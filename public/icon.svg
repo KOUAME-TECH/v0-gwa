@@ -1,0 +1,6 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="512" height="512" rx="96" fill="#4a7c59"/>
+  <text x="256" y="320" font-family="system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="160" font-weight="700" fill="white" text-anchor="middle">GWA</text>
+  <!-- Leaf accent -->
+  <path d="M256 380 Q276 360 296 380 Q276 400 256 380" fill="#8fbc8f" opacity="0.8"/>
+</svg>
