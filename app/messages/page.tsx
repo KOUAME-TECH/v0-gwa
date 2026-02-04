@@ -191,10 +191,14 @@ export default function MessagesPage() {
 
   const getUserTypeLabel = (type: string | undefined) => {
     switch (type) {
+      case "farmer": return "Producteur"
       case "producteur": return "Producteur"
       case "artisan": return "Artisan"
       case "acheteur": return "Acheteur"
-      case "cooperative": return "Cooperative"
+      case "buyer": return "Acheteur"
+      case "cooperative": return "Coopérative"
+      case "business": return "Entreprise"
+      case "student": return "Étudiant"
       default: return "Membre"
     }
   }
@@ -258,7 +262,7 @@ export default function MessagesPage() {
               </div>
               <h3 className="font-semibold text-[#111827] mb-2">Nouvelle conversation</h3>
               <p className="text-[#4B5563] text-sm">
-                Envoyez un message pour demarrer la discussion
+                Envoyez un message pour démarrer la discussion
               </p>
             </div>
           ) : (
@@ -388,7 +392,7 @@ export default function MessagesPage() {
             </div>
             <h3 className="text-xl font-semibold text-[#111827] mb-2">Aucune conversation</h3>
             <p className="text-[#4B5563] text-sm max-w-xs mb-6">
-              Contactez un vendeur depuis sa fiche produit pour demarrer une conversation
+              Contactez un vendeur depuis sa fiche produit pour démarrer une conversation
             </p>
             <Button 
               onClick={() => router.push("/marketplace")}

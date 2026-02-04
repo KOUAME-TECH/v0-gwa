@@ -35,8 +35,8 @@ export function BottomNav() {
         const { count: msgCount } = await supabase
           .from('messages')
           .select('*', { count: 'exact', head: true })
-          .eq('receiver_id', user.id)
-          .eq('read', false)
+          .eq('is_read', false)
+          .neq('sender_id', user.id)
         setUnreadMessages(msgCount || 0)
         
         // Compter notifications non lues
@@ -44,7 +44,7 @@ export function BottomNav() {
           .from('notifications')
           .select('*', { count: 'exact', head: true })
           .eq('user_id', user.id)
-          .eq('read', false)
+          .eq('is_read', false)
         setUnreadNotifications(notifCount || 0)
         
         // Compter articles dans le panier
