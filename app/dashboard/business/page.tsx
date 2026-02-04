@@ -1,298 +1,390 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { createClient } from "@/lib/supabase/client"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Navigation } from "@/components/navigation"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import Link from "next/link"
+import Image from "next/image"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Building2, TrendingUp, Users, ShoppingBag, DollarSign, Package, BarChart3, Loader2 } from 'lucide-react'
-import Link from "next/link"
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-
-interface Stats {
-  revenue: number
-  orders: number
-  products: number
-  suppliers: number
-}
+import { 
+  Building2, TrendingUp, ShoppingBag, Wallet, Users, Bell, ArrowLeft,
+  ChevronRight, FileText, BarChart3, Search, Package, Truck,
+  CheckCircle2, Clock, ArrowUpRight, ArrowDownRight, Filter, Globe
+} from 'lucide-react'
+import { createClient } from "@/lib/supabase/client"
+import { BottomNav } from "@/components/bottom-nav"
+import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts'
 
 interface Order {
   id: string
   total_amount: number
   status: string
   created_at: string
-  products?: { name: string }
-  profiles?: { full_name: string }
+  profiles: { full_name: string } | null
 }
 
 export default function BusinessDashboard() {
   const router = useRouter()
-  const [loading, setLoading] = useState(true)
   const [user, setUser] = useState<any>(null)
-  const [stats, setStats] = useState<Stats>({ revenue: 0, orders: 0, products: 0, suppliers: 0 })
-  const [recentOrders, setRecentOrders] = useState<Order[]>([])
-  const [revenueData, setRevenueData] = useState<any[]>([])
-  
-  const supabase = createClient()
+  const [profile, setProfile] = useState<any>(null)
+  const [orders, setOrders] = useState<Order[]>([])
+  const [stats, setStats] = useState({
+    totalSpent: 0,
+    totalOrders: 0,
+    suppliers: 0,
+    avgOrder: 0,
+    trend: 0
+  })
+  const [chartData, setChartData] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    loadDashboardData()
-  }, [])
+    const fetchData = async () => {
+      const supabase = createClient()
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+      
+      if (!authUser) {
+        router.push("/auth/login")
+        return
+      }
+      setUser(authUser)
 
-  async function loadDashboardData() {
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
-      router.push('/auth/login?redirect=/dashboard/business')
-      return
-    }
-    
-    setUser(user)
+      // Profil
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authUser.id)
+        .single()
+      setProfile(profileData)
 
-    // Get orders where user is buyer (entreprise)
-    const { data: ordersData, count: ordersCount } = await supabase
-      .from('orders')
-      .select('*, products:order_items(product_id), profiles:seller_id(full_name)', { count: 'exact' })
-      .eq('buyer_id', user.id)
-      .order('created_at', { ascending: false })
+      // Commandes (en tant qu'acheteur)
+      const { data: ordersData } = await supabase
+        .from('orders')
+        .select('*, profiles:seller_id(full_name)')
+        .eq('buyer_id', authUser.id)
+        .order('created_at', { ascending: false })
+      setOrders(ordersData || [])
 
-    const orders = ordersData || []
-    const revenue = orders.reduce((sum, o) => sum + (o.total_amount || 0), 0)
+      // Stats
+      const totalSpent = ordersData?.reduce((sum, o) => sum + (o.total_amount || 0), 0) || 0
+      const suppliers = new Set(ordersData?.map(o => o.seller_id).filter(Boolean)).size
+      const avgOrder = ordersData && ordersData.length > 0 ? totalSpent / ordersData.length : 0
 
-    // Count unique suppliers
-    const supplierIds = new Set(orders.map(o => o.seller_id).filter(Boolean))
-
-    // Get recent orders
-    const { data: recentOrdersData } = await supabase
-      .from('orders')
-      .select(`
-        *,
-        profiles:seller_id(full_name)
-      `)
-      .eq('buyer_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(5)
-
-    setRecentOrders(recentOrdersData || [])
-
-    // Calculate monthly revenue data
-    const monthlyData: Record<string, number> = {}
-    const months = ['Jan', 'Fev', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aout', 'Sep', 'Oct', 'Nov', 'Dec']
-    
-    orders.forEach(order => {
-      const date = new Date(order.created_at)
-      const monthKey = months[date.getMonth()]
-      monthlyData[monthKey] = (monthlyData[monthKey] || 0) + (order.total_amount || 0)
-    })
-
-    // Get last 6 months
-    const currentMonth = new Date().getMonth()
-    const chartData = []
-    for (let i = 5; i >= 0; i--) {
-      const monthIndex = (currentMonth - i + 12) % 12
-      const month = months[monthIndex]
-      chartData.push({
-        month,
-        revenus: monthlyData[month] || 0
+      // Données graphique (6 derniers mois)
+      const months = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc']
+      const monthlyData: Record<string, number> = {}
+      
+      ordersData?.forEach(order => {
+        const date = new Date(order.created_at)
+        const monthKey = months[date.getMonth()]
+        monthlyData[monthKey] = (monthlyData[monthKey] || 0) + (order.total_amount || 0)
       })
+
+      const currentMonth = new Date().getMonth()
+      const chartDataArr = []
+      for (let i = 5; i >= 0; i--) {
+        const monthIndex = (currentMonth - i + 12) % 12
+        const month = months[monthIndex]
+        chartDataArr.push({ month, montant: monthlyData[month] || 0 })
+      }
+      setChartData(chartDataArr)
+
+      setStats({
+        totalSpent,
+        totalOrders: ordersData?.length || 0,
+        suppliers,
+        avgOrder,
+        trend: 12 // Placeholder
+      })
+
+      setIsLoading(false)
     }
+    fetchData()
+  }, [router])
 
-    setRevenueData(chartData)
-
-    setStats({
-      revenue,
-      orders: ordersCount || 0,
-      products: 0, // Enterprises typically buy, not sell
-      suppliers: supplierIds.size
-    })
-
-    setLoading(false)
-  }
-
-  const getStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      pending: 'bg-yellow-100 text-yellow-800',
-      confirmed: 'bg-blue-100 text-blue-800',
-      shipped: 'bg-purple-100 text-purple-800',
-      delivered: 'bg-green-100 text-green-800',
-      cancelled: 'bg-red-100 text-red-800'
-    }
-    return colors[status] || 'bg-gray-100 text-gray-800'
-  }
-
-  const getStatusLabel = (status: string) => {
-    const labels: Record<string, string> = {
-      pending: 'En attente',
-      confirmed: 'Confirmee',
-      shipped: 'Expediee',
-      delivered: 'Livree',
-      cancelled: 'Annulee'
-    }
-    return labels[status] || status
-  }
-
-  if (loading) {
+  if (isLoading) {
     return (
-      <div className="flex min-h-screen flex-col">
-        <Navigation />
-        <main className="flex-1 flex items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </main>
+      <div className="min-h-screen bg-[#0F172A] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#6366F1]" />
       </div>
     )
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <Navigation />
-      
-      <main className="flex-1 bg-muted/30">
-        <div className="container py-8 px-4">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h1 className="text-3xl font-bold mb-2">Tableau de Bord Entreprise</h1>
-              <p className="text-muted-foreground">Vue d'ensemble de votre activite commerciale</p>
+    <div className="min-h-screen bg-[#0F172A] pb-20">
+      {/* Header Entreprise - Design corporate sombre */}
+      <header className="bg-gradient-to-br from-[#1E293B] to-[#0F172A] text-white px-4 pt-12 pb-6">
+        <div className="flex items-center justify-between mb-6">
+          <button onClick={() => router.back()}>
+            <ArrowLeft className="h-6 w-6" />
+          </button>
+          <h1 className="text-lg font-semibold">Espace Entreprise</h1>
+          <Link href="/notifications">
+            <Bell className="h-6 w-6" />
+          </Link>
+        </div>
+
+        {/* Info entreprise */}
+        <div className="flex items-center gap-4 mb-6">
+          <div className="w-14 h-14 rounded-xl bg-[#6366F1]/20 flex items-center justify-center overflow-hidden">
+            {profile?.avatar_url ? (
+              <Image src={profile.avatar_url || "/placeholder.svg"} alt="" width={56} height={56} className="object-cover" />
+            ) : (
+              <Building2 className="h-7 w-7 text-[#6366F1]" />
+            )}
+          </div>
+          <div className="flex-1">
+            <h2 className="text-xl font-bold">{profile?.full_name || profile?.company_name || "Mon Entreprise"}</h2>
+            <p className="text-white/60 text-sm flex items-center gap-1">
+              <Globe className="h-3 w-3" />
+              {profile?.city || profile?.country || "Afrique"}
+            </p>
+          </div>
+          <Badge className="bg-[#6366F1] text-white">PRO</Badge>
+        </div>
+
+        {/* KPI principal */}
+        <Card className="bg-gradient-to-r from-[#6366F1] to-[#8B5CF6] border-0">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-white/80 text-sm">Total des achats</p>
+                <p className="text-3xl font-bold text-white">
+                  {stats.totalSpent > 0 ? `${(stats.totalSpent / 1000000).toFixed(1)}M` : "0"} 
+                  <span className="text-lg font-normal"> FCFA</span>
+                </p>
+                <div className="flex items-center gap-1 mt-1">
+                  {stats.trend >= 0 ? (
+                    <ArrowUpRight className="h-4 w-4 text-green-300" />
+                  ) : (
+                    <ArrowDownRight className="h-4 w-4 text-red-300" />
+                  )}
+                  <span className={stats.trend >= 0 ? "text-green-300 text-sm" : "text-red-300 text-sm"}>
+                    {Math.abs(stats.trend)}% ce mois
+                  </span>
+                </div>
+              </div>
+              <div className="w-20 h-20">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData.slice(-4)}>
+                    <Line 
+                      type="monotone" 
+                      dataKey="montant" 
+                      stroke="#fff" 
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" asChild>
-                <Link href="/rfq">
-                  <BarChart3 className="mr-2 h-4 w-4" />
-                  Demandes de devis
-                </Link>
-              </Button>
-              <Button asChild>
-                <Link href="/marketplace">
-                  <Package className="mr-2 h-4 w-4" />
-                  Explorer le marche
-                </Link>
+          </CardContent>
+        </Card>
+      </header>
+
+      <main className="px-4 -mt-4">
+        {/* Stats secondaires */}
+        <div className="grid grid-cols-3 gap-3 mb-6">
+          <Card className="bg-[#1E293B] border-0">
+            <CardContent className="p-4 text-center">
+              <ShoppingBag className="h-6 w-6 text-[#6366F1] mx-auto mb-2" />
+              <p className="text-2xl font-bold text-white">{stats.totalOrders}</p>
+              <p className="text-xs text-white/60">Commandes</p>
+            </CardContent>
+          </Card>
+          <Card className="bg-[#1E293B] border-0">
+            <CardContent className="p-4 text-center">
+              <Users className="h-6 w-6 text-[#10B981] mx-auto mb-2" />
+              <p className="text-2xl font-bold text-white">{stats.suppliers}</p>
+              <p className="text-xs text-white/60">Fournisseurs</p>
+            </CardContent>
+          </Card>
+          <Card className="bg-[#1E293B] border-0">
+            <CardContent className="p-4 text-center">
+              <Wallet className="h-6 w-6 text-[#F59E0B] mx-auto mb-2" />
+              <p className="text-2xl font-bold text-white">
+                {stats.avgOrder > 0 ? `${(stats.avgOrder / 1000).toFixed(0)}K` : "0"}
+              </p>
+              <p className="text-xs text-white/60">Panier moyen</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Actions rapides */}
+        <div className="flex gap-3 mb-6 overflow-x-auto pb-2">
+          <Link href="/agriculture">
+            <Button className="bg-[#6366F1] hover:bg-[#5558E3] text-white rounded-xl whitespace-nowrap">
+              <Search className="h-4 w-4 mr-2" />
+              Explorer le marché
+            </Button>
+          </Link>
+          <Link href="/rfq">
+            <Button variant="outline" className="rounded-xl whitespace-nowrap border-[#6366F1] text-[#6366F1] bg-transparent">
+              <FileText className="h-4 w-4 mr-2" />
+              Demande de devis
+            </Button>
+          </Link>
+          <Link href="/dashboard/commandes">
+            <Button variant="outline" className="rounded-xl whitespace-nowrap text-white/80 border-white/20 bg-transparent">
+              <Package className="h-4 w-4 mr-2" />
+              Commandes
+            </Button>
+          </Link>
+        </div>
+
+        {/* Graphique des dépenses */}
+        <Card className="bg-[#1E293B] border-0 mb-6">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-white">Évolution des achats</h3>
+              <Button size="sm" variant="ghost" className="text-white/60">
+                <Filter className="h-4 w-4 mr-1" />
+                6 mois
               </Button>
             </div>
+            <div className="h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData}>
+                  <XAxis 
+                    dataKey="month" 
+                    axisLine={false} 
+                    tickLine={false}
+                    tick={{ fill: '#64748B', fontSize: 12 }}
+                  />
+                  <YAxis 
+                    axisLine={false} 
+                    tickLine={false}
+                    tick={{ fill: '#64748B', fontSize: 12 }}
+                    tickFormatter={(value) => `${(value / 1000).toFixed(0)}K`}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: '#1E293B', 
+                      border: 'none',
+                      borderRadius: '8px',
+                      color: '#fff'
+                    }}
+                    formatter={(value: number) => [`${value.toLocaleString()} FCFA`, 'Montant']}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="montant" 
+                    stroke="#6366F1" 
+                    strokeWidth={3}
+                    dot={{ fill: '#6366F1', strokeWidth: 0, r: 4 }}
+                    activeDot={{ r: 6, fill: '#6366F1' }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Commandes récentes */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-white">Commandes Récentes</h3>
+            <Link href="/dashboard/commandes" className="text-[#6366F1] text-sm font-medium flex items-center">
+              Voir tout <ChevronRight className="h-4 w-4" />
+            </Link>
           </div>
 
-          {/* KPIs principaux */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
-            <Card className="hover:shadow-lg transition-all">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Achats</CardTitle>
-                <DollarSign className="h-4 w-4 text-primary" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats.revenue.toLocaleString()} FCFA</div>
-                <p className="text-xs text-muted-foreground">Valeur totale des commandes</p>
+          {orders.length === 0 ? (
+            <Card className="bg-[#1E293B] border-0">
+              <CardContent className="p-8 text-center">
+                <ShoppingBag className="h-12 w-12 text-[#6366F1]/30 mx-auto mb-4" />
+                <h4 className="font-semibold text-white mb-2">Aucune commande</h4>
+                <p className="text-sm text-white/60 mb-4">
+                  Explorez le marché pour trouver vos fournisseurs
+                </p>
+                <Link href="/agriculture">
+                  <Button className="bg-[#6366F1]">
+                    <Search className="h-4 w-4 mr-2" />
+                    Explorer le marché
+                  </Button>
+                </Link>
               </CardContent>
             </Card>
-
-            <Card className="hover:shadow-lg transition-all">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Commandes</CardTitle>
-                <ShoppingBag className="h-4 w-4 text-primary" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats.orders}</div>
-                <p className="text-xs text-muted-foreground">Nombre total de commandes</p>
-              </CardContent>
-            </Card>
-
-            <Card className="hover:shadow-lg transition-all">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Fournisseurs</CardTitle>
-                <Users className="h-4 w-4 text-primary" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats.suppliers}</div>
-                <p className="text-xs text-muted-foreground">Partenaires actifs</p>
-              </CardContent>
-            </Card>
-
-            <Card className="hover:shadow-lg transition-all">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Panier moyen</CardTitle>
-                <TrendingUp className="h-4 w-4 text-primary" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {stats.orders > 0 ? Math.round(stats.revenue / stats.orders).toLocaleString() : 0} FCFA
-                </div>
-                <p className="text-xs text-muted-foreground">Par commande</p>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="grid gap-6 lg:grid-cols-2">
-            {/* Graphique revenus */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Evolution des achats</CardTitle>
-                <CardDescription>Vos depenses sur les 6 derniers mois</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={revenueData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="month" />
-                      <YAxis />
-                      <Tooltip 
-                        formatter={(value: number) => [`${value.toLocaleString()} FCFA`, 'Montant']}
-                      />
-                      <Line 
-                        type="monotone" 
-                        dataKey="revenus" 
-                        stroke="hsl(var(--primary))" 
-                        strokeWidth={2}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Commandes recentes */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Commandes recentes</CardTitle>
-                <CardDescription>Vos dernieres commandes</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {recentOrders.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <ShoppingBag className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>Aucune commande pour le moment</p>
-                    <Button className="mt-4" asChild>
-                      <Link href="/marketplace">Explorer le marche</Link>
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {recentOrders.map((order) => (
-                      <div key={order.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                        <div>
-                          <p className="font-medium">Commande #{order.id.slice(0, 8)}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {order.profiles?.full_name || 'Vendeur'}
-                          </p>
+          ) : (
+            <div className="space-y-3">
+              {orders.slice(0, 4).map((order) => (
+                <Card key={order.id} className="bg-[#1E293B] border-0">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                          order.status === 'delivered' ? 'bg-green-500/20' :
+                          order.status === 'shipping' ? 'bg-blue-500/20' :
+                          'bg-yellow-500/20'
+                        }`}>
+                          {order.status === 'delivered' ? (
+                            <CheckCircle2 className="h-5 w-5 text-green-500" />
+                          ) : order.status === 'shipping' ? (
+                            <Truck className="h-5 w-5 text-blue-500" />
+                          ) : (
+                            <Clock className="h-5 w-5 text-yellow-500" />
+                          )}
                         </div>
-                        <div className="text-right">
-                          <p className="font-medium">{order.total_amount?.toLocaleString()} FCFA</p>
-                          <Badge className={getStatusColor(order.status)}>
-                            {getStatusLabel(order.status)}
-                          </Badge>
+                        <div>
+                          <p className="font-semibold text-white">#{order.id.slice(0, 8)}</p>
+                          <p className="text-sm text-white/60">{order.profiles?.full_name || "Fournisseur"}</p>
                         </div>
                       </div>
-                    ))}
-                    
-                    <Button variant="outline" className="w-full bg-transparent" asChild>
-                      <Link href="/dashboard/commandes">Voir toutes les commandes</Link>
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                      <div className="text-right">
+                        <p className="font-bold text-white">{order.total_amount?.toLocaleString()} FCFA</p>
+                        <Badge className={
+                          order.status === 'delivered' ? "bg-green-500/20 text-green-400" :
+                          order.status === 'shipping' ? "bg-blue-500/20 text-blue-400" :
+                          "bg-yellow-500/20 text-yellow-400"
+                        }>
+                          {order.status === 'delivered' ? 'Livrée' :
+                           order.status === 'shipping' ? 'En livraison' :
+                           order.status === 'confirmed' ? 'Confirmée' : 'En attente'}
+                        </Badge>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </div>
+
+        {/* Raccourcis */}
+        <Card className="bg-gradient-to-r from-[#6366F1]/20 to-[#8B5CF6]/20 border-0">
+          <CardContent className="p-4">
+            <div className="grid grid-cols-2 gap-3">
+              <Link href="/rfq">
+                <Button variant="ghost" className="w-full h-auto py-4 flex flex-col items-center gap-2 text-white hover:bg-white/10">
+                  <FileText className="h-6 w-6 text-[#6366F1]" />
+                  <span className="text-sm">Demande de devis</span>
+                </Button>
+              </Link>
+              <Link href="/network">
+                <Button variant="ghost" className="w-full h-auto py-4 flex flex-col items-center gap-2 text-white hover:bg-white/10">
+                  <Users className="h-6 w-6 text-[#10B981]" />
+                  <span className="text-sm">Fournisseurs</span>
+                </Button>
+              </Link>
+              <Link href="/dashboard/commandes">
+                <Button variant="ghost" className="w-full h-auto py-4 flex flex-col items-center gap-2 text-white hover:bg-white/10">
+                  <BarChart3 className="h-6 w-6 text-[#F59E0B]" />
+                  <span className="text-sm">Rapports</span>
+                </Button>
+              </Link>
+              <Link href="/messages">
+                <Button variant="ghost" className="w-full h-auto py-4 flex flex-col items-center gap-2 text-white hover:bg-white/10">
+                  <Building2 className="h-6 w-6 text-[#EC4899]" />
+                  <span className="text-sm">Paramètres</span>
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
       </main>
+
+      <BottomNav />
     </div>
   )
 }

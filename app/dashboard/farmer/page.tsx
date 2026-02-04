@@ -4,13 +4,16 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
-import { Navigation } from "@/components/navigation"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
-import { Sprout, CloudRain, TrendingUp, Package, Users, DollarSign, AlertCircle, Calendar, Truck, ShoppingCart, Plus } from 'lucide-react'
+import { 
+  Sprout, CloudSun, TrendingUp, Package, Users, Wallet, 
+  Plus, ChevronRight, Truck, Bell, Sun, Droplets, Wind,
+  ArrowLeft, MoreVertical, Eye, Edit2, BarChart3
+} from 'lucide-react'
 import { createClient } from "@/lib/supabase/client"
+import { BottomNav } from "@/components/bottom-nav"
 
 interface Product {
   id: string
@@ -20,6 +23,7 @@ interface Product {
   stock_quantity: number
   images: string[]
   status: string
+  origin_region: string | null
 }
 
 interface Order {
@@ -27,395 +31,377 @@ interface Order {
   total_amount: number
   status: string
   created_at: string
-  profiles: {
-    full_name: string
-  } | null
-}
-
-interface DashboardStats {
-  totalRevenue: number
-  totalProducts: number
-  totalOrders: number
-  totalCustomers: number
-  revenueChange: number
+  profiles: { full_name: string } | null
 }
 
 export default function FarmerDashboard() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
+  const [profile, setProfile] = useState<any>(null)
   const [products, setProducts] = useState<Product[]>([])
   const [orders, setOrders] = useState<Order[]>([])
-  const [stats, setStats] = useState<DashboardStats>({
+  const [stats, setStats] = useState({
     totalRevenue: 0,
     totalProducts: 0,
     totalOrders: 0,
-    totalCustomers: 0,
-    revenueChange: 0
+    pendingOrders: 0
   })
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    const fetchDashboardData = async () => {
+    const fetchData = async () => {
       const supabase = createClient()
-      
-      // Verifier l'authentification
       const { data: { user: authUser } } = await supabase.auth.getUser()
+      
       if (!authUser) {
         router.push("/auth/login")
         return
       }
       setUser(authUser)
 
-      // Recuperer les produits de l'utilisateur
+      // Profil
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authUser.id)
+        .single()
+      setProfile(profileData)
+
+      // Produits
       const { data: productsData } = await supabase
         .from('products')
         .select('*')
         .eq('seller_id', authUser.id)
         .order('created_at', { ascending: false })
+      setProducts(productsData || [])
 
-      if (productsData) {
-        setProducts(productsData)
-      }
-
-      // Recuperer les commandes (en tant que vendeur)
-      const { data: ordersData } = await supabase
-        .from('orders')
-        .select(`
-          *,
-          profiles:buyer_id (full_name)
-        `)
-        .order('created_at', { ascending: false })
-        .limit(5)
-
-      if (ordersData) {
-        setOrders(ordersData)
-      }
-
-      // Calculer les statistiques
-      const totalRevenue = ordersData?.reduce((sum, o) => 
-        o.status === 'delivered' ? sum + (o.total_amount || 0) : sum, 0) || 0
+      // Commandes (en tant que vendeur via order_items)
+      const productIds = productsData?.map(p => p.id) || []
+      let ordersData: Order[] = []
       
-      const uniqueCustomers = new Set(ordersData?.map(o => o.buyer_id)).size
+      if (productIds.length > 0) {
+        const { data: orderItems } = await supabase
+          .from('order_items')
+          .select('order_id')
+          .in('product_id', productIds)
+        
+        const orderIds = [...new Set(orderItems?.map(oi => oi.order_id) || [])]
+        
+        if (orderIds.length > 0) {
+          const { data: ordersResult } = await supabase
+            .from('orders')
+            .select('*, profiles:buyer_id(full_name)')
+            .in('id', orderIds)
+            .order('created_at', { ascending: false })
+            .limit(5)
+          ordersData = ordersResult || []
+        }
+      }
+      setOrders(ordersData)
+
+      // Stats
+      const totalRevenue = ordersData.reduce((sum, o) => 
+        o.status === 'delivered' ? sum + (o.total_amount || 0) : sum, 0)
+      const pendingOrders = ordersData.filter(o => 
+        ['pending', 'confirmed', 'shipping'].includes(o.status)).length
 
       setStats({
         totalRevenue,
         totalProducts: productsData?.length || 0,
-        totalOrders: ordersData?.length || 0,
-        totalCustomers: uniqueCustomers,
-        revenueChange: 18 // Placeholder
+        totalOrders: ordersData.length,
+        pendingOrders
       })
 
       setIsLoading(false)
     }
-
-    fetchDashboardData()
+    fetchData()
   }, [router])
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen flex-col">
-        <Navigation />
-        <div className="flex-1 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-        </div>
+      <div className="min-h-screen bg-[#FFF6E5] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#2F7D32]" />
       </div>
     )
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <Navigation />
-      
-      <main className="flex-1 bg-muted/30">
-        <div className="container py-8 px-4">
-          <div className="flex items-center justify-between mb-8">
+    <div className="min-h-screen bg-[#FFF6E5] pb-20">
+      {/* Header Producteur - Vert nature */}
+      <header className="bg-gradient-to-br from-[#2F7D32] to-[#1B5E20] text-white px-4 pt-12 pb-6 rounded-b-3xl">
+        <div className="flex items-center justify-between mb-6">
+          <button onClick={() => router.back()}>
+            <ArrowLeft className="h-6 w-6" />
+          </button>
+          <h1 className="text-lg font-semibold">Espace Producteur</h1>
+          <Link href="/notifications">
+            <Bell className="h-6 w-6" />
+          </Link>
+        </div>
+
+        {/* Profil */}
+        <div className="flex items-center gap-4 mb-6">
+          <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center overflow-hidden">
+            {profile?.avatar_url ? (
+              <Image src={profile.avatar_url || "/placeholder.svg"} alt="" width={64} height={64} className="object-cover" />
+            ) : (
+              <Sprout className="h-8 w-8 text-white" />
+            )}
+          </div>
+          <div>
+            <h2 className="text-xl font-bold">{profile?.full_name || "Producteur"}</h2>
+            <p className="text-white/80 text-sm">{profile?.city || profile?.country || "Afrique"}</p>
+            {profile?.is_verified && (
+              <Badge className="bg-white/20 text-white mt-1">Certifié GWA</Badge>
+            )}
+          </div>
+        </div>
+
+        {/* Météo simplifiée */}
+        <div className="bg-white/10 rounded-2xl p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Sun className="h-10 w-10 text-yellow-300" />
             <div>
-              <h1 className="text-3xl font-bold mb-2">Espace Agriculteur</h1>
-              <p className="text-muted-foreground">Gerez votre exploitation et vendez vos produits</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className="text-base px-4 py-2">
-                <CloudRain className="mr-2 h-4 w-4" />
-                25C - Ensoleille
-              </Badge>
+              <p className="text-2xl font-bold">28°C</p>
+              <p className="text-white/70 text-sm">Ensoleillé</p>
             </div>
           </div>
-
-          {/* Stats */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
-            <Card className="hover:shadow-lg transition-all">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Revenus totaux</CardTitle>
-                <DollarSign className="h-4 w-4 text-primary" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats.totalRevenue.toLocaleString()} FCFA</div>
-                <p className="text-xs text-muted-foreground">
-                  {stats.totalRevenue > 0 ? (
-                    <span className="text-green-500">+{stats.revenueChange}%</span>
-                  ) : (
-                    "Aucune vente pour le moment"
-                  )}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="hover:shadow-lg transition-all">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Produits en vente</CardTitle>
-                <Package className="h-4 w-4 text-accent" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats.totalProducts}</div>
-                <p className="text-xs text-muted-foreground">
-                  {products.filter(p => p.status === 'active').length} actifs
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="hover:shadow-lg transition-all">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Commandes</CardTitle>
-                <ShoppingCart className="h-4 w-4 text-secondary" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats.totalOrders}</div>
-                <p className="text-xs text-muted-foreground">
-                  {orders.filter(o => o.status === 'shipping').length} en cours de livraison
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="hover:shadow-lg transition-all">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Clients</CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats.totalCustomers}</div>
-                <p className="text-xs text-muted-foreground">
-                  Clients uniques
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="grid gap-6 lg:grid-cols-3">
-            {/* Products */}
-            <Card className="lg:col-span-2">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>Mes Produits</CardTitle>
-                    <CardDescription>Gerez votre inventaire et vos prix</CardDescription>
-                  </div>
-                  <Link href="/dashboard/products/new">
-                    <Button size="sm">
-                      <Plus className="mr-2 h-4 w-4" />
-                      Ajouter un produit
-                    </Button>
-                  </Link>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {products.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <h3 className="text-lg font-medium mb-2">Aucun produit</h3>
-                    <p className="text-muted-foreground mb-4">
-                      Commencez a vendre en ajoutant votre premier produit
-                    </p>
-                    <Link href="/dashboard/products/new">
-                      <Button>
-                        <Plus className="mr-2 h-4 w-4" />
-                        Ajouter un produit
-                      </Button>
-                    </Link>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {products.slice(0, 4).map((product) => (
-                      <div key={product.id} className="p-4 rounded-lg border hover:border-primary transition-colors">
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex items-center gap-3">
-                            {product.images?.[0] ? (
-                              <div className="h-12 w-12 rounded-lg overflow-hidden bg-muted">
-                                <Image
-                                  src={product.images[0] || "/placeholder.svg"}
-                                  alt={product.name}
-                                  width={48}
-                                  height={48}
-                                  className="object-cover w-full h-full"
-                                />
-                              </div>
-                            ) : (
-                              <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center">
-                                <Sprout className="h-6 w-6 text-muted-foreground" />
-                              </div>
-                            )}
-                            <div>
-                              <h3 className="font-semibold">{product.name}</h3>
-                              <p className="text-sm text-muted-foreground">
-                                Stock: {product.stock_quantity} {product.unit}
-                              </p>
-                            </div>
-                          </div>
-                          <Badge variant={product.status === 'active' ? "default" : "secondary"}>
-                            {product.status === 'active' ? "Actif" : "Inactif"}
-                          </Badge>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium text-primary">
-                            {product.price.toLocaleString()} FCFA/{product.unit}
-                          </span>
-                          <Link href={`/dashboard/products/${product.id}/edit`}>
-                            <Button size="sm" variant="outline">Modifier</Button>
-                          </Link>
-                        </div>
-                      </div>
-                    ))}
-                    {products.length > 4 && (
-                      <Link href="/dashboard/products">
-                        <Button variant="outline" className="w-full bg-transparent">
-                          Voir tous les produits ({products.length})
-                        </Button>
-                      </Link>
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Quick Actions & Alerts */}
-            <div className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Actions Rapides</CardTitle>
-                  <CardDescription>Gerez votre activite</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <Link href="/dashboard/products/new">
-                    <Button variant="outline" className="w-full justify-start bg-transparent">
-                      <Package className="mr-2 h-4 w-4" />
-                      Ajouter un produit
-                    </Button>
-                  </Link>
-                  <Link href="/dashboard/commandes">
-                    <Button variant="outline" className="w-full justify-start bg-transparent">
-                      <Truck className="mr-2 h-4 w-4" />
-                      Gerer les commandes
-                    </Button>
-                  </Link>
-                  <Link href="/dashboard/stats">
-                    <Button variant="outline" className="w-full justify-start bg-transparent">
-                      <TrendingUp className="mr-2 h-4 w-4" />
-                      Voir les statistiques
-                    </Button>
-                  </Link>
-                  <Link href="/network">
-                    <Button variant="outline" className="w-full justify-start bg-transparent">
-                      <Users className="mr-2 h-4 w-4" />
-                      Trouver des acheteurs
-                    </Button>
-                  </Link>
-                </CardContent>
-              </Card>
-
-              {/* Alerts */}
-              <Card className="border-yellow-500/50">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <AlertCircle className="h-5 w-5 text-yellow-500" />
-                    Alertes
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {products.filter(p => p.stock_quantity < 100).length > 0 && (
-                    <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
-                      <p className="text-sm font-medium mb-1">Stock faible</p>
-                      <p className="text-xs text-muted-foreground">
-                        {products.filter(p => p.stock_quantity < 100).length} produit(s) necessitent un reapprovisionnement
-                      </p>
-                    </div>
-                  )}
-                  <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                    <p className="text-sm font-medium mb-1">Conseil</p>
-                    <p className="text-xs text-muted-foreground">
-                      Ajoutez des photos de qualite pour augmenter vos ventes
-                    </p>
-                  </div>
-                  {products.length === 0 && (
-                    <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
-                      <p className="text-sm font-medium mb-1">Commencez maintenant</p>
-                      <p className="text-xs text-muted-foreground">
-                        Ajoutez votre premier produit pour commencer a vendre
-                      </p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+          <div className="flex gap-4 text-sm">
+            <div className="text-center">
+              <Droplets className="h-5 w-5 mx-auto text-blue-300" />
+              <p className="text-white/70">65%</p>
+            </div>
+            <div className="text-center">
+              <Wind className="h-5 w-5 mx-auto text-white/70" />
+              <p className="text-white/70">12 km/h</p>
             </div>
           </div>
+        </div>
+      </header>
 
-          {/* Recent Orders */}
-          <Card className="mt-6">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Commandes Recentes</CardTitle>
-                  <CardDescription>Suivez vos ventes et livraisons</CardDescription>
-                </div>
-                <Link href="/dashboard/commandes">
-                  <Button variant="outline" size="sm">Voir tout</Button>
-                </Link>
+      <main className="px-4 -mt-4">
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 gap-3 mb-6">
+          <Card className="bg-white border-0 shadow-sm">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-2">
+                <Wallet className="h-8 w-8 text-[#2F7D32] bg-[#2F7D32]/10 p-1.5 rounded-lg" />
+                <TrendingUp className="h-4 w-4 text-green-500" />
               </div>
-            </CardHeader>
-            <CardContent>
-              {orders.length === 0 ? (
-                <div className="text-center py-8">
-                  <ShoppingCart className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="text-lg font-medium mb-2">Aucune commande</h3>
-                  <p className="text-muted-foreground">
-                    Vos commandes apparaitront ici
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {orders.map((order) => (
-                    <div key={order.id} className="flex items-center justify-between p-4 rounded-lg border hover:border-primary transition-colors">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-1">
-                          <span className="font-semibold">#{order.id.slice(0, 8)}</span>
-                          <Badge variant={
-                            order.status === 'delivered' ? "default" :
-                            order.status === 'shipping' ? "secondary" : "outline"
-                          }>
-                            {order.status === 'delivered' ? 'Livre' :
-                             order.status === 'shipping' ? 'En livraison' :
-                             order.status === 'confirmed' ? 'Confirme' :
-                             order.status === 'pending' ? 'En attente' : order.status}
-                          </Badge>
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          {order.profiles?.full_name || 'Client'}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-semibold text-primary">
-                          {order.total_amount?.toLocaleString() || 0} FCFA
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(order.created_at).toLocaleDateString('fr-FR')}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <p className="text-2xl font-bold text-[#111827]">
+                {stats.totalRevenue > 0 ? `${(stats.totalRevenue / 1000).toFixed(0)}K` : "0"}
+              </p>
+              <p className="text-xs text-[#4B5563]">Revenus (FCFA)</p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white border-0 shadow-sm">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-2">
+                <Package className="h-8 w-8 text-[#F39A1F] bg-[#F39A1F]/10 p-1.5 rounded-lg" />
+                <span className="text-xs text-[#4B5563]">{products.filter(p => p.status === 'active').length} actifs</span>
+              </div>
+              <p className="text-2xl font-bold text-[#111827]">{stats.totalProducts}</p>
+              <p className="text-xs text-[#4B5563]">Produits</p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white border-0 shadow-sm">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-2">
+                <Truck className="h-8 w-8 text-blue-500 bg-blue-500/10 p-1.5 rounded-lg" />
+                {stats.pendingOrders > 0 && (
+                  <Badge className="bg-red-500 text-white text-xs">{stats.pendingOrders}</Badge>
+                )}
+              </div>
+              <p className="text-2xl font-bold text-[#111827]">{stats.totalOrders}</p>
+              <p className="text-xs text-[#4B5563]">Commandes</p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white border-0 shadow-sm">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-2">
+                <Users className="h-8 w-8 text-purple-500 bg-purple-500/10 p-1.5 rounded-lg" />
+              </div>
+              <p className="text-2xl font-bold text-[#111827]">
+                {new Set(orders.map(o => o.profiles?.full_name).filter(Boolean)).size}
+              </p>
+              <p className="text-xs text-[#4B5563]">Clients</p>
             </CardContent>
           </Card>
         </div>
+
+        {/* Actions rapides */}
+        <div className="flex gap-3 mb-6 overflow-x-auto pb-2">
+          <Link href="/dashboard/products/new">
+            <Button className="bg-[#2F7D32] hover:bg-[#1B5E20] text-white rounded-full whitespace-nowrap">
+              <Plus className="h-4 w-4 mr-2" />
+              Ajouter produit
+            </Button>
+          </Link>
+          <Link href="/dashboard/commandes">
+            <Button variant="outline" className="rounded-full whitespace-nowrap border-[#2F7D32] text-[#2F7D32] bg-transparent">
+              <Truck className="h-4 w-4 mr-2" />
+              Commandes
+            </Button>
+          </Link>
+          <Link href="/messages">
+            <Button variant="outline" className="rounded-full whitespace-nowrap bg-transparent">
+              Messages
+            </Button>
+          </Link>
+        </div>
+
+        {/* Mes Produits */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-[#111827]">Mes Produits</h3>
+            <Link href="/dashboard/products" className="text-[#2F7D32] text-sm font-medium flex items-center">
+              Voir tout <ChevronRight className="h-4 w-4" />
+            </Link>
+          </div>
+
+          {products.length === 0 ? (
+            <Card className="bg-white border-0 shadow-sm">
+              <CardContent className="p-8 text-center">
+                <Sprout className="h-12 w-12 text-[#2F7D32]/30 mx-auto mb-4" />
+                <h4 className="font-semibold text-[#111827] mb-2">Aucun produit</h4>
+                <p className="text-sm text-[#4B5563] mb-4">
+                  Commencez à vendre vos récoltes
+                </p>
+                <Link href="/dashboard/products/new">
+                  <Button className="bg-[#2F7D32]">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Ajouter un produit
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {products.slice(0, 4).map((product) => (
+                <Card key={product.id} className="bg-white border-0 shadow-sm overflow-hidden">
+                  <CardContent className="p-0">
+                    <div className="flex items-center">
+                      <div className="w-20 h-20 bg-[#FFF6E5] flex-shrink-0">
+                        {product.images?.[0] ? (
+                          <Image
+                            src={product.images[0] || "/placeholder.svg"}
+                            alt={product.name}
+                            width={80}
+                            height={80}
+                            className="object-cover w-full h-full"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Sprout className="h-8 w-8 text-[#2F7D32]/30" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 p-3">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h4 className="font-semibold text-[#111827] line-clamp-1">{product.name}</h4>
+                            <p className="text-sm text-[#2F7D32] font-medium">
+                              {product.price.toLocaleString()} FCFA/{product.unit}
+                            </p>
+                          </div>
+                          <Badge 
+                            className={product.status === 'active' 
+                              ? "bg-green-100 text-green-700" 
+                              : "bg-gray-100 text-gray-600"}
+                          >
+                            {product.status === 'active' ? 'Actif' : 'Inactif'}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center justify-between mt-2">
+                          <p className="text-xs text-[#4B5563]">
+                            Stock: {product.stock_quantity} {product.unit}
+                          </p>
+                          <div className="flex gap-1">
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0">
+                              <Eye className="h-4 w-4 text-[#4B5563]" />
+                            </Button>
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0">
+                              <Edit2 className="h-4 w-4 text-[#4B5563]" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Commandes récentes */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-[#111827]">Commandes Récentes</h3>
+            <Link href="/dashboard/commandes" className="text-[#2F7D32] text-sm font-medium flex items-center">
+              Voir tout <ChevronRight className="h-4 w-4" />
+            </Link>
+          </div>
+
+          {orders.length === 0 ? (
+            <Card className="bg-white border-0 shadow-sm">
+              <CardContent className="p-6 text-center">
+                <Truck className="h-10 w-10 text-[#4B5563]/30 mx-auto mb-3" />
+                <p className="text-sm text-[#4B5563]">Aucune commande pour le moment</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {orders.slice(0, 3).map((order) => (
+                <Card key={order.id} className="bg-white border-0 shadow-sm">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold text-[#111827]">#{order.id.slice(0, 8)}</p>
+                        <p className="text-sm text-[#4B5563]">{order.profiles?.full_name || 'Client'}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-[#2F7D32]">{order.total_amount?.toLocaleString()} FCFA</p>
+                        <Badge className={
+                          order.status === 'delivered' ? "bg-green-100 text-green-700" :
+                          order.status === 'shipping' ? "bg-blue-100 text-blue-700" :
+                          "bg-yellow-100 text-yellow-700"
+                        }>
+                          {order.status === 'delivered' ? 'Livré' :
+                           order.status === 'shipping' ? 'En cours' :
+                           order.status === 'confirmed' ? 'Confirmé' : 'En attente'}
+                        </Badge>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Conseils */}
+        <Card className="bg-gradient-to-r from-[#2F7D32]/10 to-[#F39A1F]/10 border-0">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-[#2F7D32] flex items-center justify-center flex-shrink-0">
+                <BarChart3 className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h4 className="font-semibold text-[#111827] mb-1">Conseil du jour</h4>
+                <p className="text-sm text-[#4B5563]">
+                  Ajoutez des photos de qualité pour augmenter vos ventes de 40%
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </main>
+
+      <BottomNav />
     </div>
   )
 }
