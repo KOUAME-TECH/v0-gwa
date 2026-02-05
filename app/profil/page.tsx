@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   Settings, LogOut, ChevronRight, Package, Heart, ShoppingBag,
-  MessageCircle, MapPin, BadgeCheck, Wallet, Bell, HelpCircle, Star
+  MessageCircle, MapPin, BadgeCheck, Wallet, Bell, HelpCircle, Star, Shield
 } from "lucide-react"
 
 type Profile = {
@@ -29,6 +29,7 @@ export default function ProfilPage() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [stats, setStats] = useState({ products: 0, orders: 0, favorites: 0 })
   const [isLoading, setIsLoading] = useState(true)
+  const [isAdmin, setIsAdmin] = useState(false)
   const supabase = createClient()
 
   useEffect(() => {
@@ -50,11 +51,16 @@ export default function ProfilPage() {
         setProfile({ ...profileData, email: user.email || "" })
       }
 
-      const [productsRes, ordersRes, favoritesRes] = await Promise.all([
+      const [productsRes, ordersRes, favoritesRes, adminRes] = await Promise.all([
         supabase.from("products").select("id", { count: "exact" }).eq("seller_id", user.id),
         supabase.from("orders").select("id", { count: "exact" }).eq("buyer_id", user.id),
         supabase.from("favorites").select("id", { count: "exact" }).eq("user_id", user.id),
+        supabase.from("admin_roles").select("role").eq("user_id", user.id).eq("is_active", true).single(),
       ])
+      
+      if (adminRes.data) {
+        setIsAdmin(true)
+      }
 
       setStats({
         products: productsRes.count || 0,
@@ -75,10 +81,14 @@ export default function ProfilPage() {
 
   const getUserTypeLabel = (type: string | null) => {
     const types: Record<string, string> = {
+      farmer: "Producteur",
       producteur: "Producteur",
       artisan: "Artisan",
+      buyer: "Acheteur",
       acheteur: "Acheteur",
-      cooperative: "Cooperative",
+      cooperative: "Coopérative",
+      business: "Entreprise",
+      student: "Étudiant",
     }
     return type ? types[type] || type : "Membre"
   }
@@ -110,7 +120,7 @@ export default function ProfilPage() {
       <div className="min-h-screen bg-white flex items-center justify-center p-5">
         <div className="text-center">
           <h2 className="text-xl font-semibold mb-2">Connectez-vous</h2>
-          <p className="text-neutral-500 text-sm mb-6">pour acceder a votre profil</p>
+          <p className="text-neutral-500 text-sm mb-6">pour accéder à votre profil</p>
           <Link href="/auth/login">
             <Button className="rounded-full px-8">Se connecter</Button>
           </Link>
@@ -120,6 +130,11 @@ export default function ProfilPage() {
   }
 
   const menuSections = [
+    ...(isAdmin ? [{
+      items: [
+        { icon: Shield, label: "Administration", href: "/admin", highlight: true },
+      ]
+    }] : []),
     {
       items: [
         { icon: Package, label: "Mes produits", href: "/dashboard/products", count: stats.products },
@@ -136,7 +151,7 @@ export default function ProfilPage() {
     },
     {
       items: [
-        { icon: Settings, label: "Parametres", href: "/profil/settings" },
+        { icon: Settings, label: "Paramètres", href: "/profil/settings" },
         { icon: HelpCircle, label: "Aide", href: "/contact" },
       ]
     }
@@ -221,9 +236,13 @@ export default function ProfilPage() {
               <Link key={item.href} href={item.href}>
                 <div className={`flex items-center gap-4 px-4 py-3.5 active:bg-neutral-50 ${
                   itemIdx !== section.items.length - 1 ? "border-b border-neutral-100" : ""
-                }`}>
-                  <div className="w-9 h-9 rounded-full bg-neutral-100 flex items-center justify-center">
-                    <item.icon className="h-[18px] w-[18px] text-neutral-600" />
+                } ${(item as any).highlight ? "bg-[#2F7D32]/5" : ""}`}>
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center ${
+                    (item as any).highlight ? "bg-[#2F7D32]" : "bg-neutral-100"
+                  }`}>
+                    <item.icon className={`h-[18px] w-[18px] ${
+                      (item as any).highlight ? "text-white" : "text-neutral-600"
+                    }`} />
                   </div>
                   <span className="flex-1 font-medium text-[15px]">{item.label}</span>
                   {item.count !== undefined && item.count > 0 && (
@@ -242,7 +261,7 @@ export default function ProfilPage() {
           className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-white text-red-600 font-medium shadow-sm active:bg-red-50"
         >
           <LogOut className="h-[18px] w-[18px]" />
-          Se deconnecter
+          Se déconnecter
         </button>
 
         <p className="text-center text-xs text-neutral-400 py-4">
