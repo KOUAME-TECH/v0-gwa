@@ -34,9 +34,16 @@ const userTypeLabels: Record<string, string> = {
   artisan: 'Artisan',
   acheteur: 'Acheteur',
   transformateur: 'Transformateur',
-  cooperative: 'Cooperative',
+  cooperative: 'Coopérative',
   entreprise: 'Entreprise'
 }
+
+const africanCountries = [
+  "Côte d'Ivoire", "Sénégal", "Mali", "Burkina Faso", "Ghana",
+  "Togo", "Bénin", "Niger", "Guinée", "Cameroun", "Nigeria",
+  "Kenya", "Tanzanie", "Ouganda", "Rwanda", "Éthiopie", "Maroc",
+  "Tunisie", "Algérie", "Afrique du Sud", "RDC", "Congo"
+]
 
 export default function NetworkPage() {
   const router = useRouter()

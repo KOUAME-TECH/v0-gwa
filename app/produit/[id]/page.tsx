@@ -114,7 +114,7 @@ export default function ProduitPage() {
     if (error) {
       toast.error("Erreur")
     } else {
-      toast.success("Ajoute au panier")
+      toast.success("Ajouté au panier")
     }
   }
 
@@ -137,7 +137,7 @@ export default function ProduitPage() {
       await navigator.share({ title: product?.name, url: window.location.href })
     } else {
       await navigator.clipboard.writeText(window.location.href)
-      toast.success("Lien copie")
+      toast.success("Lien copié")
     }
   }
 

@@ -15,17 +15,23 @@ const userTypes = [
   { value: "producteur", label: "Producteur", icon: Sprout },
   { value: "artisan", label: "Artisan", icon: Palette },
   { value: "acheteur", label: "Acheteur", icon: ShoppingCart },
-  { value: "cooperative", label: "Cooperative", icon: Users },
+  { value: "cooperative", label: "Coopérative", icon: Users },
   { value: "entreprise", label: "Entreprise", icon: Building2 },
 ]
 
 const countries = [
-  { value: "ci", label: "Cote d'Ivoire" },
-  { value: "sn", label: "Senegal" },
+  { value: "ci", label: "Côte d'Ivoire" },
+  { value: "sn", label: "Sénégal" },
   { value: "cm", label: "Cameroun" },
   { value: "ml", label: "Mali" },
   { value: "bf", label: "Burkina Faso" },
   { value: "gh", label: "Ghana" },
+  { value: "bj", label: "Bénin" },
+  { value: "tg", label: "Togo" },
+  { value: "gn", label: "Guinée" },
+  { value: "ne", label: "Niger" },
+  { value: "ng", label: "Nigeria" },
+  { value: "ma", label: "Maroc" },
 ]
 
 export default function SignupPage() {
@@ -85,7 +91,7 @@ export default function SignupPage() {
     })
 
     if (authError) {
-      setError(authError.message.includes("already registered") ? "Cet email est deja utilise" : authError.message)
+      setError(authError.message.includes("already registered") ? "Cet email est déjà utilisé" : authError.message)
       setIsLoading(false)
       return
     }

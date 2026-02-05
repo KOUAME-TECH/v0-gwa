@@ -35,12 +35,12 @@ type Profile = {
 }
 
 const userTypes = [
-  { value: "farmer", label: "Producteur agricole" },
+  { value: "producteur", label: "Producteur agricole" },
   { value: "artisan", label: "Artisan" },
-  { value: "buyer", label: "Acheteur" },
-  { value: "business", label: "Entreprise" },
+  { value: "transformateur", label: "Transformateur" },
+  { value: "acheteur", label: "Acheteur" },
   { value: "cooperative", label: "Coopérative" },
-  { value: "student", label: "Étudiant" },
+  { value: "entreprise", label: "Entreprise" },
 ]
 
 const countries = [

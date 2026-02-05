@@ -3,7 +3,7 @@
 import React from "react"
 import { useEffect, useState, useRef } from "react"
 import { createClient } from "@/lib/supabase/client"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
@@ -35,6 +35,8 @@ interface Message {
 
 export default function MessagesPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const recipientId = searchParams.get("to")
   const [user, setUser] = useState<{ id: string } | null>(null)
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null)
@@ -49,6 +51,13 @@ export default function MessagesPage() {
   useEffect(() => {
     checkUserAndLoadConversations()
   }, [])
+
+  // Ouvrir ou créer une conversation si le paramètre "to" est présent
+  useEffect(() => {
+    if (user && recipientId && conversations.length >= 0 && !loading) {
+      openOrCreateConversation(recipientId)
+    }
+  }, [user, recipientId, loading])
 
   useEffect(() => {
     if (selectedConversation) {
@@ -172,6 +181,51 @@ export default function MessagesPage() {
 
     await loadConversations(user.id)
     setSending(false)
+  }
+
+  async function openOrCreateConversation(recipientId: string) {
+    if (!user || recipientId === user.id) return
+    
+    // Chercher une conversation existante avec cet utilisateur
+    const existingConv = conversations.find(c => 
+      c.other_user?.id === recipientId ||
+      (c.participant_1 === recipientId || c.participant_2 === recipientId)
+    )
+    
+    if (existingConv) {
+      setSelectedConversation(existingConv)
+      return
+    }
+    
+    // Créer une nouvelle conversation
+    const { data: newConv, error } = await supabase
+      .from("conversations")
+      .insert({
+        participant_1: user.id,
+        participant_2: recipientId,
+        last_message_at: new Date().toISOString()
+      })
+      .select()
+      .single()
+    
+    if (newConv && !error) {
+      // Charger les infos de l'autre utilisateur
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("id, full_name, avatar_url, user_type")
+        .eq("id", recipientId)
+        .single()
+      
+      const newConversation: Conversation = {
+        ...newConv,
+        other_user: profileData || undefined,
+        last_message: undefined,
+        unread_count: 0
+      }
+      
+      setConversations(prev => [newConversation, ...prev])
+      setSelectedConversation(newConversation)
+    }
   }
 
   const filteredConversations = conversations.filter(c =>

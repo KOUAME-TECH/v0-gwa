@@ -81,14 +81,12 @@ export default function ProfilPage() {
 
   const getUserTypeLabel = (type: string | null) => {
     const types: Record<string, string> = {
-      farmer: "Producteur",
       producteur: "Producteur",
       artisan: "Artisan",
-      buyer: "Acheteur",
+      transformateur: "Transformateur",
       acheteur: "Acheteur",
       cooperative: "Coopérative",
-      business: "Entreprise",
-      student: "Étudiant",
+      entreprise: "Entreprise",
     }
     return type ? types[type] || type : "Membre"
   }

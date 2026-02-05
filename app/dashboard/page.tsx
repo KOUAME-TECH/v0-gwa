@@ -41,11 +41,11 @@ export default function DashboardPage() {
         .eq("id", user.id)
         .single()
 
-      const userType = profile?.user_type || "buyer"
+      const userType = profile?.user_type || "acheteur"
 
-      // Rediriger selon le type
+      // Rediriger selon le type (utilise les valeurs de la contrainte DB)
       switch (userType) {
-        case "farmer":
+        case "producteur":
           setStatus("Redirection vers votre espace Producteur...")
           router.push("/dashboard/farmer")
           break
@@ -53,7 +53,11 @@ export default function DashboardPage() {
           setStatus("Redirection vers votre espace Artisan...")
           router.push("/dashboard/artisan")
           break
-        case "buyer":
+        case "transformateur":
+          setStatus("Redirection vers votre espace Transformateur...")
+          router.push("/dashboard/farmer") // Même interface que producteur
+          break
+        case "acheteur":
           setStatus("Redirection vers votre espace Acheteur...")
           router.push("/dashboard/buyer")
           break
@@ -61,7 +65,7 @@ export default function DashboardPage() {
           setStatus("Redirection vers votre espace Coopérative...")
           router.push("/dashboard/cooperative")
           break
-        case "business":
+        case "entreprise":
           setStatus("Redirection vers votre espace Entreprise...")
           router.push("/dashboard/business")
           break
@@ -78,7 +82,7 @@ export default function DashboardPage() {
     if (status.includes("Producteur")) return <Sprout className="h-12 w-12 text-[#2F7D32]" />
     if (status.includes("Artisan")) return <Palette className="h-12 w-12 text-[#8B4513]" />
     if (status.includes("Acheteur")) return <ShoppingCart className="h-12 w-12 text-[#1976D2]" />
-    if (status.includes("Coopérative")) return <Users className="h-12 w-12 text-[#7B1FA2]" />
+    if (status.includes("Coopérative") || status.includes("Cooperative")) return <Users className="h-12 w-12 text-[#7B1FA2]" />
     if (status.includes("Entreprise")) return <Building2 className="h-12 w-12 text-[#455A64]" />
     return <Loader2 className="h-12 w-12 text-[#2F7D32] animate-spin" />
   }

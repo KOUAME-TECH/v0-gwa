@@ -523,22 +523,45 @@ export default function HomePage() {
             <div className="w-20 h-20 rounded-full bg-[#2F7D32]/10 flex items-center justify-center mx-auto mb-4">
               <ShoppingBag className="h-10 w-10 text-[#2F7D32]" />
             </div>
-            <h3 className="font-semibold text-lg text-[#111827] mb-2">Bienvenue sur GWA</h3>
-            <p className="text-[#4B5563] text-sm mb-6">
-              Découvrez et connectez-vous avec des producteurs et artisans africains
-            </p>
-            <div className="flex flex-col gap-3">
-              <Link href="/auth/signup">
-                <Button className="w-full rounded-full bg-[#2F7D32] hover:bg-[#256427]">
-                  Créer un compte
-                </Button>
-              </Link>
-              <Link href="/marketplace">
-                <Button variant="outline" className="w-full rounded-full bg-transparent">
-                  Explorer le marketplace
-                </Button>
-              </Link>
-            </div>
+            {user ? (
+              <>
+                <h3 className="font-semibold text-lg text-[#111827] mb-2">Aucune publication pour le moment</h3>
+                <p className="text-[#4B5563] text-sm mb-6">
+                  Soyez le premier à publier du contenu ou explorez le marketplace
+                </p>
+                <div className="flex flex-col gap-3">
+                  <Link href="/publier">
+                    <Button className="w-full rounded-full bg-[#2F7D32] hover:bg-[#256427]">
+                      Publier un produit
+                    </Button>
+                  </Link>
+                  <Link href="/marketplace">
+                    <Button variant="outline" className="w-full rounded-full bg-transparent">
+                      Explorer le marketplace
+                    </Button>
+                  </Link>
+                </div>
+              </>
+            ) : (
+              <>
+                <h3 className="font-semibold text-lg text-[#111827] mb-2">Bienvenue sur GWA</h3>
+                <p className="text-[#4B5563] text-sm mb-6">
+                  Découvrez et connectez-vous avec des producteurs et artisans africains
+                </p>
+                <div className="flex flex-col gap-3">
+                  <Link href="/auth/signup">
+                    <Button className="w-full rounded-full bg-[#2F7D32] hover:bg-[#256427]">
+                      Créer un compte
+                    </Button>
+                  </Link>
+                  <Link href="/marketplace">
+                    <Button variant="outline" className="w-full rounded-full bg-transparent">
+                      Explorer le marketplace
+                    </Button>
+                  </Link>
+                </div>
+              </>
+            )}
           </div>
         ) : (
           filteredFeed.map((item, index) => (

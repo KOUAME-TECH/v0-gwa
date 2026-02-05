@@ -101,8 +101,15 @@ export function BottomNav() {
     }
   }, [])
   
-  // Masquer sur auth et admin
-  if (pathname?.startsWith("/auth") || pathname?.startsWith("/admin")) {
+  // Masquer sur auth, admin, messages conversation, produit detail, profil edit
+  if (
+    pathname?.startsWith("/auth") || 
+    pathname?.startsWith("/admin") ||
+    pathname?.startsWith("/messages/") ||
+    pathname?.startsWith("/produit/") ||
+    pathname?.startsWith("/profil/edit") ||
+    pathname?.startsWith("/dashboard/")
+  ) {
     return null
   }
 
