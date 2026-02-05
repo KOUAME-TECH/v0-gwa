@@ -170,7 +170,7 @@ export default function ProductPage() {
                     <ShoppingCart className="h-5 w-5 mr-2" />
                     Add to Cart
                   </Button>
-                  <Button variant="outline" size="lg" className="flex-1">
+                  <Button variant="outline" size="lg" className="flex-1 bg-transparent">
                     Buy Now
                   </Button>
                 </div>
@@ -250,9 +250,9 @@ export default function ProductPage() {
                     {[
                       { label: "Material", value: "Elephant Grass, Natural Dyes" },
                       { label: "Origin", value: "Accra, Ghana" },
-                      { label: "Large Basket", value: "14" diameter x 10" height" },
-                      { label: "Medium Basket", value: "12" diameter x 8" height" },
-                      { label: "Small Basket", value: "10" diameter x 6" height" },
+                      { label: "Large Basket", value: "14\" diameter x 10\" height" },
+                      { label: "Medium Basket", value: "12\" diameter x 8\" height" },
+                      { label: "Small Basket", value: "10\" diameter x 6\" height" },
                       { label: "Weight", value: "2.5 lbs (total set)" },
                       { label: "Care", value: "Wipe clean with damp cloth" },
                       { label: "Certification", value: "Fair Trade Certified" }
