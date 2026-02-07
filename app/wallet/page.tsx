@@ -477,7 +477,7 @@ export default function WalletPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Methode de retrait</Label>
+              <Label>Méthode de retrait</Label>
               <div className="grid grid-cols-3 gap-2">
                 <Button
                   type="button"

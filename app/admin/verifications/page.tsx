@@ -405,7 +405,7 @@ export default function AdminVerificationsPage() {
                   </div>
                   {selectedRequest.cooperatives && (
                     <div>
-                      <p className="text-sm text-muted-foreground">Cooperative</p>
+                      <p className="text-sm text-muted-foreground">Coopérative</p>
                       <p className="font-medium">{selectedRequest.cooperatives.name}</p>
                       <p className="text-sm text-muted-foreground">
                         N° {selectedRequest.cooperatives.registration_number}

@@ -97,19 +97,12 @@ export default function AdminLayout({
           .eq("is_active", true)
           .maybeSingle()
 
-        console.log("[v0] Admin check for user:", user.id)
-        console.log("[v0] Admin role result:", adminRole)
-        console.log("[v0] Admin error:", adminError)
-
         if (!isMounted) return
 
         if (!adminRole) {
-          console.log("[v0] No admin role found, redirecting to dashboard")
           router.push("/dashboard")
           return
         }
-        
-        console.log("[v0] Admin access granted with role:", adminRole.role)
 
         // Get profile
         const { data: profile } = await supabase

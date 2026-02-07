@@ -25,13 +25,13 @@ interface Product {
 
 const categories = [
   { name: "Tout", icon: "🌍", slug: "all" },
-  { name: "Cereales", icon: "🌾", slug: "cereales" },
+  { name: "Céréales", icon: "🌾", slug: "cereales" },
   { name: "Cacao", icon: "🍫", slug: "cacao" },
-  { name: "Cafe", icon: "☕", slug: "cafe" },
+  { name: "Café", icon: "☕", slug: "cafe" },
   { name: "Fruits", icon: "🥭", slug: "fruits" },
-  { name: "Legumes", icon: "🥬", slug: "legumes" },
-  { name: "Epices", icon: "🌶", slug: "epices" },
-  { name: "Elevage", icon: "🐄", slug: "elevage" }
+  { name: "Légumes", icon: "🥬", slug: "legumes" },
+  { name: "Épices", icon: "🌶", slug: "epices" },
+  { name: "Élevage", icon: "🐄", slug: "elevage" }
 ]
 
 export default function AgriculturePage() {

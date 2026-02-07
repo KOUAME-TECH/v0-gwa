@@ -210,11 +210,11 @@ export default function AdminDashboardPage() {
   const getStatusBadge = (status: string) => {
     const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
       pending: { label: "En attente", variant: "secondary" },
-      confirmed: { label: "Confirmee", variant: "default" },
-      processing: { label: "En preparation", variant: "default" },
-      shipped: { label: "Expediee", variant: "default" },
-      delivered: { label: "Livree", variant: "outline" },
-      cancelled: { label: "Annulee", variant: "destructive" },
+      confirmed: { label: "Confirmée", variant: "default" },
+      processing: { label: "En préparation", variant: "default" },
+      shipped: { label: "Expédiée", variant: "default" },
+      delivered: { label: "Livrée", variant: "outline" },
+      cancelled: { label: "Annulée", variant: "destructive" },
     }
     const config = statusConfig[status] || { label: status, variant: "secondary" as const }
     return <Badge variant={config.variant}>{config.label}</Badge>
@@ -255,7 +255,7 @@ export default function AdminDashboardPage() {
                 </div>
                 <div className="flex-1">
                   <p className="font-medium">{stats.pendingProducts} produit(s) en attente</p>
-                  <p className="text-sm text-muted-foreground">Moderation requise</p>
+                  <p className="text-sm text-muted-foreground">Modération requise</p>
                 </div>
                 <Link href="/admin/products?status=pending">
                   <Button variant="outline" size="sm" className="bg-transparent">
@@ -273,7 +273,7 @@ export default function AdminDashboardPage() {
                 </div>
                 <div className="flex-1">
                   <p className="font-medium">{stats.openReports} signalement(s)</p>
-                  <p className="text-sm text-muted-foreground">A traiter</p>
+                  <p className="text-sm text-muted-foreground">À traiter</p>
                 </div>
                 <Link href="/admin/reports">
                   <Button variant="outline" size="sm" className="bg-transparent">
@@ -291,7 +291,7 @@ export default function AdminDashboardPage() {
                 </div>
                 <div className="flex-1">
                   <p className="font-medium">{stats.openDisputes} litige(s) ouvert(s)</p>
-                  <p className="text-sm text-muted-foreground">Resolution requise</p>
+                  <p className="text-sm text-muted-foreground">Résolution requise</p>
                 </div>
                 <Link href="/admin/disputes">
                   <Button variant="outline" size="sm" className="bg-transparent">
@@ -328,7 +328,7 @@ export default function AdminDashboardPage() {
           <CardContent>
             <div className="text-2xl font-bold">{stats.totalProducts}</div>
             <p className="text-xs text-muted-foreground">
-              {stats.pendingProducts} en attente de moderation
+              {stats.pendingProducts} en attente de modération
             </p>
           </CardContent>
         </Card>
@@ -365,8 +365,8 @@ export default function AdminDashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle>Commandes recentes</CardTitle>
-              <CardDescription>Les 5 dernieres commandes</CardDescription>
+              <CardTitle>Commandes récentes</CardTitle>
+              <CardDescription>Les 5 dernières commandes</CardDescription>
             </div>
             <Link href="/admin/orders">
               <Button variant="outline" size="sm" className="bg-transparent">
@@ -446,8 +446,8 @@ export default function AdminDashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle>Produits en attente de moderation</CardTitle>
-              <CardDescription>Produits necessitant une validation</CardDescription>
+              <CardTitle>Produits en attente de modération</CardTitle>
+              <CardDescription>Produits nécessitant une validation</CardDescription>
             </div>
             <Link href="/admin/products?status=pending">
               <Button variant="outline" size="sm" className="bg-transparent">

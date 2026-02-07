@@ -172,7 +172,7 @@ export default function CommissionsPage() {
             Commande Personnalisee
           </Badge>
           <h1 className="text-3xl sm:text-4xl font-bold mb-4">
-            Creez Votre Piece Unique
+            Créez Votre Pièce Unique
           </h1>
           <p className="text-muted-foreground">
             Decrivez votre projet et nos artisans certifies le realiseront selon vos specifications exactes
@@ -215,13 +215,13 @@ export default function CommissionsPage() {
                 </CardHeader>
                 <CardContent className="space-y-6">
                   <div className="space-y-2">
-                    <Label>Categorie d'artisanat</Label>
+                    <Label>Catégorie d{"'"}artisanat</Label>
                     <Select 
                       value={formData.category} 
                       onValueChange={(value) => setFormData({...formData, category: value})}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Selectionnez une categorie" />
+                        <SelectValue placeholder="Sélectionnez une catégorie" />
                       </SelectTrigger>
                       <SelectContent>
                         {categories.map((cat) => (
@@ -329,7 +329,7 @@ export default function CommissionsPage() {
                 <CardHeader>
                   <CardTitle>Choisissez un artisan</CardTitle>
                   <CardDescription>
-                    Selectionnez un artisan certifie ou laissez-nous vous en recommander un
+                    Sélectionnez un artisan certifié ou laissez-nous vous en recommander un
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
@@ -365,7 +365,7 @@ export default function CommissionsPage() {
                   {featuredArtisans.length === 0 ? (
                     <div className="text-center py-8 text-muted-foreground">
                       <p>Aucun artisan certifie disponible pour le moment.</p>
-                      <p className="text-sm">Selectionnez la recommandation automatique.</p>
+                      <p className="text-sm">Sélectionnez la recommandation automatique.</p>
                     </div>
                   ) : (
                     <div className="grid sm:grid-cols-2 gap-4">
@@ -493,7 +493,7 @@ export default function CommissionsPage() {
                   <div className="p-4 bg-muted rounded-lg space-y-3">
                     <h4 className="font-medium">Resume de votre commande</h4>
                     <div className="grid grid-cols-2 gap-2 text-sm">
-                      <span className="text-muted-foreground">Categorie:</span>
+                      <span className="text-muted-foreground">Catégorie :</span>
                       <span>{categories.find(c => c.id === formData.category)?.name || '-'}</span>
                       <span className="text-muted-foreground">Quantite:</span>
                       <span>{formData.quantity} piece(s)</span>

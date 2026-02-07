@@ -124,8 +124,8 @@ export default function AdminDisputesPage() {
       .insert({
         user_id: dispute.opened_by,
         type: 'dispute',
-        title: `Litige ${newStatus === 'resolved' ? 'resolu' : 'mis a jour'}`,
-        message: resolution || `Le statut de votre litige a ete mis a jour: ${getStatusLabel(newStatus)}`,
+        title: `Litige ${newStatus === 'resolved' ? 'résolu' : 'mis à jour'}`,
+        message: resolution || `Le statut de votre litige a été mis à jour : ${getStatusLabel(newStatus)}`,
         link: `/dashboard/commandes`
       })
 
@@ -141,8 +141,8 @@ export default function AdminDisputesPage() {
     switch (status) {
       case 'open': return 'Ouvert'
       case 'under_review': return 'En cours d\'examen'
-      case 'resolved': return 'Resolu'
-      case 'closed': return 'Ferme'
+      case 'resolved': return 'Résolu'
+      case 'closed': return 'Fermé'
       default: return status
     }
   }
@@ -154,9 +154,9 @@ export default function AdminDisputesPage() {
       case 'under_review':
         return <Badge className="bg-yellow-100 text-yellow-700">En examen</Badge>
       case 'resolved':
-        return <Badge className="bg-green-100 text-green-700">Resolu</Badge>
+        return <Badge className="bg-green-100 text-green-700">Résolu</Badge>
       case 'closed':
-        return <Badge className="bg-gray-100 text-gray-700">Ferme</Badge>
+        return <Badge className="bg-gray-100 text-gray-700">Fermé</Badge>
       default:
         return <Badge>{status}</Badge>
     }
@@ -164,11 +164,11 @@ export default function AdminDisputesPage() {
 
   const getReasonLabel = (reason: string) => {
     const reasons: Record<string, string> = {
-      'product_not_received': 'Produit non recu',
-      'product_damaged': 'Produit endommage',
+      'product_not_received': 'Produit non reçu',
+      'product_damaged': 'Produit endommagé',
       'wrong_product': 'Mauvais produit',
-      'quality_issue': 'Probleme de qualite',
-      'quantity_issue': 'Probleme de quantite',
+      'quality_issue': 'Problème de qualité',
+      'quantity_issue': 'Problème de quantité',
       'other': 'Autre'
     }
     return reasons[reason] || reason
@@ -202,7 +202,7 @@ export default function AdminDisputesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">Litiges</h1>
-          <p className="text-muted-foreground">Gerer les litiges entre acheteurs et vendeurs</p>
+          <p className="text-muted-foreground">Gérer les litiges entre acheteurs et vendeurs</p>
         </div>
         <Button variant="outline" onClick={loadDisputes}>
           <RefreshCw className="h-4 w-4 mr-2" />
@@ -252,7 +252,7 @@ export default function AdminDisputesPage() {
             </div>
             <div>
               <p className="text-2xl font-bold">{resolvedCount}</p>
-              <p className="text-sm text-muted-foreground">Resolus</p>
+              <p className="text-sm text-muted-foreground">Résolus</p>
             </div>
           </CardContent>
         </Card>
@@ -262,7 +262,7 @@ export default function AdminDisputesPage() {
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
-          placeholder="Rechercher par numero de commande, nom..."
+          placeholder="Rechercher par numéro de commande, nom..."
           className="pl-10"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
@@ -274,7 +274,7 @@ export default function AdminDisputesPage() {
         <TabsList>
           <TabsTrigger value="open">Ouverts ({openCount})</TabsTrigger>
           <TabsTrigger value="under_review">En examen ({underReviewCount})</TabsTrigger>
-          <TabsTrigger value="resolved">Resolus ({resolvedCount})</TabsTrigger>
+          <TabsTrigger value="resolved">Résolus ({resolvedCount})</TabsTrigger>
           <TabsTrigger value="all">Tous ({disputes.length})</TabsTrigger>
         </TabsList>
 
@@ -289,7 +289,7 @@ export default function AdminDisputesPage() {
                 <AlertTriangle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                 <h3 className="text-lg font-semibold mb-2">Aucun litige</h3>
                 <p className="text-muted-foreground">
-                  Les litiges apparaitront ici
+                  Les litiges apparaîtront ici
                 </p>
               </Card>
             ) : (
@@ -340,7 +340,7 @@ export default function AdminDisputesPage() {
                               </span>
                               {dispute.assignee && (
                                 <span className="text-blue-600">
-                                  Assigne a {dispute.assignee.full_name}
+                                  Assigné à {dispute.assignee.full_name}
                                 </span>
                               )}
                             </div>

@@ -169,7 +169,7 @@ export default function PublierPage() {
       
       if (error) throw error
       
-      toast.success("Produit publie avec succes!")
+      toast.success("Produit publié avec succès !")
       router.push("/profil")
     } catch (error: any) {
       console.error("Error:", error)
@@ -208,7 +208,7 @@ export default function PublierPage() {
       
       if (error) throw error
       
-      toast.success("Publication creee!")
+      toast.success("Publication créée !")
       router.push("/")
     } catch (error: any) {
       console.error("Error:", error)
@@ -476,9 +476,9 @@ export default function PublierPage() {
           </div>
         </div>
 
-        {/* Categorie */}
+        {/* Catégorie */}
         <div>
-          <label className="text-sm font-medium text-[#111827] mb-3 block">Categorie *</label>
+          <label className="text-sm font-medium text-[#111827] mb-3 block">Catégorie *</label>
           <div className="flex flex-wrap gap-2">
             {filteredCategories.slice(0, 12).map((cat) => (
               <button
@@ -521,7 +521,7 @@ export default function PublierPage() {
             />
           </div>
           <div>
-            <label className="text-sm font-medium text-[#111827] mb-2 block">Unite</label>
+            <label className="text-sm font-medium text-[#111827] mb-2 block">Unité</label>
             <select
               value={productForm.unit}
               onChange={(e) => setProductForm({ ...productForm, unit: e.target.value })}
@@ -530,7 +530,7 @@ export default function PublierPage() {
               <option value="kg">Kilogramme</option>
               <option value="g">Gramme</option>
               <option value="L">Litre</option>
-              <option value="piece">Piece</option>
+              <option value="piece">Pièce</option>
               <option value="sac">Sac</option>
               <option value="lot">Lot</option>
             </select>
@@ -539,7 +539,7 @@ export default function PublierPage() {
 
         {/* Stock */}
         <div>
-          <label className="text-sm font-medium text-[#111827] mb-2 block">Quantite disponible</label>
+          <label className="text-sm font-medium text-[#111827] mb-2 block">Quantité disponible</label>
           <Input
             type="number"
             value={productForm.stock_quantity}
@@ -555,7 +555,7 @@ export default function PublierPage() {
           <Textarea
             value={productForm.description}
             onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
-            placeholder="Decrivez votre produit..."
+            placeholder="Décrivez votre produit..."
             className="min-h-[100px] rounded-xl border-[#E5E7EB] bg-white resize-none"
           />
         </div>

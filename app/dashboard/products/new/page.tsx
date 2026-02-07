@@ -153,7 +153,7 @@ export default function NewProductPage() {
         .single()
       
       if (catError) {
-        setError("Erreur lors de la creation de la categorie: " + catError.message)
+        setError("Erreur lors de la création de la catégorie : " + catError.message)
         setIsLoading(false)
         return
       }
@@ -259,10 +259,10 @@ export default function NewProductPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Categorie *</Label>
+                  <Label>Catégorie *</Label>
                   <Select value={formData.category} onValueChange={(value) => setFormData({...formData, category: value, subcategory: ""})}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Selectionnez" />
+                      <SelectValue placeholder="Sélectionnez" />
                     </SelectTrigger>
                     <SelectContent>
                       {categories.map((cat) => (
@@ -275,14 +275,14 @@ export default function NewProductPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Sous-categorie</Label>
+                  <Label>Sous-catégorie</Label>
                   <Select 
                     value={formData.subcategory} 
                     onValueChange={(value) => setFormData({...formData, subcategory: value})}
                     disabled={!selectedCategory}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Selectionnez" />
+                      <SelectValue placeholder="Sélectionnez" />
                     </SelectTrigger>
                     <SelectContent>
                       {selectedCategory?.subcategories.map((sub) => (
@@ -411,7 +411,7 @@ export default function NewProductPage() {
                   Annuler
                 </Button>
                 <Button type="submit" className="flex-1" disabled={isLoading}>
-                  {isLoading ? "Creation en cours..." : "Creer le produit"}
+                  {isLoading ? "Création en cours..." : "Créer le produit"}
                 </Button>
               </div>
             </form>

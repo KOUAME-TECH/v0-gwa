@@ -156,7 +156,7 @@ export default function ProfilePage() {
   const getUserTypeLabel = (type: string) => {
     const types: Record<string, string> = {
       'producteur': 'Producteur', 'artisan': 'Artisan', 'acheteur': 'Acheteur',
-      'cooperative': 'Cooperative', 'entreprise': 'Entreprise', 'transformateur': 'Transformateur'
+      'cooperative': 'Coopérative', 'entreprise': 'Entreprise', 'transformateur': 'Transformateur'
     }
     return types[type] || type
   }

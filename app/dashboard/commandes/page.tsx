@@ -64,11 +64,11 @@ interface AuditLog {
 const orderStatuses = {
   draft: { label: "Brouillon", color: "bg-gray-500", icon: FileText },
   pending: { label: "En attente", color: "bg-yellow-500", icon: Clock },
-  confirmed: { label: "Confirmee", color: "bg-blue-500", icon: CheckCircle2 },
-  preparing: { label: "En preparation", color: "bg-purple-500", icon: Package },
+  confirmed: { label: "Confirmée", color: "bg-blue-500", icon: CheckCircle2 },
+  preparing: { label: "En préparation", color: "bg-purple-500", icon: Package },
   shipping: { label: "En livraison", color: "bg-orange-500", icon: Truck },
-  delivered: { label: "Livree", color: "bg-green-500", icon: CheckCircle2 },
-  cancelled: { label: "Annulee", color: "bg-red-500", icon: XCircle },
+  delivered: { label: "Livrée", color: "bg-green-500", icon: CheckCircle2 },
+  cancelled: { label: "Annulée", color: "bg-red-500", icon: XCircle },
 }
 
 export default function OrdersPage() {
@@ -283,7 +283,7 @@ export default function OrdersPage() {
               </div>
               <div>
                 <p className="text-2xl font-bold">{orders.filter(o => o.status === "delivered").length}</p>
-                <p className="text-sm text-muted-foreground">Livrees</p>
+                <p className="text-sm text-muted-foreground">Livrées</p>
               </div>
             </CardContent>
           </Card>
@@ -325,7 +325,7 @@ export default function OrdersPage() {
           <TabsList>
             <TabsTrigger value="all">Toutes ({orders.length})</TabsTrigger>
             <TabsTrigger value="active">En cours ({orders.filter(o => ["pending", "confirmed", "preparing", "shipping"].includes(o.status)).length})</TabsTrigger>
-            <TabsTrigger value="delivered">Livrees ({orders.filter(o => o.status === "delivered").length})</TabsTrigger>
+            <TabsTrigger value="delivered">Livrées ({orders.filter(o => o.status === "delivered").length})</TabsTrigger>
             <TabsTrigger value="cancelled">Annulees ({orders.filter(o => o.status === "cancelled").length})</TabsTrigger>
           </TabsList>
 

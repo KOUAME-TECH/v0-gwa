@@ -9,10 +9,11 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { 
   Heart, MessageCircle, Share2, UserPlus, Search, Bell,
   ShoppingBag, BadgeCheck, MapPin, Bookmark, MoreHorizontal,
-  Send, ChevronLeft, ChevronRight, X
+  Send, ChevronLeft, ChevronRight, X, Flag, EyeOff, LinkIcon
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -795,9 +796,31 @@ function FeedCard({
             <UserPlus className="h-3.5 w-3.5 mr-1" />
             Suivre
           </Button>
-          <Button variant="ghost" size="icon" className="rounded-full h-9 w-9">
-            <MoreHorizontal className="h-5 w-5 text-[#4B5563]" />
-          </Button>
+<DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="rounded-full h-9 w-9">
+                    <MoreHorizontal className="h-5 w-5 text-[#4B5563]" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem onClick={() => {
+                    const url = `${window.location.origin}/${isProduct ? "produit" : "post"}/${data.id}`
+                    navigator.clipboard.writeText(url)
+                    toast.success("Lien copié !")
+                  }}>
+                    <LinkIcon className="h-4 w-4 mr-2" />
+                    Copier le lien
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => toast.success("Publication masquée")}>
+                    <EyeOff className="h-4 w-4 mr-2" />
+                    Masquer
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => toast.success("Signalement envoyé")} className="text-destructive">
+                    <Flag className="h-4 w-4 mr-2" />
+                    Signaler
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
         </div>
       </div>
 

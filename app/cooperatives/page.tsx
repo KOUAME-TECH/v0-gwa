@@ -14,8 +14,7 @@ import {
   Search, Users, MapPin, Phone, Mail, Globe, Calendar, 
   CheckCircle2, ShieldCheck, Sprout, Hammer, Plus, Building2 
 } from "lucide-react"
-
-interface Cooperative {
+interface CooperativeData {
   id: string
   name: string
   description: string
@@ -37,7 +36,7 @@ interface Cooperative {
 }
 
 export default function CooperativesPage() {
-  const [cooperatives, setCooperatives] = useState<Cooperative[]>([])
+  const [cooperatives, setCooperatives] = useState<CooperativeData[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedType, setSelectedType] = useState("all")
@@ -96,16 +95,16 @@ export default function CooperativesPage() {
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-bold mb-2">Cooperatives</h1>
+            <h1 className="text-3xl font-bold mb-2">Coopératives</h1>
             <p className="text-muted-foreground">
-              Rejoignez ou creez une cooperative pour mutualiser vos ressources
+              Rejoignez ou créez une coopérative pour mutualiser vos ressources
             </p>
           </div>
           {user && (
             <Link href="/cooperatives/create">
               <Button className="mt-4 md:mt-0">
                 <Plus className="h-4 w-4 mr-2" />
-                Creer une cooperative
+Créer une coopérative
               </Button>
             </Link>
           )}
@@ -120,7 +119,7 @@ export default function CooperativesPage() {
               </div>
               <div>
                 <p className="text-2xl font-bold">{cooperatives.length}</p>
-                <p className="text-xs text-muted-foreground">Cooperatives</p>
+                <p className="text-xs text-muted-foreground">Coopératives</p>
               </div>
             </CardContent>
           </Card>
@@ -170,7 +169,7 @@ export default function CooperativesPage() {
           <div className="relative flex-1">
             <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Rechercher une cooperative..."
+              placeholder="Rechercher une coopérative..."
               className="pl-10"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -200,7 +199,7 @@ export default function CooperativesPage() {
           </Select>
         </div>
 
-        {/* Cooperatives Grid */}
+        {/* Grille Coopératives */}
         {filteredCooperatives.length === 0 ? (
           <Card className="p-12 text-center">
             <Building2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />

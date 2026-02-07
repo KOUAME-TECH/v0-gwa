@@ -120,7 +120,7 @@ export default function AdminSettingsPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold">Parametres</h1>
+          <h1 className="text-2xl md:text-3xl font-bold">Paramètres</h1>
           <p className="text-muted-foreground">Configuration de la plateforme GWA</p>
         </div>
         <div className="flex gap-2">
@@ -148,10 +148,10 @@ export default function AdminSettingsPage() {
 
       <Tabs defaultValue="general" className="space-y-4">
         <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">
-          <TabsTrigger value="general">General</TabsTrigger>
+          <TabsTrigger value="general">Général</TabsTrigger>
           <TabsTrigger value="commissions">Commissions</TabsTrigger>
           <TabsTrigger value="payments">Paiements</TabsTrigger>
-          <TabsTrigger value="security">Securite</TabsTrigger>
+          <TabsTrigger value="security">Sécurité</TabsTrigger>
         </TabsList>
 
         <TabsContent value="general" className="space-y-4">
@@ -159,10 +159,10 @@ export default function AdminSettingsPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Settings className="h-5 w-5" />
-                Parametres generaux
+                Paramètres généraux
               </CardTitle>
               <CardDescription>
-                Configuration generale de la plateforme
+                Configuration générale de la plateforme
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -170,7 +170,7 @@ export default function AdminSettingsPage() {
                 <div className="space-y-0.5">
                   <Label>Mode maintenance</Label>
                   <p className="text-sm text-muted-foreground">
-                    Desactive l'acces a la plateforme pour les utilisateurs
+                    Désactive l{"'"}accès à la plateforme pour les utilisateurs
                   </p>
                 </div>
                 <Switch
@@ -183,9 +183,9 @@ export default function AdminSettingsPage() {
 
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <Label>Auto-approbation vendeurs verifies</Label>
+                  <Label>Auto-approbation vendeurs vérifiés</Label>
                   <p className="text-sm text-muted-foreground">
-                    Les produits des vendeurs verifies sont automatiquement approuves
+                    Les produits des vendeurs vérifiés sont automatiquement approuvés
                   </p>
                 </div>
                 <Switch
@@ -219,7 +219,7 @@ export default function AdminSettingsPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <Label>Pays supportes</Label>
+                <Label>Pays supportés</Label>
                 <div className="flex flex-wrap gap-2 mt-2">
                   {settings.supported_countries.map((country) => (
                     <Badge key={country} variant="secondary">{country}</Badge>
@@ -227,7 +227,7 @@ export default function AdminSettingsPage() {
                 </div>
               </div>
               <div>
-                <Label>Devises supportees</Label>
+                <Label>Devises supportées</Label>
                 <div className="flex flex-wrap gap-2 mt-2">
                   {settings.supported_currencies.map((currency) => (
                     <Badge key={currency} variant="outline">{currency}</Badge>
@@ -246,7 +246,7 @@ export default function AdminSettingsPage() {
                 Taux de commission
               </CardTitle>
               <CardDescription>
-                Commissions prelevees sur les ventes par categorie
+                Commissions prélevées sur les ventes par catégorie
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -284,7 +284,7 @@ export default function AdminSettingsPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Par defaut (%)</Label>
+                  <Label>Par défaut (%)</Label>
                   <Input
                     type="number"
                     value={settings.commission_rate.default}
@@ -370,10 +370,10 @@ export default function AdminSettingsPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <CreditCard className="h-5 w-5" />
-                Methodes de paiement
+                Méthodes de paiement
               </CardTitle>
               <CardDescription>
-                Methodes de paiement actives sur la plateforme
+                Méthodes de paiement actives sur la plateforme
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -393,10 +393,10 @@ export default function AdminSettingsPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Shield className="h-5 w-5" />
-                Securite
+                Sécurité
               </CardTitle>
               <CardDescription>
-                Parametres de securite de la plateforme
+                Paramètres de sécurité de la plateforme
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -406,7 +406,7 @@ export default function AdminSettingsPage() {
                   <p className="font-medium">Mode maintenance actif</p>
                   <p className="text-sm text-muted-foreground">
                     {settings.maintenance_mode 
-                      ? "La plateforme est actuellement en mode maintenance. Les utilisateurs ne peuvent pas acceder au site."
+                      ? "La plateforme est actuellement en mode maintenance. Les utilisateurs ne peuvent pas accéder au site."
                       : "La plateforme fonctionne normalement."
                     }
                   </p>

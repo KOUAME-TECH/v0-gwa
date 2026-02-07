@@ -175,7 +175,7 @@ export default function MarketplacePage() {
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium mb-3 block">Categorie</label>
+                  <label className="text-sm font-medium mb-3 block">Catégorie</label>
                   <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
                     <button
                       onClick={() => setSelectedCategory("all")}
@@ -326,7 +326,7 @@ export default function MarketplacePage() {
 
                     {product.is_verified && (
                       <Badge className="absolute top-2 left-2 bg-primary text-primary-foreground text-[10px] px-1.5 py-0.5">
-                        Verifie
+                        Vérifié
                       </Badge>
                     )}
                   </div>

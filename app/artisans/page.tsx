@@ -31,7 +31,7 @@ const categories = [
   { name: "Bois", icon: "🪵", slug: "bois" },
   { name: "Cuir", icon: "👜", slug: "cuir" },
   { name: "Vannerie", icon: "🧺", slug: "vannerie" },
-  { name: "Cosmetiques", icon: "🧴", slug: "cosmetiques" }
+  { name: "Cosmétiques", icon: "🧴", slug: "cosmetiques" }
 ]
 
 export default function ArtisansPage() {

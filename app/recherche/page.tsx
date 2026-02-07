@@ -29,7 +29,7 @@ const filters = [
   { value: "artisanat", label: "Artisanat" },
 ]
 
-const trending = ["Cacao", "Cafe", "Mangue", "Tissage", "Karite", "Miel"]
+const trending = ["Cacao", "Café", "Mangue", "Tissage", "Karité", "Miel"]
 
 export default function RecherchePage() {
   const searchParams = useSearchParams()
