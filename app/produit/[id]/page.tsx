@@ -159,7 +159,7 @@ export default function ProduitPage() {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center p-5">
         <div className="text-center">
-          <h2 className="text-xl font-semibold mb-2">Produit non trouve</h2>
+          <h2 className="text-xl font-semibold mb-2">Produit non trouvé</h2>
           <Link href="/recherche">
             <Button className="rounded-full">Retour</Button>
           </Link>

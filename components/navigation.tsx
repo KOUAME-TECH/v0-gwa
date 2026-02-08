@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { createClient } from "@/lib/supabase/client"
+import { toast } from "react-toastify" // Import toast from react-toastify
 
 interface UserProfile {
   id: string
@@ -315,15 +316,21 @@ export function Navigation() {
             </>
           )}
 
-          <Select defaultValue="fr">
+          <Select defaultValue="fr" onValueChange={(val) => {
+              if (val !== "fr") {
+                toast.info("Traduction bientôt disponible", {
+                  description: "Cette fonctionnalité sera disponible prochainement."
+                })
+              }
+            }}>
             <SelectTrigger className="w-[100px] hidden sm:flex hover:border-primary transition-colors">
               <Globe className="h-4 w-4 mr-1" />
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="fr">Francais</SelectItem>
+              <SelectItem value="fr">Français</SelectItem>
               <SelectItem value="en">English</SelectItem>
-              <SelectItem value="pt">Portugues</SelectItem>
+              <SelectItem value="pt">Português</SelectItem>
               <SelectItem value="ar">العربية</SelectItem>
             </SelectContent>
           </Select>

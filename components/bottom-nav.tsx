@@ -101,14 +101,17 @@ export function BottomNav() {
     }
   }, [])
   
-  // Masquer sur auth, admin, messages conversation, produit detail, profil edit
+  // Masquer sur auth, admin, messages conversation, produit detail, profil edit, checkout
   if (
     pathname?.startsWith("/auth") || 
     pathname?.startsWith("/admin") ||
     pathname?.startsWith("/messages/") ||
     pathname?.startsWith("/produit/") ||
+    pathname?.startsWith("/marketplace/product/") ||
     pathname?.startsWith("/profil/edit") ||
-    pathname?.startsWith("/dashboard/")
+    pathname?.startsWith("/dashboard/") ||
+    pathname?.startsWith("/commandes/") ||
+    pathname?.startsWith("/panier")
   ) {
     return null
   }
