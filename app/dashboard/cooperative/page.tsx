@@ -13,7 +13,7 @@ import {
   Building2, Sprout, Hammer, CheckCircle2, AlertCircle, Globe
 } from 'lucide-react'
 import { createClient } from "@/lib/supabase/client"
-import { BottomNav } from "@/components/bottom-nav"
+import { DashboardNav } from "@/components/dashboard-nav"
 
 interface Member {
   id: string
@@ -348,7 +348,7 @@ export default function CooperativeDashboard() {
         </Card>
       </main>
 
-      <BottomNav />
+      <DashboardNav userType={profile?.user_type} />
     </div>
   )
 }

@@ -18,6 +18,7 @@ interface NavItem {
 export function BottomNav() {
   const pathname = usePathname()
   const [user, setUser] = useState<any>(null)
+  const [userType, setUserType] = useState<string | null>(null)
   const [unreadMessages, setUnreadMessages] = useState(0)
   const [unreadNotifications, setUnreadNotifications] = useState(0)
   const [cartCount, setCartCount] = useState(0)
@@ -31,6 +32,14 @@ export function BottomNav() {
       setUser(user)
       
       if (user) {
+        // Charger le type d'utilisateur
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('user_type')
+          .eq('id', user.id)
+          .single()
+        if (profileData) setUserType(profileData.user_type)
+        
         // Compter messages non lus
         const { count: msgCount } = await supabase
           .from('messages')
@@ -116,10 +125,18 @@ export function BottomNav() {
     return null
   }
 
-  const navItems: NavItem[] = [
+  const isSeller = ["producteur", "artisan", "transformateur"].includes(userType || "")
+  
+  const navItems: NavItem[] = isSeller ? [
     { href: "/", icon: Home, label: "Accueil" },
     { href: "/recherche", icon: Search, label: "Explorer" },
     { href: "/publier", icon: Plus, label: "Publier", isMain: true },
+    { href: "/messages", icon: MessageCircle, label: "Messages", badge: unreadMessages },
+    { href: user ? "/profil" : "/auth/login", icon: User, label: user ? "Profil" : "Connexion" },
+  ] : [
+    { href: "/", icon: Home, label: "Accueil" },
+    { href: "/recherche", icon: Search, label: "Explorer" },
+    { href: "/marketplace", icon: ShoppingBag, label: "Acheter", isMain: true },
     { href: "/messages", icon: MessageCircle, label: "Messages", badge: unreadMessages },
     { href: user ? "/profil" : "/auth/login", icon: User, label: user ? "Profil" : "Connexion" },
   ]

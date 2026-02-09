@@ -140,11 +140,19 @@ export default function CartPage() {
         .from("orders")
         .insert({
           buyer_id: user.id,
+          seller_id: cart[0]?.product?.profiles ? undefined : undefined,
+          subtotal: subtotal,
           total_amount: total,
+          shipping_cost: deliveryFee,
+          service_fee: serviceFee,
           status: "pending",
           payment_method: paymentMethod,
           payment_status: "pending",
-          shipping_address: deliveryAddress,
+          shipping_address: deliveryAddress.address || deliveryAddress.name,
+          shipping_city: deliveryAddress.city,
+          shipping_country: deliveryAddress.country,
+          shipping_phone: deliveryAddress.phone,
+          order_number: `GWA-${Date.now().toString(36).toUpperCase()}`,
         })
         .select()
         .single()
@@ -162,7 +170,7 @@ export default function CartPage() {
       await supabase.from("order_items").insert(orderItems)
       await supabase.from("cart_items").delete().eq("user_id", user.id)
 
-      router.push(`/commandes/confirmation?id=${order.id}`)
+      router.push(`/commandes/confirmation?order=${order.id}`)
     } catch {
       setIsProcessing(false)
     }

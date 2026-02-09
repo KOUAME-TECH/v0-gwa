@@ -13,7 +13,7 @@ import {
   Sparkles, TrendingUp, Clock, Heart
 } from 'lucide-react'
 import { createClient } from "@/lib/supabase/client"
-import { BottomNav } from "@/components/bottom-nav"
+import { DashboardNav } from "@/components/dashboard-nav"
 
 interface Product {
   id: string
@@ -343,7 +343,7 @@ export default function ArtisanDashboard() {
         )}
       </main>
 
-      <BottomNav />
+      <DashboardNav userType={profile?.user_type} />
     </div>
   )
 }

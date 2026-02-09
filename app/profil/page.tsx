@@ -127,6 +127,43 @@ export default function ProfilPage() {
     )
   }
 
+  const isSeller = ["producteur", "artisan", "transformateur"].includes(profile.user_type || "")
+  const isBuyer = profile.user_type === "acheteur"
+  const isBusiness = profile.user_type === "entreprise"
+  const isCooperative = profile.user_type === "cooperative"
+
+  const getMainMenuItems = () => {
+    if (isSeller) {
+      return [
+        { icon: Package, label: "Mes produits", href: "/dashboard/products", count: stats.products },
+        { icon: ShoppingBag, label: "Mes ventes", href: "/dashboard/commandes", count: stats.orders },
+        { icon: Wallet, label: "Portefeuille", href: "/wallet" },
+        { icon: Star, label: "Mes avis", href: "/dashboard/reviews" },
+      ]
+    }
+    if (isBusiness) {
+      return [
+        { icon: ShoppingBag, label: "Mes commandes", href: "/dashboard/commandes", count: stats.orders },
+        { icon: Package, label: "Demandes B2B", href: "/b2b" },
+        { icon: Heart, label: "Favoris", href: "/favoris", count: stats.favorites },
+        { icon: Wallet, label: "Portefeuille", href: "/wallet" },
+      ]
+    }
+    if (isCooperative) {
+      return [
+        { icon: Package, label: "Ma coopérative", href: "/dashboard/cooperative" },
+        { icon: ShoppingBag, label: "Ventes collectives", href: "/dashboard/commandes", count: stats.orders },
+        { icon: Wallet, label: "Portefeuille", href: "/wallet" },
+      ]
+    }
+    // Acheteur par défaut
+    return [
+      { icon: ShoppingBag, label: "Mes commandes", href: "/dashboard/commandes", count: stats.orders },
+      { icon: Heart, label: "Favoris", href: "/favoris", count: stats.favorites },
+      { icon: Wallet, label: "Portefeuille", href: "/wallet" },
+    ]
+  }
+
   const menuSections = [
     ...(isAdmin ? [{
       items: [
@@ -134,12 +171,7 @@ export default function ProfilPage() {
       ]
     }] : []),
     {
-      items: [
-        { icon: Package, label: "Mes produits", href: "/dashboard/products", count: stats.products },
-        { icon: ShoppingBag, label: "Mes commandes", href: "/dashboard/commandes", count: stats.orders },
-        { icon: Heart, label: "Favoris", href: "/favoris", count: stats.favorites },
-        { icon: Wallet, label: "Portefeuille", href: "/wallet" },
-      ]
+      items: getMainMenuItems()
     },
     {
       items: [
@@ -213,11 +245,23 @@ export default function ProfilPage() {
       {/* Stats */}
       <div className="px-5 -mt-3 mb-4">
         <div className="grid grid-cols-3 gap-3">
-          {[
+          {(isSeller ? [
             { label: "Produits", value: stats.products },
+            { label: "Ventes", value: stats.orders },
+            { label: "Favoris", value: stats.favorites },
+          ] : isBusiness ? [
+            { label: "Commandes", value: stats.orders },
+            { label: "Fournisseurs", value: stats.products },
+            { label: "Favoris", value: stats.favorites },
+          ] : isCooperative ? [
+            { label: "Produits", value: stats.products },
+            { label: "Ventes", value: stats.orders },
+            { label: "Membres", value: stats.favorites },
+          ] : [
             { label: "Commandes", value: stats.orders },
             { label: "Favoris", value: stats.favorites },
-          ].map((stat) => (
+            { label: "Produits vus", value: stats.products },
+          ]).map((stat) => (
             <div key={stat.label} className="bg-white rounded-2xl p-4 text-center shadow-sm">
               <p className="text-2xl font-bold text-neutral-900">{stat.value}</p>
               <p className="text-xs text-neutral-500 mt-0.5">{stat.label}</p>

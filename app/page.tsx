@@ -88,6 +88,7 @@ export default function HomePage() {
   const [feed, setFeed] = useState<FeedItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null)
+  const [userType, setUserType] = useState<string | null>(null)
   const [activeCategory, setActiveCategory] = useState("all")
   const [activeTab, setActiveTab] = useState<"tout" | "produits" | "publications">("tout")
   
@@ -110,15 +111,19 @@ export default function HomePage() {
       const { data: { user: currentUser } } = await supabase.auth.getUser()
       setUser(currentUser)
 
-      // Charger les likes et favoris de l'utilisateur
+      // Charger les likes, favoris et profil de l'utilisateur
       let userLikes: string[] = []
       let userFavorites: string[] = []
       
       if (currentUser) {
-        const [likesRes, favsRes] = await Promise.all([
+        const [likesRes, favsRes, profileRes] = await Promise.all([
           supabase.from("post_likes").select("post_id").eq("user_id", currentUser.id),
-          supabase.from("favorites").select("product_id").eq("user_id", currentUser.id)
+          supabase.from("favorites").select("product_id").eq("user_id", currentUser.id),
+          supabase.from("profiles").select("user_type").eq("id", currentUser.id).single()
         ])
+        if (profileRes.data) {
+          setUserType(profileRes.data.user_type)
+        }
         userLikes = likesRes.data?.map(l => l.post_id) || []
         userFavorites = favsRes.data?.map(f => f.product_id) || []
       }
@@ -528,17 +533,36 @@ export default function HomePage() {
               <>
                 <h3 className="font-semibold text-lg text-[#111827] mb-2">Aucune publication pour le moment</h3>
                 <p className="text-[#4B5563] text-sm mb-6">
-                  Soyez le premier à publier du contenu ou explorez le marketplace
+                  {["producteur", "artisan", "transformateur"].includes(userType || "")
+                    ? "Publiez votre premier produit pour commencer à vendre"
+                    : userType === "entreprise"
+                    ? "Explorez le marketplace pour trouver des fournisseurs"
+                    : "Découvrez les produits des producteurs et artisans africains"
+                  }
                 </p>
                 <div className="flex flex-col gap-3">
-                  <Link href="/publier">
-                    <Button className="w-full rounded-full bg-[#2F7D32] hover:bg-[#256427]">
-                      Publier un produit
-                    </Button>
-                  </Link>
-                  <Link href="/marketplace">
+                  {["producteur", "artisan", "transformateur"].includes(userType || "") ? (
+                    <Link href="/publier">
+                      <Button className="w-full rounded-full bg-[#2F7D32] hover:bg-[#256427]">
+                        Publier un produit
+                      </Button>
+                    </Link>
+                  ) : userType === "entreprise" ? (
+                    <Link href="/b2b">
+                      <Button className="w-full rounded-full bg-[#2F7D32] hover:bg-[#256427]">
+                        Créer une demande B2B
+                      </Button>
+                    </Link>
+                  ) : (
+                    <Link href="/marketplace">
+                      <Button className="w-full rounded-full bg-[#2F7D32] hover:bg-[#256427]">
+                        Explorer le marketplace
+                      </Button>
+                    </Link>
+                  )}
+                  <Link href="/dashboard">
                     <Button variant="outline" className="w-full rounded-full bg-transparent">
-                      Explorer le marketplace
+                      Voir mon tableau de bord
                     </Button>
                   </Link>
                 </div>

@@ -14,7 +14,7 @@ import {
   Wallet, TrendingUp, Store
 } from 'lucide-react'
 import { createClient } from "@/lib/supabase/client"
-import { BottomNav } from "@/components/bottom-nav"
+import { DashboardNav } from "@/components/dashboard-nav"
 
 interface Order {
   id: string
@@ -460,7 +460,7 @@ export default function BuyerDashboard() {
         )}
       </main>
 
-      <BottomNav />
+      <DashboardNav userType={profile?.user_type} />
     </div>
   )
 }

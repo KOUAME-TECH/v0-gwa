@@ -13,7 +13,7 @@ import {
   CheckCircle2, Clock, ArrowUpRight, ArrowDownRight, Filter, Globe
 } from 'lucide-react'
 import { createClient } from "@/lib/supabase/client"
-import { BottomNav } from "@/components/bottom-nav"
+import { DashboardNav } from "@/components/dashboard-nav"
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts'
 
 interface Order {
@@ -384,7 +384,7 @@ export default function BusinessDashboard() {
         </Card>
       </main>
 
-      <BottomNav />
+      <DashboardNav userType={profile?.user_type} />
     </div>
   )
 }

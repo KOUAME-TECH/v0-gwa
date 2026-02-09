@@ -147,7 +147,7 @@ export default function SignupPage() {
           {step === 1 && (
             <>
               <div className="mb-8">
-                <h1 className="text-3xl font-bold tracking-tight mb-2">Creer un compte</h1>
+                <h1 className="text-3xl font-bold tracking-tight mb-2">Créer un compte</h1>
                 <p className="text-neutral-500">Rejoignez GWA</p>
               </div>
 
@@ -171,7 +171,7 @@ export default function SignupPage() {
                   <Input
                     id="password"
                     type={showPassword ? "text" : "password"}
-                    placeholder="Minimum 8 caracteres"
+                    placeholder="Minimum 8 caractères"
                     className="h-14 rounded-xl border-neutral-200 text-[15px] pr-12 focus:border-neutral-400 focus:ring-0"
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
@@ -187,7 +187,7 @@ export default function SignupPage() {
                   </button>
                 </div>
                 {formData.password && formData.password.length < 8 && (
-                  <p className="text-xs text-neutral-500 mt-2">Encore {8 - formData.password.length} caracteres</p>
+                  <p className="text-xs text-neutral-500 mt-2">Encore {8 - formData.password.length} caractères</p>
                 )}
               </div>
             </>
@@ -215,7 +215,7 @@ export default function SignupPage() {
               </div>
 
               <div>
-                <label className="text-sm font-medium text-neutral-700 mb-3 block">Vous etes</label>
+                <label className="text-sm font-medium text-neutral-700 mb-3 block">Vous êtes</label>
                 <div className="grid grid-cols-2 gap-2">
                   {userTypes.map((type) => (
                     <button
@@ -254,7 +254,7 @@ export default function SignupPage() {
             <>
               <div className="mb-8">
                 <h1 className="text-3xl font-bold tracking-tight mb-2">Localisation</h1>
-                <p className="text-neutral-500">Ou etes-vous situe?</p>
+                <p className="text-neutral-500">Où êtes-vous situé ?</p>
               </div>
 
               <div>
@@ -265,7 +265,7 @@ export default function SignupPage() {
                   onChange={(e) => setFormData({ ...formData, country: e.target.value })}
                   className="w-full h-14 rounded-xl border border-neutral-200 bg-white px-4 text-[15px] focus:border-neutral-400 focus:outline-none"
                 >
-                  <option value="">Selectionnez</option>
+                  <option value="">Sélectionnez</option>
                   {countries.map((country) => (
                     <option key={country.value} value={country.value}>{country.label}</option>
                   ))}
@@ -295,7 +295,7 @@ export default function SignupPage() {
                   J'accepte les{" "}
                   <Link href="/legal/terms" className="font-medium text-neutral-900 underline">conditions</Link>
                   {" "}et la{" "}
-                  <Link href="/legal/privacy" className="font-medium text-neutral-900 underline">politique de confidentialite</Link>
+                  <Link href="/legal/privacy" className="font-medium text-neutral-900 underline">politique de confidentialité</Link>
                 </label>
               </div>
             </>
@@ -306,12 +306,12 @@ export default function SignupPage() {
             className="w-full h-14 rounded-full text-[15px] font-semibold"
             disabled={!canProceed() || isLoading}
           >
-            {isLoading ? "Creation..." : step < 3 ? "Continuer" : "Creer mon compte"}
+            {isLoading ? "Création..." : step < 3 ? "Continuer" : "Créer mon compte"}
           </Button>
         </form>
 
         <p className="mt-8 text-center text-[15px]">
-          <span className="text-neutral-500">Deja inscrit? </span>
+          <span className="text-neutral-500">Déjà inscrit ? </span>
           <Link href="/auth/login" className="font-semibold text-neutral-900">Connexion</Link>
         </p>
       </main>
