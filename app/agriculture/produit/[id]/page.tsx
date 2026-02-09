@@ -377,11 +377,11 @@ export default function ProductDetailPage({ params }: { params: { id: string } }
                   </div>
                   <div className="flex items-center gap-2 text-sm">
                     <CheckCircle2 className="h-4 w-4 text-primary" />
-                    <span>Qualite certifiee</span>
+                    <span>Qualité certifiée</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm">
                     <Award className="h-4 w-4 text-primary" />
-                    <span>Vendeur verifie</span>
+                    <span>Vendeur vérifié</span>
                   </div>
                 </div>
               </CardContent>

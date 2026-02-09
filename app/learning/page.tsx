@@ -142,9 +142,9 @@ export default function LearningPage() {
             ) : filteredCourses.length === 0 ? (
               <div className="text-center py-20">
                 <BookOpen className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
-                <h3 className="text-xl font-semibold mb-2">Aucune formation trouvee</h3>
+                <h3 className="text-xl font-semibold mb-2">Aucune formation trouvée</h3>
                 <p className="text-muted-foreground">
-                  De nouvelles formations seront bientot disponibles
+                  De nouvelles formations seront bientôt disponibles
                 </p>
               </div>
             ) : (

@@ -122,7 +122,7 @@ export default function FormationsPage() {
             </div>
             <div className="flex items-center gap-2 bg-white/10 rounded-xl px-3 py-2">
               <Award className="h-4 w-4 text-white" />
-              <span className="text-sm text-white">{completedCount} terminees</span>
+              <span className="text-sm text-white">{completedCount} terminées</span>
             </div>
           </div>
           
@@ -174,11 +174,11 @@ export default function FormationsPage() {
             </div>
             <h3 className="text-lg font-semibold mb-2">Centre de formation</h3>
             <p className="text-muted-foreground text-sm mb-6 max-w-xs">
-              Nos formations en agriculture, artisanat et business arrivent bientot. Inscrivez-vous pour etre informe!
+              Nos formations en agriculture, artisanat et business arrivent bientôt. Inscrivez-vous pour être informé !
             </p>
             {!user && (
               <Link href="/auth/signup">
-                <Button className="rounded-xl bg-[#1e3a5f]">Creer mon compte</Button>
+                <Button className="rounded-xl bg-[#1e3a5f]">Créer mon compte</Button>
               </Link>
             )}
           </div>

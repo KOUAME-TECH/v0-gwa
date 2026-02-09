@@ -134,7 +134,7 @@ export default function NewProductPage() {
 
     const supabase = createClient()
 
-    // Recuperer ou creer la categorie
+    // Récupérer ou créer la catégorie
     let { data: categoryData } = await supabase
       .from('categories')
       .select('id')

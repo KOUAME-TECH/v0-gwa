@@ -214,7 +214,7 @@ export default function NetworkPage() {
               </Select>
 
               <div className="ml-auto text-sm text-muted-foreground">
-                {filteredProfiles.length} membre(s) trouve(s)
+                {filteredProfiles.length} membre(s) trouvé(s)
               </div>
             </div>
 

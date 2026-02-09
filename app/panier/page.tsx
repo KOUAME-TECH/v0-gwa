@@ -199,14 +199,14 @@ export default function CartPage() {
         </div>
         <h2 className="text-xl font-bold mb-2">Connectez-vous</h2>
         <p className="text-muted-foreground text-sm text-center mb-6 max-w-xs">
-          Pour voir votre panier, vous devez etre connecte
+          Pour voir votre panier, vous devez être connecté
         </p>
         <div className="flex flex-col gap-3 w-full max-w-xs">
           <Link href="/auth/login?redirect=/panier">
             <Button className="w-full h-12 rounded-xl">Se connecter</Button>
           </Link>
           <Link href="/auth/signup">
-            <Button variant="outline" className="w-full h-12 rounded-xl bg-transparent">Creer un compte</Button>
+            <Button variant="outline" className="w-full h-12 rounded-xl bg-transparent">Créer un compte</Button>
           </Link>
         </div>
       </div>
@@ -369,7 +369,7 @@ export default function CartPage() {
                   onChange={(e) => setDeliveryAddress({...deliveryAddress, country: e.target.value})}
                   className="mt-1.5 w-full h-12 px-3 rounded-xl border bg-background text-sm"
                 >
-                  <option value="ci">Cote d'Ivoire</option>
+                  <option value="ci">Côte d{"'"}Ivoire</option>
                   <option value="sn">Senegal</option>
                   <option value="cm">Cameroun</option>
                   <option value="ml">Mali</option>

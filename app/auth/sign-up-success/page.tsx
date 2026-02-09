@@ -61,9 +61,9 @@ export default function SignUpSuccessPage() {
               <CheckCircle2 className="h-8 w-8 text-primary" />
             </div>
           </div>
-          <CardTitle className="text-2xl font-bold">Inscription reussie !</CardTitle>
+          <CardTitle className="text-2xl font-bold">Inscription réussie !</CardTitle>
           <CardDescription>
-            Votre compte GWA a ete cree avec succes
+            Votre compte GWA a été créé avec succès
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

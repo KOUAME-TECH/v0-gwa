@@ -120,8 +120,8 @@ export default function AdminVerificationsPage() {
       .insert({
         user_id: request.user_id,
         type: 'verification',
-        title: 'Verification approuvee',
-        message: 'Votre demande de verification a ete approuvee. Votre profil est maintenant verifie.',
+        title: 'Vérification approuvée',
+        message: 'Votre demande de vérification a été approuvée. Votre profil est maintenant vérifié.',
         link: '/profile'
       })
 
@@ -296,7 +296,7 @@ export default function AdminVerificationsPage() {
                 <ShieldCheck className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                 <h3 className="text-lg font-semibold mb-2">Aucune demande</h3>
                 <p className="text-muted-foreground">
-                  Les demandes de verification apparaitront ici
+                  Les demandes de vérification apparaîtront ici
                 </p>
               </Card>
             ) : (

@@ -203,13 +203,13 @@ Créer une coopérative
         {filteredCooperatives.length === 0 ? (
           <Card className="p-12 text-center">
             <Building2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">Aucune cooperative trouvee</h3>
+            <h3 className="text-lg font-semibold mb-2">Aucune coopérative trouvée</h3>
             <p className="text-muted-foreground mb-4">
-              Soyez le premier a creer une cooperative dans votre region
+              Soyez le premier à créer une coopérative dans votre région
             </p>
             {user && (
               <Link href="/cooperatives/create">
-                <Button>Creer une cooperative</Button>
+                <Button>Créer une coopérative</Button>
               </Link>
             )}
           </Card>

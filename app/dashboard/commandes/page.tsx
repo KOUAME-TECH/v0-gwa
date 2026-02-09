@@ -326,7 +326,7 @@ export default function OrdersPage() {
             <TabsTrigger value="all">Toutes ({orders.length})</TabsTrigger>
             <TabsTrigger value="active">En cours ({orders.filter(o => ["pending", "confirmed", "preparing", "shipping"].includes(o.status)).length})</TabsTrigger>
             <TabsTrigger value="delivered">Livrées ({orders.filter(o => o.status === "delivered").length})</TabsTrigger>
-            <TabsTrigger value="cancelled">Annulees ({orders.filter(o => o.status === "cancelled").length})</TabsTrigger>
+            <TabsTrigger value="cancelled">Annulées ({orders.filter(o => o.status === "cancelled").length})</TabsTrigger>
           </TabsList>
 
           <TabsContent value="all" className="mt-6">
@@ -335,7 +335,7 @@ export default function OrdersPage() {
                 <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                 <h3 className="text-lg font-semibold mb-2">Aucune commande</h3>
                 <p className="text-muted-foreground mb-4">
-                  Vos commandes apparaitront ici
+                  Vos commandes apparaîtront ici
                 </p>
                 <Link href="/agriculture">
                   <Button>Explorer les produits</Button>

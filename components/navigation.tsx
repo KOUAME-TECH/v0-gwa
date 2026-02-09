@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { createClient } from "@/lib/supabase/client"
-import { toast } from "react-toastify" // Import toast from react-toastify
+import { toast } from "sonner"
 
 interface UserProfile {
   id: string
@@ -188,7 +188,7 @@ export function Navigation() {
                       >
                         <div className="text-sm font-medium leading-none">Marketplace Agricole</div>
                         <p className="line-clamp-2 text-sm leading-snug text-muted-foreground">
-                          Decouvrez tous les produits agricoles
+                          Découvrez tous les produits agricoles
                         </p>
                       </Link>
                     </NavigationMenuLink>
@@ -199,7 +199,7 @@ export function Navigation() {
                       >
                         <div className="text-sm font-medium leading-none">Producteurs</div>
                         <p className="line-clamp-2 text-sm leading-snug text-muted-foreground">
-                          Vendez vos recoltes directement aux acheteurs
+                          Vendez vos récoltes directement aux acheteurs
                         </p>
                       </Link>
                     </NavigationMenuLink>
@@ -210,7 +210,7 @@ export function Navigation() {
                       >
                         <div className="text-sm font-medium leading-none">Acheteurs</div>
                         <p className="line-clamp-2 text-sm leading-snug text-muted-foreground">
-                          Approvisionnez-vous directement aupres des producteurs
+                          Approvisionnez-vous directement auprès des producteurs
                         </p>
                       </Link>
                     </NavigationMenuLink>
@@ -232,7 +232,7 @@ export function Navigation() {
                       >
                         <div className="text-sm font-medium leading-none">Galerie Artisanale</div>
                         <p className="line-clamp-2 text-sm leading-snug text-muted-foreground">
-                          Decouvrez les creations africaines
+                          Découvrez les créations africaines
                         </p>
                       </Link>
                     </NavigationMenuLink>
@@ -243,7 +243,7 @@ export function Navigation() {
                       >
                         <div className="text-sm font-medium leading-none">Commandes Sur-Mesure</div>
                         <p className="line-clamp-2 text-sm leading-snug text-muted-foreground">
-                          Creations personnalisees selon vos besoins
+                          Créations personnalisées selon vos besoins
                         </p>
                       </Link>
                     </NavigationMenuLink>
@@ -262,7 +262,7 @@ export function Navigation() {
               <NavigationMenuItem>
                 <Link href="/cooperatives" legacyBehavior passHref>
                   <NavigationMenuLink className="group inline-flex h-10 w-max items-center justify-center rounded-md bg-transparent px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground">
-                    Cooperatives
+                    Coopératives
                   </NavigationMenuLink>
                 </Link>
               </NavigationMenuItem>
@@ -270,7 +270,7 @@ export function Navigation() {
               <NavigationMenuItem>
                 <Link href="/communaute" legacyBehavior passHref>
                   <NavigationMenuLink className="group inline-flex h-10 w-max items-center justify-center rounded-md bg-transparent px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground">
-                    Communaute
+                    Communauté
                   </NavigationMenuLink>
                 </Link>
               </NavigationMenuItem>
@@ -383,7 +383,7 @@ export function Navigation() {
                 <DropdownMenuItem asChild>
                   <Link href="/dashboard/settings">
                     <Settings className="mr-2 h-4 w-4" />
-                    Parametres
+                    Paramètres
                   </Link>
                 </DropdownMenuItem>
                 {isAdmin && (
@@ -480,7 +480,7 @@ export function Navigation() {
                       </Link>
                       <Button variant="outline" className="w-full justify-start text-destructive bg-transparent" onClick={handleSignOut}>
                         <LogOut className="mr-2 h-4 w-4" />
-                        Se deconnecter
+                  Se déconnecter
                       </Button>
                     </>
                   ) : (

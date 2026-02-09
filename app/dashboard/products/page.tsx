@@ -89,7 +89,7 @@ export default function ProductsPage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold">Mes Produits</h1>
-            <p className="text-muted-foreground">Gerez vos produits en vente sur GWA</p>
+            <p className="text-muted-foreground">Gérez vos produits en vente sur GWA</p>
           </div>
           <Button asChild>
             <Link href="/dashboard/products/new">

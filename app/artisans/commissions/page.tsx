@@ -547,9 +547,9 @@ export default function CommissionsPage() {
               <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mx-auto mb-3">
                 <Award className="h-6 w-6 text-primary" />
               </div>
-              <h3 className="font-medium mb-1">Artisans Certifies</h3>
+              <h3 className="font-medium mb-1">Artisans Certifiés</h3>
               <p className="text-sm text-muted-foreground">
-                Tous nos artisans sont verifies et reconnus pour leur savoir-faire
+                Tous nos artisans sont vérifiés et reconnus pour leur savoir-faire
               </p>
             </div>
             <div className="text-center">
