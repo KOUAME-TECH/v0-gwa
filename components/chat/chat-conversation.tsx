@@ -469,7 +469,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       {showAttach && (
         <>
           <div className="fixed inset-0 bg-black/30 z-[108]" onClick={() => setShowAttach(false)} />
-          <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl z-[109] p-6 pb-8 safe-bottom animate-in slide-in-from-bottom duration-200">
+          <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl z-[109] p-6 pb-8 safe-bottom animate-slideUp">
             <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-6" />
             <div className="grid grid-cols-3 gap-6">
               {[
