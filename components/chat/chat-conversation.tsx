@@ -5,9 +5,9 @@ import { createClient } from "@/lib/supabase/client"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { toast } from "sonner"
 import {
-  ArrowLeft, Send, Mic, MicOff, Camera, Paperclip, Smile, Phone, Video, MoreVertical,
+  ArrowLeft, Send, Mic, Smile, Phone, Video, MoreVertical,
   Check, CheckCheck, ImageIcon, FileText, X, Trash2, Copy, Reply,
-  Pin, BellOff, UserCircle, Flag, ChevronDown
+  Pin, BellOff, UserCircle, Flag, Paperclip, Camera, MapPin
 } from "lucide-react"
 
 interface Message {
@@ -43,344 +43,300 @@ interface ChatConversationProps {
   onBack: () => void
 }
 
-const getUserTypeLabel = (type: string | undefined) => {
-  const labels: Record<string, string> = {
-    farmer: "Producteur", producteur: "Producteur", artisan: "Artisan",
-    acheteur: "Acheteur", buyer: "Acheteur", cooperative: "Coopérative",
-    business: "Entreprise", entreprise: "Entreprise", transformateur: "Transformateur",
-  }
-  return labels[type || ""] || "Membre"
+const userTypeLabels: Record<string, string> = {
+  farmer: "Producteur", producteur: "Producteur", artisan: "Artisan",
+  acheteur: "Acheteur", buyer: "Acheteur", cooperative: "Coopérative",
+  business: "Entreprise", entreprise: "Entreprise", transformateur: "Transformateur",
 }
 
 export function ChatConversation({ conversation, userId, onBack }: ChatConversationProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState("")
   const [sending, setSending] = useState(false)
-  const [showMenu, setShowMenu] = useState(false)
-  const [showAttachMenu, setShowAttachMenu] = useState(false)
   const [replyTo, setReplyTo] = useState<Message | null>(null)
-  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null)
+  const [selectedMsg, setSelectedMsg] = useState<string | null>(null)
   const [isRecording, setIsRecording] = useState(false)
-  const [recordingTime, setRecordingTime] = useState(0)
+  const [recordSec, setRecordSec] = useState(0)
+  const [showMenu, setShowMenu] = useState(false)
+  const [showAttach, setShowAttach] = useState(false)
+  const [loadingMsgs, setLoadingMsgs] = useState(true)
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const imageInputRef = useRef<HTMLInputElement>(null)
-  const recordingInterval = useRef<NodeJS.Timeout | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const imgRef = useRef<HTMLInputElement>(null)
+  const recInterval = useRef<ReturnType<typeof setInterval> | null>(null)
   const supabase = createClient()
 
-  const scrollToBottom = useCallback(() => {
-    setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50)
+  const other = conversation.other_user
+  const otherName = other?.full_name || "Utilisateur"
+  const otherInitial = otherName.charAt(0).toUpperCase()
+
+  const scroll = useCallback(() => {
+    requestAnimationFrame(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }))
   }, [])
 
   // Load messages + realtime
   useEffect(() => {
-    async function loadMessages() {
+    let mounted = true
+    async function load() {
       const { data } = await supabase
         .from("messages")
         .select("*")
         .eq("conversation_id", conversation.id)
         .order("created_at", { ascending: true })
 
-      if (data) {
+      if (data && mounted) {
         setMessages(data)
-        scrollToBottom()
+        setLoadingMsgs(false)
+        scroll()
       }
 
-      // Mark as read
-      await supabase
+      // Mark unread as read
+      supabase
         .from("messages")
         .update({ is_read: true })
         .eq("conversation_id", conversation.id)
         .neq("sender_id", userId)
         .eq("is_read", false)
+        .then(() => {})
     }
+    load()
 
-    loadMessages()
-
-    // Focus input for keyboard
-    setTimeout(() => inputRef.current?.focus(), 300)
+    // Focus after a tick
+    setTimeout(() => inputRef.current?.focus(), 400)
 
     const channel = supabase
       .channel(`chat-${conversation.id}`)
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversation.id}` },
         (payload) => {
-          const newMsg = payload.new as Message
-          setMessages(prev => {
-            if (prev.some(m => m.id === newMsg.id)) return prev
-            return [...prev, newMsg]
-          })
-          scrollToBottom()
-          if (newMsg.sender_id !== userId) {
-            supabase.from("messages").update({ is_read: true }).eq("id", newMsg.id)
+          const msg = payload.new as Message
+          setMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg])
+          scroll()
+          if (msg.sender_id !== userId) {
+            supabase.from("messages").update({ is_read: true }).eq("id", msg.id).then(() => {})
           }
         }
       )
       .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversation.id}` },
         (payload) => {
-          const updatedMsg = payload.new as Message
-          setMessages(prev => prev.map(m => m.id === updatedMsg.id ? updatedMsg : m))
+          const msg = payload.new as Message
+          setMessages(prev => prev.map(m => m.id === msg.id ? msg : m))
         }
       )
       .subscribe()
 
-    return () => { supabase.removeChannel(channel) }
+    return () => { mounted = false; supabase.removeChannel(channel) }
   }, [conversation.id])
 
-  useEffect(() => { scrollToBottom() }, [messages.length])
+  useEffect(() => { scroll() }, [messages.length, scroll])
 
-  // Send text message
+  // Cleanup recording
+  useEffect(() => {
+    return () => { if (recInterval.current) clearInterval(recInterval.current) }
+  }, [])
+
+  // Send text
   async function handleSend(e: React.FormEvent) {
     e.preventDefault()
-    if (!newMessage.trim() || sending) return
-
+    const text = newMessage.trim()
+    if (!text || sending) return
     setSending(true)
-    const content = newMessage.trim()
     setNewMessage("")
 
-    const tempId = `temp-${Date.now()}`
-    const tempMsg: Message = {
+    const tempId = `tmp-${Date.now()}`
+    const temp: Message = {
       id: tempId, conversation_id: conversation.id, sender_id: userId,
-      content, message_type: "text", is_read: false, is_edited: false,
+      content: text, message_type: "text", is_read: false, is_edited: false,
       created_at: new Date().toISOString(), reply_to_id: replyTo?.id,
     }
-    setMessages(prev => [...prev, tempMsg])
+    setMessages(prev => [...prev, temp])
     setReplyTo(null)
-    scrollToBottom()
+    scroll()
 
-    const { data: inserted, error } = await supabase
-      .from("messages")
-      .insert({
-        conversation_id: conversation.id, sender_id: userId,
-        content, message_type: "text", reply_to_id: replyTo?.id || null,
-      })
-      .select().single()
+    const { data, error } = await supabase.from("messages").insert({
+      conversation_id: conversation.id, sender_id: userId,
+      content: text, message_type: "text", reply_to_id: replyTo?.id || null,
+    }).select().single()
 
     if (error) {
       setMessages(prev => prev.filter(m => m.id !== tempId))
-      setNewMessage(content)
-      toast.error("Erreur lors de l'envoi")
-    } else if (inserted) {
-      setMessages(prev => prev.map(m => m.id === tempId ? inserted : m))
+      setNewMessage(text)
+      toast.error("Erreur d'envoi")
+    } else if (data) {
+      setMessages(prev => prev.map(m => m.id === tempId ? data : m))
     }
 
-    await supabase
-      .from("conversations")
-      .update({ last_message_at: new Date().toISOString() })
-      .eq("id", conversation.id)
-
+    supabase.from("conversations").update({ last_message_at: new Date().toISOString() }).eq("id", conversation.id).then(() => {})
     setSending(false)
     inputRef.current?.focus()
   }
 
   // File upload
   async function handleFileUpload(file: File, type: "image" | "file") {
+    setShowAttach(false)
+    const toastId = toast.loading(type === "image" ? "Envoi de l'image..." : "Envoi du fichier...")
+
     const ext = file.name.split('.').pop()
     const path = `chat/${conversation.id}/${Date.now()}.${ext}`
+    const { error: upErr } = await supabase.storage.from("chat-media").upload(path, file)
 
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from("chat-media")
-      .upload(path, file)
-
-    if (uploadError) {
-      // Fallback: send file name as message
-      const content = type === "image" ? `[Image: ${file.name}]` : `[Fichier: ${file.name}]`
-      await supabase.from("messages").insert({
-        conversation_id: conversation.id, sender_id: userId,
-        content, message_type: type,
-      })
-      toast.info(type === "image" ? "Image envoyée" : "Fichier envoyé")
-    } else {
+    let mediaUrl: string | undefined
+    if (!upErr) {
       const { data: { publicUrl } } = supabase.storage.from("chat-media").getPublicUrl(path)
-      await supabase.from("messages").insert({
-        conversation_id: conversation.id, sender_id: userId,
-        content: file.name, message_type: type, media_url: publicUrl,
-      })
-      toast.success(type === "image" ? "Image envoyée" : "Fichier envoyé")
+      mediaUrl = publicUrl
     }
 
-    await supabase.from("conversations")
-      .update({ last_message_at: new Date().toISOString() })
-      .eq("id", conversation.id)
-    setShowAttachMenu(false)
+    const content = type === "image" ? (mediaUrl ? file.name : `[Photo: ${file.name}]`) : `[${file.name}]`
+    await supabase.from("messages").insert({
+      conversation_id: conversation.id, sender_id: userId,
+      content, message_type: type, media_url: mediaUrl || null,
+    })
+    await supabase.from("conversations").update({ last_message_at: new Date().toISOString() }).eq("id", conversation.id)
+    toast.dismiss(toastId)
+    toast.success(type === "image" ? "Photo envoyée" : "Fichier envoyé")
   }
 
-  // Voice recording simulation
-  function toggleRecording() {
+  // Voice toggle
+  function toggleVoice() {
     if (isRecording) {
       setIsRecording(false)
-      if (recordingInterval.current) clearInterval(recordingInterval.current)
-      // Send voice message
-      const duration = recordingTime
-      setRecordingTime(0)
-      const minutes = Math.floor(duration / 60)
-      const seconds = duration % 60
-      const durationStr = `${minutes}:${seconds.toString().padStart(2, '0')}`
+      if (recInterval.current) clearInterval(recInterval.current)
+      const sec = recordSec
+      setRecordSec(0)
+      const dur = `${Math.floor(sec / 60)}:${(sec % 60).toString().padStart(2, '0')}`
 
       supabase.from("messages").insert({
         conversation_id: conversation.id, sender_id: userId,
-        content: `Message vocal (${durationStr})`, message_type: "voice",
+        content: `Message vocal (${dur})`, message_type: "voice",
       }).then(() => {
-        supabase.from("conversations")
-          .update({ last_message_at: new Date().toISOString() })
-          .eq("id", conversation.id)
+        supabase.from("conversations").update({ last_message_at: new Date().toISOString() }).eq("id", conversation.id)
       })
       toast.success("Message vocal envoyé")
     } else {
       setIsRecording(true)
-      setRecordingTime(0)
-      recordingInterval.current = setInterval(() => {
-        setRecordingTime(prev => prev + 1)
-      }, 1000)
+      setRecordSec(0)
+      recInterval.current = setInterval(() => setRecordSec(p => p + 1), 1000)
     }
   }
 
-  // Long press on message
-  function handleMessageAction(action: string, message: Message) {
-    setSelectedMessage(null)
-    switch (action) {
-      case "reply":
-        setReplyTo(message)
-        inputRef.current?.focus()
-        break
-      case "copy":
-        navigator.clipboard.writeText(message.content)
-        toast.success("Copié dans le presse-papiers")
-        break
-      case "delete":
-        if (message.sender_id === userId) {
-          supabase.from("messages").delete().eq("id", message.id).then(() => {
-            setMessages(prev => prev.filter(m => m.id !== message.id))
-            toast.success("Message supprimé")
-          })
-        }
-        break
-    }
+  function cancelRecording() {
+    setIsRecording(false)
+    if (recInterval.current) clearInterval(recInterval.current)
+    setRecordSec(0)
   }
 
-  // 3-dot menu actions
-  function handleMenuAction(action: string) {
+  // Menu actions
+  function menuAction(a: string) {
     setShowMenu(false)
-    switch (action) {
-      case "profile":
-        window.location.href = `/network/profile/${conversation.other_user?.id}`
-        break
-      case "mute":
-        toast.info("Conversation mise en sourdine")
-        break
-      case "pin":
-        toast.info("Conversation épinglée")
-        break
-      case "clear":
-        toast.info("Historique effacé")
-        break
-      case "report":
-        toast.info("Signalement envoyé")
-        break
+    if (a === "profile") window.location.href = `/network/profile/${other?.id}`
+    else if (a === "mute") toast.info("Conversation en sourdine")
+    else if (a === "pin") toast.info("Conversation épinglée")
+    else if (a === "clear") toast.info("Historique effacé")
+    else if (a === "report") toast.info("Signalement envoyé")
+  }
+
+  function msgAction(a: string, msg: Message) {
+    setSelectedMsg(null)
+    if (a === "reply") { setReplyTo(msg); inputRef.current?.focus() }
+    else if (a === "copy") { navigator.clipboard.writeText(msg.content); toast.success("Copié") }
+    else if (a === "delete" && msg.sender_id === userId) {
+      supabase.from("messages").delete().eq("id", msg.id).then(() => {
+        setMessages(prev => prev.filter(m => m.id !== msg.id))
+        toast.success("Supprimé")
+      })
     }
   }
 
-  // Render message content
-  function renderMessageContent(message: Message) {
-    if (message.message_type === "voice") {
+  const fmtTime = (d: string) => new Date(d).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+
+  function renderContent(msg: Message) {
+    if (msg.message_type === "voice") {
       return (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-[180px]">
           <div className="w-8 h-8 bg-[#1DA1F2] rounded-full flex items-center justify-center shrink-0">
             <Mic className="h-4 w-4 text-white" />
           </div>
-          <div className="flex-1">
-            <div className="h-1 bg-current opacity-20 rounded-full">
-              <div className="h-full bg-[#1DA1F2] rounded-full" style={{ width: '70%' }} />
-            </div>
+          <div className="flex-1 flex items-center gap-0.5">
+            {Array.from({ length: 24 }).map((_, i) => (
+              <div key={i} className="w-[3px] rounded-full bg-[#1DA1F2]/40" style={{ height: `${4 + Math.sin(i * 0.7) * 8 + Math.random() * 4}px` }} />
+            ))}
           </div>
-          <span className="text-xs opacity-70">{message.content.match(/\((.*?)\)/)?.[1] || "0:00"}</span>
+          <span className="text-[11px] opacity-60 shrink-0">{msg.content.match(/\((.*?)\)/)?.[1] || "0:00"}</span>
         </div>
       )
     }
-    if (message.message_type === "image") {
-      return message.media_url ? (
-        <img src={message.media_url || "/placeholder.svg"} alt={message.content} className="rounded-lg max-w-[250px] max-h-[300px] object-cover" crossOrigin="anonymous" />
+    if (msg.message_type === "image") {
+      return msg.media_url ? (
+        <img src={msg.media_url || "/placeholder.svg"} alt="" className="rounded-lg max-w-[240px] max-h-[280px] object-cover" crossOrigin="anonymous" />
       ) : (
-        <div className="flex items-center gap-2 text-sm">
-          <ImageIcon className="h-4 w-4 text-[#1DA1F2]" />
-          <span>{message.content}</span>
-        </div>
+        <div className="flex items-center gap-2"><ImageIcon className="h-4 w-4 text-[#1DA1F2]" /><span className="text-sm">{msg.content}</span></div>
       )
     }
-    if (message.message_type === "file") {
+    if (msg.message_type === "file") {
       return (
-        <div className="flex items-center gap-2 bg-black/5 rounded-lg p-2">
-          <FileText className="h-8 w-8 text-[#1DA1F2]" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">{message.content}</p>
-            <p className="text-xs opacity-60">Document</p>
+        <div className="flex items-center gap-2 bg-black/5 rounded-lg p-2.5 min-w-[180px]">
+          <FileText className="h-8 w-8 text-[#1DA1F2] shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium truncate">{msg.content.replace(/^\[|\]$/g, '')}</p>
+            <p className="text-[11px] opacity-50">Document</p>
           </div>
         </div>
       )
     }
-    // Text
-    return (
-      <p className="text-[15px] whitespace-pre-wrap break-words leading-relaxed">
-        {message.content}
-      </p>
-    )
+    return <p className="text-[15px] whitespace-pre-wrap break-words leading-relaxed">{msg.content}</p>
   }
 
-  const formatTime = (d: string) => new Date(d).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
-
   return (
-    <div className="h-[100dvh] flex flex-col bg-[#FFF6E5]">
-      {/* Header */}
-      <header className="bg-[#1DA1F2] text-white px-2 py-2 flex items-center gap-2 shrink-0 z-50">
-        <button onClick={onBack} className="p-2 -ml-1 rounded-full hover:bg-white/10 active:bg-white/20">
+    <div className="fixed inset-0 z-[100] flex flex-col bg-[#efeae2]">
+      {/* HEADER */}
+      <header className="bg-[#1DA1F2] text-white flex items-center gap-1 px-1 py-1.5 shrink-0 safe-top">
+        <button onClick={onBack} className="p-2 rounded-full active:bg-white/20 transition-colors" aria-label="Retour">
           <ArrowLeft className="h-5 w-5" />
         </button>
-        <button onClick={() => handleMenuAction("profile")} className="flex items-center gap-2 flex-1 min-w-0">
-          <Avatar className="h-10 w-10 border-2 border-white/20">
-            <AvatarImage src={conversation.other_user?.avatar_url || ""} />
-            <AvatarFallback className="bg-white/20 text-white font-semibold">
-              {conversation.other_user?.full_name?.charAt(0)?.toUpperCase() || "?"}
-            </AvatarFallback>
+
+        <button onClick={() => menuAction("profile")} className="flex items-center gap-2.5 flex-1 min-w-0 py-1">
+          <Avatar className="h-10 w-10 border-2 border-white/30">
+            <AvatarImage src={other?.avatar_url || ""} />
+            <AvatarFallback className="bg-white/20 text-white font-bold text-sm">{otherInitial}</AvatarFallback>
           </Avatar>
           <div className="min-w-0">
-            <h2 className="font-semibold truncate text-[15px]">
-              {conversation.other_user?.full_name || "Utilisateur"}
-            </h2>
-            <p className="text-xs text-white/70">{getUserTypeLabel(conversation.other_user?.user_type)}</p>
+            <h2 className="font-semibold text-[15px] truncate leading-tight">{otherName}</h2>
+            <p className="text-[11px] text-white/70 leading-tight">{userTypeLabels[other?.user_type || ""] || "En ligne"}</p>
           </div>
         </button>
 
-        <button onClick={() => toast.info("Appel audio bientot disponible")} className="p-2 rounded-full hover:bg-white/10">
+        <button onClick={() => toast.info("Appel audio bientôt disponible")} className="p-2.5 rounded-full active:bg-white/20" aria-label="Appel audio">
           <Phone className="h-5 w-5" />
         </button>
-        <button onClick={() => toast.info("Appel video bientot disponible")} className="p-2 rounded-full hover:bg-white/10">
+        <button onClick={() => toast.info("Appel vidéo bientôt disponible")} className="p-2.5 rounded-full active:bg-white/20" aria-label="Appel vidéo">
           <Video className="h-5 w-5" />
         </button>
+
         <div className="relative">
-          <button onClick={() => setShowMenu(!showMenu)} className="p-2 rounded-full hover:bg-white/10">
+          <button onClick={() => setShowMenu(!showMenu)} className="p-2.5 rounded-full active:bg-white/20" aria-label="Menu">
             <MoreVertical className="h-5 w-5" />
           </button>
           {showMenu && (
             <>
-              <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
-              <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-xl shadow-xl z-50 py-1 text-[#111827]">
-                <button onClick={() => handleMenuAction("profile")} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-sm">
-                  <UserCircle className="h-4 w-4 text-[#4B5563]" /> Voir le profil
-                </button>
-                <button onClick={() => handleMenuAction("pin")} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-sm">
-                  <Pin className="h-4 w-4 text-[#4B5563]" /> Épingler
-                </button>
-                <button onClick={() => handleMenuAction("mute")} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-sm">
-                  <BellOff className="h-4 w-4 text-[#4B5563]" /> Sourdine
-                </button>
-                <button onClick={() => handleMenuAction("clear")} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-sm">
-                  <Trash2 className="h-4 w-4 text-[#4B5563]" /> Effacer les messages
-                </button>
-                <div className="border-t my-1" />
-                <button onClick={() => handleMenuAction("report")} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-sm text-red-600">
-                  <Flag className="h-4 w-4" /> Signaler
+              <div className="fixed inset-0 z-[110]" onClick={() => setShowMenu(false)} />
+              <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-2xl shadow-2xl z-[120] py-2 text-[#111]">
+                {[
+                  { key: "profile", icon: UserCircle, label: "Voir le profil" },
+                  { key: "pin", icon: Pin, label: "Épingler la conversation" },
+                  { key: "mute", icon: BellOff, label: "Mettre en sourdine" },
+                  { key: "clear", icon: Trash2, label: "Effacer les messages" },
+                ].map(item => (
+                  <button key={item.key} onClick={() => menuAction(item.key)}
+                    className="w-full flex items-center gap-3 px-4 py-3 active:bg-gray-100 text-sm">
+                    <item.icon className="h-4 w-4 text-[#6B7280]" />{item.label}
+                  </button>
+                ))}
+                <div className="border-t border-gray-100 my-1" />
+                <button onClick={() => menuAction("report")} className="w-full flex items-center gap-3 px-4 py-3 active:bg-gray-100 text-sm text-red-600">
+                  <Flag className="h-4 w-4" />Signaler
                 </button>
               </div>
             </>
@@ -388,81 +344,77 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
         </div>
       </header>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1" style={{
-        backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fillRule='evenodd'%3E%3Cg fill='%231DA1F2' fillOpacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
+      {/* MESSAGES AREA */}
+      <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-3" style={{
+        backgroundImage: `url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23c8b68a' fillOpacity='0.06'%3E%3Cpath d='M20 20.5V18H0v-2h20v-2l4 3-4 3z'/%3E%3C/g%3E%3C/svg%3E")`
       }}>
-        {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center px-8">
-            <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mb-4 shadow-sm">
-              <Send className="h-8 w-8 text-[#1DA1F2]" />
+        {loadingMsgs ? (
+          <div className="flex items-center justify-center h-full">
+            <div className="w-8 h-8 border-3 border-[#1DA1F2] border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : messages.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-center px-6">
+            <div className="w-16 h-16 bg-white/80 rounded-2xl flex items-center justify-center mb-4 shadow-sm">
+              <Send className="h-7 w-7 text-[#1DA1F2]" />
             </div>
-            <h3 className="font-semibold text-[#111827] mb-2">Nouvelle conversation</h3>
-            <p className="text-[#4B5563] text-sm">
-              Envoyez un message pour démarrer la discussion avec{" "}
-              <span className="font-medium">{conversation.other_user?.full_name}</span>
-            </p>
+            <p className="text-[#5f6368] text-sm font-medium">Envoyez un message pour démarrer la conversation</p>
           </div>
         ) : (
-          messages.map((message, index) => {
-            const isOwn = message.sender_id === userId
-            const showDate = index === 0 || new Date(message.created_at).toDateString() !== new Date(messages[index - 1].created_at).toDateString()
-            const replyMsg = message.reply_to_id ? messages.find(m => m.id === message.reply_to_id) : null
+          messages.map((msg, i) => {
+            const own = msg.sender_id === userId
+            const showDate = i === 0 || new Date(msg.created_at).toDateString() !== new Date(messages[i - 1].created_at).toDateString()
+            const replyMsg = msg.reply_to_id ? messages.find(m => m.id === msg.reply_to_id) : null
 
             return (
-              <React.Fragment key={message.id}>
+              <React.Fragment key={msg.id}>
                 {showDate && (
                   <div className="flex justify-center my-3">
-                    <span className="text-xs text-[#4B5563] bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-lg shadow-sm">
-                      {new Date(message.created_at).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
+                    <span className="text-[11px] text-[#54656f] bg-white/90 backdrop-blur-sm px-3 py-1 rounded-lg shadow-sm font-medium">
+                      {new Date(msg.created_at).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
                     </span>
                   </div>
                 )}
-                <div className={`flex ${isOwn ? "justify-end" : "justify-start"} group`}>
-                  <div className="relative max-w-[80%]">
-                    {/* Message bubble */}
+                <div className={`flex mb-1 ${own ? "justify-end" : "justify-start"}`}>
+                  <div className="relative max-w-[82%]">
                     <button
                       type="button"
-                      onClick={() => setSelectedMessage(selectedMessage?.id === message.id ? null : message)}
-                      className={`text-left px-3 py-2 rounded-2xl shadow-sm ${
-                        isOwn ? "bg-[#d1ecf9] rounded-tr-sm" : "bg-white rounded-tl-sm"
+                      onClick={() => setSelectedMsg(selectedMsg === msg.id ? null : msg.id)}
+                      className={`text-left rounded-2xl shadow-sm px-3 py-1.5 ${
+                        own ? "bg-[#d9fdd3] rounded-tr-md" : "bg-white rounded-tl-md"
                       }`}
                     >
-                      {/* Reply preview */}
                       {replyMsg && (
-                        <div className="border-l-2 border-[#1DA1F2] pl-2 mb-1 py-0.5 opacity-70">
-                          <p className="text-xs font-medium text-[#1DA1F2]">
-                            {replyMsg.sender_id === userId ? "Vous" : conversation.other_user?.full_name}
+                        <div className="border-l-[3px] border-[#1DA1F2] pl-2 mb-1 py-0.5 rounded-r-md bg-black/5">
+                          <p className="text-[11px] font-semibold text-[#1DA1F2]">
+                            {replyMsg.sender_id === userId ? "Vous" : otherName}
                           </p>
-                          <p className="text-xs truncate">{replyMsg.content}</p>
+                          <p className="text-[11px] text-[#667781] truncate max-w-[200px]">{replyMsg.content}</p>
                         </div>
                       )}
-
-                      <div className="text-[#111827]">
-                        {renderMessageContent(message)}
-                      </div>
-
-                      <div className={`flex items-center gap-1 mt-0.5 ${isOwn ? "justify-end" : ""}`}>
-                        <span className="text-[11px] text-[#4B5563]">{formatTime(message.created_at)}</span>
-                        {message.is_edited && <span className="text-[10px] text-[#4B5563] italic">modifié</span>}
-                        {isOwn && (message.is_read ? <CheckCheck className="h-3.5 w-3.5 text-[#1DA1F2]" /> : <Check className="h-3.5 w-3.5 text-[#4B5563]" />)}
+                      <div className="text-[#111b21]">{renderContent(msg)}</div>
+                      <div className={`flex items-center gap-1 ${own ? "justify-end" : ""} -mb-0.5 mt-0.5`}>
+                        <span className="text-[11px] text-[#667781]">{fmtTime(msg.created_at)}</span>
+                        {msg.is_edited && <span className="text-[10px] text-[#667781] italic">modifié</span>}
+                        {own && (msg.is_read
+                          ? <CheckCheck className="h-[14px] w-[14px] text-[#53bdeb]" />
+                          : <Check className="h-[14px] w-[14px] text-[#667781]" />
+                        )}
                       </div>
                     </button>
 
-                    {/* Message actions popup */}
-                    {selectedMessage?.id === message.id && (
+                    {selectedMsg === msg.id && (
                       <>
-                        <div className="fixed inset-0 z-30" onClick={() => setSelectedMessage(null)} />
-                        <div className={`absolute ${isOwn ? 'right-0' : 'left-0'} bottom-full mb-1 bg-white rounded-xl shadow-xl z-40 py-1 min-w-[160px]`}>
-                          <button onClick={() => handleMessageAction("reply", message)} className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-gray-50 text-sm">
-                            <Reply className="h-4 w-4 text-[#4B5563]" /> Répondre
+                        <div className="fixed inset-0 z-[105]" onClick={() => setSelectedMsg(null)} />
+                        <div className={`absolute ${own ? 'right-0' : 'left-0'} bottom-full mb-1 bg-white rounded-2xl shadow-2xl z-[110] py-1.5 min-w-[150px]`}>
+                          <button onClick={() => msgAction("reply", msg)} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 active:bg-gray-100 text-sm">
+                            <Reply className="h-4 w-4 text-[#6B7280]" />Répondre
                           </button>
-                          <button onClick={() => handleMessageAction("copy", message)} className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-gray-50 text-sm">
-                            <Copy className="h-4 w-4 text-[#4B5563]" /> Copier
+                          <button onClick={() => msgAction("copy", msg)} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 active:bg-gray-100 text-sm">
+                            <Copy className="h-4 w-4 text-[#6B7280]" />Copier
                           </button>
-                          {isOwn && (
-                            <button onClick={() => handleMessageAction("delete", message)} className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-gray-50 text-sm text-red-600">
-                              <Trash2 className="h-4 w-4" /> Supprimer
+                          {own && (
+                            <button onClick={() => msgAction("delete", msg)} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 active:bg-gray-100 text-sm text-red-600">
+                              <Trash2 className="h-4 w-4" />Supprimer
                             </button>
                           )}
                         </div>
@@ -477,120 +429,120 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Reply preview */}
+      {/* REPLY PREVIEW */}
       {replyTo && (
-        <div className="px-3 py-2 bg-white border-t flex items-center gap-2">
-          <div className="flex-1 border-l-2 border-[#1DA1F2] pl-2">
-            <p className="text-xs font-medium text-[#1DA1F2]">
-              {replyTo.sender_id === userId ? "Vous" : conversation.other_user?.full_name}
+        <div className="bg-white border-t border-gray-200 px-3 py-2 flex items-center gap-2 shrink-0">
+          <div className="flex-1 border-l-[3px] border-[#1DA1F2] pl-2 min-w-0">
+            <p className="text-[11px] font-semibold text-[#1DA1F2]">
+              {replyTo.sender_id === userId ? "Vous" : otherName}
             </p>
-            <p className="text-xs text-[#4B5563] truncate">{replyTo.content}</p>
+            <p className="text-[12px] text-[#667781] truncate">{replyTo.content}</p>
           </div>
-          <button onClick={() => setReplyTo(null)} className="p-1 rounded-full hover:bg-gray-100">
-            <X className="h-4 w-4 text-[#4B5563]" />
+          <button onClick={() => setReplyTo(null)} className="p-1.5 rounded-full active:bg-gray-100">
+            <X className="h-4 w-4 text-[#667781]" />
           </button>
         </div>
       )}
 
-      {/* Recording UI */}
+      {/* RECORDING BAR */}
       {isRecording && (
-        <div className="px-4 py-3 bg-red-50 border-t flex items-center gap-3">
-          <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
-          <span className="text-red-600 font-medium text-sm">
-            {Math.floor(recordingTime / 60)}:{(recordingTime % 60).toString().padStart(2, '0')}
-          </span>
-          <div className="flex-1 flex items-center gap-1">
-            {Array.from({ length: 20 }).map((_, i) => (
-              <div key={i} className="w-1 bg-red-300 rounded-full" style={{ height: `${Math.random() * 16 + 4}px` }} />
-            ))}
-          </div>
-          <button onClick={() => { setIsRecording(false); if (recordingInterval.current) clearInterval(recordingInterval.current); setRecordingTime(0) }}
-            className="p-2 rounded-full hover:bg-red-100">
+        <div className="bg-white border-t border-gray-200 px-3 py-2.5 flex items-center gap-3 shrink-0">
+          <button onClick={cancelRecording} className="p-2 rounded-full active:bg-red-50">
             <Trash2 className="h-5 w-5 text-red-500" />
           </button>
-          <button onClick={toggleRecording} className="p-2 rounded-full bg-red-500 text-white">
+          <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse shrink-0" />
+          <span className="text-red-600 font-mono text-sm font-medium w-10">
+            {Math.floor(recordSec / 60)}:{(recordSec % 60).toString().padStart(2, '0')}
+          </span>
+          <div className="flex-1 flex items-center gap-[2px] overflow-hidden">
+            {Array.from({ length: 40 }).map((_, i) => (
+              <div key={i} className="w-[2px] bg-red-400/60 rounded-full shrink-0" style={{ height: `${3 + Math.sin((recordSec + i) * 0.5) * 10 + Math.random() * 4}px` }} />
+            ))}
+          </div>
+          <button onClick={toggleVoice} className="w-11 h-11 rounded-full bg-[#1DA1F2] text-white flex items-center justify-center active:scale-90 transition-transform">
             <Send className="h-5 w-5" />
           </button>
         </div>
       )}
 
-      {/* Input bar */}
+      {/* ATTACH OVERLAY */}
+      {showAttach && (
+        <>
+          <div className="fixed inset-0 bg-black/30 z-[108]" onClick={() => setShowAttach(false)} />
+          <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl z-[109] p-6 pb-8 safe-bottom animate-in slide-in-from-bottom duration-200">
+            <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-6" />
+            <div className="grid grid-cols-3 gap-6">
+              {[
+                { icon: ImageIcon, color: "bg-violet-500", label: "Galerie", action: () => { imgRef.current?.click(); setShowAttach(false) } },
+                { icon: Camera, color: "bg-pink-500", label: "Caméra", action: () => { imgRef.current?.click(); setShowAttach(false) } },
+                { icon: FileText, color: "bg-blue-500", label: "Document", action: () => { fileRef.current?.click(); setShowAttach(false) } },
+                { icon: MapPin, color: "bg-green-500", label: "Position", action: () => { toast.info("Partage de position bientôt disponible"); setShowAttach(false) } },
+              ].map(item => (
+                <button key={item.label} onClick={item.action} className="flex flex-col items-center gap-2">
+                  <div className={`w-14 h-14 ${item.color} rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform`}>
+                    <item.icon className="h-6 w-6 text-white" />
+                  </div>
+                  <span className="text-xs text-[#667781] font-medium">{item.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* INPUT BAR */}
       {!isRecording && (
-        <form onSubmit={handleSend} className="p-2 bg-[#f0f2f5] shrink-0">
-          <div className="flex items-end gap-2">
-            {/* Attach + input */}
-            <div className="flex-1 flex items-center bg-white rounded-full px-1 py-1 shadow-sm relative">
-              <button type="button" onClick={() => toast.info("Emojis bientot disponibles")} className="p-1.5 text-[#54656f] shrink-0 hover:text-[#1DA1F2]">
+        <div className="bg-[#f0f2f5] px-2 py-1.5 shrink-0 safe-bottom">
+          <form onSubmit={handleSend} className="flex items-end gap-1.5">
+            <div className="flex-1 flex items-center bg-white rounded-[25px] shadow-sm min-h-[48px] px-2">
+              <button type="button" onClick={() => toast.info("Emojis bientôt disponibles")}
+                className="p-2 text-[#54656f] active:text-[#1DA1F2] shrink-0" aria-label="Emojis">
                 <Smile className="h-6 w-6" />
               </button>
 
               <input
                 ref={inputRef}
                 value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                placeholder="Message..."
-                className="flex-1 border-0 bg-transparent h-10 text-[15px] focus:outline-none placeholder:text-[#8696a0] px-2"
-                autoFocus
+                onChange={e => setNewMessage(e.target.value)}
+                placeholder="Message"
+                className="flex-1 bg-transparent border-0 text-[15px] h-[48px] focus:outline-none placeholder:text-[#8696a0] px-1"
                 enterKeyHint="send"
+                autoComplete="off"
               />
 
-              {/* Attach button */}
-              <div className="relative">
-                <button type="button" onClick={() => setShowAttachMenu(!showAttachMenu)} className="p-1.5 text-[#54656f] shrink-0 hover:text-[#1DA1F2]">
-                  <Paperclip className="h-6 w-6" />
-                </button>
-                {showAttachMenu && (
-                  <>
-                    <div className="fixed inset-0 z-30" onClick={() => setShowAttachMenu(false)} />
-                    <div className="absolute bottom-full right-0 mb-2 bg-white rounded-xl shadow-xl z-40 p-3 flex gap-3">
-                      <button type="button" onClick={() => imageInputRef.current?.click()} className="flex flex-col items-center gap-1">
-                        <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center">
-                          <ImageIcon className="h-5 w-5 text-purple-600" />
-                        </div>
-                        <span className="text-[10px] text-[#4B5563]">Photo</span>
-                      </button>
-                      <button type="button" onClick={() => imageInputRef.current?.click()} className="flex flex-col items-center gap-1">
-                        <div className="w-12 h-12 rounded-full bg-pink-100 flex items-center justify-center">
-                          <ImageIcon className="h-5 w-5 text-pink-600" />
-                        </div>
-                        <span className="text-[10px] text-[#4B5563]">Caméra</span>
-                      </button>
-                      <button type="button" onClick={() => fileInputRef.current?.click()} className="flex flex-col items-center gap-1">
-                        <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
-                          <FileText className="h-5 w-5 text-blue-600" />
-                        </div>
-                        <span className="text-[10px] text-[#4B5563]">Fichier</span>
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              <button type="button" onClick={() => imageInputRef.current?.click()} className="p-1.5 text-[#54656f] shrink-0 hover:text-[#1DA1F2]">
-                <ImageIcon className="h-6 w-6" />
+              <button type="button" onClick={() => setShowAttach(true)}
+                className="p-2 text-[#54656f] active:text-[#1DA1F2] shrink-0" aria-label="Joindre un fichier">
+                <Paperclip className="h-6 w-6" />
               </button>
+
+              {!newMessage.trim() && (
+                <button type="button" onClick={() => imgRef.current?.click()}
+                  className="p-2 text-[#54656f] active:text-[#1DA1F2] shrink-0" aria-label="Photo rapide">
+                  <Camera className="h-6 w-6" />
+                </button>
+              )}
             </div>
 
-            {/* Send or mic */}
             {newMessage.trim() ? (
               <button type="submit" disabled={sending}
-                className="rounded-full h-12 w-12 bg-[#1DA1F2] hover:bg-[#1a8cd8] text-white shadow-sm flex items-center justify-center shrink-0 active:scale-95 transition-all disabled:opacity-50">
+                className="w-[48px] h-[48px] rounded-full bg-[#1DA1F2] text-white flex items-center justify-center shrink-0 active:scale-90 transition-transform disabled:opacity-50 shadow-sm"
+                aria-label="Envoyer">
                 <Send className="h-5 w-5" />
               </button>
             ) : (
-              <button type="button" onClick={toggleRecording}
-                className="rounded-full h-12 w-12 bg-[#1DA1F2] hover:bg-[#1a8cd8] text-white shadow-sm flex items-center justify-center shrink-0 active:scale-95 transition-all">
+              <button type="button" onClick={toggleVoice}
+                className="w-[48px] h-[48px] rounded-full bg-[#1DA1F2] text-white flex items-center justify-center shrink-0 active:scale-90 transition-transform shadow-sm"
+                aria-label="Enregistrement vocal">
                 <Mic className="h-5 w-5" />
               </button>
             )}
-          </div>
+          </form>
 
-          {/* Hidden file inputs */}
-          <input ref={fileInputRef} type="file" className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.zip"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f, "file"); e.target.value = "" }} />
-          <input ref={imageInputRef} type="file" className="hidden" accept="image/*,video/*" capture="environment"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f, "image"); e.target.value = "" }} />
-        </form>
+          <input ref={fileRef} type="file" className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar"
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f, "file"); e.target.value = "" }} />
+          <input ref={imgRef} type="file" className="hidden" accept="image/*,video/*"
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f, "image"); e.target.value = "" }} />
+        </div>
       )}
     </div>
   )
