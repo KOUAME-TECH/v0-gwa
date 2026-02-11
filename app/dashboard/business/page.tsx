@@ -219,7 +219,7 @@ export default function BusinessDashboard() {
               Explorer le marché
             </Button>
           </Link>
-          <Link href="/rfq">
+          <Link href="/b2b">
             <Button variant="outline" className="rounded-xl whitespace-nowrap border-[#6366F1] text-[#6366F1] bg-transparent">
               <FileText className="h-4 w-4 mr-2" />
               Demande de devis
@@ -355,7 +355,7 @@ export default function BusinessDashboard() {
         <Card className="bg-gradient-to-r from-[#6366F1]/20 to-[#8B5CF6]/20 border-0">
           <CardContent className="p-4">
             <div className="grid grid-cols-2 gap-3">
-              <Link href="/rfq">
+              <Link href="/b2b">
                 <Button variant="ghost" className="w-full h-auto py-4 flex flex-col items-center gap-2 text-white hover:bg-white/10">
                   <FileText className="h-6 w-6 text-[#6366F1]" />
                   <span className="text-sm">Demande de devis</span>

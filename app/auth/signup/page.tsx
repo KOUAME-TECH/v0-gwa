@@ -1,6 +1,6 @@
 "use client"
 
-import React from "react"
+import React, { Suspense } from "react"
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -34,7 +34,7 @@ const countries = [
   { value: "ma", label: "Maroc" },
 ]
 
-export default function SignupPage() {
+function SignupForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const preselectedType = searchParams.get("type")
@@ -316,5 +316,13 @@ export default function SignupPage() {
         </p>
       </main>
     </div>
+  )
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-white flex items-center justify-center"><div className="w-8 h-8 border-3 border-neutral-300 border-t-neutral-900 rounded-full animate-spin" /></div>}>
+      <SignupForm />
+    </Suspense>
   )
 }
