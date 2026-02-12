@@ -93,13 +93,12 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       }
 
       // Mark unread as read
-      supabase
+      await supabase
         .from("messages")
         .update({ is_read: true })
         .eq("conversation_id", conversation.id)
         .neq("sender_id", userId)
         .eq("is_read", false)
-        .then(() => {})
     }
     load()
 
@@ -115,7 +114,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
           setMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg])
           scroll()
           if (msg.sender_id !== userId) {
-            supabase.from("messages").update({ is_read: true }).eq("id", msg.id).then(() => {})
+            supabase.from("messages").update({ is_read: true }).eq("id", msg.id)
           }
         }
       )
@@ -169,7 +168,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       setMessages(prev => prev.map(m => m.id === tempId ? data : m))
     }
 
-    supabase.from("conversations").update({ last_message_at: new Date().toISOString() }).eq("id", conversation.id).then(() => {})
+    await supabase.from("conversations").update({ last_message_at: new Date().toISOString() }).eq("id", conversation.id)
     setSending(false)
     inputRef.current?.focus()
   }
@@ -200,7 +199,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   }
 
   // Voice toggle
-  function toggleVoice() {
+  async function toggleVoice() {
     if (isRecording) {
       setIsRecording(false)
       if (recInterval.current) clearInterval(recInterval.current)
@@ -208,12 +207,11 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       setRecordSec(0)
       const dur = `${Math.floor(sec / 60)}:${(sec % 60).toString().padStart(2, '0')}`
 
-      supabase.from("messages").insert({
+      await supabase.from("messages").insert({
         conversation_id: conversation.id, sender_id: userId,
         content: `Message vocal (${dur})`, message_type: "voice",
-      }).then(() => {
-        supabase.from("conversations").update({ last_message_at: new Date().toISOString() }).eq("id", conversation.id)
       })
+      await supabase.from("conversations").update({ last_message_at: new Date().toISOString() }).eq("id", conversation.id)
       toast.success("Message vocal envoyé")
     } else {
       setIsRecording(true)
@@ -238,15 +236,14 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     else if (a === "report") toast.info("Signalement envoyé")
   }
 
-  function msgAction(a: string, msg: Message) {
+  async function msgAction(a: string, msg: Message) {
     setSelectedMsg(null)
     if (a === "reply") { setReplyTo(msg); inputRef.current?.focus() }
     else if (a === "copy") { navigator.clipboard.writeText(msg.content); toast.success("Copié") }
     else if (a === "delete" && msg.sender_id === userId) {
-      supabase.from("messages").delete().eq("id", msg.id).then(() => {
-        setMessages(prev => prev.filter(m => m.id !== msg.id))
-        toast.success("Supprimé")
-      })
+      setMessages(prev => prev.filter(m => m.id !== msg.id))
+      toast.success("Supprimé")
+      await supabase.from("messages").delete().eq("id", msg.id)
     }
   }
 
