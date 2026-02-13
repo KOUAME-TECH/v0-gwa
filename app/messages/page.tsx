@@ -113,7 +113,8 @@ function MessagesContent() {
         unread_count: unreadMap.get(c.id) || 0,
       }
     })
-  }, [supabase])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     let mounted = true
