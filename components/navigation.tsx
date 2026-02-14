@@ -381,7 +381,7 @@ export function Navigation() {
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <Link href="/dashboard/settings">
+                  <Link href="/profil/edit">
                     <Settings className="mr-2 h-4 w-4" />
                     Paramètres
                   </Link>

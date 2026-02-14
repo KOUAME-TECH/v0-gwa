@@ -181,7 +181,7 @@ export default function ProfilPage() {
     },
     {
       items: [
-        { icon: Settings, label: "Paramètres", href: "/profil/settings" },
+        { icon: Settings, label: "Paramètres", href: "/profil/edit" },
         { icon: HelpCircle, label: "Aide", href: "/contact" },
       ]
     }
@@ -193,7 +193,7 @@ export default function ProfilPage() {
       <header className="bg-white px-5 pt-4 pb-6">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-xl font-semibold">Profil</h1>
-          <Link href="/profil/settings">
+          <Link href="/profil/edit">
             <button className="p-2 -mr-2 active:opacity-60">
               <Settings className="h-5 w-5 text-neutral-600" />
             </button>
