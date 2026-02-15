@@ -471,7 +471,18 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
             <div className="grid grid-cols-3 gap-6">
               {[
                 { icon: ImageIcon, color: "bg-violet-500", label: "Galerie", action: () => { imgRef.current?.click(); setShowAttach(false) } },
-                { icon: Camera, color: "bg-pink-500", label: "Caméra", action: () => { imgRef.current?.click(); setShowAttach(false) } },
+                { icon: Camera, color: "bg-pink-500", label: "Caméra", action: () => {
+                const camInput = document.createElement('input')
+                camInput.type = 'file'
+                camInput.accept = 'image/*'
+                camInput.capture = 'environment'
+                camInput.onchange = (ev) => {
+                  const f = (ev.target as HTMLInputElement).files?.[0]
+                  if (f) handleFileUpload(f, "image")
+                }
+                camInput.click()
+                setShowAttach(false)
+              } },
                 { icon: FileText, color: "bg-blue-500", label: "Document", action: () => { fileRef.current?.click(); setShowAttach(false) } },
                 { icon: MapPin, color: "bg-green-500", label: "Position", action: () => { toast.info("Partage de position bientôt disponible"); setShowAttach(false) } },
               ].map(item => (
