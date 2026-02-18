@@ -155,15 +155,21 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     setReplyTo(null)
     scroll()
 
-    const { data, error } = await supabase.from("messages").insert({
+    const insertData: Record<string, unknown> = {
       conversation_id: conversation.id, sender_id: userId,
-      content: text, message_type: "text", reply_to_id: replyTo?.id || null,
-    }).select().single()
+      content: text,
+    }
+    // Only add optional columns if they exist in the table
+    if (replyTo?.id) insertData.reply_to_id = replyTo.id
+
+    console.log("[v0] Sending message:", insertData)
+    const { data, error } = await supabase.from("messages").insert(insertData).select().single()
+    console.log("[v0] Send result:", { data, error })
 
     if (error) {
       setMessages(prev => prev.filter(m => m.id !== tempId))
       setNewMessage(text)
-      toast.error("Erreur d'envoi")
+      toast.error("Erreur d'envoi: " + (error.message || "Inconnu"))
     } else if (data) {
       setMessages(prev => prev.map(m => m.id === tempId ? data : m))
     }

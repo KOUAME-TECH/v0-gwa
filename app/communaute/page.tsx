@@ -66,6 +66,9 @@ export default function CommunautePage() {
   const [posting, setPosting] = useState(false)
   const [selectedTab, setSelectedTab] = useState("all")
   const [showNewPost, setShowNewPost] = useState(false)
+  const [postImage, setPostImage] = useState<File | null>(null)
+  const [postImagePreview, setPostImagePreview] = useState<string | null>(null)
+  const imgInputRef = React.useRef<HTMLInputElement>(null)
   
   const supabase = createClient()
 
@@ -118,25 +121,44 @@ export default function CommunautePage() {
   }
 
   const handleCreatePost = async () => {
-    if (!user || !newPostContent.trim()) return
+    if (!user || (!newPostContent.trim() && !postImage)) return
     setPosting(true)
 
-    const { data } = await supabase
-      .from("posts")
-      .insert({
-        author_id: user.id,
-        content: newPostContent,
-        post_type: newPostType,
-        location: userProfile?.city,
-        visibility: "public",
-      })
-      .select(`*, profiles:author_id (full_name, avatar_url, user_type, city)`)
-      .single()
+    try {
+      let imageUrl: string | null = null
 
-    if (data) {
-      setPosts([data, ...posts])
-      setNewPostContent("")
-      setShowNewPost(false)
+      if (postImage) {
+        const ext = postImage.name.split('.').pop()?.toLowerCase() || 'jpg'
+        const path = `${user.id}/${Date.now()}.${ext}`
+        const { error: upErr } = await supabase.storage.from("community").upload(path, postImage, { upsert: false })
+        if (!upErr) {
+          const { data: { publicUrl } } = supabase.storage.from("community").getPublicUrl(path)
+          imageUrl = publicUrl
+        }
+      }
+
+      const { data } = await supabase
+        .from("posts")
+        .insert({
+          author_id: user.id,
+          content: newPostContent,
+          image_url: imageUrl,
+          post_type: newPostType,
+          location: userProfile?.city,
+          visibility: "public",
+        })
+        .select(`*, profiles:author_id (full_name, avatar_url, user_type, city)`)
+        .single()
+
+      if (data) {
+        setPosts([data, ...posts])
+        setNewPostContent("")
+        setPostImage(null)
+        setPostImagePreview(null)
+        setShowNewPost(false)
+      }
+    } catch (err) {
+      console.error("Post error:", err)
     }
     setPosting(false)
   }
@@ -231,8 +253,22 @@ export default function CommunautePage() {
                       autoFocus
                     />
 
+                    {postImagePreview && (
+                      <div className="relative w-full h-40 rounded-xl overflow-hidden bg-muted">
+                        <Image src={postImagePreview} alt="Apercu" fill className="object-cover" />
+                        <button onClick={() => { setPostImage(null); setPostImagePreview(null) }} className="absolute top-2 right-2 w-7 h-7 bg-black/60 rounded-full flex items-center justify-center">
+                          <X className="h-4 w-4 text-white" />
+                        </button>
+                      </div>
+                    )}
+
+                    <input ref={imgInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => {
+                      const f = e.target.files?.[0]
+                      if (f) { setPostImage(f); setPostImagePreview(URL.createObjectURL(f)) }
+                    }} />
+
                     <div className="flex items-center justify-between">
-                      <Button variant="ghost" size="icon" className="rounded-full">
+                      <Button variant="ghost" size="icon" className="rounded-full" onClick={() => imgInputRef.current?.click()}>
                         <ImageIcon className="h-5 w-5" />
                       </Button>
                       <Button 

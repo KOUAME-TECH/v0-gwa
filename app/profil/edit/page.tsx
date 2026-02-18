@@ -146,9 +146,7 @@ export default function EditProfilPage() {
     setIsSaving(true)
 
     try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({
+      const updateData = {
           full_name: formData.full_name,
           bio: formData.bio || null,
           user_type: formData.user_type || null,
@@ -157,9 +155,16 @@ export default function EditProfilPage() {
           country: formData.country || null,
           address: formData.address || null,
           updated_at: new Date().toISOString(),
-        })
-        .eq("id", profile.id)
+        }
+      console.log("[v0] Saving profile:", updateData, "for id:", profile.id)
 
+      const { error, data } = await supabase
+        .from("profiles")
+        .update(updateData)
+        .eq("id", profile.id)
+        .select()
+
+      console.log("[v0] Profile save result:", { error, data })
       if (error) throw error
 
       toast.success("Profil mis à jour avec succès")
