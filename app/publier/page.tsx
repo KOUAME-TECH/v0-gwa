@@ -191,19 +191,19 @@ export default function PublierPage() {
     setUploadProgress(0)
     
     try {
-      let imageUrl: string | null = null
+      let mediaUrls: { url: string; type: string }[] | null = null
       
       if (images.length > 0) {
         const urls = await uploadImages('posts')
-        imageUrl = urls[0] || null
+        mediaUrls = urls.map(url => ({ url, type: 'image' }))
       }
 
       const { error } = await supabase.from("posts").insert({
         author_id: user.id,
         content: postContent.trim(),
-        image_url: imageUrl,
+        media_urls: mediaUrls,
         visibility: "public",
-        post_type: "general",
+        post_type: mediaUrls ? "media" : "general",
       })
       
       if (error) throw error

@@ -1,5 +1,6 @@
 "use client"
 
+import React from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { useEffect, useState } from "react"
@@ -20,9 +21,9 @@ import { fr } from "date-fns/locale"
 
 interface Post {
   id: string
-  user_id: string
+  author_id: string
   content: string
-  image_url: string | null
+  media_urls: { url: string; type: string }[] | null
   post_type: string
   location: string | null
   likes_count: number
@@ -125,7 +126,7 @@ export default function CommunautePage() {
     setPosting(true)
 
     try {
-      let imageUrl: string | null = null
+      let mediaUrls: { url: string; type: string }[] | null = null
 
       if (postImage) {
         const ext = postImage.name.split('.').pop()?.toLowerCase() || 'jpg'
@@ -133,7 +134,7 @@ export default function CommunautePage() {
         const { error: upErr } = await supabase.storage.from("community").upload(path, postImage, { upsert: false })
         if (!upErr) {
           const { data: { publicUrl } } = supabase.storage.from("community").getPublicUrl(path)
-          imageUrl = publicUrl
+          mediaUrls = [{ url: publicUrl, type: "image" }]
         }
       }
 
@@ -142,7 +143,7 @@ export default function CommunautePage() {
         .insert({
           author_id: user.id,
           content: newPostContent,
-          image_url: imageUrl,
+          media_urls: mediaUrls,
           post_type: newPostType,
           location: userProfile?.city,
           visibility: "public",
@@ -363,7 +364,7 @@ function PostCard({ post, onLike, isLoggedIn }: {
     setLoadingComments(true)
     const { data } = await supabase
       .from("post_comments")
-      .select(`*, profiles:user_id (full_name, avatar_url)`)
+      .select(`*, profiles:author_id (full_name, avatar_url)`)
       .eq("post_id", post.id)
       .order("created_at", { ascending: true })
 
@@ -380,8 +381,8 @@ function PostCard({ post, onLike, isLoggedIn }: {
 
     const { data } = await supabase
       .from("post_comments")
-      .insert({ post_id: post.id, user_id: user.id, content: newComment })
-      .select(`*, profiles:user_id (full_name, avatar_url)`)
+      .insert({ post_id: post.id, author_id: user.id, content: newComment })
+      .select(`*, profiles:author_id (full_name, avatar_url)`)
       .single()
 
     if (data) {
@@ -433,9 +434,9 @@ function PostCard({ post, onLike, isLoggedIn }: {
         <p className="text-sm whitespace-pre-wrap">{post.content}</p>
       </div>
 
-      {post.image_url && (
+      {post.media_urls && post.media_urls.length > 0 && (
         <div className="relative aspect-video bg-muted">
-          <Image src={post.image_url || "/placeholder.svg"} alt="" fill className="object-cover" />
+          <Image src={post.media_urls[0].url || "/placeholder.svg"} alt="" fill className="object-cover" />
         </div>
       )}
       

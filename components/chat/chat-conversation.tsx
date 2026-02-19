@@ -155,26 +155,35 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     setReplyTo(null)
     scroll()
 
-    const insertData: Record<string, unknown> = {
-      conversation_id: conversation.id, sender_id: userId,
-      content: text,
-    }
-    // Only add optional columns if they exist in the table
-    if (replyTo?.id) insertData.reply_to_id = replyTo.id
+    try {
+      const insertPayload: Record<string, unknown> = {
+        conversation_id: conversation.id,
+        sender_id: userId,
+        content: text,
+        message_type: "text",
+      }
+      if (replyTo?.id) insertPayload.reply_to_id = replyTo.id
 
-    console.log("[v0] Sending message:", insertData)
-    const { data, error } = await supabase.from("messages").insert(insertData).select().single()
-    console.log("[v0] Send result:", { data, error })
+      console.log("[v0] Sending message:", JSON.stringify(insertPayload))
+      const { data, error } = await supabase.from("messages").insert(insertPayload).select().single()
+      console.log("[v0] Send result:", JSON.stringify({ data, error }))
 
-    if (error) {
+      if (error) {
+        console.error("[v0] Send error detail:", error.code, error.details, error.hint, error.message)
+        setMessages(prev => prev.filter(m => m.id !== tempId))
+        setNewMessage(text)
+        toast.error(error.message || "Erreur d'envoi")
+      } else if (data) {
+        setMessages(prev => prev.map(m => m.id === tempId ? data : m))
+      }
+
+      await supabase.from("conversations").update({ last_message_at: new Date().toISOString() }).eq("id", conversation.id)
+    } catch (err: any) {
+      console.error("[v0] Send catch:", err)
       setMessages(prev => prev.filter(m => m.id !== tempId))
       setNewMessage(text)
-      toast.error("Erreur d'envoi: " + (error.message || "Inconnu"))
-    } else if (data) {
-      setMessages(prev => prev.map(m => m.id === tempId ? data : m))
+      toast.error("Erreur réseau")
     }
-
-    await supabase.from("conversations").update({ last_message_at: new Date().toISOString() }).eq("id", conversation.id)
     setSending(false)
     inputRef.current?.focus()
   }
