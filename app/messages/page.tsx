@@ -227,7 +227,8 @@ function MessagesContent() {
       userId={user?.id || ""}
       userType={userType}
       onSelectConversation={setSelectedConv}
-      onSelectGroup={(g) => toast.info("Groupes bientôt disponibles")}
+      onSelectGroup={(g) => toast.info(`Groupe "${g.name}" - Chat de groupe bientôt disponible`)}
+      onGroupCreated={(g) => setGroups(prev => [g, ...prev])}
     />
   )
 }

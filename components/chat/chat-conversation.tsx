@@ -156,17 +156,36 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     scroll()
 
     try {
+      // Verify auth before sending
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+      if (!authUser) {
+        toast.error("Session expirée, reconnectez-vous")
+        setSending(false)
+        return
+      }
+
       const insertPayload: Record<string, unknown> = {
         conversation_id: conversation.id,
-        sender_id: userId,
+        sender_id: authUser.id,
         content: text,
-        message_type: "text",
       }
       if (replyTo?.id) insertPayload.reply_to_id = replyTo.id
 
-      console.log("[v0] Sending message:", JSON.stringify(insertPayload))
+      console.log("[v0] Auth user:", authUser.id, "Conv:", conversation.id, "Payload:", JSON.stringify(insertPayload))
+      
+      // Verify conversation exists
+      const { data: convCheck } = await supabase.from("conversations").select("id").eq("id", conversation.id).single()
+      if (!convCheck) {
+        console.error("[v0] Conversation not found in DB:", conversation.id)
+        toast.error("Conversation introuvable")
+        setMessages(prev => prev.filter(m => m.id !== tempId))
+        setNewMessage(text)
+        setSending(false)
+        return
+      }
+
       const { data, error } = await supabase.from("messages").insert(insertPayload).select().single()
-      console.log("[v0] Send result:", JSON.stringify({ data, error }))
+      console.log("[v0] Send result:", error ? JSON.stringify(error) : "OK, id=" + data?.id)
 
       if (error) {
         console.error("[v0] Send error detail:", error.code, error.details, error.hint, error.message)
