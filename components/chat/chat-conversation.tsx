@@ -171,24 +171,9 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       }
       if (replyTo?.id) insertPayload.reply_to_id = replyTo.id
 
-      console.log("[v0] Auth user:", authUser.id, "Conv:", conversation.id, "Payload:", JSON.stringify(insertPayload))
-      
-      // Verify conversation exists
-      const { data: convCheck } = await supabase.from("conversations").select("id").eq("id", conversation.id).single()
-      if (!convCheck) {
-        console.error("[v0] Conversation not found in DB:", conversation.id)
-        toast.error("Conversation introuvable")
-        setMessages(prev => prev.filter(m => m.id !== tempId))
-        setNewMessage(text)
-        setSending(false)
-        return
-      }
-
       const { data, error } = await supabase.from("messages").insert(insertPayload).select().single()
-      console.log("[v0] Send result:", error ? JSON.stringify(error) : "OK, id=" + data?.id)
 
       if (error) {
-        console.error("[v0] Send error detail:", error.code, error.details, error.hint, error.message)
         setMessages(prev => prev.filter(m => m.id !== tempId))
         setNewMessage(text)
         toast.error(error.message || "Erreur d'envoi")
@@ -197,8 +182,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       }
 
       await supabase.from("conversations").update({ last_message_at: new Date().toISOString() }).eq("id", conversation.id)
-    } catch (err: any) {
-      console.error("[v0] Send catch:", err)
+    } catch {
       setMessages(prev => prev.filter(m => m.id !== tempId))
       setNewMessage(text)
       toast.error("Erreur réseau")

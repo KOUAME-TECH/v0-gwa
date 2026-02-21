@@ -156,15 +156,11 @@ export default function EditProfilPage() {
           address: formData.address || null,
           updated_at: new Date().toISOString(),
         }
-      console.log("[v0] Saving profile:", updateData, "for id:", profile.id)
-
-      const { error, data } = await supabase
+      const { error } = await supabase
         .from("profiles")
         .update(updateData)
         .eq("id", profile.id)
-        .select()
 
-      console.log("[v0] Profile save result:", { error, data })
       if (error) throw error
 
       toast.success("Profil mis à jour avec succès")

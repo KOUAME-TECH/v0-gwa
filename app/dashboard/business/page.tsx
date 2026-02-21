@@ -373,7 +373,7 @@ export default function BusinessDashboard() {
                   <span className="text-sm">Rapports</span>
                 </Button>
               </Link>
-              <Link href="/messages">
+              <Link href="/profil/edit">
                 <Button variant="ghost" className="w-full h-auto py-4 flex flex-col items-center gap-2 text-white hover:bg-white/10">
                   <Building2 className="h-6 w-6 text-[#EC4899]" />
                   <span className="text-sm">Paramètres</span>
