@@ -377,8 +377,8 @@ export default function PublierPage() {
           )}
         </div>
 
-        {/* Bottom toolbar */}
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#E5E7EB] p-4">
+        {/* Bottom toolbar - above bottom nav */}
+        <div className="fixed bottom-[76px] left-0 right-0 bg-white border-t border-[#E5E7EB] p-4 z-40">
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={images.length >= 4}
@@ -561,8 +561,8 @@ export default function PublierPage() {
         </div>
       </div>
 
-      {/* Fixed button */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-[#E5E7EB]">
+      {/* Fixed button - above bottom nav */}
+      <div className="fixed bottom-[76px] left-0 right-0 p-4 bg-white border-t border-[#E5E7EB] z-40">
         <Button 
           onClick={handleSubmitProduct}
           disabled={isSubmitting || !productForm.name || !productForm.price || !productForm.category_id}

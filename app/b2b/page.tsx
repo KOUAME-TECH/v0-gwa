@@ -24,14 +24,16 @@ import {
 } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { fr } from "date-fns/locale"
+import { toast } from "sonner"
 
 interface RFQ {
   id: string
+  rfq_number: string
   buyer_id: string
   title: string
   description: string
-  category: string
-  quantity: number
+  product_category: string
+  quantity_needed: number
   unit: string
   budget_min: number | null
   budget_max: number | null
@@ -140,31 +142,44 @@ export default function B2BPage() {
   }
 
   const handleCreateRfq = async () => {
-    if (!user) return
+    if (!user) { toast.error("Connectez-vous pour publier un devis"); return }
+    if (!newRfq.title.trim()) { toast.error("Le titre est obligatoire"); return }
+    if (!newRfq.description.trim()) { toast.error("La description est obligatoire"); return }
 
     setCreating(true)
+
+    const rfqNumber = `RFQ-${Date.now().toString(36).toUpperCase()}`
 
     const { data, error } = await supabase
       .from('rfq_requests')
       .insert({
+        rfq_number: rfqNumber,
         buyer_id: user.id,
-        title: newRfq.title,
-        description: newRfq.description,
-        category: newRfq.category,
-        quantity: parseFloat(newRfq.quantity),
+        title: newRfq.title.trim(),
+        description: newRfq.description.trim(),
+        product_category: newRfq.category || 'general',
+        quantity_needed: newRfq.quantity ? parseFloat(newRfq.quantity) : 1,
         unit: newRfq.unit,
         budget_min: newRfq.budget_min ? parseFloat(newRfq.budget_min) : null,
         budget_max: newRfq.budget_max ? parseFloat(newRfq.budget_max) : null,
-        delivery_location: newRfq.delivery_location,
-        delivery_deadline: newRfq.delivery_deadline,
+        delivery_location: newRfq.delivery_location || null,
+        delivery_deadline: newRfq.delivery_deadline || null,
         status: 'open'
       })
       .select()
       .single()
 
+    if (error) {
+      toast.error("Erreur: " + (error.message || "Impossible de publier le devis"))
+      setCreating(false)
+      return
+    }
+
     if (data) {
       setMyRfqs([data, ...myRfqs])
+      setRfqs([data, ...rfqs])
       setShowCreateDialog(false)
+      toast.success("Demande de devis publiee avec succes !")
       setNewRfq({
         title: "",
         description: "",
@@ -229,7 +244,7 @@ export default function B2BPage() {
                   Nouvelle demande de devis
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl">
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Créer une demande de devis</DialogTitle>
                   <DialogDescription>

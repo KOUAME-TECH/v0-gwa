@@ -160,21 +160,40 @@ function MessagesContent() {
     return () => { mounted = false }
   }, [])
 
-  // Handle "to" param
+  // Handle "to" param - open existing or create new conversation
   useEffect(() => {
     if (!user || !recipientId || loading) return
     if (recipientId === user.id) return
     if (handledRef.current === recipientId) return
     handledRef.current = recipientId
 
-    const existing = conversations.find(c =>
-      c.other_user?.id === recipientId ||
-      c.participant_1 === recipientId ||
-      c.participant_2 === recipientId
-    )
-    if (existing) { setSelectedConv(existing); return }
+    async function openOrCreate() {
+      // Check existing conversations
+      const existing = conversations.find(c =>
+        c.other_user?.id === recipientId ||
+        c.participant_1 === recipientId ||
+        c.participant_2 === recipientId
+      )
+      if (existing) { setSelectedConv(existing); return }
 
-    async function create() {
+      // Check if conversation exists in DB but not loaded
+      const { data: dbConv } = await supabase.from("conversations")
+        .select("*")
+        .or(`and(participant_1.eq.${user!.id},participant_2.eq.${recipientId}),and(participant_1.eq.${recipientId},participant_2.eq.${user!.id})`)
+        .single()
+
+      if (dbConv) {
+        const { data: p } = await supabase.from("profiles")
+          .select("id, full_name, avatar_url, user_type")
+          .eq("id", recipientId!)
+          .single()
+        const conv: Conversation = { ...dbConv, other_user: p || undefined, unread_count: 0 }
+        setConversations(prev => [conv, ...prev])
+        setSelectedConv(conv)
+        return
+      }
+
+      // Create new conversation
       const { data: nc } = await supabase.from("conversations").insert({
         participant_1: user!.id,
         participant_2: recipientId,
@@ -192,8 +211,9 @@ function MessagesContent() {
         setSelectedConv(newConv)
       }
     }
-    create()
-  }, [user, recipientId, loading, conversations, convType, supabase])
+    openOrCreate()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, recipientId, loading])
 
   if (loading) {
     return (
