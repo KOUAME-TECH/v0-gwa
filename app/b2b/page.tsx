@@ -52,12 +52,16 @@ interface RFQ {
 interface RFQResponse {
   id: string
   rfq_id: string
-  seller_id: string
+  supplier_id: string
   proposed_price: number
   delivery_time_days: number
-  message: string
+  notes: string
   status: string
   created_at: string
+  rfq_requests?: {
+    title: string
+    status: string
+  }
   profiles?: {
     full_name: string
     company_name: string | null
@@ -120,7 +124,7 @@ export default function B2BPage() {
           *,
           rfq_requests (title, status)
         `)
-        .eq('seller_id', user.id)
+        .eq('supplier_id', user.id)
         .order('created_at', { ascending: false })
 
       if (responsesData) setMyResponses(responsesData)
@@ -474,7 +478,7 @@ export default function B2BPage() {
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="font-medium">{(response as any).rfq_requests?.title}</p>
+                          <p className="font-medium">{response.rfq_requests?.title}</p>
                           <p className="text-sm text-muted-foreground">
                             Prix proposé : {response.proposed_price.toLocaleString()} FCFA
                           </p>
@@ -537,7 +541,7 @@ function RFQCard({ rfq, showBuyer, showResponses }: {
         <div className="grid grid-cols-2 gap-2 text-sm">
           <div className="flex items-center gap-2">
             <Package className="h-4 w-4 text-muted-foreground" />
-            <span>{rfq.quantity} {rfq.unit}</span>
+            <span>{rfq.quantity_needed} {rfq.unit}</span>
           </div>
           <div className="flex items-center gap-2">
             <DollarSign className="h-4 w-4 text-muted-foreground" />

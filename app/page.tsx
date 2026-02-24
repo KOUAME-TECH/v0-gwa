@@ -775,7 +775,7 @@ function FeedCard({
       {/* Header auteur */}
       <div className="flex items-center justify-between px-4 py-3">
         <Link 
-          href={isProduct ? `/vendeur/${(data as Product).seller_id}` : `/profil/${(data as Post).author_id}`} 
+          href={isProduct ? `/profil/${(data as Product).seller_id}` : `/profil/${(data as Post).author_id}`} 
           className="flex items-center gap-3"
         >
           <Avatar className="h-11 w-11 border-2 border-[#E5E7EB]">
