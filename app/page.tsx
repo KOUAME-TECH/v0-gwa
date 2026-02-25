@@ -434,14 +434,28 @@ export default function HomePage() {
 
   // Filtrer le feed
   const filteredFeed = feed.filter(item => {
-    if (activeTab === "tout") return true
-    if (activeTab === "produits") return item.type === "product"
-    if (activeTab === "publications") return item.type === "post"
+    // Filtre par onglet
+    if (activeTab === "produits" && item.type !== "product") return false
+    if (activeTab === "publications" && item.type !== "post") return false
+    
+    // Filtre par categorie (s'applique aux produits)
+    if (activeCategory !== "all" && item.type === "product") {
+      const product = item.data as Product
+      const cat = product.product_type?.toLowerCase() || ""
+      if (!cat.includes(activeCategory)) return false
+    }
     return true
   })
 
   return (
     <div className="min-h-screen bg-[#FFF6E5] pb-20">
+      {/* Météo */}
+      {userType && ["farmer", "cooperative"].includes(userType) && (
+        <div className="px-4 pt-3">
+          <WeatherWidget />
+        </div>
+      )}
+
       {/* Header */}
       <header className="sticky top-0 z-40 bg-white border-b border-[#E5E7EB]">
         <div className="px-4 py-3">

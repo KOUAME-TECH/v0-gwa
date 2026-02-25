@@ -54,9 +54,13 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   const [newMessage, setNewMessage] = useState("")
   const [sending, setSending] = useState(false)
   const [replyTo, setReplyTo] = useState<Message | null>(null)
+  const [showAttach, setShowAttach] = useState(false)
+  const [showMenu, setShowMenu] = useState(false)
   const [selectedMsg, setSelectedMsg] = useState<string | null>(null)
   const [isRecording, setIsRecording] = useState(false)
   const [recordSec, setRecordSec] = useState(0)
+  const [showEmojis, setShowEmojis] = useState(false)
+  const [audioPreview, setAudioPreview] = useState<{ duration: string; seconds: number } | null>(null)
   const [showMenu, setShowMenu] = useState(false)
   const [showAttach, setShowAttach] = useState(false)
   const [loadingMsgs, setLoadingMsgs] = useState(true)
@@ -217,29 +221,41 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   }
 
   // Voice toggle
-  async function toggleVoice() {
+  function toggleVoice() {
     if (isRecording) {
+      // Stop recording -> show preview
       setIsRecording(false)
       if (recInterval.current) clearInterval(recInterval.current)
       const sec = recordSec
-      setRecordSec(0)
       const dur = `${Math.floor(sec / 60)}:${(sec % 60).toString().padStart(2, '0')}`
-
-      await supabase.from("messages").insert({
-        conversation_id: conversation.id, sender_id: userId,
-        content: `Message vocal (${dur})`, message_type: "voice",
-      })
-      await supabase.from("conversations").update({ last_message_at: new Date().toISOString() }).eq("id", conversation.id)
-      toast.success("Message vocal envoyé")
+      setRecordSec(0)
+      if (sec > 0) {
+        setAudioPreview({ duration: dur, seconds: sec })
+      }
     } else {
       setIsRecording(true)
       setRecordSec(0)
+      setAudioPreview(null)
       recInterval.current = setInterval(() => setRecordSec(p => p + 1), 1000)
     }
   }
 
+  async function sendVoiceMessage() {
+    if (!audioPreview) return
+    const { data: { user: authUser } } = await supabase.auth.getUser()
+    if (!authUser) return
+    await supabase.from("messages").insert({
+      conversation_id: conversation.id, sender_id: authUser.id,
+      content: `Message vocal (${audioPreview.duration})`, message_type: "voice",
+    })
+    await supabase.from("conversations").update({ last_message_at: new Date().toISOString() }).eq("id", conversation.id)
+    setAudioPreview(null)
+    toast.success("Message vocal envoyé")
+  }
+
   function cancelRecording() {
     setIsRecording(false)
+    setAudioPreview(null)
     if (recInterval.current) clearInterval(recInterval.current)
     setRecordSec(0)
   }
@@ -475,6 +491,29 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
             ))}
           </div>
           <button onClick={toggleVoice} className="w-11 h-11 rounded-full bg-[#1DA1F2] text-white flex items-center justify-center active:scale-90 transition-transform">
+            <Check className="h-5 w-5" />
+          </button>
+        </div>
+      )}
+
+      {/* AUDIO PREVIEW BAR */}
+      {audioPreview && !isRecording && (
+        <div className="bg-white border-t border-gray-200 px-3 py-2.5 flex items-center gap-3 shrink-0">
+          <button onClick={cancelRecording} className="p-2 rounded-full active:bg-red-50" aria-label="Annuler">
+            <Trash2 className="h-5 w-5 text-red-500" />
+          </button>
+          <div className="flex-1 bg-[#f0f2f5] rounded-full px-4 py-2.5 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-[#1DA1F2] flex items-center justify-center shrink-0">
+              <Mic className="h-4 w-4 text-white" />
+            </div>
+            <div className="flex-1 flex items-center gap-[2px]">
+              {Array.from({ length: 30 }).map((_, i) => (
+                <div key={i} className="w-[3px] bg-[#1DA1F2]/40 rounded-full shrink-0" style={{ height: `${4 + Math.sin(i * 0.4) * 8 + Math.random() * 3}px` }} />
+              ))}
+            </div>
+            <span className="text-sm font-mono text-[#667781] shrink-0">{audioPreview.duration}</span>
+          </div>
+          <button onClick={sendVoiceMessage} className="w-11 h-11 rounded-full bg-[#1DA1F2] text-white flex items-center justify-center active:scale-90 transition-transform" aria-label="Envoyer vocal">
             <Send className="h-5 w-5" />
           </button>
         </div>
@@ -517,12 +556,12 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       )}
 
       {/* INPUT BAR */}
-      {!isRecording && (
+      {!isRecording && !audioPreview && (
         <div className="bg-[#f0f2f5] px-2 py-1.5 shrink-0 safe-bottom">
           <form onSubmit={handleSend} className="flex items-end gap-1.5">
             <div className="flex-1 flex items-center bg-white rounded-[25px] shadow-sm min-h-[48px] px-2">
-              <button type="button" onClick={() => toast.info("Emojis bientôt disponibles")}
-                className="p-2 text-[#54656f] active:text-[#1DA1F2] shrink-0" aria-label="Emojis">
+              <button type="button" onClick={() => setShowEmojis(!showEmojis)}
+                className={`p-2 shrink-0 ${showEmojis ? "text-[#1DA1F2]" : "text-[#54656f]"} active:text-[#1DA1F2]`} aria-label="Emojis">
                 <Smile className="h-6 w-6" />
               </button>
 
@@ -568,6 +607,20 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
             onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f, "file"); e.target.value = "" }} />
           <input ref={imgRef} type="file" className="hidden" accept="image/*,video/*"
             onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f, "image"); e.target.value = "" }} />
+
+          {/* EMOJI PICKER */}
+          {showEmojis && (
+            <div className="bg-white border-t border-gray-100 px-2 py-2 max-h-[200px] overflow-y-auto">
+              <div className="grid grid-cols-8 gap-1">
+                {["😀","😂","😍","🥰","😘","😊","🤗","😎","🤔","😏","😭","😢","🥺","😤","🤯","🔥","❤️","💕","👍","👎","🙏","💪","🎉","✨","🌟","⭐","🌍","🌱","🍀","🌸","🍎","🍋","🥑","🌽","🍫","☕","🐔","🐄","🐐","🐟","🚜","🏠","📦","💰","📍","📞","✅","❌","⚡","💡","🎯","📸","🛒","🤝","🎊","👋","🙌","💯","🆗","ℹ️","⏰","🗓️","📝","🔔"].map(emoji => (
+                  <button key={emoji} type="button" onClick={() => { setNewMessage(prev => prev + emoji); setShowEmojis(false); inputRef.current?.focus() }}
+                    className="text-2xl p-1.5 rounded-lg active:bg-gray-100 hover:bg-gray-50 transition-colors">
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
