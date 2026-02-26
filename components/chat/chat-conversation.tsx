@@ -61,8 +61,6 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   const [recordSec, setRecordSec] = useState(0)
   const [showEmojis, setShowEmojis] = useState(false)
   const [audioPreview, setAudioPreview] = useState<{ duration: string; seconds: number } | null>(null)
-  const [showMenu, setShowMenu] = useState(false)
-  const [showAttach, setShowAttach] = useState(false)
   const [loadingMsgs, setLoadingMsgs] = useState(true)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)

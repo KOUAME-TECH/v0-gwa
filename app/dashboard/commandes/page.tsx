@@ -50,10 +50,11 @@ interface Order {
 
 interface AuditLog {
   id: string
-  old_status: string
-  new_status: string
-  changed_by: string
-  change_reason: string | null
+  action: string
+  old_value: string | null
+  new_value: string | null
+  performed_by: uuid | null
+  notes: string | null
   ip_address: string | null
   created_at: string
   profiles?: {
@@ -100,7 +101,7 @@ export default function OrdersPage() {
       .from('orders')
       .select(`
         *,
-        seller:seller_id (full_name, company_name),
+        seller:seller_id (full_name, city),
         order_items (
           id,
           quantity,
@@ -116,7 +117,7 @@ export default function OrdersPage() {
       .from('orders')
       .select(`
         *,
-        buyer:buyer_id (full_name, company_name),
+        buyer:buyer_id (full_name, city),
         order_items (
           id,
           quantity,
