@@ -60,7 +60,8 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   const [isRecording, setIsRecording] = useState(false)
   const [recordSec, setRecordSec] = useState(0)
   const [showEmojis, setShowEmojis] = useState(false)
-  const [audioPreview, setAudioPreview] = useState<{ duration: string; seconds: number } | null>(null)
+  const [audioPreview, setAudioPreview] = useState<{ blob: Blob; url: string; duration: string } | null>(null)
+  const [isPlayingPreview, setIsPlayingPreview] = useState(false)
   const [loadingMsgs, setLoadingMsgs] = useState(true)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -68,6 +69,9 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   const fileRef = useRef<HTMLInputElement>(null)
   const imgRef = useRef<HTMLInputElement>(null)
   const recInterval = useRef<ReturnType<typeof setInterval> | null>(null)
+  const mediaRecorder = useRef<MediaRecorder | null>(null)
+  const audioChunks = useRef<Blob[]>([])
+  const previewAudio = useRef<HTMLAudioElement | null>(null)
   const supabase = createClient()
 
   const other = conversation.other_user
@@ -218,42 +222,98 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     toast.success(type === "image" ? "Photo envoyée" : "Fichier envoyé")
   }
 
-  // Voice toggle
-  function toggleVoice() {
+  // Voice -- real MediaRecorder
+  async function toggleVoice() {
     if (isRecording) {
-      // Stop recording -> show preview
+      // Stop -> preview
+      mediaRecorder.current?.stop()
       setIsRecording(false)
       if (recInterval.current) clearInterval(recInterval.current)
-      const sec = recordSec
-      const dur = `${Math.floor(sec / 60)}:${(sec % 60).toString().padStart(2, '0')}`
-      setRecordSec(0)
-      if (sec > 0) {
-        setAudioPreview({ duration: dur, seconds: sec })
-      }
     } else {
-      setIsRecording(true)
-      setRecordSec(0)
-      setAudioPreview(null)
-      recInterval.current = setInterval(() => setRecordSec(p => p + 1), 1000)
+      // Start recording
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        audioChunks.current = []
+        const mr = new MediaRecorder(stream, { mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4' })
+
+        mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.current.push(e.data) }
+        mr.onstop = () => {
+          stream.getTracks().forEach(t => t.stop())
+          const blob = new Blob(audioChunks.current, { type: mr.mimeType })
+          const url = URL.createObjectURL(blob)
+          const sec = recordSec
+          const dur = `${Math.floor(sec / 60)}:${(sec % 60).toString().padStart(2, '0')}`
+          setRecordSec(0)
+          if (sec > 0) {
+            setAudioPreview({ blob, url, duration: dur })
+          }
+        }
+
+        mediaRecorder.current = mr
+        mr.start()
+        setIsRecording(true)
+        setRecordSec(0)
+        setAudioPreview(null)
+        recInterval.current = setInterval(() => setRecordSec(p => p + 1), 1000)
+      } catch {
+        toast.error("Microphone inaccessible")
+      }
     }
+  }
+
+  function playPreview() {
+    if (!audioPreview) return
+    if (isPlayingPreview && previewAudio.current) {
+      previewAudio.current.pause()
+      previewAudio.current.currentTime = 0
+      setIsPlayingPreview(false)
+      return
+    }
+    const audio = new Audio(audioPreview.url)
+    previewAudio.current = audio
+    setIsPlayingPreview(true)
+    audio.onended = () => setIsPlayingPreview(false)
+    audio.play()
   }
 
   async function sendVoiceMessage() {
     if (!audioPreview) return
+    if (previewAudio.current) { previewAudio.current.pause(); setIsPlayingPreview(false) }
+
     const { data: { user: authUser } } = await supabase.auth.getUser()
     if (!authUser) return
+
+    // Upload audio blob to storage
+    const ext = audioPreview.blob.type.includes('webm') ? 'webm' : 'mp4'
+    const path = `chat/${conversation.id}/${Date.now()}.${ext}`
+    const { error: upErr } = await supabase.storage.from("chat-media").upload(path, audioPreview.blob)
+
+    let mediaUrl: string | undefined
+    if (!upErr) {
+      const { data: { publicUrl } } = supabase.storage.from("chat-media").getPublicUrl(path)
+      mediaUrl = publicUrl
+    }
+
     await supabase.from("messages").insert({
       conversation_id: conversation.id, sender_id: authUser.id,
-      content: `Message vocal (${audioPreview.duration})`, message_type: "voice",
+      content: `Message vocal (${audioPreview.duration})`,
+      message_type: "voice",
+      media_url: mediaUrl || null,
     })
     await supabase.from("conversations").update({ last_message_at: new Date().toISOString() }).eq("id", conversation.id)
+
+    URL.revokeObjectURL(audioPreview.url)
     setAudioPreview(null)
-    toast.success("Message vocal envoyé")
+    toast.success("Message vocal envoye")
   }
 
   function cancelRecording() {
+    if (mediaRecorder.current?.state === 'recording') {
+      mediaRecorder.current.stop()
+    }
     setIsRecording(false)
-    setAudioPreview(null)
+    if (audioPreview) { URL.revokeObjectURL(audioPreview.url); setAudioPreview(null) }
+    if (previewAudio.current) { previewAudio.current.pause(); setIsPlayingPreview(false) }
     if (recInterval.current) clearInterval(recInterval.current)
     setRecordSec(0)
   }
@@ -281,20 +341,32 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
 
   const fmtTime = (d: string) => new Date(d).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
 
+  function playVoiceMsg(msg: Message) {
+    if (msg.media_url) {
+      const a = new Audio(msg.media_url)
+      a.play().catch(() => toast.error("Impossible de lire le vocal"))
+    }
+  }
+
   function renderContent(msg: Message) {
     if (msg.message_type === "voice") {
       return (
-        <div className="flex items-center gap-2 min-w-[180px]">
+        <button type="button" onClick={(e) => { e.stopPropagation(); playVoiceMsg(msg) }}
+          className="flex items-center gap-2 min-w-[180px]">
           <div className="w-8 h-8 bg-[#1DA1F2] rounded-full flex items-center justify-center shrink-0">
-            <Mic className="h-4 w-4 text-white" />
+            {msg.media_url ? (
+              <svg viewBox="0 0 24 24" className="h-4 w-4 text-white fill-current"><polygon points="6,4 20,12 6,20" /></svg>
+            ) : (
+              <Mic className="h-4 w-4 text-white" />
+            )}
           </div>
           <div className="flex-1 flex items-center gap-0.5">
             {Array.from({ length: 24 }).map((_, i) => (
-              <div key={i} className="w-[3px] rounded-full bg-[#1DA1F2]/40" style={{ height: `${4 + Math.sin(i * 0.7) * 8 + Math.random() * 4}px` }} />
+              <div key={i} className="w-[3px] rounded-full bg-[#1DA1F2]/40" style={{ height: `${4 + Math.sin(i * 0.7) * 8}px` }} />
             ))}
           </div>
           <span className="text-[11px] opacity-60 shrink-0">{msg.content.match(/\((.*?)\)/)?.[1] || "0:00"}</span>
-        </div>
+        </button>
       )
     }
     if (msg.message_type === "image") {
@@ -501,12 +573,16 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
             <Trash2 className="h-5 w-5 text-red-500" />
           </button>
           <div className="flex-1 bg-[#f0f2f5] rounded-full px-4 py-2.5 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-[#1DA1F2] flex items-center justify-center shrink-0">
-              <Mic className="h-4 w-4 text-white" />
-            </div>
+            <button type="button" onClick={playPreview} className="w-8 h-8 rounded-full bg-[#1DA1F2] flex items-center justify-center shrink-0 active:scale-90 transition-transform" aria-label={isPlayingPreview ? "Pause" : "Ecouter"}>
+              {isPlayingPreview ? (
+                <svg viewBox="0 0 24 24" className="h-4 w-4 text-white fill-current"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
+              ) : (
+                <svg viewBox="0 0 24 24" className="h-4 w-4 text-white fill-current"><polygon points="6,4 20,12 6,20" /></svg>
+              )}
+            </button>
             <div className="flex-1 flex items-center gap-[2px]">
               {Array.from({ length: 30 }).map((_, i) => (
-                <div key={i} className="w-[3px] bg-[#1DA1F2]/40 rounded-full shrink-0" style={{ height: `${4 + Math.sin(i * 0.4) * 8 + Math.random() * 3}px` }} />
+                <div key={i} className="w-[3px] bg-[#1DA1F2]/40 rounded-full shrink-0" style={{ height: `${4 + Math.sin(i * 0.4) * 8}px` }} />
               ))}
             </div>
             <span className="text-sm font-mono text-[#667781] shrink-0">{audioPreview.duration}</span>

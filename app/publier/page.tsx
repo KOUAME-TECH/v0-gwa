@@ -314,7 +314,7 @@ export default function PublierPage() {
   // Formulaire POST
   if (publishType === "post") {
     return (
-      <div className="min-h-screen bg-[#FFF6E5] pb-24">
+      <div className="min-h-screen bg-[#FFF6E5] pb-40">
         {FileInput}
         <header className="sticky top-0 z-50 bg-white border-b border-[#E5E7EB]">
           <div className="flex items-center justify-between h-14 px-4">
@@ -394,7 +394,7 @@ export default function PublierPage() {
 
   // Formulaire PRODUIT
   return (
-    <div className="min-h-screen bg-[#FFF6E5] pb-28">
+    <div className="min-h-screen bg-[#FFF6E5] pb-40">
       {FileInput}
       <header className="sticky top-0 z-50 bg-white border-b border-[#E5E7EB]">
         <div className="flex items-center justify-between h-14 px-4">
@@ -402,7 +402,13 @@ export default function PublierPage() {
             <ArrowLeft className="h-5 w-5 text-[#111827]" />
           </button>
           <h1 className="text-lg font-semibold text-[#111827]">Nouveau produit</h1>
-          <div className="w-16" />
+          <Button
+            onClick={handleSubmitProduct}
+            disabled={isSubmitting || !productForm.name || !productForm.price || !productForm.category_id}
+            className="bg-[#2F7D32] hover:bg-[#256025] text-white rounded-full px-5 h-9 disabled:opacity-50"
+          >
+            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Publier"}
+          </Button>
         </div>
       </header>
 
