@@ -4,6 +4,8 @@ import { Inter } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { BottomNav } from "@/components/bottom-nav"
 import { Toaster } from "@/components/ui/sonner"
+import { OfflineBanner } from "@/components/layout/offline-banner"
+import { PriceTicker } from "@/components/layout/price-ticker"
 import "./globals.css"
 
 const inter = Inter({
@@ -46,6 +48,8 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </head>
       <body className="font-sans antialiased min-h-dvh">
+        <OfflineBanner />
+        <PriceTicker />
         <main className="pb-[76px] safe-bottom">{children}</main>
         <BottomNav />
         <Toaster position="top-center" />
