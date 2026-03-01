@@ -45,7 +45,7 @@ type Product = {
 type Post = {
   id: string
   content: string
-  media_urls: string[] | null
+  media_urls: { url: string; type: string }[] | null
   likes_count: number
   comments_count: number
   shares_count: number
@@ -780,7 +780,13 @@ function FeedCard({
   const isProduct = item.type === "product"
   const data = item.data
   const profile = data.profiles
-  const images = isProduct ? (data as Product).images : (data as Post).media_urls
+  // Normalize images: products have string[], posts have {url,type}[]
+  const rawImages = isProduct ? (data as Product).images : (data as Post).media_urls
+  const images: string[] | null = rawImages
+    ? rawImages.map((img: string | { url: string; type: string }) =>
+        typeof img === "string" ? img : img.url
+      )
+    : null
   const productName = isProduct ? (data as Product).name : ""
   const hasMultipleImages = images && images.length > 1
 

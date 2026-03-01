@@ -1,5 +1,3 @@
-"use cache"
-
 import { NextResponse } from "next/server"
 
 const WEATHER_CODES: Record<number, { label: string; icon: string }> = {

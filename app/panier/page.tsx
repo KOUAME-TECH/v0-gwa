@@ -416,7 +416,7 @@ export default function CartPage() {
       )}
 
       {/* Fixed Bottom Summary */}
-      <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-border p-4 pb-6 space-y-3">
+      <div className="fixed bottom-[76px] left-0 right-0 bg-background border-t border-border p-4 pb-4 space-y-3 z-40">
         <div className="space-y-2 text-sm">
           <div className="flex justify-between">
             <span className="text-muted-foreground">Sous-total</span>

@@ -178,7 +178,7 @@ export default function CreateCooperativePage() {
           <Textarea value={form.description} onChange={e => set("description", e.target.value)} placeholder="Decrivez la cooperative..." className="min-h-[100px] rounded-xl resize-none" />
         </div>
 
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-background border-t">
+        <div className="fixed bottom-[76px] left-0 right-0 p-4 bg-background border-t z-40">
           <Button type="submit" disabled={saving || !form.name || !form.city} className="w-full h-12 rounded-full text-base font-semibold">
             {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : "Creer la cooperative"}
           </Button>
