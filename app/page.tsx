@@ -24,22 +24,23 @@ type Product = {
   name: string
   price: number
   unit: string
-  images: string[] | null
-  location: string | null
+  images: string[]
   origin_region: string | null
+  origin_country: string | null
   product_type: string
   seller_id: string
   likes_count: number
   comments_count: number
   shares_count: number
   created_at: string
-  profiles?: {
+  profiles: {
     id: string
     full_name: string
     avatar_url: string | null
     is_verified: boolean
-    city: string | null
+    city: string
   }
+}
 }
 
 type Post = {
@@ -133,24 +134,24 @@ export default function HomePage() {
       const { data: products } = await supabase
         .from("products")
         .select(`
-          id, name, price, unit, images, location, origin_region, product_type, seller_id,
-          likes_count, comments_count, shares_count, created_at,
+          id, name, price, unit, images, origin_region, origin_country, product_type, seller_id,
+          likes_count, comments_count, shares_count, created_at, is_organic, is_fair_trade,
           profiles:seller_id(id, full_name, avatar_url, is_verified, city)
         `)
         .eq("status", "active")
         .order("created_at", { ascending: false })
-        .limit(15)
+        .limit(20)
 
       // Charger posts
       const { data: posts } = await supabase
         .from("posts")
         .select(`
           id, content, media_urls, likes_count, comments_count, shares_count, created_at, author_id,
-          profiles:author_id(id, full_name, avatar_url, is_verified, user_type)
+          profiles!posts_author_id_fkey(id, full_name, avatar_url, is_verified, user_type)
         `)
         .eq("visibility", "public")
         .order("created_at", { ascending: false })
-        .limit(15)
+        .limit(20)
 
       // Mélanger produits et posts dans le feed
       const feedItems: FeedItem[] = []
@@ -282,12 +283,14 @@ export default function HomePage() {
       const table = item.type === "post" ? "post_comments" : "reviews"
       const idField = item.type === "post" ? "post_id" : "product_id"
 
+      // post_comments uses author_id FK, reviews uses reviewer_id FK
+      const selectQuery = table === "post_comments"
+        ? `id, content, created_at, profiles!post_comments_author_id_fkey(id, full_name, avatar_url)`
+        : `id, comment as content, created_at, profiles!reviews_reviewer_id_fkey(id, full_name, avatar_url)`
+
       const { data, error } = await supabase
         .from(table)
-        .select(`
-          id, content, created_at,
-          profiles:author_id(id, full_name, avatar_url)
-        `)
+        .select(selectQuery)
         .eq(idField, item.data.id)
         .order("created_at", { ascending: false })
         .limit(50)
@@ -322,14 +325,18 @@ export default function HomePage() {
       const idField = selectedItem.type === "post" ? "post_id" : "product_id"
       const countTable = selectedItem.type === "post" ? "posts" : "products"
 
+      const insertData = table === "post_comments"
+        ? { [idField]: selectedItem.data.id, author_id: user.id, content: newComment.trim() }
+        : { [idField]: selectedItem.data.id, reviewer_id: user.id, comment: newComment.trim(), rating: 5 }
+
+      const insertSelect = table === "post_comments"
+        ? `id, content, created_at, profiles!post_comments_author_id_fkey(id, full_name, avatar_url)`
+        : `id, comment as content, created_at, profiles!reviews_reviewer_id_fkey(id, full_name, avatar_url)`
+
       const { data, error } = await supabase
         .from(table)
-        .insert({
-          [idField]: selectedItem.data.id,
-          author_id: user.id,
-          content: newComment.trim()
-        })
-        .select(`id, content, created_at, profiles:author_id(id, full_name, avatar_url)`)
+        .insert(insertData)
+        .select(insertSelect)
         .single()
 
       if (error) throw error
@@ -548,24 +555,18 @@ export default function HomePage() {
               <>
                 <h3 className="font-semibold text-lg text-[#111827] mb-2">Aucune publication pour le moment</h3>
                 <p className="text-[#4B5563] text-sm mb-6">
-                  {["producteur", "artisan", "transformateur"].includes(userType || "")
-                    ? "Publiez votre premier produit pour commencer à vendre"
-                    : userType === "entreprise"
+                  {["farmer", "artisan", "cooperative", "processor"].includes(userType || "")
+                    ? "Publiez votre premier produit pour commencer a vendre"
+                    : userType === "business"
                     ? "Explorez le marketplace pour trouver des fournisseurs"
-                    : "Découvrez les produits des producteurs et artisans africains"
+                    : "Decouvrez les produits des producteurs et artisans africains"
                   }
                 </p>
                 <div className="flex flex-col gap-3">
-                  {["producteur", "artisan", "transformateur"].includes(userType || "") ? (
+                  {["farmer", "artisan", "cooperative", "processor"].includes(userType || "") ? (
                     <Link href="/publier">
                       <Button className="w-full rounded-full bg-[#2F7D32] hover:bg-[#256427]">
                         Publier un produit
-                      </Button>
-                    </Link>
-                  ) : userType === "entreprise" ? (
-                    <Link href="/b2b">
-                      <Button className="w-full rounded-full bg-[#2F7D32] hover:bg-[#256427]">
-                        Créer une demande B2B
                       </Button>
                     </Link>
                   ) : (
@@ -575,11 +576,13 @@ export default function HomePage() {
                       </Button>
                     </Link>
                   )}
-                  <Link href="/dashboard">
-                    <Button variant="outline" className="w-full rounded-full bg-transparent">
-                      Voir mon tableau de bord
-                    </Button>
-                  </Link>
+                  {["farmer", "artisan", "cooperative", "processor"].includes(userType || "") && (
+                    <Link href="/dashboard/business">
+                      <Button variant="outline" className="w-full rounded-full bg-transparent">
+                        Mon tableau de bord
+                      </Button>
+                    </Link>
+                  )}
                 </div>
               </>
             ) : (
@@ -820,7 +823,7 @@ function FeedCard({
               {isProduct ? (
                 <>
                   <MapPin className="h-3 w-3" />
-                  {(data as Product).origin_region || (data as Product).location || profile?.city || "Afrique"}
+                  {(data as Product).origin_region || (data as Product).origin_country || profile?.city || "Afrique"}
                 </>
               ) : (
                 <>

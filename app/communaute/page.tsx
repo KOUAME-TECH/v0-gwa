@@ -92,7 +92,7 @@ export default function CommunautePage() {
 
     let query = supabase
       .from("posts")
-      .select(`*, profiles:author_id (full_name, avatar_url, user_type, city)`)
+      .select(`*, profiles!posts_author_id_fkey (full_name, avatar_url, user_type, city)`)
       .eq("visibility", "public")
       .order("created_at", { ascending: false })
       .limit(50)
@@ -148,7 +148,7 @@ export default function CommunautePage() {
           location: userProfile?.city,
           visibility: "public",
         })
-        .select(`*, profiles:author_id (full_name, avatar_url, user_type, city)`)
+        .select(`*, profiles!posts_author_id_fkey (full_name, avatar_url, user_type, city)`)
         .single()
 
       if (data) {
@@ -364,7 +364,7 @@ function PostCard({ post, onLike, isLoggedIn }: {
     setLoadingComments(true)
     const { data } = await supabase
       .from("post_comments")
-      .select(`*, profiles:author_id (full_name, avatar_url)`)
+      .select(`*, profiles!post_comments_author_id_fkey (full_name, avatar_url)`)
       .eq("post_id", post.id)
       .order("created_at", { ascending: true })
 
@@ -382,7 +382,7 @@ function PostCard({ post, onLike, isLoggedIn }: {
     const { data } = await supabase
       .from("post_comments")
       .insert({ post_id: post.id, author_id: user.id, content: newComment })
-      .select(`*, profiles:author_id (full_name, avatar_url)`)
+      .select(`*, profiles!post_comments_author_id_fkey (full_name, avatar_url)`)
       .single()
 
     if (data) {

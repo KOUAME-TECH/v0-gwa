@@ -174,7 +174,7 @@ export default function ProduitPage() {
   const totalPrice = product.price * quantity
 
   return (
-    <div className="min-h-screen bg-white pb-32">
+    <div className="min-h-screen bg-white pb-44">
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-50 p-4 flex items-center justify-between">
         <button 
@@ -317,7 +317,7 @@ export default function ProduitPage() {
       </div>
 
       {/* Bottom Bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-neutral-100 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+      <div className="fixed bottom-[76px] left-0 right-0 bg-white border-t border-neutral-100 p-4 z-40">
         <div className="flex items-center gap-4">
           {/* Quantity */}
           <div className="flex items-center gap-1 bg-neutral-100 rounded-full p-1">
