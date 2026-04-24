@@ -33,7 +33,7 @@ export default function EditProductPage() {
       if (!user) { router.push("/auth/login"); return }
 
       const [{ data: product }, { data: cats }] = await Promise.all([
-        supabase.from("products").select("*").eq("id", productId).eq("seller_id", user.id).single(),
+        supabase.from("products").select("id, name, price, unit, images, description, origin_country, origin_region, is_organic, is_fair_trade, is_bulk_available, min_bulk_quantity, product_type, seller_id, category_id, status, likes_count, comments_count, shares_count, created_at, updated_at, stock_quantity").eq("id", productId).eq("seller_id", user.id).single(),
         supabase.from("categories").select("id, name, slug, category_type").is("parent_id", null).order("name"),
       ])
 

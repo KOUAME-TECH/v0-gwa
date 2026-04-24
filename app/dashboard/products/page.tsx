@@ -35,11 +35,11 @@ export default function ProductsPage() {
       
       if (!user) return
 
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .eq('seller_id', user.id)
-        .order('created_at', { ascending: false })
+  const { data, error } = await supabase
+    .from('products')
+    .select('id, name, price, unit, images, description, origin_country, origin_region, is_organic, is_fair_trade, is_bulk_available, min_bulk_quantity, product_type, seller_id, category_id, status, likes_count, comments_count, shares_count, created_at, updated_at')
+    .eq('seller_id', user.id)
+    .order('created_at', { ascending: false })
 
       if (!error && data) {
         setProducts(data)

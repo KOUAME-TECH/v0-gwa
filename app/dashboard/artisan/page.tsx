@@ -69,7 +69,7 @@ export default function ArtisanDashboard() {
       // Produits artisanaux
       const { data: productsData } = await supabase
         .from('products')
-        .select('*')
+        .select('id, name, price, unit, images, description, origin_country, origin_region, is_organic, is_fair_trade, is_bulk_available, min_bulk_quantity, product_type, seller_id, category_id, status, likes_count, comments_count, shares_count, created_at, updated_at, stock_quantity')
         .eq('seller_id', authUser.id)
         .order('created_at', { ascending: false })
       setProducts(productsData || [])
