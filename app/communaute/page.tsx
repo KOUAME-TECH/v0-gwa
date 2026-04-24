@@ -92,7 +92,7 @@ export default function CommunautePage() {
 
     let query = supabase
       .from("posts")
-      .select(`*, profiles!posts_author_id_fkey (full_name, avatar_url, user_type, city)`)
+      .select("*")
       .eq("visibility", "public")
       .order("created_at", { ascending: false })
       .limit(50)
@@ -101,7 +101,19 @@ export default function CommunautePage() {
       query = query.eq("post_type", selectedTab)
     }
 
-    const { data: postsData } = await query
+    const { data: rawPosts } = await query
+
+    // Charger profiles separement
+    let postsData = rawPosts
+    if (rawPosts && rawPosts.length > 0) {
+      const authorIds = [...new Set(rawPosts.map((p: any) => p.author_id))]
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, full_name, avatar_url, user_type, city")
+        .in("id", authorIds)
+      const profileMap = new Map(profiles?.map(p => [p.id, p]) || [])
+      postsData = rawPosts.map((post: any) => ({ ...post, profiles: profileMap.get(post.author_id) || null }))
+    }
 
     if (postsData && user) {
       const { data: userLikes } = await supabase
@@ -148,11 +160,13 @@ export default function CommunautePage() {
           location: userProfile?.city,
           visibility: "public",
         })
-        .select(`*, profiles!posts_author_id_fkey (full_name, avatar_url, user_type, city)`)
+        .select("*")
         .single()
 
       if (data) {
-        setPosts([data, ...posts])
+        // Ajouter le profil manuellement
+        const postWithProfile = { ...data, profiles: userProfile }
+        setPosts([postWithProfile, ...posts])
         setNewPostContent("")
         setPostImage(null)
         setPostImagePreview(null)
@@ -362,13 +376,21 @@ function PostCard({ post, onLike, isLoggedIn }: {
     }
 
     setLoadingComments(true)
-    const { data } = await supabase
+    const { data: rawComments } = await supabase
       .from("post_comments")
-      .select(`*, profiles!post_comments_author_id_fkey (full_name, avatar_url)`)
+      .select("*")
       .eq("post_id", post.id)
       .order("created_at", { ascending: true })
 
-    if (data) setComments(data)
+    // Charger profiles separement
+    if (rawComments && rawComments.length > 0) {
+      const authorIds = [...new Set(rawComments.map(c => c.author_id))]
+      const { data: profiles } = await supabase.from("profiles").select("id, full_name, avatar_url").in("id", authorIds)
+      const profileMap = new Map(profiles?.map(p => [p.id, p]) || [])
+      setComments(rawComments.map(c => ({ ...c, profiles: profileMap.get(c.author_id) || null })))
+    } else {
+      setComments([])
+    }
     setShowComments(true)
     setLoadingComments(false)
   }
@@ -379,14 +401,16 @@ function PostCard({ post, onLike, isLoggedIn }: {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    const { data } = await supabase
+    const { data: newCommentData } = await supabase
       .from("post_comments")
       .insert({ post_id: post.id, author_id: user.id, content: newComment })
-      .select(`*, profiles!post_comments_author_id_fkey (full_name, avatar_url)`)
+      .select("*")
       .single()
 
-    if (data) {
-      setComments([...comments, data])
+    if (newCommentData) {
+      // Charger le profil de l'utilisateur
+      const { data: profile } = await supabase.from("profiles").select("id, full_name, avatar_url").eq("id", user.id).single()
+      setComments([...comments, { ...newCommentData, profiles: profile }])
       setNewComment("")
     }
   }

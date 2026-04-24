@@ -142,18 +142,31 @@ export default function HomePage() {
         .order("created_at", { ascending: false })
         .limit(20)
 
-      // Charger posts
-      const { data: posts } = await supabase
+      // Charger posts (sans join FK car posts.author_id -> auth.users, pas profiles)
+      const { data: rawPosts } = await supabase
         .from("posts")
-        .select(`
-          id, content, media_urls, likes_count, comments_count, shares_count, created_at, author_id,
-          profiles!posts_author_id_fkey(id, full_name, avatar_url, is_verified, user_type)
-        `)
+        .select("id, content, media_urls, likes_count, comments_count, shares_count, created_at, author_id")
         .eq("visibility", "public")
         .order("created_at", { ascending: false })
         .limit(20)
 
-      // Mélanger produits et posts dans le feed
+      // Charger les profiles des auteurs de posts
+      let posts = rawPosts || []
+      if (rawPosts && rawPosts.length > 0) {
+        const authorIds = [...new Set(rawPosts.map(p => p.author_id))]
+        const { data: postProfiles } = await supabase
+          .from("profiles")
+          .select("id, full_name, avatar_url, is_verified, user_type")
+          .in("id", authorIds)
+
+        const profileMap = new Map(postProfiles?.map(p => [p.id, p]) || [])
+        posts = rawPosts.map(post => ({
+          ...post,
+          profiles: profileMap.get(post.author_id) || null
+        }))
+      }
+
+      // Melanger produits et posts dans le feed
       const feedItems: FeedItem[] = []
       const maxLen = Math.max(products?.length || 0, posts?.length || 0)
       
@@ -282,13 +295,14 @@ export default function HomePage() {
     try {
       const table = item.type === "post" ? "post_comments" : "reviews"
       const idField = item.type === "post" ? "post_id" : "product_id"
+      const authorField = table === "post_comments" ? "author_id" : "reviewer_id"
 
-      // post_comments uses author_id FK, reviews uses reviewer_id FK
+      // Charger les commentaires/reviews sans FK join
       const selectQuery = table === "post_comments"
-        ? `id, content, created_at, profiles!post_comments_author_id_fkey(id, full_name, avatar_url)`
-        : `id, comment as content, created_at, profiles!reviews_reviewer_id_fkey(id, full_name, avatar_url)`
+        ? "id, content, created_at, author_id"
+        : "id, comment, created_at, reviewer_id"
 
-      const { data, error } = await supabase
+      const { data: rawData, error } = await supabase
         .from(table)
         .select(selectQuery)
         .eq(idField, item.data.id)
@@ -297,12 +311,21 @@ export default function HomePage() {
 
       if (error) throw error
 
-      setComments((data || []).map(c => ({
-        id: c.id,
-        content: c.content,
-        created_at: c.created_at,
-        author: c.profiles as any
-      })))
+      // Charger les profiles separement
+      let commentsWithProfiles: any[] = []
+      if (rawData && rawData.length > 0) {
+        const userIds = [...new Set(rawData.map((c: any) => c[authorField]))]
+        const { data: profiles } = await supabase.from("profiles").select("id, full_name, avatar_url").in("id", userIds)
+        const profileMap = new Map(profiles?.map(p => [p.id, p]) || [])
+        commentsWithProfiles = rawData.map((c: any) => ({
+          id: c.id,
+          content: c.content || c.comment,
+          created_at: c.created_at,
+          author: profileMap.get(c[authorField]) || null
+        }))
+      }
+
+      setComments(commentsWithProfiles)
     } catch (error) {
       toast.error("Erreur lors du chargement des commentaires")
     } finally {
@@ -330,8 +353,8 @@ export default function HomePage() {
         : { [idField]: selectedItem.data.id, reviewer_id: user.id, comment: newComment.trim(), rating: 5 }
 
       const insertSelect = table === "post_comments"
-        ? `id, content, created_at, profiles!post_comments_author_id_fkey(id, full_name, avatar_url)`
-        : `id, comment as content, created_at, profiles!reviews_reviewer_id_fkey(id, full_name, avatar_url)`
+        ? "id, content, created_at, author_id"
+        : "id, comment, created_at, reviewer_id"
 
       const { data, error } = await supabase
         .from(table)
@@ -341,12 +364,15 @@ export default function HomePage() {
 
       if (error) throw error
 
+      // Charger le profil de l'utilisateur
+      const { data: profile } = await supabase.from("profiles").select("id, full_name, avatar_url").eq("id", user.id).single()
+
       // Ajouter le commentaire
       setComments(prev => [{
         id: data.id,
-        content: data.content,
+        content: data.content || data.comment,
         created_at: data.created_at,
-        author: data.profiles as any
+        author: profile
       }, ...prev])
 
       // Mettre à jour le compteur
