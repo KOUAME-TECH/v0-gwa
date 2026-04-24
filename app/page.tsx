@@ -806,18 +806,24 @@ function FeedCard({
 }) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false)
+  
   const isProduct = item.type === "product"
   const data = item.data
   const profile = data.profiles
-  // Normalize images: products have string[], posts have {url,type}[]
-  const rawImages = isProduct ? (data as Product).images : (data as Post).media_urls
-  const images: string[] | null = rawImages
-    ? rawImages.map((img: string | { url: string; type: string }) =>
-        typeof img === "string" ? img : img.url
+  
+  // Normalize medias: products have string[], posts have {url,type}[]
+  const rawMedias = isProduct ? (data as Product).images : (data as Post).media_urls
+  const medias: { url: string; type: string }[] | null = rawMedias
+    ? rawMedias.map((m: string | { url: string; type: string }) =>
+        typeof m === "string" ? { url: m, type: "image" } : m
       )
     : null
+  const images = medias?.filter(m => m.type === "image" || !m.type.startsWith("video")).map(m => m.url) || null
+  const videos = medias?.filter(m => m.type?.startsWith("video")) || []
+  const hasVideo = videos.length > 0
   const productName = isProduct ? (data as Product).name : ""
-  const hasMultipleImages = images && images.length > 1
+  const hasMultipleImages = medias && medias.length > 1
 
   return (
     <article className="bg-white">
@@ -907,12 +913,36 @@ function FeedCard({
         </div>
       )}
 
-      {/* Images */}
-      {images && images.length > 0 && (
+      {/* Videos */}
+      {hasVideo && (
+        <div className="relative">
+          <div className="relative aspect-video bg-black overflow-hidden">
+            <video
+              src={videos[0].url}
+              controls
+              playsInline
+              preload="metadata"
+              poster={images?.[0] || undefined}
+              className="w-full h-full object-contain"
+              onPlay={() => setIsVideoPlaying(true)}
+              onPause={() => setIsVideoPlaying(false)}
+            />
+          </div>
+          {!isProduct && (
+            <div className="absolute top-3 left-3 bg-red-500 text-white px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1">
+              <svg viewBox="0 0 24 24" className="h-3 w-3 fill-current"><polygon points="5,3 19,12 5,21"/></svg>
+              Video
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Images (seulement si pas de video) */}
+      {!hasVideo && medias && medias.length > 0 && (
         <div className="relative">
           <div className="relative aspect-square bg-[#F3F4F6] overflow-hidden">
             <Image
-              src={images[currentImageIndex] || "/placeholder.svg"}
+              src={medias[currentImageIndex]?.url || "/placeholder.svg"}
               alt={isProduct ? (data as Product).name : "Publication"}
               fill
               className="object-cover"
@@ -922,20 +952,20 @@ function FeedCard({
           {hasMultipleImages && (
             <>
               <button
-                onClick={() => setCurrentImageIndex(prev => prev > 0 ? prev - 1 : images.length - 1)}
+                onClick={() => setCurrentImageIndex(prev => prev > 0 ? prev - 1 : medias.length - 1)}
                 className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/50 flex items-center justify-center text-white"
               >
                 <ChevronLeft className="h-5 w-5" />
               </button>
               <button
-                onClick={() => setCurrentImageIndex(prev => prev < images.length - 1 ? prev + 1 : 0)}
+                onClick={() => setCurrentImageIndex(prev => prev < medias.length - 1 ? prev + 1 : 0)}
                 className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/50 flex items-center justify-center text-white"
               >
                 <ChevronRight className="h-5 w-5" />
               </button>
               
               <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
-                {images.map((_, idx) => (
+                {medias.map((_, idx) => (
                   <div
                     key={idx}
                     className={cn(

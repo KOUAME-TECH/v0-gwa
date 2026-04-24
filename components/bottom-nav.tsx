@@ -90,7 +90,7 @@ export function BottomNav() {
     return null
   }
 
-  const isSeller = ["producteur", "artisan", "transformateur"].includes(userType || "")
+  const isSeller = ["farmer", "artisan", "cooperative", "processor"].includes(userType || "")
 
   // Determiner le "monde" actif pour le style de fond
   const getActiveWorld = (): "social" | "commerce" | "messaging" | "profile" | null => {

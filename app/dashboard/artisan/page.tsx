@@ -174,7 +174,7 @@ export default function ArtisanDashboard() {
         <Card className="bg-white border-0 shadow-lg mb-6">
           <CardContent className="p-4">
             <div className="grid grid-cols-4 gap-2">
-              <Link href="/dashboard/products/new" className="text-center">
+              <Link href="/publier" className="text-center">
                 <div className="w-12 h-12 rounded-xl bg-[#8B4513]/10 flex items-center justify-center mx-auto mb-1">
                   <Plus className="h-6 w-6 text-[#8B4513]" />
                 </div>
@@ -222,10 +222,10 @@ export default function ArtisanDashboard() {
                 <p className="text-sm text-[#4B5563] mb-4">
                   Partagez votre savoir-faire avec le monde
                 </p>
-                <Link href="/dashboard/products/new">
+                <Link href="/publier">
                   <Button className="bg-[#8B4513]">
                     <Plus className="h-4 w-4 mr-2" />
-                    Ajouter une création
+                    Ajouter une creation
                   </Button>
                 </Link>
               </CardContent>
