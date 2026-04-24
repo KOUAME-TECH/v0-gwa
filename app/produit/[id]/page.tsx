@@ -60,7 +60,9 @@ export default function ProduitPage() {
       const { data } = await supabase
         .from("products")
         .select(`
-          *,
+          id, name, price, unit, images, description, origin_country, origin_region,
+          is_organic, is_fair_trade, is_bulk_available, min_bulk_quantity, product_type,
+          seller_id, category_id, status, likes_count, comments_count, shares_count, created_at, updated_at,
           profiles!products_seller_id_fkey(id, full_name, avatar_url, is_verified, city, country, rating),
           categories(name)
         `)
