@@ -234,7 +234,7 @@ export default function FarmerDashboard() {
 
         {/* Actions rapides */}
         <div className="flex gap-3 mb-6 overflow-x-auto pb-2">
-          <Link href="/dashboard/products/new">
+          <Link href="/publier">
             <Button className="bg-[#2F7D32] hover:bg-[#1B5E20] text-white rounded-full whitespace-nowrap">
               <Plus className="h-4 w-4 mr-2" />
               Ajouter produit
@@ -270,7 +270,7 @@ export default function FarmerDashboard() {
                 <p className="text-sm text-[#4B5563] mb-4">
                   Commencez à vendre vos récoltes
                 </p>
-                <Link href="/dashboard/products/new">
+                <Link href="/publier">
                   <Button className="bg-[#2F7D32]">
                     <Plus className="h-4 w-4 mr-2" />
                     Ajouter un produit

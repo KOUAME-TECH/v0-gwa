@@ -92,7 +92,7 @@ export default function ProductsPage() {
             <p className="text-muted-foreground">Gérez vos produits en vente sur GWA</p>
           </div>
           <Button asChild>
-            <Link href="/dashboard/products/new">
+            <Link href="/publier">
               <Plus className="h-4 w-4 mr-2" />
               Ajouter un produit
             </Link>
@@ -127,7 +127,7 @@ export default function ProductsPage() {
               </p>
               {!searchQuery && (
                 <Button asChild>
-                  <Link href="/dashboard/products/new">
+                  <Link href="/publier">
                     <Plus className="h-4 w-4 mr-2" />
                     Ajouter votre premier produit
                   </Link>

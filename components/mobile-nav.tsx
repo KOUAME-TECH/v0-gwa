@@ -63,7 +63,7 @@ export function MobileNav() {
     <>
       {/* Floating Action Button */}
       {user && (
-        <Link href="/dashboard/products/new">
+        <Link href="/publier">
           <Button
             size="icon"
             className="fixed bottom-24 right-4 h-14 w-14 rounded-full shadow-xl z-40 md:hidden"
