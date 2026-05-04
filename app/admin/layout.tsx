@@ -52,14 +52,15 @@ const navigation = [
   { name: "Utilisateurs", href: "/admin/users", icon: Users },
   { name: "Produits", href: "/admin/products", icon: Package },
   { name: "Commandes", href: "/admin/orders", icon: ShoppingCart },
-  { name: "Coopératives", href: "/admin/cooperatives", icon: Building2 },
+  { name: "Cooperatives", href: "/admin/cooperatives", icon: Building2 },
   { name: "Formations", href: "/admin/courses", icon: GraduationCap },
   { name: "Signalements", href: "/admin/reports", icon: Flag },
   { name: "Litiges", href: "/admin/disputes", icon: AlertTriangle },
-  { name: "Vérifications", href: "/admin/verifications", icon: Shield },
-  { name: "Annonces", href: "/admin/announcements", icon: Bell },
+  { name: "Verifications", href: "/admin/verifications", icon: Shield },
+  { name: "SCG Config", href: "/admin/scg", icon: Shield },
+  { name: "Finances", href: "/admin/finances", icon: TrendingUp },
   { name: "Statistiques", href: "/admin/analytics", icon: TrendingUp },
-  { name: "Paramètres", href: "/admin/settings", icon: Settings },
+  { name: "Parametres", href: "/admin/settings", icon: Settings },
 ]
 
 export default function AdminLayout({

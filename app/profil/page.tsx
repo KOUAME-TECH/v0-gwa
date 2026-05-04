@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   Settings, LogOut, ChevronRight, Package, Heart, ShoppingBag,
-  MessageCircle, MapPin, BadgeCheck, Wallet, Bell, HelpCircle, Star, Shield
+  MessageCircle, MapPin, BadgeCheck, Wallet, Bell, HelpCircle, Star, Shield, Download
 } from "lucide-react"
 
 type Profile = {
@@ -127,9 +127,9 @@ export default function ProfilPage() {
     )
   }
 
-  const isSeller = ["producteur", "artisan", "transformateur"].includes(profile.user_type || "")
-  const isBuyer = profile.user_type === "acheteur"
-  const isBusiness = profile.user_type === "entreprise"
+  const isSeller = ["farmer", "artisan", "processor"].includes(profile.user_type || "")
+  const isBuyer = profile.user_type === "buyer"
+  const isBusiness = profile.user_type === "business"
   const isCooperative = profile.user_type === "cooperative"
 
   const getMainMenuItems = () => {
@@ -181,7 +181,8 @@ export default function ProfilPage() {
     },
     {
       items: [
-        { icon: Settings, label: "Paramètres", href: "/profil/edit" },
+        { icon: Settings, label: "Parametres", href: "/profil/edit" },
+        { icon: Download, label: "Installer l'app", href: "/download" },
         { icon: HelpCircle, label: "Aide", href: "/contact" },
       ]
     }
