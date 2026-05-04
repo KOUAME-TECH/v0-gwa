@@ -1,17 +1,24 @@
-import { createBrowserClient } from '@supabase/ssr'
+import { createBrowserClient, type SupabaseClient } from '@supabase/ssr'
 
-let supabaseInstance: any = null
+// Global singleton to prevent multiple GoTrueClient instances
+let supabaseInstance: SupabaseClient | null = null
 
-export function createClient() {
-  // Return cached instance to prevent multiple GoTrueClient instances
-  if (typeof window !== 'undefined' && supabaseInstance) {
-    return supabaseInstance
+export function createClient(): SupabaseClient {
+  // Server-side: always create new instance (but this shouldn't be called server-side)
+  if (typeof window === 'undefined') {
+    return createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    )
   }
 
-  supabaseInstance = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  )
+  // Client-side: return cached singleton
+  if (!supabaseInstance) {
+    supabaseInstance = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    )
+  }
 
   return supabaseInstance
 }

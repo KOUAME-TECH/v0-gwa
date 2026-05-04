@@ -39,8 +39,7 @@ type Product = {
     avatar_url: string | null
     is_verified: boolean
     city: string
-  }
-}
+  } | null
 }
 
 type Post = {

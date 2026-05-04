@@ -41,11 +41,12 @@ export default function DashboardPage() {
         .eq("id", user.id)
         .single()
 
-      const userType = profile?.user_type || "acheteur"
+      const userType = profile?.user_type || "buyer"
 
-      // Rediriger selon le type (utilise les valeurs de la contrainte DB)
+      // Rediriger selon le type (valeurs DB: farmer, artisan, buyer, cooperative, business, processor)
       switch (userType) {
-        case "producteur":
+        case "farmer":
+        case "processor":
           setStatus("Redirection vers votre espace Producteur...")
           router.push("/dashboard/farmer")
           break
@@ -53,19 +54,15 @@ export default function DashboardPage() {
           setStatus("Redirection vers votre espace Artisan...")
           router.push("/dashboard/artisan")
           break
-        case "transformateur":
-          setStatus("Redirection vers votre espace Transformateur...")
-          router.push("/dashboard/farmer") // Même interface que producteur
-          break
-        case "acheteur":
+        case "buyer":
           setStatus("Redirection vers votre espace Acheteur...")
           router.push("/dashboard/buyer")
           break
         case "cooperative":
-          setStatus("Redirection vers votre espace Coopérative...")
+          setStatus("Redirection vers votre espace Cooperative...")
           router.push("/dashboard/cooperative")
           break
-        case "entreprise":
+        case "business":
           setStatus("Redirection vers votre espace Entreprise...")
           router.push("/dashboard/business")
           break

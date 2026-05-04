@@ -12,11 +12,11 @@ import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
 
 const userTypes = [
-  { value: "producteur", label: "Producteur", icon: Sprout },
+  { value: "farmer", label: "Producteur", icon: Sprout },
   { value: "artisan", label: "Artisan", icon: Palette },
-  { value: "acheteur", label: "Acheteur", icon: ShoppingCart },
-  { value: "cooperative", label: "Coopérative", icon: Users },
-  { value: "entreprise", label: "Entreprise", icon: Building2 },
+  { value: "buyer", label: "Acheteur", icon: ShoppingCart },
+  { value: "cooperative", label: "Cooperative", icon: Users },
+  { value: "business", label: "Entreprise", icon: Building2 },
 ]
 
 const countries = [
