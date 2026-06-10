@@ -57,8 +57,11 @@ function LoginForm() {
 
         router.push(redirectTo || "/profil")
       }
-    } catch {
-      setError("Une erreur est survenue")
+    } catch (err) {
+      console.log("[v0] Login network error:", err)
+      setError(
+        "Connexion au serveur impossible. Verifiez votre reseau et reessayez.",
+      )
       setIsLoading(false)
     }
   }
