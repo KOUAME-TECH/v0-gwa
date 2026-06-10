@@ -15,9 +15,9 @@ interface Order {
   order_number: string
   total_amount: number
   status: string
-  delivery_address: string
-  delivery_city: string
-  delivery_country: string
+  shipping_address: string
+  shipping_city: string
+  shipping_country: string
   payment_method: string
   payment_status: string
   created_at: string
@@ -215,9 +215,9 @@ function ConfirmationContent() {
                   <div className="flex items-center gap-2">
                     <MapPin className="h-4 w-4 text-muted-foreground" />
                     <span>
-                      {order.delivery_address}
-                      {order.delivery_city && `, ${order.delivery_city}`}
-                      {order.delivery_country && `, ${order.delivery_country}`}
+                      {order.shipping_address}
+                      {order.shipping_city && `, ${order.shipping_city}`}
+                      {order.shipping_country && `, ${order.shipping_country}`}
                     </span>
                   </div>
                   {order.estimated_delivery && (
