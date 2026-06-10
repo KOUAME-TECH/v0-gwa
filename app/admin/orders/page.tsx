@@ -176,7 +176,7 @@ export default function AdminOrdersPage() {
         performed_by: adminUser?.id,
         action: "status_change",
         new_value: newStatus,
-        notes: "Mise a jour par administrateur",
+        notes: "Mise à jour par administrateur",
       })
 
       setOrders(orders.map(o => 
@@ -207,11 +207,11 @@ export default function AdminOrdersPage() {
     const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
       draft: { label: "Brouillon", variant: "outline" },
       pending: { label: "En attente", variant: "secondary" },
-      confirmed: { label: "Confirmee", variant: "default" },
-      processing: { label: "En preparation", variant: "default" },
-      shipped: { label: "Expediee", variant: "default" },
-      delivered: { label: "Livree", variant: "outline" },
-      cancelled: { label: "Annulee", variant: "destructive" },
+      confirmed: { label: "Confirmée", variant: "default" },
+      processing: { label: "En préparation", variant: "default" },
+      shipped: { label: "Expédiée", variant: "default" },
+      delivered: { label: "Livrée", variant: "outline" },
+      cancelled: { label: "Annulée", variant: "destructive" },
     }
     const config = statusConfig[status] || { label: status, variant: "secondary" as const }
     return <Badge variant={config.variant}>{config.label}</Badge>
@@ -220,9 +220,9 @@ export default function AdminOrdersPage() {
   const getPaymentBadge = (status: string) => {
     const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
       pending: { label: "En attente", variant: "secondary" },
-      paid: { label: "Paye", variant: "default" },
-      failed: { label: "Echoue", variant: "destructive" },
-      refunded: { label: "Rembourse", variant: "outline" },
+      paid: { label: "Payé", variant: "default" },
+      failed: { label: "Échoué", variant: "destructive" },
+      refunded: { label: "Remboursé", variant: "outline" },
     }
     const config = statusConfig[status] || { label: status, variant: "secondary" as const }
     return <Badge variant={config.variant}>{config.label}</Badge>
@@ -248,7 +248,7 @@ export default function AdminOrdersPage() {
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Rechercher par numero de commande..."
+                  placeholder="Rechercher par numéro de commande..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && searchOrders()}
@@ -265,11 +265,11 @@ export default function AdminOrdersPage() {
                 <SelectContent>
                   <SelectItem value="all">Tous</SelectItem>
                   <SelectItem value="pending">En attente</SelectItem>
-                  <SelectItem value="confirmed">Confirmees</SelectItem>
-                  <SelectItem value="processing">En preparation</SelectItem>
-                  <SelectItem value="shipped">Expediees</SelectItem>
-                  <SelectItem value="delivered">Livrees</SelectItem>
-                  <SelectItem value="cancelled">Annulees</SelectItem>
+                  <SelectItem value="confirmed">Confirmées</SelectItem>
+                  <SelectItem value="processing">En préparation</SelectItem>
+                  <SelectItem value="shipped">Expédiées</SelectItem>
+                  <SelectItem value="delivered">Livrées</SelectItem>
+                  <SelectItem value="cancelled">Annulées</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={filterPayment} onValueChange={setFilterPayment}>
@@ -279,9 +279,9 @@ export default function AdminOrdersPage() {
                 <SelectContent>
                   <SelectItem value="all">Tous</SelectItem>
                   <SelectItem value="pending">En attente</SelectItem>
-                  <SelectItem value="paid">Payes</SelectItem>
-                  <SelectItem value="failed">Echoues</SelectItem>
-                  <SelectItem value="refunded">Rembourses</SelectItem>
+                  <SelectItem value="paid">Payés</SelectItem>
+                  <SelectItem value="failed">Échoués</SelectItem>
+                  <SelectItem value="refunded">Remboursés</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -295,7 +295,7 @@ export default function AdminOrdersPage() {
           ) : orders.length === 0 ? (
             <div className="text-center py-12">
               <ShoppingCart className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-              <p className="text-muted-foreground">Aucune commande trouvee</p>
+              <p className="text-muted-foreground">Aucune commande trouvée</p>
             </div>
           ) : (
             <>
@@ -359,7 +359,7 @@ export default function AdminOrdersPage() {
                               <DropdownMenuSeparator />
                               <DropdownMenuItem>
                                 <Eye className="h-4 w-4 mr-2" />
-                                Voir les details
+                                Voir les détails
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuLabel className="text-xs text-muted-foreground">
@@ -371,15 +371,15 @@ export default function AdminOrdersPage() {
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => updateOrderStatus(order.id, "processing")}>
                                 <Package className="h-4 w-4 mr-2" />
-                                En preparation
+                                En préparation
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => updateOrderStatus(order.id, "shipped")}>
                                 <Truck className="h-4 w-4 mr-2" />
-                                Expediee
+                                Expédiée
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => updateOrderStatus(order.id, "delivered")}>
                                 <CheckCircle className="h-4 w-4 mr-2" />
-                                Livree
+                                Livrée
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem 
@@ -400,7 +400,7 @@ export default function AdminOrdersPage() {
 
               <div className="flex items-center justify-between mt-4">
                 <p className="text-sm text-muted-foreground">
-                  Affichage de {page * pageSize + 1} a {Math.min((page + 1) * pageSize, totalCount)} sur {totalCount}
+                  Affichage de {page * pageSize + 1} à {Math.min((page + 1) * pageSize, totalCount)} sur {totalCount}
                 </p>
                 <div className="flex gap-2">
                   <Button 
@@ -410,7 +410,7 @@ export default function AdminOrdersPage() {
                     disabled={page === 0}
                     className="bg-transparent"
                   >
-                    Precedent
+                    Précédent
                   </Button>
                   <Button 
                     variant="outline" 

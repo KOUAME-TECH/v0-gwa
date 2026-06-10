@@ -4,40 +4,24 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
-import { Navigation } from "@/components/navigation"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
-import { Hammer, Star, Package, DollarSign, Users, TrendingUp, Clock, Award, MessageSquare, ImageIcon, Plus, Loader2 } from 'lucide-react'
+import { 
+  Palette, Star, Package, Wallet, Users, Plus, ChevronRight, 
+  Bell, ArrowLeft, MessageSquare, Award, Hammer, Eye,
+  Sparkles, TrendingUp, Clock, Heart
+} from 'lucide-react'
 import { createClient } from "@/lib/supabase/client"
+import { DashboardNav } from "@/components/dashboard-nav"
 
 interface Product {
   id: string
   name: string
   price: number
   unit: string
-  stock_quantity: number
   images: string[]
   status: string
-}
-
-interface Order {
-  id: string
-  total_amount: number
-  status: string
-  created_at: string
-  buyer_id: string
-  order_items: {
-    product_id: string
-    quantity: number
-    products: {
-      name: string
-    } | null
-  }[]
-  profiles: {
-    full_name: string
-  } | null
 }
 
 interface Review {
@@ -45,17 +29,7 @@ interface Review {
   rating: number
   comment: string
   created_at: string
-  profiles: {
-    full_name: string
-  } | null
-}
-
-interface DashboardStats {
-  totalRevenue: number
-  totalOrders: number
-  totalCustomers: number
-  avgRating: number
-  totalReviews: number
+  profiles: { full_name: string } | null
 }
 
 export default function ArtisanDashboard() {
@@ -63,465 +37,313 @@ export default function ArtisanDashboard() {
   const [user, setUser] = useState<any>(null)
   const [profile, setProfile] = useState<any>(null)
   const [products, setProducts] = useState<Product[]>([])
-  const [orders, setOrders] = useState<Order[]>([])
   const [reviews, setReviews] = useState<Review[]>([])
-  const [stats, setStats] = useState<DashboardStats>({
+  const [stats, setStats] = useState({
     totalRevenue: 0,
-    totalOrders: 0,
-    totalCustomers: 0,
+    totalProducts: 0,
     avgRating: 0,
-    totalReviews: 0
+    totalReviews: 0,
+    totalOrders: 0
   })
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    const fetchDashboardData = async () => {
+    const fetchData = async () => {
       const supabase = createClient()
-      
-      // Verifier l'authentification
       const { data: { user: authUser } } = await supabase.auth.getUser()
+      
       if (!authUser) {
         router.push("/auth/login")
         return
       }
       setUser(authUser)
 
-      // Recuperer le profil
+      // Profil
       const { data: profileData } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', authUser.id)
         .single()
+      setProfile(profileData)
 
-      if (profileData) {
-        setProfile(profileData)
-      }
-
-      // Recuperer les produits de l'artisan
+      // Produits artisanaux
       const { data: productsData } = await supabase
         .from('products')
-        .select('*')
+        .select('id, name, price, unit, images, description, origin_country, origin_region, is_organic, is_fair_trade, is_bulk_available, min_bulk_quantity, product_type, seller_id, category_id, status, likes_count, comments_count, shares_count, created_at, updated_at, stock_quantity')
         .eq('seller_id', authUser.id)
-        .eq('product_type', 'artisanat')
         .order('created_at', { ascending: false })
+      setProducts(productsData || [])
 
-      if (productsData) {
-        setProducts(productsData)
-      }
-
-      // Recuperer les commandes liees aux produits de l'artisan
-      const productIds = productsData?.map(p => p.id) || []
-      
-      if (productIds.length > 0) {
-        const { data: orderItemsData } = await supabase
-          .from('order_items')
-          .select(`
-            order_id,
-            product_id,
-            quantity,
-            products (name)
-          `)
-          .in('product_id', productIds)
-
-        if (orderItemsData && orderItemsData.length > 0) {
-          const orderIds = [...new Set(orderItemsData.map(oi => oi.order_id))]
-          
-          const { data: ordersData } = await supabase
-            .from('orders')
-            .select(`
-              *,
-              profiles:buyer_id (full_name)
-            `)
-            .in('id', orderIds)
-            .order('created_at', { ascending: false })
-            .limit(5)
-
-          if (ordersData) {
-            // Attacher les items aux commandes
-            const ordersWithItems = ordersData.map(order => ({
-              ...order,
-              order_items: orderItemsData.filter(oi => oi.order_id === order.id)
-            }))
-            setOrders(ordersWithItems)
-          }
-        }
-      }
-
-      // Recuperer les avis
+      // Avis
       const { data: reviewsData } = await supabase
         .from('reviews')
-        .select(`
-          *,
-          profiles:user_id (full_name)
-        `)
+        .select('*, profiles:user_id(full_name)')
         .eq('seller_id', authUser.id)
         .order('created_at', { ascending: false })
-        .limit(6)
+        .limit(5)
+      setReviews(reviewsData || [])
 
-      if (reviewsData) {
-        setReviews(reviewsData)
-      }
-
-      // Calculer les statistiques
-      const totalRevenue = orders.reduce((sum, o) => 
-        o.status === 'delivered' ? sum + (o.total_amount || 0) : sum, 0)
-      
-      const uniqueCustomers = new Set(orders.map(o => o.buyer_id)).size
-      
+      // Stats
       const avgRating = reviewsData && reviewsData.length > 0
         ? reviewsData.reduce((sum, r) => sum + r.rating, 0) / reviewsData.length
         : 0
 
       setStats({
-        totalRevenue,
-        totalOrders: orders.length,
-        totalCustomers: uniqueCustomers,
+        totalRevenue: 0,
+        totalProducts: productsData?.length || 0,
         avgRating,
-        totalReviews: reviewsData?.length || 0
+        totalReviews: reviewsData?.length || 0,
+        totalOrders: 0
       })
 
       setIsLoading(false)
     }
-
-    fetchDashboardData()
+    fetchData()
   }, [router])
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen flex-col">
-        <Navigation />
-        <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
+      <div className="min-h-screen bg-[#FFF6E5] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#8B4513]" />
       </div>
     )
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <Navigation />
-      
-      <main className="flex-1 bg-muted/30">
-        <div className="container py-8 px-4">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h1 className="text-3xl font-bold mb-2">Espace Artisan</h1>
-              <p className="text-muted-foreground">Presentez votre savoir-faire et developpez votre activite</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge className="text-base px-4 py-2">
-                <Star className="mr-2 h-4 w-4 fill-current" />
-                {stats.avgRating > 0 ? stats.avgRating.toFixed(1) : "N/A"} / 5.0
-              </Badge>
-            </div>
+    <div className="min-h-screen bg-[#FFF6E5] pb-20">
+      {/* Header Artisan - Couleur terre/artisanat */}
+      <header className="bg-gradient-to-br from-[#8B4513] to-[#5D2E0C] text-white px-4 pt-12 pb-6 rounded-b-3xl">
+        <div className="flex items-center justify-between mb-6">
+          <button onClick={() => router.back()}>
+            <ArrowLeft className="h-6 w-6" />
+          </button>
+          <h1 className="text-lg font-semibold">Espace Artisan</h1>
+          <Link href="/notifications">
+            <Bell className="h-6 w-6" />
+          </Link>
+        </div>
+
+        {/* Profil artisan */}
+        <div className="flex items-center gap-4 mb-6">
+          <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center overflow-hidden">
+            {profile?.avatar_url ? (
+              <Image src={profile.avatar_url || "/placeholder.svg"} alt="" width={64} height={64} className="object-cover" />
+            ) : (
+              <Palette className="h-8 w-8 text-white" />
+            )}
           </div>
-
-          {/* Stats artisan */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
-            <Card className="hover:shadow-lg transition-all">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Revenus ce mois</CardTitle>
-                <DollarSign className="h-4 w-4 text-primary" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats.totalRevenue.toLocaleString()} FCFA</div>
-                <p className="text-xs text-muted-foreground">
-                  {stats.totalRevenue > 0 ? "Ventes realisees" : "Aucune vente ce mois"}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="hover:shadow-lg transition-all">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Commandes</CardTitle>
-                <Package className="h-4 w-4 text-accent" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats.totalOrders}</div>
-                <p className="text-xs text-muted-foreground">
-                  {orders.filter(o => o.status === 'pending' || o.status === 'confirmed').length} en cours
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="hover:shadow-lg transition-all">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Clients</CardTitle>
-                <Users className="h-4 w-4 text-secondary" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats.totalCustomers}</div>
-                <p className="text-xs text-muted-foreground">
-                  Clients uniques
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="hover:shadow-lg transition-all">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Avis</CardTitle>
-                <Star className="h-4 w-4 text-yellow-500 fill-current" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats.totalReviews}</div>
-                <p className="text-xs text-muted-foreground">
-                  Note moyenne: {stats.avgRating > 0 ? stats.avgRating.toFixed(1) : "N/A"}
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="grid gap-6 lg:grid-cols-3">
-            {/* Commandes en cours */}
-            <Card className="lg:col-span-2">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>Commandes en Cours</CardTitle>
-                    <CardDescription>Suivez l'avancement de vos projets</CardDescription>
-                  </div>
-                  <Link href="/dashboard/commandes">
-                    <Button size="sm" variant="outline">Voir tout</Button>
-                  </Link>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {orders.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <h3 className="text-lg font-medium mb-2">Aucune commande</h3>
-                    <p className="text-muted-foreground mb-4">
-                      Vos commandes apparaitront ici
-                    </p>
-                    <Link href="/dashboard/products/new">
-                      <Button>
-                        <Plus className="mr-2 h-4 w-4" />
-                        Ajouter un produit
-                      </Button>
-                    </Link>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {orders.map((order) => (
-                      <div key={order.id} className="p-4 rounded-lg border hover:border-primary transition-colors">
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <Hammer className="h-4 w-4 text-primary" />
-                              <h3 className="font-semibold">
-                                {order.order_items?.[0]?.products?.name || "Commande"}
-                              </h3>
-                            </div>
-                            <p className="text-sm text-muted-foreground">
-                              Client: {order.profiles?.full_name || "Client"}
-                            </p>
-                          </div>
-                          <Badge variant={
-                            order.status === 'delivered' ? "default" :
-                            order.status === 'shipping' ? "secondary" : "outline"
-                          }>
-                            {order.status === 'delivered' ? 'Livre' :
-                             order.status === 'shipping' ? 'En livraison' :
-                             order.status === 'confirmed' ? 'Confirme' :
-                             order.status === 'pending' ? 'En attente' : order.status}
-                          </Badge>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium text-primary">
-                            {order.total_amount?.toLocaleString() || 0} FCFA
-                          </span>
-                          <div className="flex gap-2">
-                            <Button size="sm" variant="outline">
-                              <MessageSquare className="h-4 w-4 mr-1" />
-                              Contacter
-                            </Button>
-                            <Link href={`/dashboard/commandes`}>
-                              <Button size="sm">Voir</Button>
-                            </Link>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Actions et portfolio */}
-            <div className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Actions Rapides</CardTitle>
-                  <CardDescription>Gerez votre activite</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <Link href="/dashboard/products/new">
-                    <Button variant="outline" className="w-full justify-start bg-transparent">
-                      <Plus className="mr-2 h-4 w-4" />
-                      Ajouter une creation
-                    </Button>
-                  </Link>
-                  <Link href="/dashboard/products">
-                    <Button variant="outline" className="w-full justify-start bg-transparent">
-                      <Package className="mr-2 h-4 w-4" />
-                      Mes creations
-                    </Button>
-                  </Link>
-                  <Button variant="outline" className="w-full justify-start bg-transparent">
-                    <ImageIcon className="mr-2 h-4 w-4" />
-                    Gerer le portfolio
-                  </Button>
-                  <Link href="/network">
-                    <Button variant="outline" className="w-full justify-start bg-transparent">
-                      <Users className="mr-2 h-4 w-4" />
-                      Trouver des clients
-                    </Button>
-                  </Link>
-                </CardContent>
-              </Card>
-
-              {/* Produits */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Package className="h-5 w-5 text-primary" />
-                    Mes Creations
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {products.length === 0 ? (
-                    <div className="text-center py-4">
-                      <p className="text-muted-foreground text-sm mb-3">
-                        Aucune creation pour le moment
-                      </p>
-                      <Link href="/dashboard/products/new">
-                        <Button size="sm">
-                          <Plus className="mr-2 h-4 w-4" />
-                          Ajouter
-                        </Button>
-                      </Link>
-                    </div>
-                  ) : (
-                    products.slice(0, 3).map((product) => (
-                      <div key={product.id} className="p-3 rounded-lg border flex items-center gap-3">
-                        {product.images?.[0] ? (
-                          <div className="h-10 w-10 rounded-lg overflow-hidden bg-muted flex-shrink-0">
-                            <Image
-                              src={product.images[0] || "/placeholder.svg"}
-                              alt={product.name}
-                              width={40}
-                              height={40}
-                              className="object-cover w-full h-full"
-                            />
-                          </div>
-                        ) : (
-                          <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
-                            <Hammer className="h-5 w-5 text-muted-foreground" />
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{product.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {product.price.toLocaleString()} FCFA
-                          </p>
-                        </div>
-                        <Badge variant={product.status === 'active' ? "default" : "secondary"}>
-                          {product.status === 'active' ? "Actif" : "Inactif"}
-                        </Badge>
-                      </div>
-                    ))
-                  )}
-                  {products.length > 3 && (
-                    <Link href="/dashboard/products">
-                      <Button variant="ghost" className="w-full" size="sm">
-                        Voir tous ({products.length})
-                      </Button>
-                    </Link>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Certifications */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Award className="h-5 w-5 text-primary" />
-                    Mes Certifications
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {profile?.is_verified ? (
-                    <div className="p-3 rounded-lg border flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
-                        <Award className="h-5 w-5 text-white" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">Artisan Certifie GWA</p>
-                        <p className="text-xs text-muted-foreground">Verifie</p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-center py-4">
-                      <p className="text-muted-foreground text-sm mb-3">
-                        Obtenez la certification GWA
-                      </p>
-                      <Button size="sm" variant="outline">
-                        Demander
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-
-          {/* Avis recents */}
-          <Card className="mt-6">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Avis Recents</CardTitle>
-                  <CardDescription>Ce que disent vos clients</CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {reviews.length === 0 ? (
-                <div className="text-center py-8">
-                  <Star className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="text-lg font-medium mb-2">Aucun avis</h3>
-                  <p className="text-muted-foreground">
-                    Les avis de vos clients apparaitront ici
-                  </p>
-                </div>
-              ) : (
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {reviews.map((review) => (
-                    <div key={review.id} className="p-4 rounded-lg border hover:border-primary transition-colors">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-semibold">
-                          {review.profiles?.full_name || "Client"}
-                        </span>
-                        <div className="flex gap-1">
-                          {[...Array(review.rating)].map((_, j) => (
-                            <Star key={j} className="h-4 w-4 text-yellow-500 fill-current" />
-                          ))}
-                        </div>
-                      </div>
-                      <p className="text-sm text-muted-foreground mb-2 line-clamp-2">
-                        {review.comment || "Pas de commentaire"}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(review.created_at).toLocaleDateString('fr-FR')}
-                      </p>
-                    </div>
-                  ))}
+          <div className="flex-1">
+            <h2 className="text-xl font-bold">{profile?.full_name || "Artisan"}</h2>
+            <p className="text-white/80 text-sm">{profile?.speciality || "Artisanat traditionnel"}</p>
+            <div className="flex items-center gap-2 mt-1">
+              {profile?.is_verified && (
+                <Badge className="bg-[#F39A1F] text-white">
+                  <Award className="h-3 w-3 mr-1" />
+                  Certifié
+                </Badge>
+              )}
+              {stats.avgRating > 0 && (
+                <div className="flex items-center gap-1 text-sm">
+                  <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                  <span>{stats.avgRating.toFixed(1)}</span>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+
+        {/* Stats principales */}
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-white/10 rounded-xl p-3 text-center">
+            <p className="text-2xl font-bold">{stats.totalProducts}</p>
+            <p className="text-xs text-white/70">Créations</p>
+          </div>
+          <div className="bg-white/10 rounded-xl p-3 text-center">
+            <p className="text-2xl font-bold">{stats.totalReviews}</p>
+            <p className="text-xs text-white/70">Avis</p>
+          </div>
+          <div className="bg-white/10 rounded-xl p-3 text-center">
+            <p className="text-2xl font-bold">{stats.totalOrders}</p>
+            <p className="text-xs text-white/70">Commandes</p>
+          </div>
+        </div>
+      </header>
+
+      <main className="px-4 -mt-4">
+        {/* Actions rapides */}
+        <Card className="bg-white border-0 shadow-lg mb-6">
+          <CardContent className="p-4">
+            <div className="grid grid-cols-4 gap-2">
+              <Link href="/publier" className="text-center">
+                <div className="w-12 h-12 rounded-xl bg-[#8B4513]/10 flex items-center justify-center mx-auto mb-1">
+                  <Plus className="h-6 w-6 text-[#8B4513]" />
+                </div>
+                <p className="text-xs text-[#4B5563]">Ajouter</p>
+              </Link>
+              <Link href="/dashboard/products" className="text-center">
+                <div className="w-12 h-12 rounded-xl bg-[#F39A1F]/10 flex items-center justify-center mx-auto mb-1">
+                  <Package className="h-6 w-6 text-[#F39A1F]" />
+                </div>
+                <p className="text-xs text-[#4B5563]">Produits</p>
+              </Link>
+              <Link href="/dashboard/commandes" className="text-center">
+                <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center mx-auto mb-1">
+                  <Clock className="h-6 w-6 text-blue-500" />
+                </div>
+                <p className="text-xs text-[#4B5563]">Commandes</p>
+              </Link>
+              <Link href="/messages" className="text-center">
+                <div className="w-12 h-12 rounded-xl bg-green-500/10 flex items-center justify-center mx-auto mb-1">
+                  <MessageSquare className="h-6 w-6 text-green-500" />
+                </div>
+                <p className="text-xs text-[#4B5563]">Messages</p>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Mes Créations */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-[#111827] flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-[#F39A1F]" />
+              Mes Créations
+            </h3>
+            <Link href="/dashboard/products" className="text-[#8B4513] text-sm font-medium flex items-center">
+              Voir tout <ChevronRight className="h-4 w-4" />
+            </Link>
+          </div>
+
+          {products.length === 0 ? (
+            <Card className="bg-white border-0 shadow-sm">
+              <CardContent className="p-8 text-center">
+                <Hammer className="h-12 w-12 text-[#8B4513]/30 mx-auto mb-4" />
+                <h4 className="font-semibold text-[#111827] mb-2">Aucune création</h4>
+                <p className="text-sm text-[#4B5563] mb-4">
+                  Partagez votre savoir-faire avec le monde
+                </p>
+                <Link href="/publier">
+                  <Button className="bg-[#8B4513]">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Ajouter une creation
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              {products.slice(0, 4).map((product) => (
+                <Card key={product.id} className="bg-white border-0 shadow-sm overflow-hidden">
+                  <div className="aspect-square bg-[#FFF6E5] relative">
+                    {product.images?.[0] ? (
+                      <Image
+                        src={product.images[0] || "/placeholder.svg"}
+                        alt={product.name}
+                        fill
+                        className="object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Palette className="h-10 w-10 text-[#8B4513]/30" />
+                      </div>
+                    )}
+                    <Badge className={`absolute top-2 right-2 ${
+                      product.status === 'active' 
+                        ? "bg-green-500 text-white" 
+                        : "bg-gray-500 text-white"
+                    }`}>
+                      {product.status === 'active' ? 'En vente' : 'Inactif'}
+                    </Badge>
+                  </div>
+                  <CardContent className="p-3">
+                    <h4 className="font-semibold text-[#111827] text-sm line-clamp-1">{product.name}</h4>
+                    <p className="text-[#8B4513] font-bold text-sm">
+                      {product.price.toLocaleString()} FCFA
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Avis Clients */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-[#111827] flex items-center gap-2">
+              <Star className="h-5 w-5 text-yellow-500 fill-yellow-500" />
+              Avis Clients
+            </h3>
+          </div>
+
+          {reviews.length === 0 ? (
+            <Card className="bg-white border-0 shadow-sm">
+              <CardContent className="p-6 text-center">
+                <Star className="h-10 w-10 text-yellow-500/30 mx-auto mb-3" />
+                <p className="text-sm text-[#4B5563]">Vos premiers avis apparaîtront ici</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {reviews.slice(0, 3).map((review) => (
+                <Card key={review.id} className="bg-white border-0 shadow-sm">
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-full bg-[#8B4513]/10 flex items-center justify-center flex-shrink-0">
+                        <span className="text-[#8B4513] font-bold text-sm">
+                          {review.profiles?.full_name?.charAt(0) || "?"}
+                        </span>
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="font-semibold text-[#111827] text-sm">
+                            {review.profiles?.full_name || "Client"}
+                          </p>
+                          <div className="flex">
+                            {[...Array(5)].map((_, i) => (
+                              <Star 
+                                key={i} 
+                                className={`h-3 w-3 ${
+                                  i < review.rating 
+                                    ? "text-yellow-500 fill-yellow-500" 
+                                    : "text-gray-300"
+                                }`} 
+                              />
+                            ))}
+                          </div>
+                        </div>
+                        <p className="text-sm text-[#4B5563] line-clamp-2">{review.comment}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Certification */}
+        {!profile?.is_verified && (
+          <Card className="bg-gradient-to-r from-[#8B4513] to-[#F39A1F] border-0">
+            <CardContent className="p-4 flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
+                <Award className="h-6 w-6 text-white" />
+              </div>
+              <div className="flex-1">
+                <h4 className="font-semibold text-white mb-1">Devenez Artisan Certifié</h4>
+                <p className="text-sm text-white/80">
+                  Augmentez votre visibilité et gagnez la confiance des acheteurs
+                </p>
+              </div>
+              <Button size="sm" className="bg-white text-[#8B4513]">
+                Demander
+              </Button>
             </CardContent>
           </Card>
-        </div>
+        )}
       </main>
+
+      <DashboardNav userType={profile?.user_type} />
     </div>
   )
 }

@@ -251,7 +251,7 @@ export default function AdminUsersPage() {
       artisan: { label: "Artisan", variant: "default" },
       transformer: { label: "Transformateur", variant: "secondary" },
       buyer: { label: "Acheteur", variant: "outline" },
-      cooperative: { label: "Cooperative", variant: "default" },
+      cooperative: { label: "Coopérative", variant: "default" },
       business: { label: "Entreprise", variant: "secondary" },
     }
     const config = typeConfig[type] || { label: type, variant: "outline" as const }
@@ -278,7 +278,7 @@ export default function AdminUsersPage() {
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Rechercher par nom, email ou telephone..."
+                  placeholder="Rechercher par nom, email ou téléphone..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && searchUsers()}
@@ -298,7 +298,7 @@ export default function AdminUsersPage() {
                   <SelectItem value="artisan">Artisan</SelectItem>
                   <SelectItem value="transformer">Transformateur</SelectItem>
                   <SelectItem value="buyer">Acheteur</SelectItem>
-                  <SelectItem value="cooperative">Cooperative</SelectItem>
+                  <SelectItem value="cooperative">Coopérative</SelectItem>
                   <SelectItem value="business">Entreprise</SelectItem>
                 </SelectContent>
               </Select>
@@ -308,8 +308,8 @@ export default function AdminUsersPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Tous</SelectItem>
-                  <SelectItem value="verified">Verifies</SelectItem>
-                  <SelectItem value="unverified">Non verifies</SelectItem>
+                  <SelectItem value="verified">Vérifiés</SelectItem>
+                  <SelectItem value="unverified">Non vérifiés</SelectItem>
                   <SelectItem value="suspended">Suspendus</SelectItem>
                 </SelectContent>
               </Select>
@@ -323,7 +323,7 @@ export default function AdminUsersPage() {
             </div>
           ) : users.length === 0 ? (
             <div className="text-center py-12">
-              <p className="text-muted-foreground">Aucun utilisateur trouve</p>
+              <p className="text-muted-foreground">Aucun utilisateur trouvé</p>
             </div>
           ) : (
             <>
@@ -368,11 +368,11 @@ export default function AdminUsersPage() {
                             {user.is_verified && (
                               <Badge variant="outline" className="border-green-500 text-green-600">
                                 <CheckCircle className="h-3 w-3 mr-1" />
-                                Verifie
+                                Vérifié
                               </Badge>
                             )}
                             {!user.is_verified && !user.is_suspended && (
-                              <Badge variant="secondary">Non verifie</Badge>
+                              <Badge variant="secondary">Non vérifié</Badge>
                             )}
                           </div>
                         </TableCell>
@@ -394,14 +394,14 @@ export default function AdminUsersPage() {
                               {!user.is_verified && (
                                 <DropdownMenuItem onClick={() => handleVerifyUser(user)}>
                                   <CheckCircle className="h-4 w-4 mr-2" />
-                                  Verifier
+                                  Vérifier
                                 </DropdownMenuItem>
                               )}
                               <DropdownMenuSeparator />
                               {user.is_suspended ? (
                                 <DropdownMenuItem onClick={() => handleUnsuspendUser(user)}>
                                   <CheckCircle className="h-4 w-4 mr-2" />
-                                  Reactiver
+                                  Réactiver
                                 </DropdownMenuItem>
                               ) : (
                                 <DropdownMenuItem 
@@ -427,7 +427,7 @@ export default function AdminUsersPage() {
               {/* Pagination */}
               <div className="flex items-center justify-between mt-4">
                 <p className="text-sm text-muted-foreground">
-                  Affichage de {page * pageSize + 1} a {Math.min((page + 1) * pageSize, totalCount)} sur {totalCount}
+                  Affichage de {page * pageSize + 1} à {Math.min((page + 1) * pageSize, totalCount)} sur {totalCount}
                 </p>
                 <div className="flex gap-2">
                   <Button 
@@ -437,7 +437,7 @@ export default function AdminUsersPage() {
                     disabled={page === 0}
                     className="bg-transparent"
                   >
-                    Precedent
+                    Précédent
                   </Button>
                   <Button 
                     variant="outline" 
@@ -461,7 +461,7 @@ export default function AdminUsersPage() {
           <DialogHeader>
             <DialogTitle>Suspendre l'utilisateur</DialogTitle>
             <DialogDescription>
-              Cette action empechera l'utilisateur d'acceder a son compte.
+              Cette action empêchera l{"'"}utilisateur d{"'"}accéder à son compte.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -479,7 +479,7 @@ export default function AdminUsersPage() {
               <Label htmlFor="reason">Raison de la suspension</Label>
               <Textarea
                 id="reason"
-                placeholder="Decrivez la raison de cette suspension..."
+                placeholder="Décrivez la raison de cette suspension..."
                 value={suspendReason}
                 onChange={(e) => setSuspendReason(e.target.value)}
               />

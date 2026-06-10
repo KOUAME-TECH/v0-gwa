@@ -270,7 +270,7 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
                   <CardContent>
                     {modules.length === 0 ? (
                       <p className="text-muted-foreground text-center py-8">
-                        Le contenu sera bientot disponible
+                        Le contenu sera bientôt disponible
                       </p>
                     ) : (
                       <Accordion type="single" collapsible className="w-full">

@@ -1,7 +1,95 @@
 @import "tailwindcss";
-@import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
+
+/* Shadcn animation utilities (replaces tw-animate-css) */
+@utility animate-in {
+  animation-name: enter;
+  animation-duration: 150ms;
+  --tw-enter-opacity: initial;
+  --tw-enter-scale: initial;
+  --tw-enter-rotate: initial;
+  --tw-enter-translate-x: initial;
+  --tw-enter-translate-y: initial;
+}
+
+@utility animate-out {
+  animation-name: exit;
+  animation-duration: 150ms;
+  --tw-exit-opacity: initial;
+  --tw-exit-scale: initial;
+  --tw-exit-rotate: initial;
+  --tw-exit-translate-x: initial;
+  --tw-exit-translate-y: initial;
+}
+
+@utility fade-in {
+  --tw-enter-opacity: 0;
+}
+
+@utility fade-in-* {
+  --tw-enter-opacity: calc(var(--value) * 1%);
+}
+
+@utility fade-out {
+  --tw-exit-opacity: 0;
+}
+
+@utility fade-out-* {
+  --tw-exit-opacity: calc(var(--value) * 1%);
+}
+
+@utility zoom-in-* {
+  --tw-enter-scale: calc(var(--value) * 1%);
+}
+
+@utility zoom-out-* {
+  --tw-exit-scale: calc(var(--value) * 1%);
+}
+
+@utility spin-in-* {
+  --tw-enter-rotate: calc(var(--value) * 1deg);
+}
+
+@utility spin-out-* {
+  --tw-exit-rotate: calc(var(--value) * 1deg);
+}
+
+@utility slide-in-from-top-* {
+  --tw-enter-translate-y: calc(var(--value) * -1px);
+}
+
+@utility slide-in-from-bottom-* {
+  --tw-enter-translate-y: calc(var(--value) * 1px);
+}
+
+@utility slide-in-from-left-* {
+  --tw-enter-translate-x: calc(var(--value) * -1px);
+}
+
+@utility slide-in-from-right-* {
+  --tw-enter-translate-x: calc(var(--value) * 1px);
+}
+
+@utility slide-out-to-top-* {
+  --tw-exit-translate-y: calc(var(--value) * -1px);
+}
+
+@utility slide-out-to-bottom-* {
+  --tw-exit-translate-y: calc(var(--value) * 1px);
+}
+
+@utility slide-out-to-left-* {
+  --tw-exit-translate-x: calc(var(--value) * -1px);
+}
+
+@utility slide-out-to-right-* {
+  --tw-exit-translate-x: calc(var(--value) * 1px);
+}
+
+@utility duration-* {
+  animation-duration: calc(var(--value) * 1ms);
+}
 
 /* 
   GWA Design System v3.0 - Mobile First Africain
@@ -104,6 +192,29 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+@theme inline {
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+}
+
+@keyframes accordion-down {
+  from { height: 0; }
+  to { height: var(--radix-accordion-content-height); }
+}
+
+@keyframes accordion-up {
+  from { height: var(--radix-accordion-content-height); }
+  to { height: 0; }
+}
+
+@keyframes enter {
+  from { opacity: var(--tw-enter-opacity, 1); transform: translate3d(var(--tw-enter-translate-x, 0), var(--tw-enter-translate-y, 0), 0) scale3d(var(--tw-enter-scale, 1), var(--tw-enter-scale, 1), var(--tw-enter-scale, 1)) rotate(var(--tw-enter-rotate, 0)); }
+}
+
+@keyframes exit {
+  to { opacity: var(--tw-exit-opacity, 1); transform: translate3d(var(--tw-exit-translate-x, 0), var(--tw-exit-translate-y, 0), 0) scale3d(var(--tw-exit-scale, 1), var(--tw-exit-scale, 1), var(--tw-exit-scale, 1)) rotate(var(--tw-exit-rotate, 0)); }
+}
+
 @layer base {
   * {
     @apply border-border;
@@ -187,8 +298,63 @@
   background: hsl(var(--primary) / 0.15);
 }
 
-/* Focus visible ameliore */
 :focus-visible {
   outline: 2px solid hsl(var(--primary));
   outline-offset: 2px;
 }
+
+/* GWA Design Tokens */
+:root {
+  --gwa-green: #16a34a;
+  --gwa-green-50: #f0fdf4;
+  --gwa-amber: #f59e0b;
+  --gwa-amber-50: #fffbeb;
+  --gwa-warm: #1c1917;
+  --gwa-surface: #f8faf5;
+  --gwa-radius: 16px;
+}
+
+/* Ticker prix GWA */
+@keyframes gwa-ticker {
+  0%   { transform: translateX(100vw); }
+  100% { transform: translateX(-100%); }
+}
+.gwa-ticker { animation: gwa-ticker 40s linear infinite; white-space: nowrap; }
+.gwa-ticker:hover { animation-play-state: paused; }
+
+/* Shimmer skeleton */
+@keyframes gwa-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.gwa-skeleton {
+  background: linear-gradient(90deg,#f3f4f6 25%,#e5e7eb 50%,#f3f4f6 75%);
+  background-size: 200% 100%;
+  animation: gwa-shimmer 1.5s infinite;
+  border-radius: 8px;
+}
+
+/* Notification bell */
+@keyframes gwa-bell {
+  0%,100% { transform: rotate(0); }
+  10%,30%,50%,70%,90% { transform: rotate(-14deg); }
+  20%,40%,60%,80% { transform: rotate(14deg); }
+}
+.gwa-bell { animation: gwa-bell 0.7s ease-in-out; }
+
+/* Yelly typing dots */
+@keyframes gwa-dot {
+  0%,80%,100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
+.gwa-dot { animation: gwa-dot 1.2s infinite ease-in-out; }
+.gwa-dot:nth-child(1) { animation-delay: 0s; }
+.gwa-dot:nth-child(2) { animation-delay: 0.2s; }
+.gwa-dot:nth-child(3) { animation-delay: 0.4s; }
+
+/* iOS safe area */
+.gwa-safe-bottom { padding-bottom: max(env(safe-area-inset-bottom, 0px), 8px); }
+
+/* Scrollbar cachee */
+.gwa-no-scroll::-webkit-scrollbar { display: none; }
+.gwa-no-scroll { -ms-overflow-style: none; scrollbar-width: none; }

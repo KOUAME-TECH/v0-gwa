@@ -238,7 +238,7 @@ export default function AdminAnalyticsPage() {
       'producteur': 'Producteurs',
       'artisan': 'Artisans',
       'acheteur': 'Acheteurs',
-      'cooperative': 'Cooperatives',
+      'cooperative': 'Coopératives',
       'entreprise': 'Entreprises',
       'other': 'Autres'
     }
@@ -248,23 +248,23 @@ export default function AdminAnalyticsPage() {
   const getStatusLabel = (status: string) => {
     const labels: Record<string, string> = {
       'pending': 'En attente',
-      'confirmed': 'Confirmees',
-      'preparing': 'En preparation',
+      'confirmed': 'Confirmées',
+      'preparing': 'En préparation',
       'shipping': 'En livraison',
-      'delivered': 'Livrees',
-      'cancelled': 'Annulees'
+      'delivered': 'Livrées',
+      'cancelled': 'Annulées'
     }
     return labels[status] || status
   }
 
   const getCountryName = (code: string) => {
     const countries: Record<string, string> = {
-      'CI': 'Cote d\'Ivoire',
+      'CI': "Côte d'Ivoire",
       'GH': 'Ghana',
-      'SN': 'Senegal',
+      'SN': 'Sénégal',
       'BF': 'Burkina Faso',
       'ML': 'Mali',
-      'BJ': 'Benin',
+      'BJ': 'Bénin',
       'TG': 'Togo',
       'NE': 'Niger',
       'NG': 'Nigeria',
@@ -327,7 +327,7 @@ export default function AdminAnalyticsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">Analytics</h1>
-          <p className="text-muted-foreground">Statistiques detaillees de la plateforme</p>
+          <p className="text-muted-foreground">Statistiques détaillées de la plateforme</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={loadAnalytics}>
@@ -433,7 +433,7 @@ export default function AdminAnalyticsPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Utilisateurs par type</CardTitle>
-                <CardDescription>Repartition des utilisateurs par categorie</CardDescription>
+                <CardDescription>Répartition des utilisateurs par catégorie</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
@@ -518,8 +518,8 @@ export default function AdminAnalyticsPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Top categories</CardTitle>
-                <CardDescription>Categories les plus populaires</CardDescription>
+                <CardTitle>Top catégories</CardTitle>
+                <CardDescription>Catégories les plus populaires</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
@@ -609,7 +609,7 @@ export default function AdminAnalyticsPage() {
                 <div className="text-3xl font-bold">{data.totalCooperatives}</div>
                 <div className="flex items-center gap-2 mt-2">
                   <Badge className="bg-green-100 text-green-700">
-                    {data.verifiedCooperatives} verifiees
+                    {data.verifiedCooperatives} vérifiées
                   </Badge>
                   <Badge variant="outline">
                     {data.totalCooperatives - data.verifiedCooperatives} en attente

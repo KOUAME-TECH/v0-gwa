@@ -169,7 +169,7 @@ export default function PublierPage() {
       
       if (error) throw error
       
-      toast.success("Produit publie avec succes!")
+      toast.success("Produit publié avec succès !")
       router.push("/profil")
     } catch (error: any) {
       console.error("Error:", error)
@@ -191,7 +191,7 @@ export default function PublierPage() {
     setUploadProgress(0)
     
     try {
-      let mediaUrls: { url: string; type: string }[] = []
+      let mediaUrls: { url: string; type: string }[] | null = null
       
       if (images.length > 0) {
         const urls = await uploadImages('posts')
@@ -201,14 +201,14 @@ export default function PublierPage() {
       const { error } = await supabase.from("posts").insert({
         author_id: user.id,
         content: postContent.trim(),
-        media_urls: mediaUrls.length > 0 ? mediaUrls : null,
+        media_urls: mediaUrls,
         visibility: "public",
-        post_type: mediaUrls.length > 0 ? "media" : "standard",
+        post_type: mediaUrls ? "media" : "general",
       })
       
       if (error) throw error
       
-      toast.success("Publication creee!")
+      toast.success("Publication créée !")
       router.push("/")
     } catch (error: any) {
       console.error("Error:", error)
@@ -314,7 +314,7 @@ export default function PublierPage() {
   // Formulaire POST
   if (publishType === "post") {
     return (
-      <div className="min-h-screen bg-[#FFF6E5] pb-24">
+      <div className="min-h-screen bg-[#FFF6E5] pb-40">
         {FileInput}
         <header className="sticky top-0 z-50 bg-white border-b border-[#E5E7EB]">
           <div className="flex items-center justify-between h-14 px-4">
@@ -377,8 +377,8 @@ export default function PublierPage() {
           )}
         </div>
 
-        {/* Bottom toolbar */}
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#E5E7EB] p-4">
+        {/* Bottom toolbar - above bottom nav */}
+        <div className="fixed bottom-[76px] left-0 right-0 bg-white border-t border-[#E5E7EB] p-4 z-40">
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={images.length >= 4}
@@ -394,7 +394,7 @@ export default function PublierPage() {
 
   // Formulaire PRODUIT
   return (
-    <div className="min-h-screen bg-[#FFF6E5] pb-28">
+    <div className="min-h-screen bg-[#FFF6E5] pb-40">
       {FileInput}
       <header className="sticky top-0 z-50 bg-white border-b border-[#E5E7EB]">
         <div className="flex items-center justify-between h-14 px-4">
@@ -402,7 +402,13 @@ export default function PublierPage() {
             <ArrowLeft className="h-5 w-5 text-[#111827]" />
           </button>
           <h1 className="text-lg font-semibold text-[#111827]">Nouveau produit</h1>
-          <div className="w-16" />
+          <Button
+            onClick={handleSubmitProduct}
+            disabled={isSubmitting || !productForm.name || !productForm.price || !productForm.category_id}
+            className="bg-[#2F7D32] hover:bg-[#256025] text-white rounded-full px-5 h-9 disabled:opacity-50"
+          >
+            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Publier"}
+          </Button>
         </div>
       </header>
 
@@ -476,9 +482,9 @@ export default function PublierPage() {
           </div>
         </div>
 
-        {/* Categorie */}
+        {/* Catégorie */}
         <div>
-          <label className="text-sm font-medium text-[#111827] mb-3 block">Categorie *</label>
+          <label className="text-sm font-medium text-[#111827] mb-3 block">Catégorie *</label>
           <div className="flex flex-wrap gap-2">
             {filteredCategories.slice(0, 12).map((cat) => (
               <button
@@ -521,7 +527,7 @@ export default function PublierPage() {
             />
           </div>
           <div>
-            <label className="text-sm font-medium text-[#111827] mb-2 block">Unite</label>
+            <label className="text-sm font-medium text-[#111827] mb-2 block">Unité</label>
             <select
               value={productForm.unit}
               onChange={(e) => setProductForm({ ...productForm, unit: e.target.value })}
@@ -530,7 +536,7 @@ export default function PublierPage() {
               <option value="kg">Kilogramme</option>
               <option value="g">Gramme</option>
               <option value="L">Litre</option>
-              <option value="piece">Piece</option>
+              <option value="piece">Pièce</option>
               <option value="sac">Sac</option>
               <option value="lot">Lot</option>
             </select>
@@ -539,7 +545,7 @@ export default function PublierPage() {
 
         {/* Stock */}
         <div>
-          <label className="text-sm font-medium text-[#111827] mb-2 block">Quantite disponible</label>
+          <label className="text-sm font-medium text-[#111827] mb-2 block">Quantité disponible</label>
           <Input
             type="number"
             value={productForm.stock_quantity}
@@ -555,14 +561,14 @@ export default function PublierPage() {
           <Textarea
             value={productForm.description}
             onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
-            placeholder="Decrivez votre produit..."
+            placeholder="Décrivez votre produit..."
             className="min-h-[100px] rounded-xl border-[#E5E7EB] bg-white resize-none"
           />
         </div>
       </div>
 
-      {/* Fixed button */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-[#E5E7EB]">
+      {/* Fixed button - above bottom nav */}
+      <div className="fixed bottom-[76px] left-0 right-0 p-4 bg-white border-t border-[#E5E7EB] z-40">
         <Button 
           onClick={handleSubmitProduct}
           disabled={isSubmitting || !productForm.name || !productForm.price || !productForm.category_id}

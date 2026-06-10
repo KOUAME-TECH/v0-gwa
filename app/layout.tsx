@@ -4,6 +4,8 @@ import { Inter } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { BottomNav } from "@/components/bottom-nav"
 import { Toaster } from "@/components/ui/sonner"
+import { OfflineBanner } from "@/components/layout/offline-banner"
+import { PriceTicker } from "@/components/layout/price-ticker"
 import "./globals.css"
 
 const inter = Inter({
@@ -13,8 +15,8 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: "GWA - Green World Agriculture",
-  description: "Marketplace et reseau social pour l'agriculture et l'artisanat africain. Achetez, vendez et connectez-vous.",
+  title: "GWA - La Super App Africaine",
+  description: "Achetez, vendez, discutez et partagez. Le marketplace social africain qui connecte producteurs, artisans et acheteurs du monde entier.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
@@ -46,7 +48,9 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </head>
       <body className="font-sans antialiased min-h-dvh">
-        <main className="pb-20 safe-bottom">{children}</main>
+        <OfflineBanner />
+        <PriceTicker />
+        <main className="pb-[76px] safe-bottom">{children}</main>
         <BottomNav />
         <Toaster position="top-center" />
         <Analytics />

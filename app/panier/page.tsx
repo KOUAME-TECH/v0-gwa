@@ -26,6 +26,7 @@ interface CartItem {
     unit: string
     images: string[]
     product_type: string
+    seller_id: string
     profiles: {
       full_name: string
       city: string
@@ -49,6 +50,7 @@ export default function CartPage() {
   const [step, setStep] = useState(1)
   const [paymentMethod, setPaymentMethod] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
+  const [checkoutError, setCheckoutError] = useState("")
   const [user, setUser] = useState<any>(null)
   const [deliveryAddress, setDeliveryAddress] = useState({
     name: "", phone: "", address: "", city: "", country: "ci"
@@ -90,7 +92,7 @@ export default function CartPage() {
       .select(`
         id, quantity,
         product:product_id (
-          id, name, price, unit, images, product_type,
+          id, name, price, unit, images, product_type, seller_id,
           profiles:seller_id (full_name, city, country)
         )
       `)
@@ -127,43 +129,99 @@ export default function CartPage() {
       setStep(step + 1)
       return
     }
-    
+
     if (!user) {
       router.push("/auth/login?redirect=/panier")
       return
     }
 
     setIsProcessing(true)
-    
+
     try {
-      const { data: order, error: orderError } = await supabase
-        .from("orders")
-        .insert({
-          buyer_id: user.id,
-          total_amount: total,
-          status: "pending",
-          payment_method: paymentMethod,
-          payment_status: "pending",
-          shipping_address: deliveryAddress,
+      // Grouper les articles par vendeur : une commande par vendeur (marketplace)
+      const itemsBySeller = new Map<string, CartItem[]>()
+      for (const item of cart) {
+        const sellerId = item.product.seller_id
+        if (!sellerId) continue
+        const existing = itemsBySeller.get(sellerId) || []
+        existing.push(item)
+        itemsBySeller.set(sellerId, existing)
+      }
+
+      if (itemsBySeller.size === 0) {
+        throw new Error("Aucun vendeur valide dans le panier")
+      }
+
+      const createdOrderIds: string[] = []
+
+      for (const [sellerId, items] of itemsBySeller) {
+        const orderSubtotal = items.reduce(
+          (sum, it) => sum + it.product.price * it.quantity,
+          0,
+        )
+        // Repartir les frais au prorata du sous-total de chaque vendeur
+        const ratio = subtotal > 0 ? orderSubtotal / subtotal : 0
+        const orderShipping = Math.round(deliveryFee * ratio)
+        const orderService = Math.round(serviceFee * ratio)
+        const orderTotal = orderSubtotal + orderShipping + orderService
+
+        const { data: order, error: orderError } = await supabase
+          .from("orders")
+          .insert({
+            buyer_id: user.id,
+            seller_id: sellerId,
+            subtotal: orderSubtotal,
+            total_amount: orderTotal,
+            shipping_cost: orderShipping,
+            service_fee: orderService,
+            status: "pending",
+            payment_method: paymentMethod,
+            payment_status: "pending",
+            shipping_address: deliveryAddress.address || deliveryAddress.name,
+            shipping_city: deliveryAddress.city,
+            shipping_country: deliveryAddress.country,
+            shipping_phone: deliveryAddress.phone,
+            order_number: `GWA-${Date.now().toString(36).toUpperCase()}-${createdOrderIds.length + 1}`,
+          })
+          .select()
+          .single()
+
+        if (orderError) throw orderError
+
+        const orderItems = items.map((item) => ({
+          order_id: order.id,
+          product_id: item.product.id,
+          quantity: item.quantity,
+          unit_price: item.product.price,
+          total_price: item.product.price * item.quantity,
+        }))
+
+        const { error: itemsError } = await supabase
+          .from("order_items")
+          .insert(orderItems)
+        if (itemsError) throw itemsError
+
+        // Trace d'audit de creation de commande
+        await supabase.from("order_audit_log").insert({
+          order_id: order.id,
+          performed_by: user.id,
+          action: "order_created",
+          new_value: "pending",
+          notes: `Commande creee via panier (${items.length} article(s))`,
         })
-        .select()
-        .single()
 
-      if (orderError) throw orderError
+        createdOrderIds.push(order.id)
+      }
 
-      const orderItems = cart.map(item => ({
-        order_id: order.id,
-        product_id: item.product.id,
-        quantity: item.quantity,
-        unit_price: item.product.price,
-        total_price: item.product.price * item.quantity
-      }))
-
-      await supabase.from("order_items").insert(orderItems)
+      // Vider le panier une fois toutes les commandes creees
       await supabase.from("cart_items").delete().eq("user_id", user.id)
 
-      router.push(`/commandes/confirmation?id=${order.id}`)
-    } catch {
+      router.push(`/commandes/confirmation?order=${createdOrderIds[0]}`)
+    } catch (err) {
+      console.log("[v0] Checkout error:", err)
+      setCheckoutError(
+        "Une erreur est survenue lors de la commande. Reessayez.",
+      )
       setIsProcessing(false)
     }
   }
@@ -191,14 +249,14 @@ export default function CartPage() {
         </div>
         <h2 className="text-xl font-bold mb-2">Connectez-vous</h2>
         <p className="text-muted-foreground text-sm text-center mb-6 max-w-xs">
-          Pour voir votre panier, vous devez etre connecte
+          Pour voir votre panier, vous devez être connecté
         </p>
         <div className="flex flex-col gap-3 w-full max-w-xs">
           <Link href="/auth/login?redirect=/panier">
             <Button className="w-full h-12 rounded-xl">Se connecter</Button>
           </Link>
           <Link href="/auth/signup">
-            <Button variant="outline" className="w-full h-12 rounded-xl bg-transparent">Creer un compte</Button>
+            <Button variant="outline" className="w-full h-12 rounded-xl bg-transparent">Créer un compte</Button>
           </Link>
         </div>
       </div>
@@ -361,7 +419,7 @@ export default function CartPage() {
                   onChange={(e) => setDeliveryAddress({...deliveryAddress, country: e.target.value})}
                   className="mt-1.5 w-full h-12 px-3 rounded-xl border bg-background text-sm"
                 >
-                  <option value="ci">Cote d'Ivoire</option>
+                  <option value="ci">Côte d{"'"}Ivoire</option>
                   <option value="sn">Senegal</option>
                   <option value="cm">Cameroun</option>
                   <option value="ml">Mali</option>
@@ -408,7 +466,10 @@ export default function CartPage() {
       )}
 
       {/* Fixed Bottom Summary */}
-      <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-border p-4 pb-6 space-y-3">
+      <div className="fixed bottom-[76px] left-0 right-0 bg-background border-t border-border p-4 pb-4 space-y-3 z-40">
+        {checkoutError && (
+          <p className="text-sm text-destructive text-center">{checkoutError}</p>
+        )}
         <div className="space-y-2 text-sm">
           <div className="flex justify-between">
             <span className="text-muted-foreground">Sous-total</span>

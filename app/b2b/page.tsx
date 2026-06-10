@@ -24,14 +24,16 @@ import {
 } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { fr } from "date-fns/locale"
+import { toast } from "sonner"
 
 interface RFQ {
   id: string
+  rfq_number: string
   buyer_id: string
   title: string
   description: string
-  category: string
-  quantity: number
+  product_category: string
+  quantity_needed: number
   unit: string
   budget_min: number | null
   budget_max: number | null
@@ -50,12 +52,16 @@ interface RFQ {
 interface RFQResponse {
   id: string
   rfq_id: string
-  seller_id: string
+  supplier_id: string
   proposed_price: number
   delivery_time_days: number
-  message: string
+  notes: string
   status: string
   created_at: string
+  rfq_requests?: {
+    title: string
+    status: string
+  }
   profiles?: {
     full_name: string
     company_name: string | null
@@ -118,7 +124,7 @@ export default function B2BPage() {
           *,
           rfq_requests (title, status)
         `)
-        .eq('seller_id', user.id)
+        .eq('supplier_id', user.id)
         .order('created_at', { ascending: false })
 
       if (responsesData) setMyResponses(responsesData)
@@ -140,31 +146,44 @@ export default function B2BPage() {
   }
 
   const handleCreateRfq = async () => {
-    if (!user) return
+    if (!user) { toast.error("Connectez-vous pour publier un devis"); return }
+    if (!newRfq.title.trim()) { toast.error("Le titre est obligatoire"); return }
+    if (!newRfq.description.trim()) { toast.error("La description est obligatoire"); return }
 
     setCreating(true)
+
+    const rfqNumber = `RFQ-${Date.now().toString(36).toUpperCase()}`
 
     const { data, error } = await supabase
       .from('rfq_requests')
       .insert({
+        rfq_number: rfqNumber,
         buyer_id: user.id,
-        title: newRfq.title,
-        description: newRfq.description,
-        category: newRfq.category,
-        quantity: parseFloat(newRfq.quantity),
+        title: newRfq.title.trim(),
+        description: newRfq.description.trim(),
+        product_category: newRfq.category || 'general',
+        quantity_needed: newRfq.quantity ? parseFloat(newRfq.quantity) : 1,
         unit: newRfq.unit,
         budget_min: newRfq.budget_min ? parseFloat(newRfq.budget_min) : null,
         budget_max: newRfq.budget_max ? parseFloat(newRfq.budget_max) : null,
-        delivery_location: newRfq.delivery_location,
-        delivery_deadline: newRfq.delivery_deadline,
+        delivery_location: newRfq.delivery_location || null,
+        delivery_deadline: newRfq.delivery_deadline || null,
         status: 'open'
       })
       .select()
       .single()
 
+    if (error) {
+      toast.error("Erreur: " + (error.message || "Impossible de publier le devis"))
+      setCreating(false)
+      return
+    }
+
     if (data) {
       setMyRfqs([data, ...myRfqs])
+      setRfqs([data, ...rfqs])
       setShowCreateDialog(false)
+      toast.success("Demande de devis publiee avec succes !")
       setNewRfq({
         title: "",
         description: "",
@@ -190,9 +209,9 @@ export default function B2BPage() {
 
   const statusLabels: Record<string, string> = {
     open: "Ouvert",
-    closed: "Ferme",
-    awarded: "Attribue",
-    cancelled: "Annule"
+    closed: "Fermé",
+    awarded: "Attribué",
+    cancelled: "Annulé"
   }
 
   if (loading) {
@@ -218,7 +237,7 @@ export default function B2BPage() {
           <div>
             <h1 className="text-3xl font-bold mb-2">Espace B2B</h1>
             <p className="text-muted-foreground">
-              Demandes de devis et opportunites commerciales en gros
+              Demandes de devis et opportunités commerciales en gros
             </p>
           </div>
           {user && (
@@ -229,11 +248,11 @@ export default function B2BPage() {
                   Nouvelle demande de devis
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl">
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                  <DialogTitle>Creer une demande de devis</DialogTitle>
+                  <DialogTitle>Créer une demande de devis</DialogTitle>
                   <DialogDescription>
-                    Decrivez votre besoin pour recevoir des propositions de fournisseurs
+                    Décrivez votre besoin pour recevoir des propositions de fournisseurs
                   </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
@@ -246,32 +265,32 @@ export default function B2BPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Description detaillee</Label>
+                    <Label>Description détaillée</Label>
                     <Textarea
-                      placeholder="Decrivez vos besoins en detail..."
+                      placeholder="Décrivez vos besoins en détail..."
                       value={newRfq.description}
                       onChange={(e) => setNewRfq({...newRfq, description: e.target.value})}
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Categorie</Label>
+                      <Label>Catégorie</Label>
                       <Select value={newRfq.category} onValueChange={(v) => setNewRfq({...newRfq, category: v})}>
                         <SelectTrigger>
-                          <SelectValue placeholder="Selectionnez" />
+                          <SelectValue placeholder="Sélectionnez" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="cereales">Cereales</SelectItem>
+                          <SelectItem value="cereales">Céréales</SelectItem>
                           <SelectItem value="fruits">Fruits</SelectItem>
-                          <SelectItem value="legumes">Legumes</SelectItem>
-                          <SelectItem value="oleagineux">Oleagineux</SelectItem>
-                          <SelectItem value="cacao-cafe">Cacao & Cafe</SelectItem>
+                          <SelectItem value="legumes">Légumes</SelectItem>
+                          <SelectItem value="oleagineux">Oléagineux</SelectItem>
+                          <SelectItem value="cacao-cafe">Cacao & Café</SelectItem>
                           <SelectItem value="artisanat">Artisanat</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label>Quantite souhaitee</Label>
+                      <Label>Quantité souhaitée</Label>
                       <div className="flex gap-2">
                         <Input
                           type="number"
@@ -286,7 +305,7 @@ export default function B2BPage() {
                           <SelectContent>
                             <SelectItem value="kg">kg</SelectItem>
                             <SelectItem value="tonnes">tonnes</SelectItem>
-                            <SelectItem value="unites">unites</SelectItem>
+                            <SelectItem value="unites">unités</SelectItem>
                             <SelectItem value="cartons">cartons</SelectItem>
                           </SelectContent>
                         </Select>
@@ -337,7 +356,7 @@ export default function B2BPage() {
                     Annuler
                   </Button>
                   <Button onClick={handleCreateRfq} disabled={creating || !newRfq.title}>
-                    {creating ? "Creation..." : "Publier la demande"}
+                    {creating ? "Création..." : "Publier la demande"}
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -376,7 +395,7 @@ export default function B2BPage() {
               </div>
               <div>
                 <p className="text-2xl font-bold">{myResponses.length}</p>
-                <p className="text-xs text-muted-foreground">Mes reponses</p>
+                <p className="text-xs text-muted-foreground">Mes réponses</p>
               </div>
             </CardContent>
           </Card>
@@ -400,7 +419,7 @@ export default function B2BPage() {
           <TabsList>
             <TabsTrigger value="marketplace">Marketplace ({rfqs.length})</TabsTrigger>
             <TabsTrigger value="my-rfqs">Mes demandes ({myRfqs.length})</TabsTrigger>
-            <TabsTrigger value="my-responses">Mes reponses ({myResponses.length})</TabsTrigger>
+            <TabsTrigger value="my-responses">Mes réponses ({myResponses.length})</TabsTrigger>
           </TabsList>
 
           <TabsContent value="marketplace" className="mt-6">
@@ -409,7 +428,7 @@ export default function B2BPage() {
                 <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                 <h3 className="text-lg font-semibold mb-2">Aucune demande ouverte</h3>
                 <p className="text-muted-foreground">
-                  Les demandes de devis apparaitront ici
+                  Les demandes de devis apparaîtront ici
                 </p>
               </Card>
             ) : (
@@ -425,13 +444,13 @@ export default function B2BPage() {
             {myRfqs.length === 0 ? (
               <Card className="p-12 text-center">
                 <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold mb-2">Aucune demande creee</h3>
+                <h3 className="text-lg font-semibold mb-2">Aucune demande créée</h3>
                 <p className="text-muted-foreground mb-4">
-                  Creez votre premiere demande de devis
+                  Créez votre première demande de devis
                 </p>
                 <Button onClick={() => setShowCreateDialog(true)}>
                   <Plus className="h-4 w-4 mr-2" />
-                  Creer une demande
+                  Créer une demande
                 </Button>
               </Card>
             ) : (
@@ -447,9 +466,9 @@ export default function B2BPage() {
             {myResponses.length === 0 ? (
               <Card className="p-12 text-center">
                 <MessageSquare className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold mb-2">Aucune reponse envoyee</h3>
+                <h3 className="text-lg font-semibold mb-2">Aucune réponse envoyée</h3>
                 <p className="text-muted-foreground">
-                  Repondez aux demandes de devis pour voir vos propositions ici
+                  Répondez aux demandes de devis pour voir vos propositions ici
                 </p>
               </Card>
             ) : (
@@ -459,9 +478,9 @@ export default function B2BPage() {
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="font-medium">{(response as any).rfq_requests?.title}</p>
+                          <p className="font-medium">{response.rfq_requests?.title}</p>
                           <p className="text-sm text-muted-foreground">
-                            Prix propose: {response.proposed_price.toLocaleString()} FCFA
+                            Prix proposé : {response.proposed_price.toLocaleString()} FCFA
                           </p>
                         </div>
                         <Badge className={statusColors[response.status]}>
@@ -522,7 +541,7 @@ function RFQCard({ rfq, showBuyer, showResponses }: {
         <div className="grid grid-cols-2 gap-2 text-sm">
           <div className="flex items-center gap-2">
             <Package className="h-4 w-4 text-muted-foreground" />
-            <span>{rfq.quantity} {rfq.unit}</span>
+            <span>{rfq.quantity_needed} {rfq.unit}</span>
           </div>
           <div className="flex items-center gap-2">
             <DollarSign className="h-4 w-4 text-muted-foreground" />

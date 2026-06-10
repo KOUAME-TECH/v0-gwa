@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
@@ -75,7 +75,7 @@ interface Product {
   }
 }
 
-export default function AdminProductsPage() {
+function AdminProductsContent() {
   const searchParams = useSearchParams()
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
@@ -220,8 +220,8 @@ export default function AdminProductsPage() {
   const getModerationBadge = (status: string) => {
     const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
       pending: { label: "En attente", variant: "secondary" },
-      approved: { label: "Approuve", variant: "default" },
-      rejected: { label: "Rejete", variant: "destructive" },
+      approved: { label: "Approuvé", variant: "default" },
+      rejected: { label: "Rejeté", variant: "destructive" },
     }
     const config = statusConfig[status] || { label: status, variant: "outline" as const }
     return <Badge variant={config.variant}>{config.label}</Badge>
@@ -264,8 +264,8 @@ export default function AdminProductsPage() {
                 <SelectContent>
                   <SelectItem value="all">Tous</SelectItem>
                   <SelectItem value="pending">En attente</SelectItem>
-                  <SelectItem value="approved">Approuves</SelectItem>
-                  <SelectItem value="rejected">Rejetes</SelectItem>
+                  <SelectItem value="approved">Approuvés</SelectItem>
+                  <SelectItem value="rejected">Rejetés</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={filterType} onValueChange={setFilterType}>
@@ -289,7 +289,7 @@ export default function AdminProductsPage() {
           ) : products.length === 0 ? (
             <div className="text-center py-12">
               <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-              <p className="text-muted-foreground">Aucun produit trouve</p>
+              <p className="text-muted-foreground">Aucun produit trouvé</p>
             </div>
           ) : (
             <>
@@ -301,7 +301,7 @@ export default function AdminProductsPage() {
                       <TableHead>Vendeur</TableHead>
                       <TableHead>Prix</TableHead>
                       <TableHead>Stock</TableHead>
-                      <TableHead>Moderation</TableHead>
+                      <TableHead>Modération</TableHead>
                       <TableHead>Date</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
@@ -344,7 +344,7 @@ export default function AdminProductsPage() {
                               </p>
                               {product.seller?.is_verified && (
                                 <Badge variant="outline" className="text-xs py-0 border-green-500 text-green-600">
-                                  Verifie
+                                  Vérifié
                                 </Badge>
                               )}
                             </div>
@@ -410,7 +410,7 @@ export default function AdminProductsPage() {
 
               <div className="flex items-center justify-between mt-4">
                 <p className="text-sm text-muted-foreground">
-                  Affichage de {page * pageSize + 1} a {Math.min((page + 1) * pageSize, totalCount)} sur {totalCount}
+                  Affichage de {page * pageSize + 1} à {Math.min((page + 1) * pageSize, totalCount)} sur {totalCount}
                 </p>
                 <div className="flex gap-2">
                   <Button 
@@ -420,7 +420,7 @@ export default function AdminProductsPage() {
                     disabled={page === 0}
                     className="bg-transparent"
                   >
-                    Precedent
+                    Précédent
                   </Button>
                   <Button 
                     variant="outline" 
@@ -448,7 +448,7 @@ export default function AdminProductsPage() {
             <DialogDescription>
               {moderationAction === "approve" 
                 ? "Ce produit sera visible sur la marketplace."
-                : "Ce produit ne sera pas publie sur la marketplace."}
+                : "Ce produit ne sera pas publié sur la marketplace."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -483,8 +483,8 @@ export default function AdminProductsPage() {
               <Textarea
                 id="notes"
                 placeholder={moderationAction === "approve" 
-                  ? "Ajoutez des notes si necessaire..."
-                  : "Expliquez pourquoi ce produit est rejete..."}
+                  ? "Ajoutez des notes si nécessaire..."
+                  : "Expliquez pourquoi ce produit est rejeté..."}
                 value={moderationNotes}
                 onChange={(e) => setModerationNotes(e.target.value)}
               />
@@ -505,5 +505,13 @@ export default function AdminProductsPage() {
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+export default function AdminProductsPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-[50vh]"><div className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin" /></div>}>
+      <AdminProductsContent />
+    </Suspense>
   )
 }

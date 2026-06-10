@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
@@ -29,9 +29,9 @@ const filters = [
   { value: "artisanat", label: "Artisanat" },
 ]
 
-const trending = ["Cacao", "Cafe", "Mangue", "Tissage", "Karite", "Miel"]
+const trending = ["Cacao", "Café", "Mangue", "Tissage", "Karité", "Miel"]
 
-export default function RecherchePage() {
+function RechercheContent() {
   const searchParams = useSearchParams()
   const initialQuery = searchParams.get("q") || ""
   
@@ -183,7 +183,7 @@ export default function RecherchePage() {
           // Results grid
           <>
             <p className="text-sm text-neutral-500 mb-4">
-              {products.length} resultat{products.length > 1 ? "s" : ""}
+              {products.length} résultat{products.length > 1 ? "s" : ""}
             </p>
             <div className="grid grid-cols-2 gap-3">
               {products.map((product) => (
@@ -208,7 +208,7 @@ export default function RecherchePage() {
                     {product.profiles?.is_verified && (
                       <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-white/90 rounded-full px-2 py-0.5">
                         <BadgeCheck className="h-3 w-3 text-[#2F7D32]" />
-                        <span className="text-[10px] font-medium text-[#111827]">Verifie</span>
+                        <span className="text-[10px] font-medium text-[#111827]">Vérifié</span>
                       </div>
                     )}
                   </div>
@@ -230,5 +230,13 @@ export default function RecherchePage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function RecherchePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-white flex items-center justify-center"><div className="w-8 h-8 border-3 border-neutral-300 border-t-neutral-900 rounded-full animate-spin" /></div>}>
+      <RechercheContent />
+    </Suspense>
   )
 }

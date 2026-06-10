@@ -35,11 +35,11 @@ export default function ProductsPage() {
       
       if (!user) return
 
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .eq('seller_id', user.id)
-        .order('created_at', { ascending: false })
+  const { data, error } = await supabase
+    .from('products')
+    .select('id, name, price, unit, images, description, origin_country, origin_region, is_organic, is_fair_trade, is_bulk_available, min_bulk_quantity, product_type, seller_id, category_id, status, likes_count, comments_count, shares_count, created_at, updated_at')
+    .eq('seller_id', user.id)
+    .order('created_at', { ascending: false })
 
       if (!error && data) {
         setProducts(data)
@@ -89,10 +89,10 @@ export default function ProductsPage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold">Mes Produits</h1>
-            <p className="text-muted-foreground">Gerez vos produits en vente sur GWA</p>
+            <p className="text-muted-foreground">Gérez vos produits en vente sur GWA</p>
           </div>
           <Button asChild>
-            <Link href="/dashboard/products/new">
+            <Link href="/publier">
               <Plus className="h-4 w-4 mr-2" />
               Ajouter un produit
             </Link>
@@ -127,7 +127,7 @@ export default function ProductsPage() {
               </p>
               {!searchQuery && (
                 <Button asChild>
-                  <Link href="/dashboard/products/new">
+                  <Link href="/publier">
                     <Plus className="h-4 w-4 mr-2" />
                     Ajouter votre premier produit
                   </Link>

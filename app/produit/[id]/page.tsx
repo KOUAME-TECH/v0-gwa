@@ -60,7 +60,9 @@ export default function ProduitPage() {
       const { data } = await supabase
         .from("products")
         .select(`
-          *,
+          id, name, price, unit, images, description, origin_country, origin_region,
+          is_organic, is_fair_trade, is_bulk_available, min_bulk_quantity, product_type,
+          seller_id, category_id, status, likes_count, comments_count, shares_count, created_at, updated_at,
           profiles!products_seller_id_fkey(id, full_name, avatar_url, is_verified, city, country, rating),
           categories(name)
         `)
@@ -114,7 +116,7 @@ export default function ProduitPage() {
     if (error) {
       toast.error("Erreur")
     } else {
-      toast.success("Ajoute au panier")
+      toast.success("Ajouté au panier")
     }
   }
 
@@ -137,7 +139,7 @@ export default function ProduitPage() {
       await navigator.share({ title: product?.name, url: window.location.href })
     } else {
       await navigator.clipboard.writeText(window.location.href)
-      toast.success("Lien copie")
+      toast.success("Lien copié")
     }
   }
 
@@ -159,7 +161,7 @@ export default function ProduitPage() {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center p-5">
         <div className="text-center">
-          <h2 className="text-xl font-semibold mb-2">Produit non trouve</h2>
+          <h2 className="text-xl font-semibold mb-2">Produit non trouvé</h2>
           <Link href="/recherche">
             <Button className="rounded-full">Retour</Button>
           </Link>
@@ -174,7 +176,7 @@ export default function ProduitPage() {
   const totalPrice = product.price * quantity
 
   return (
-    <div className="min-h-screen bg-white pb-32">
+    <div className="min-h-screen bg-white pb-44">
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-50 p-4 flex items-center justify-between">
         <button 
@@ -317,7 +319,7 @@ export default function ProduitPage() {
       </div>
 
       {/* Bottom Bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-neutral-100 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+      <div className="fixed bottom-[76px] left-0 right-0 bg-white border-t border-neutral-100 p-4 z-40">
         <div className="flex items-center gap-4">
           {/* Quantity */}
           <div className="flex items-center gap-1 bg-neutral-100 rounded-full p-1">

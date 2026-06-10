@@ -156,7 +156,7 @@ export default function ProfilePage() {
   const getUserTypeLabel = (type: string) => {
     const types: Record<string, string> = {
       'producteur': 'Producteur', 'artisan': 'Artisan', 'acheteur': 'Acheteur',
-      'cooperative': 'Cooperative', 'entreprise': 'Entreprise', 'transformateur': 'Transformateur'
+      'cooperative': 'Coopérative', 'entreprise': 'Entreprise', 'transformateur': 'Transformateur'
     }
     return types[type] || type
   }
@@ -178,10 +178,10 @@ export default function ProfilePage() {
         <Navigation />
         <main className="flex-1 flex items-center justify-center">
           <div className="text-center">
-            <h1 className="text-2xl font-bold mb-2">Profil non trouve</h1>
-            <p className="text-muted-foreground mb-4">Ce profil n'existe pas ou a ete supprime.</p>
+            <h1 className="text-2xl font-bold mb-2">Profil non trouvé</h1>
+            <p className="text-muted-foreground mb-4">Ce profil n{"'"}existe pas ou a été supprimé.</p>
             <Link href="/network">
-              <Button>Retour au reseau</Button>
+              <Button>Retour au réseau</Button>
             </Link>
           </div>
         </main>

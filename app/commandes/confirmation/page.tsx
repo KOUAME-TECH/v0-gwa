@@ -15,9 +15,9 @@ interface Order {
   order_number: string
   total_amount: number
   status: string
-  delivery_address: string
-  delivery_city: string
-  delivery_country: string
+  shipping_address: string
+  shipping_city: string
+  shipping_country: string
   payment_method: string
   payment_status: string
   created_at: string
@@ -81,10 +81,10 @@ function ConfirmationContent() {
   }
 
   const orderStatuses = [
-    { status: "pending", label: "Commande confirmee", icon: CheckCircle2, completed: true },
-    { status: "confirmed", label: "En preparation", icon: Package, completed: order?.status !== 'pending' },
+    { status: "pending", label: "Commande confirmée", icon: CheckCircle2, completed: true },
+    { status: "confirmed", label: "En préparation", icon: Package, completed: order?.status !== 'pending' },
     { status: "shipped", label: "En cours de livraison", icon: Truck, completed: order?.status === 'shipped' || order?.status === 'delivered' },
-    { status: "delivered", label: "Livree", icon: MapPin, completed: order?.status === 'delivered' }
+    { status: "delivered", label: "Livrée", icon: MapPin, completed: order?.status === 'delivered' }
   ]
 
   if (loading) {
@@ -108,7 +108,7 @@ function ConfirmationContent() {
             <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
               <CheckCircle2 className="h-10 w-10 text-primary" />
             </div>
-            <h1 className="text-3xl font-bold mb-2">Commande Confirmee !</h1>
+            <h1 className="text-3xl font-bold mb-2">Commande Confirmée !</h1>
             <p className="text-muted-foreground mb-8">
               Merci pour votre commande. Vous recevrez un SMS de confirmation sous peu.
             </p>
@@ -122,7 +122,7 @@ function ConfirmationContent() {
               <Button asChild>
                 <Link href="/">
                   <Home className="mr-2 h-4 w-4" />
-                  Retour a l'accueil
+                  Retour à l{"'"}accueil
                 </Link>
               </Button>
             </div>
@@ -143,7 +143,7 @@ function ConfirmationContent() {
             <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
               <CheckCircle2 className="h-10 w-10 text-primary" />
             </div>
-            <h1 className="text-3xl font-bold mb-2">Commande Confirmee !</h1>
+            <h1 className="text-3xl font-bold mb-2">Commande Confirmée !</h1>
             <p className="text-muted-foreground">
               Merci pour votre commande. Vous recevrez un SMS de confirmation sous peu.
             </p>
@@ -154,14 +154,14 @@ function ConfirmationContent() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <div>
-                  <p className="text-sm text-muted-foreground">Numero de commande</p>
+                  <p className="text-sm text-muted-foreground">Numéro de commande</p>
                   <p className="font-mono font-bold">{order.order_number || `GWA-${order.id.slice(0, 8).toUpperCase()}`}</p>
                 </div>
                 <Badge variant="secondary">
                   {order.status === 'pending' ? 'En attente' : 
-                   order.status === 'confirmed' ? 'Confirmee' :
-                   order.status === 'shipped' ? 'Expediee' : 
-                   order.status === 'delivered' ? 'Livree' : order.status}
+                   order.status === 'confirmed' ? 'Confirmée' :
+                   order.status === 'shipped' ? 'Expédiée' : 
+                   order.status === 'delivered' ? 'Livrée' : order.status}
                 </Badge>
               </div>
 
@@ -188,13 +188,13 @@ function ConfirmationContent() {
 
               {/* Order Items */}
               <div className="space-y-3 mb-6">
-                <h3 className="font-medium">Articles commandes</h3>
+                <h3 className="font-medium">Articles commandés</h3>
                 {order.order_items?.map((item, i) => (
                   <div key={i} className="flex items-center justify-between p-3 bg-muted rounded-lg">
                     <div>
                       <p className="font-medium">{item.products?.name || 'Produit'}</p>
                       <p className="text-sm text-muted-foreground">
-                        {item.quantity} {item.products?.unit || 'unite'}(s)
+                        {item.quantity} {item.products?.unit || 'unité'}(s)
                       </p>
                     </div>
                     <p className="font-medium">{(item.quantity * item.unit_price).toLocaleString()} FCFA</p>
@@ -215,15 +215,15 @@ function ConfirmationContent() {
                   <div className="flex items-center gap-2">
                     <MapPin className="h-4 w-4 text-muted-foreground" />
                     <span>
-                      {order.delivery_address}
-                      {order.delivery_city && `, ${order.delivery_city}`}
-                      {order.delivery_country && `, ${order.delivery_country}`}
+                      {order.shipping_address}
+                      {order.shipping_city && `, ${order.shipping_city}`}
+                      {order.shipping_country && `, ${order.shipping_country}`}
                     </span>
                   </div>
                   {order.estimated_delivery && (
                     <div className="flex items-center gap-2">
                       <Clock className="h-4 w-4 text-muted-foreground" />
-                      <span>Livraison estimee: {order.estimated_delivery}</span>
+                      <span>Livraison estimée : {order.estimated_delivery}</span>
                     </div>
                   )}
                 </div>

@@ -50,10 +50,11 @@ interface Order {
 
 interface AuditLog {
   id: string
-  old_status: string
-  new_status: string
-  changed_by: string
-  change_reason: string | null
+  action: string
+  old_value: string | null
+  new_value: string | null
+  performed_by: uuid | null
+  notes: string | null
   ip_address: string | null
   created_at: string
   profiles?: {
@@ -64,11 +65,11 @@ interface AuditLog {
 const orderStatuses = {
   draft: { label: "Brouillon", color: "bg-gray-500", icon: FileText },
   pending: { label: "En attente", color: "bg-yellow-500", icon: Clock },
-  confirmed: { label: "Confirmee", color: "bg-blue-500", icon: CheckCircle2 },
-  preparing: { label: "En preparation", color: "bg-purple-500", icon: Package },
+  confirmed: { label: "Confirmée", color: "bg-blue-500", icon: CheckCircle2 },
+  preparing: { label: "En préparation", color: "bg-purple-500", icon: Package },
   shipping: { label: "En livraison", color: "bg-orange-500", icon: Truck },
-  delivered: { label: "Livree", color: "bg-green-500", icon: CheckCircle2 },
-  cancelled: { label: "Annulee", color: "bg-red-500", icon: XCircle },
+  delivered: { label: "Livrée", color: "bg-green-500", icon: CheckCircle2 },
+  cancelled: { label: "Annulée", color: "bg-red-500", icon: XCircle },
 }
 
 export default function OrdersPage() {
@@ -100,7 +101,7 @@ export default function OrdersPage() {
       .from('orders')
       .select(`
         *,
-        seller:seller_id (full_name, company_name),
+        seller:seller_id (full_name, city),
         order_items (
           id,
           quantity,
@@ -116,7 +117,7 @@ export default function OrdersPage() {
       .from('orders')
       .select(`
         *,
-        buyer:buyer_id (full_name, company_name),
+        buyer:buyer_id (full_name, city),
         order_items (
           id,
           quantity,
@@ -283,7 +284,7 @@ export default function OrdersPage() {
               </div>
               <div>
                 <p className="text-2xl font-bold">{orders.filter(o => o.status === "delivered").length}</p>
-                <p className="text-sm text-muted-foreground">Livrees</p>
+                <p className="text-sm text-muted-foreground">Livrées</p>
               </div>
             </CardContent>
           </Card>
@@ -325,8 +326,8 @@ export default function OrdersPage() {
           <TabsList>
             <TabsTrigger value="all">Toutes ({orders.length})</TabsTrigger>
             <TabsTrigger value="active">En cours ({orders.filter(o => ["pending", "confirmed", "preparing", "shipping"].includes(o.status)).length})</TabsTrigger>
-            <TabsTrigger value="delivered">Livrees ({orders.filter(o => o.status === "delivered").length})</TabsTrigger>
-            <TabsTrigger value="cancelled">Annulees ({orders.filter(o => o.status === "cancelled").length})</TabsTrigger>
+            <TabsTrigger value="delivered">Livrées ({orders.filter(o => o.status === "delivered").length})</TabsTrigger>
+            <TabsTrigger value="cancelled">Annulées ({orders.filter(o => o.status === "cancelled").length})</TabsTrigger>
           </TabsList>
 
           <TabsContent value="all" className="mt-6">
@@ -335,7 +336,7 @@ export default function OrdersPage() {
                 <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                 <h3 className="text-lg font-semibold mb-2">Aucune commande</h3>
                 <p className="text-muted-foreground mb-4">
-                  Vos commandes apparaitront ici
+                  Vos commandes apparaîtront ici
                 </p>
                 <Link href="/agriculture">
                   <Button>Explorer les produits</Button>

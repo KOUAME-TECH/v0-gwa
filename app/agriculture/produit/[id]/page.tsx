@@ -26,10 +26,10 @@ export default function ProductDetailPage({ params }: { params: { id: string } }
     id: params.id,
     name: "Cacao Bio Premium Grade A",
     category: "Cacao",
-    description: "Feves de cacao de haute qualite, cultivees de maniere biologique dans les plantations de Soubre. Parfait pour la fabrication de chocolat premium et les exportations.",
+    description: "Fèves de cacao de haute qualité, cultivées de manière biologique dans les plantations de Soubré. Parfait pour la fabrication de chocolat premium et les exportations.",
     seller: {
-      name: "Cooperative SOCOOPENCO",
-      location: "Soubre, Cote d'Ivoire",
+      name: "Coopérative SOCOOPENCO",
+      location: "Soubré, Côte d'Ivoire",
       members: 450,
       rating: 4.8,
       reviews: 127,
@@ -377,11 +377,11 @@ export default function ProductDetailPage({ params }: { params: { id: string } }
                   </div>
                   <div className="flex items-center gap-2 text-sm">
                     <CheckCircle2 className="h-4 w-4 text-primary" />
-                    <span>Qualite certifiee</span>
+                    <span>Qualité certifiée</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm">
                     <Award className="h-4 w-4 text-primary" />
-                    <span>Vendeur verifie</span>
+                    <span>Vendeur vérifié</span>
                   </div>
                 </div>
               </CardContent>

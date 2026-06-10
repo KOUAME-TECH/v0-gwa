@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   Settings, LogOut, ChevronRight, Package, Heart, ShoppingBag,
-  MessageCircle, MapPin, BadgeCheck, Wallet, Bell, HelpCircle, Star
+  MessageCircle, MapPin, BadgeCheck, Wallet, Bell, HelpCircle, Star, Shield, Download, TrendingUp
 } from "lucide-react"
 
 type Profile = {
@@ -29,6 +29,7 @@ export default function ProfilPage() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [stats, setStats] = useState({ products: 0, orders: 0, favorites: 0 })
   const [isLoading, setIsLoading] = useState(true)
+  const [isAdmin, setIsAdmin] = useState(false)
   const supabase = createClient()
 
   useEffect(() => {
@@ -50,11 +51,16 @@ export default function ProfilPage() {
         setProfile({ ...profileData, email: user.email || "" })
       }
 
-      const [productsRes, ordersRes, favoritesRes] = await Promise.all([
+      const [productsRes, ordersRes, favoritesRes, adminRes] = await Promise.all([
         supabase.from("products").select("id", { count: "exact" }).eq("seller_id", user.id),
         supabase.from("orders").select("id", { count: "exact" }).eq("buyer_id", user.id),
         supabase.from("favorites").select("id", { count: "exact" }).eq("user_id", user.id),
+        supabase.from("admin_roles").select("role").eq("user_id", user.id).eq("is_active", true).single(),
       ])
+      
+      if (adminRes.data) {
+        setIsAdmin(true)
+      }
 
       setStats({
         products: productsRes.count || 0,
@@ -77,8 +83,10 @@ export default function ProfilPage() {
     const types: Record<string, string> = {
       producteur: "Producteur",
       artisan: "Artisan",
+      transformateur: "Transformateur",
       acheteur: "Acheteur",
-      cooperative: "Cooperative",
+      cooperative: "Coopérative",
+      entreprise: "Entreprise",
     }
     return type ? types[type] || type : "Membre"
   }
@@ -110,7 +118,7 @@ export default function ProfilPage() {
       <div className="min-h-screen bg-white flex items-center justify-center p-5">
         <div className="text-center">
           <h2 className="text-xl font-semibold mb-2">Connectez-vous</h2>
-          <p className="text-neutral-500 text-sm mb-6">pour acceder a votre profil</p>
+          <p className="text-neutral-500 text-sm mb-6">pour accéder à votre profil</p>
           <Link href="/auth/login">
             <Button className="rounded-full px-8">Se connecter</Button>
           </Link>
@@ -119,15 +127,57 @@ export default function ProfilPage() {
     )
   }
 
-  const menuSections = [
-    {
-      items: [
+  const isSeller = ["farmer", "artisan", "processor"].includes(profile.user_type || "")
+  const isBuyer = profile.user_type === "buyer"
+  const isBusiness = profile.user_type === "business"
+  const isCooperative = profile.user_type === "cooperative"
+
+  const getMainMenuItems = () => {
+    if (isSeller) {
+      return [
         { icon: Package, label: "Mes produits", href: "/dashboard/products", count: stats.products },
+        { icon: ShoppingBag, label: "Mes ventes", href: "/dashboard/commandes", count: stats.orders },
+        { icon: Wallet, label: "Portefeuille", href: "/wallet" },
+        { icon: Star, label: "Mes avis", href: "/dashboard/reviews" },
+      ]
+    }
+    if (isBusiness) {
+      return [
         { icon: ShoppingBag, label: "Mes commandes", href: "/dashboard/commandes", count: stats.orders },
+        { icon: Package, label: "Demandes B2B", href: "/b2b" },
         { icon: Heart, label: "Favoris", href: "/favoris", count: stats.favorites },
         { icon: Wallet, label: "Portefeuille", href: "/wallet" },
       ]
+    }
+    if (isCooperative) {
+      return [
+        { icon: Package, label: "Ma coopérative", href: "/dashboard/cooperative" },
+        { icon: ShoppingBag, label: "Ventes collectives", href: "/dashboard/commandes", count: stats.orders },
+        { icon: Wallet, label: "Portefeuille", href: "/wallet" },
+      ]
+    }
+    // Acheteur par défaut
+    return [
+      { icon: ShoppingBag, label: "Mes commandes", href: "/dashboard/commandes", count: stats.orders },
+      { icon: Heart, label: "Favoris", href: "/favoris", count: stats.favorites },
+      { icon: Wallet, label: "Portefeuille", href: "/wallet" },
+    ]
+  }
+
+  const menuSections = [
+    ...(isAdmin ? [{
+      items: [
+        { icon: Shield, label: "Administration", href: "/admin", highlight: true },
+      ]
+    }] : []),
+    {
+      items: getMainMenuItems()
     },
+    ...((isSeller || isCooperative) ? [{
+      items: [
+        { icon: TrendingUp, label: "Score de Confiance GWA", href: "/scg", highlight: true },
+      ]
+    }] : []),
     {
       items: [
         { icon: MessageCircle, label: "Messages", href: "/messages" },
@@ -136,7 +186,8 @@ export default function ProfilPage() {
     },
     {
       items: [
-        { icon: Settings, label: "Parametres", href: "/profil/settings" },
+        { icon: Settings, label: "Parametres", href: "/profil/edit" },
+        { icon: Download, label: "Installer l'app", href: "/download" },
         { icon: HelpCircle, label: "Aide", href: "/contact" },
       ]
     }
@@ -148,7 +199,7 @@ export default function ProfilPage() {
       <header className="bg-white px-5 pt-4 pb-6">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-xl font-semibold">Profil</h1>
-          <Link href="/profil/settings">
+          <Link href="/profil/edit">
             <button className="p-2 -mr-2 active:opacity-60">
               <Settings className="h-5 w-5 text-neutral-600" />
             </button>
@@ -200,11 +251,23 @@ export default function ProfilPage() {
       {/* Stats */}
       <div className="px-5 -mt-3 mb-4">
         <div className="grid grid-cols-3 gap-3">
-          {[
+          {(isSeller ? [
             { label: "Produits", value: stats.products },
+            { label: "Ventes", value: stats.orders },
+            { label: "Favoris", value: stats.favorites },
+          ] : isBusiness ? [
+            { label: "Commandes", value: stats.orders },
+            { label: "Fournisseurs", value: stats.products },
+            { label: "Favoris", value: stats.favorites },
+          ] : isCooperative ? [
+            { label: "Produits", value: stats.products },
+            { label: "Ventes", value: stats.orders },
+            { label: "Membres", value: stats.favorites },
+          ] : [
             { label: "Commandes", value: stats.orders },
             { label: "Favoris", value: stats.favorites },
-          ].map((stat) => (
+            { label: "Produits vus", value: stats.products },
+          ]).map((stat) => (
             <div key={stat.label} className="bg-white rounded-2xl p-4 text-center shadow-sm">
               <p className="text-2xl font-bold text-neutral-900">{stat.value}</p>
               <p className="text-xs text-neutral-500 mt-0.5">{stat.label}</p>
@@ -221,9 +284,13 @@ export default function ProfilPage() {
               <Link key={item.href} href={item.href}>
                 <div className={`flex items-center gap-4 px-4 py-3.5 active:bg-neutral-50 ${
                   itemIdx !== section.items.length - 1 ? "border-b border-neutral-100" : ""
-                }`}>
-                  <div className="w-9 h-9 rounded-full bg-neutral-100 flex items-center justify-center">
-                    <item.icon className="h-[18px] w-[18px] text-neutral-600" />
+                } ${(item as any).highlight ? "bg-[#2F7D32]/5" : ""}`}>
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center ${
+                    (item as any).highlight ? "bg-[#2F7D32]" : "bg-neutral-100"
+                  }`}>
+                    <item.icon className={`h-[18px] w-[18px] ${
+                      (item as any).highlight ? "text-white" : "text-neutral-600"
+                    }`} />
                   </div>
                   <span className="flex-1 font-medium text-[15px]">{item.label}</span>
                   {item.count !== undefined && item.count > 0 && (
@@ -242,7 +309,7 @@ export default function ProfilPage() {
           className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-white text-red-600 font-medium shadow-sm active:bg-red-50"
         >
           <LogOut className="h-[18px] w-[18px]" />
-          Se deconnecter
+          Se déconnecter
         </button>
 
         <p className="text-center text-xs text-neutral-400 py-4">

@@ -57,7 +57,8 @@ const navigation = [
   { name: "Signalements", href: "/admin/reports", icon: Flag },
   { name: "Litiges", href: "/admin/disputes", icon: AlertTriangle },
   { name: "Verifications", href: "/admin/verifications", icon: Shield },
-  { name: "Annonces", href: "/admin/announcements", icon: Bell },
+  { name: "SCG Config", href: "/admin/scg", icon: Shield },
+  { name: "Finances", href: "/admin/finances", icon: TrendingUp },
   { name: "Statistiques", href: "/admin/analytics", icon: TrendingUp },
   { name: "Parametres", href: "/admin/settings", icon: Settings },
 ]
@@ -90,12 +91,12 @@ export default function AdminLayout({
         }
 
         // Check if user is admin
-        const { data: adminRole } = await supabase
+        const { data: adminRole, error: adminError } = await supabase
           .from("admin_roles")
           .select("role")
           .eq("user_id", user.id)
           .eq("is_active", true)
-          .single()
+          .maybeSingle()
 
         if (!isMounted) return
 
@@ -145,7 +146,7 @@ export default function AdminLayout({
       <div className="min-h-screen flex items-center justify-center bg-muted/30">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Verification des acces...</p>
+          <p className="text-muted-foreground">Vérification des accès...</p>
         </div>
       </div>
     )
@@ -275,13 +276,13 @@ export default function AdminLayout({
               <DropdownMenuItem asChild>
                 <Link href="/admin/settings">
                   <Settings className="h-4 w-4 mr-2" />
-                  Parametres
+                  Paramètres
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleLogout} className="text-destructive">
                 <LogOut className="h-4 w-4 mr-2" />
-                Deconnexion
+                Déconnexion
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

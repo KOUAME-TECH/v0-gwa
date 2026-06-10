@@ -125,7 +125,7 @@ export default function WalletPage() {
       type: 'credit' as const,
       amount: order.total_amount - (order.service_fee || 0),
       status: 'completed' as const,
-      description: 'Vente livree',
+      description: 'Vente livrée',
       reference: null,
       created_at: new Date(Date.now() - i * 86400000).toISOString()
     })) || []
@@ -154,7 +154,7 @@ export default function WalletPage() {
     }
 
     if (!withdrawPhone || withdrawPhone.length < 8) {
-      setError("Numero de telephone invalide")
+      setError("Numéro de téléphone invalide")
       return
     }
 
@@ -199,11 +199,11 @@ export default function WalletPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'completed':
-        return <Badge className="bg-green-100 text-green-700">Complete</Badge>
+        return <Badge className="bg-green-100 text-green-700">Complété</Badge>
       case 'pending':
         return <Badge className="bg-yellow-100 text-yellow-700">En attente</Badge>
       case 'failed':
-        return <Badge className="bg-red-100 text-red-700">Echoue</Badge>
+        return <Badge className="bg-red-100 text-red-700">Échoué</Badge>
       default:
         return <Badge>{status}</Badge>
     }
@@ -230,7 +230,7 @@ export default function WalletPage() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">Mon Portefeuille</h1>
           <p className="text-muted-foreground">
-            Gerez vos revenus et effectuez des retraits vers Mobile Money
+            Gérez vos revenus et effectuez des retraits vers Mobile Money
           </p>
         </div>
 
@@ -263,7 +263,7 @@ export default function WalletPage() {
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Total gagne</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total gagné</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between">
@@ -275,7 +275,7 @@ export default function WalletPage() {
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Total retire</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total retiré</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between">
@@ -321,7 +321,7 @@ export default function WalletPage() {
         <Tabs defaultValue="all">
           <TabsList>
             <TabsTrigger value="all">Toutes les transactions</TabsTrigger>
-            <TabsTrigger value="credits">Entrees</TabsTrigger>
+            <TabsTrigger value="credits">Entrées</TabsTrigger>
             <TabsTrigger value="withdrawals">Retraits</TabsTrigger>
           </TabsList>
 
@@ -331,7 +331,7 @@ export default function WalletPage() {
                 <History className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                 <h3 className="text-lg font-semibold mb-2">Aucune transaction</h3>
                 <p className="text-muted-foreground">
-                  Vos transactions apparaitront ici apres vos premieres ventes
+                  Vos transactions apparaîtront ici après vos premières ventes
                 </p>
               </Card>
             ) : (
@@ -407,7 +407,7 @@ export default function WalletPage() {
                 <ArrowUpRight className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                 <h3 className="text-lg font-semibold mb-2">Aucun retrait</h3>
                 <p className="text-muted-foreground">
-                  Vos retraits apparaitront ici
+                  Vos retraits apparaîtront ici
                 </p>
               </Card>
             ) : (
@@ -447,7 +447,7 @@ export default function WalletPage() {
           <DialogHeader>
             <DialogTitle>Retirer des fonds</DialogTitle>
             <DialogDescription>
-              Transferez vos gains vers votre compte Mobile Money
+              Transférez vos gains vers votre compte Mobile Money
             </DialogDescription>
           </DialogHeader>
 
@@ -464,7 +464,7 @@ export default function WalletPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Montant a retirer (FCFA)</Label>
+              <Label>Montant à retirer (FCFA)</Label>
               <Input
                 type="number"
                 placeholder="10000"
@@ -477,7 +477,7 @@ export default function WalletPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Methode de retrait</Label>
+              <Label>Méthode de retrait</Label>
               <div className="grid grid-cols-3 gap-2">
                 <Button
                   type="button"
@@ -510,7 +510,7 @@ export default function WalletPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Numero de telephone</Label>
+              <Label>Numéro de téléphone</Label>
               <Input
                 type="tel"
                 placeholder="07 XX XX XX XX"

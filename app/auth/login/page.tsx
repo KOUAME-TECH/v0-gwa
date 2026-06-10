@@ -3,14 +3,17 @@
 import React from "react"
 import { useState } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ArrowLeft, Eye, EyeOff } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+import { Suspense } from "react"
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const redirectTo = searchParams.get("redirect")
   const [showPassword, setShowPassword] = useState(false)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -52,10 +55,13 @@ export default function LoginPage() {
           return
         }
 
-        router.push("/profil")
+        router.push(redirectTo || "/profil")
       }
-    } catch {
-      setError("Une erreur est survenue")
+    } catch (err) {
+      console.log("[v0] Login network error:", err)
+      setError(
+        "Connexion au serveur impossible. Verifiez votre reseau et reessayez.",
+      )
       setIsLoading(false)
     }
   }
@@ -143,7 +149,7 @@ export default function LoginPage() {
         </form>
 
         <p className="mt-8 text-center text-[15px]">
-          <span className="text-neutral-500">Pas de compte? </span>
+          <span className="text-neutral-500">Pas de compte ? </span>
           <Link href="/auth/signup" className="font-semibold text-neutral-900">
             Inscription
           </Link>
@@ -155,5 +161,17 @@ export default function LoginPage() {
         <span className="text-2xl font-bold tracking-tight">GWA</span>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="w-10 h-10 border-3 border-neutral-300 border-t-neutral-900 rounded-full animate-spin" />
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   )
 }

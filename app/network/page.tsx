@@ -34,9 +34,16 @@ const userTypeLabels: Record<string, string> = {
   artisan: 'Artisan',
   acheteur: 'Acheteur',
   transformateur: 'Transformateur',
-  cooperative: 'Cooperative',
+  cooperative: 'Coopérative',
   entreprise: 'Entreprise'
 }
+
+const africanCountries = [
+  "Côte d'Ivoire", "Sénégal", "Mali", "Burkina Faso", "Ghana",
+  "Togo", "Bénin", "Niger", "Guinée", "Cameroun", "Nigeria",
+  "Kenya", "Tanzanie", "Ouganda", "Rwanda", "Éthiopie", "Maroc",
+  "Tunisie", "Algérie", "Afrique du Sud", "RDC", "Congo"
+]
 
 export default function NetworkPage() {
   const router = useRouter()
@@ -145,21 +152,20 @@ export default function NetworkPage() {
     profile.city?.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  const countries = [...new Set(profiles.map(p => p.country).filter(Boolean))]
+  const countriesFromProfiles = [...new Set(profiles.map(p => p.country).filter(Boolean))]
+  const countries = countriesFromProfiles.length > 0 ? countriesFromProfiles : africanCountries
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <Navigation />
-      
+    <div className="flex min-h-screen flex-col pb-20">
       <main className="flex-1 bg-muted/30">
         {/* Hero */}
         <section className="bg-gradient-to-br from-primary/10 via-background to-accent/10 py-12">
           <div className="container px-4 text-center">
             <Users className="h-16 w-16 mx-auto text-primary mb-4" />
-            <h1 className="text-4xl font-bold mb-4">Reseau GWA</h1>
+            <h1 className="text-4xl font-bold mb-4">Réseau GWA</h1>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-8">
               Connectez-vous avec des producteurs, artisans, acheteurs et entreprises 
-              a travers toute l'Afrique
+              à travers toute l'Afrique
             </p>
             
             <div className="max-w-xl mx-auto">
@@ -208,7 +214,7 @@ export default function NetworkPage() {
               </Select>
 
               <div className="ml-auto text-sm text-muted-foreground">
-                {filteredProfiles.length} membre(s) trouve(s)
+                {filteredProfiles.length} membre(s) trouvé(s)
               </div>
             </div>
 
@@ -223,18 +229,18 @@ export default function NetworkPage() {
                 </div>
                 <h3 className="text-2xl font-semibold mb-3">
                   {searchTerm || selectedType !== "all" || selectedCountry !== "all"
-                    ? "Aucun membre trouve"
-                    : "Rejoignez notre communaute"
+                    ? "Aucun membre trouvé"
+                    : "Rejoignez notre communauté"
                   }
                 </h3>
                 <p className="text-muted-foreground mb-6 max-w-lg mx-auto">
                   {searchTerm || selectedType !== "all" || selectedCountry !== "all"
                     ? "Essayez de modifier vos filtres ou votre recherche"
-                    : "Soyez parmi les premiers membres du reseau GWA. Creez votre profil et connectez-vous avec des professionnels de toute l'Afrique."
+                    : "Soyez parmi les premiers membres du réseau GWA. Créez votre profil et connectez-vous avec des professionnels de toute l'Afrique."
                   }
                 </p>
                 <Link href="/auth/signup">
-                  <Button size="lg">Creer mon profil</Button>
+                  <Button size="lg">Créer mon profil</Button>
                 </Link>
               </div>
             ) : (

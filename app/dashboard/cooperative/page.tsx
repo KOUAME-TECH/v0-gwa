@@ -3,51 +3,26 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Navigation } from "@/components/navigation"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import Image from "next/image"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
 import { 
-  Users, TrendingUp, Package, DollarSign, MapPin, 
-  UserPlus, FileText, BarChart3, Settings,
-  ArrowUp, AlertCircle, CheckCircle2, Loader2, Plus
+  Users, TrendingUp, Package, Wallet, MapPin, Bell, ArrowLeft,
+  ChevronRight, UserPlus, FileText, BarChart3, Settings,
+  Building2, Sprout, Hammer, CheckCircle2, AlertCircle, Globe
 } from 'lucide-react'
 import { createClient } from "@/lib/supabase/client"
+import { DashboardNav } from "@/components/dashboard-nav"
 
 interface Member {
   id: string
   full_name: string
   user_type: string
   city: string
-  country: string
   is_verified: boolean
-  created_at: string
+  avatar_url: string | null
   products_count?: number
-}
-
-interface Order {
-  id: string
-  total_amount: number
-  status: string
-  created_at: string
-  order_items: {
-    product_id: string
-    quantity: number
-    products: {
-      name: string
-    } | null
-  }[]
-  profiles: {
-    full_name: string
-  } | null
-}
-
-interface DashboardStats {
-  totalRevenue: number
-  totalMembers: number
-  totalProducts: number
-  pendingOrders: number
 }
 
 export default function CooperativeDashboard() {
@@ -55,39 +30,35 @@ export default function CooperativeDashboard() {
   const [user, setUser] = useState<any>(null)
   const [profile, setProfile] = useState<any>(null)
   const [members, setMembers] = useState<Member[]>([])
-  const [orders, setOrders] = useState<Order[]>([])
-  const [stats, setStats] = useState<DashboardStats>({
+  const [stats, setStats] = useState({
     totalRevenue: 0,
     totalMembers: 0,
     totalProducts: 0,
-    pendingOrders: 0
+    farmers: 0,
+    artisans: 0
   })
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    const fetchDashboardData = async () => {
+    const fetchData = async () => {
       const supabase = createClient()
-      
-      // Verifier l'authentification
       const { data: { user: authUser } } = await supabase.auth.getUser()
+      
       if (!authUser) {
         router.push("/auth/login")
         return
       }
       setUser(authUser)
 
-      // Recuperer le profil
+      // Profil
       const { data: profileData } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', authUser.id)
         .single()
+      setProfile(profileData)
 
-      if (profileData) {
-        setProfile(profileData)
-      }
-
-      // Recuperer les membres de la cooperative (tous les farmers/artisans de la meme region)
+      // Membres de la région
       const { data: membersData } = await supabase
         .from('profiles')
         .select('*')
@@ -97,7 +68,7 @@ export default function CooperativeDashboard() {
         .limit(10)
 
       if (membersData) {
-        // Compter les produits pour chaque membre
+        // Compter les produits par membre
         const membersWithProducts = await Promise.all(
           membersData.map(async (member) => {
             const { count } = await supabase
@@ -105,408 +76,279 @@ export default function CooperativeDashboard() {
               .select('*', { count: 'exact', head: true })
               .eq('seller_id', member.id)
               .eq('status', 'active')
-            
-            return {
-              ...member,
-              products_count: count || 0
-            }
+            return { ...member, products_count: count || 0 }
           })
         )
         setMembers(membersWithProducts)
       }
 
-      // Recuperer les commandes recentes de la region
-      const { data: ordersData } = await supabase
-        .from('orders')
-        .select(`
-          *,
-          order_items (
-            product_id,
-            quantity,
-            products (name)
-          ),
-          profiles:buyer_id (full_name)
-        `)
-        .order('created_at', { ascending: false })
-        .limit(5)
-
-      if (ordersData) {
-        setOrders(ordersData)
-      }
-
-      // Compter les produits totaux des membres
-      const memberIds = membersData?.map(m => m.id) || []
-      const { count: productsCount } = await supabase
-        .from('products')
-        .select('*', { count: 'exact', head: true })
-        .in('seller_id', memberIds)
-        .eq('status', 'active')
-
-      // Calculer les statistiques
-      const totalRevenue = ordersData?.reduce((sum, o) => 
-        o.status === 'delivered' ? sum + (o.total_amount || 0) : sum, 0) || 0
-      
-      const pendingOrders = ordersData?.filter(o => 
-        o.status === 'pending' || o.status === 'confirmed' || o.status === 'shipping'
-      ).length || 0
+      // Stats
+      const farmers = membersData?.filter(m => m.user_type === 'farmer').length || 0
+      const artisans = membersData?.filter(m => m.user_type === 'artisan').length || 0
 
       setStats({
-        totalRevenue,
+        totalRevenue: 0,
         totalMembers: membersData?.length || 0,
-        totalProducts: productsCount || 0,
-        pendingOrders
+        totalProducts: 0,
+        farmers,
+        artisans
       })
 
       setIsLoading(false)
     }
-
-    fetchDashboardData()
+    fetchData()
   }, [router])
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen flex-col">
-        <Navigation />
-        <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
+      <div className="min-h-screen bg-[#F0FDF4] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#059669]" />
       </div>
     )
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <Navigation />
-      
-      <main className="flex-1 bg-muted/30">
-        <div className="container py-8 px-4">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h1 className="text-3xl font-bold mb-2">Espace Cooperative</h1>
-              <p className="text-muted-foreground">Gerez vos membres et centralisez les ventes</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge className="text-base px-4 py-2">
-                <Users className="mr-2 h-4 w-4" />
-                {stats.totalMembers} membres
+    <div className="min-h-screen bg-[#F0FDF4] pb-20">
+      {/* Header Coopérative - Vert émeraude */}
+      <header className="bg-gradient-to-br from-[#059669] to-[#047857] text-white px-4 pt-12 pb-6 rounded-b-3xl">
+        <div className="flex items-center justify-between mb-6">
+          <button onClick={() => router.back()}>
+            <ArrowLeft className="h-6 w-6" />
+          </button>
+          <h1 className="text-lg font-semibold">Espace Coopérative</h1>
+          <Link href="/notifications">
+            <Bell className="h-6 w-6" />
+          </Link>
+        </div>
+
+        {/* Info coopérative */}
+        <div className="flex items-center gap-4 mb-6">
+          <div className="w-16 h-16 rounded-2xl bg-white/20 flex items-center justify-center overflow-hidden">
+            {profile?.avatar_url ? (
+              <Image src={profile.avatar_url || "/placeholder.svg"} alt="" width={64} height={64} className="object-cover" />
+            ) : (
+              <Building2 className="h-8 w-8 text-white" />
+            )}
+          </div>
+          <div className="flex-1">
+            <h2 className="text-xl font-bold">{profile?.full_name || "Ma Coopérative"}</h2>
+            <p className="text-white/80 text-sm flex items-center gap-1">
+              <Globe className="h-3 w-3" />
+              {profile?.city || profile?.country || "Afrique"}
+            </p>
+            {profile?.is_verified && (
+              <Badge className="bg-white/20 text-white mt-1">
+                <CheckCircle2 className="h-3 w-3 mr-1" />
+                Certifiée
               </Badge>
+            )}
+          </div>
+        </div>
+
+        {/* Stats principales */}
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-white/10 rounded-xl p-3 text-center">
+            <Users className="h-6 w-6 mx-auto mb-1" />
+            <p className="text-2xl font-bold">{stats.totalMembers}</p>
+            <p className="text-xs text-white/70">Membres</p>
+          </div>
+          <div className="bg-white/10 rounded-xl p-3 text-center">
+            <Sprout className="h-6 w-6 mx-auto mb-1" />
+            <p className="text-2xl font-bold">{stats.farmers}</p>
+            <p className="text-xs text-white/70">Producteurs</p>
+          </div>
+          <div className="bg-white/10 rounded-xl p-3 text-center">
+            <Hammer className="h-6 w-6 mx-auto mb-1" />
+            <p className="text-2xl font-bold">{stats.artisans}</p>
+            <p className="text-xs text-white/70">Artisans</p>
+          </div>
+        </div>
+      </header>
+
+      <main className="px-4 -mt-4">
+        {/* Actions rapides */}
+        <Card className="bg-white border-0 shadow-lg mb-6">
+          <CardContent className="p-4">
+            <div className="grid grid-cols-4 gap-2">
+              <button className="text-center">
+                <div className="w-12 h-12 rounded-xl bg-[#059669]/10 flex items-center justify-center mx-auto mb-1">
+                  <UserPlus className="h-6 w-6 text-[#059669]" />
+                </div>
+                <p className="text-xs text-[#4B5563]">Inviter</p>
+              </button>
+              <Link href="/dashboard/products" className="text-center">
+                <div className="w-12 h-12 rounded-xl bg-[#F39A1F]/10 flex items-center justify-center mx-auto mb-1">
+                  <Package className="h-6 w-6 text-[#F39A1F]" />
+                </div>
+                <p className="text-xs text-[#4B5563]">Produits</p>
+              </Link>
+              <button className="text-center">
+                <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center mx-auto mb-1">
+                  <FileText className="h-6 w-6 text-blue-500" />
+                </div>
+                <p className="text-xs text-[#4B5563]">Rapports</p>
+              </button>
+              <button className="text-center">
+                <div className="w-12 h-12 rounded-xl bg-purple-500/10 flex items-center justify-center mx-auto mb-1">
+                  <BarChart3 className="h-6 w-6 text-purple-500" />
+                </div>
+                <p className="text-xs text-[#4B5563]">Stats</p>
+              </button>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Répartition des membres */}
+        <Card className="bg-white border-0 shadow-sm mb-6">
+          <CardContent className="p-4">
+            <h3 className="font-bold text-[#111827] mb-4">Répartition des Membres</h3>
+            <div className="space-y-4">
+              <div>
+                <div className="flex items-center justify-between text-sm mb-2">
+                  <span className="flex items-center gap-2">
+                    <Sprout className="h-4 w-4 text-[#2F7D32]" />
+                    Producteurs
+                  </span>
+                  <span className="font-medium">{stats.farmers} ({stats.totalMembers > 0 ? Math.round((stats.farmers / stats.totalMembers) * 100) : 0}%)</span>
+                </div>
+                <div className="h-3 rounded-full bg-[#F0FDF4] overflow-hidden">
+                  <div 
+                    className="h-full bg-[#2F7D32] rounded-full transition-all" 
+                    style={{ width: `${stats.totalMembers > 0 ? (stats.farmers / stats.totalMembers) * 100 : 0}%` }} 
+                  />
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center justify-between text-sm mb-2">
+                  <span className="flex items-center gap-2">
+                    <Hammer className="h-4 w-4 text-[#8B4513]" />
+                    Artisans
+                  </span>
+                  <span className="font-medium">{stats.artisans} ({stats.totalMembers > 0 ? Math.round((stats.artisans / stats.totalMembers) * 100) : 0}%)</span>
+                </div>
+                <div className="h-3 rounded-full bg-[#FFF6E5] overflow-hidden">
+                  <div 
+                    className="h-full bg-[#8B4513] rounded-full transition-all" 
+                    style={{ width: `${stats.totalMembers > 0 ? (stats.artisans / stats.totalMembers) * 100 : 0}%` }} 
+                  />
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Liste des membres */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-[#111827] flex items-center gap-2">
+              <Users className="h-5 w-5 text-[#059669]" />
+              Membres
+            </h3>
+            <Button variant="outline" size="sm" className="rounded-full border-[#059669] text-[#059669] bg-transparent">
+              <UserPlus className="h-4 w-4 mr-1" />
+              Inviter
+            </Button>
           </div>
 
-          {/* Stats cooperative */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
-            <Card className="hover:shadow-lg transition-all">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Chiffre d'affaires</CardTitle>
-                <DollarSign className="h-4 w-4 text-primary" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats.totalRevenue.toLocaleString()} FCFA</div>
-                <div className="flex items-center text-xs text-muted-foreground">
-                  {stats.totalRevenue > 0 ? (
-                    <span className="text-green-500 flex items-center">
-                      <ArrowUp className="h-3 w-3 mr-1" />
-                      Ventes realisees
-                    </span>
-                  ) : (
-                    "Aucune vente pour le moment"
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="hover:shadow-lg transition-all">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Produits en vente</CardTitle>
-                <Package className="h-4 w-4 text-accent" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats.totalProducts}</div>
-                <p className="text-xs text-muted-foreground">
-                  Produits des membres
+          {members.length === 0 ? (
+            <Card className="bg-white border-0 shadow-sm">
+              <CardContent className="p-8 text-center">
+                <Users className="h-12 w-12 text-[#059669]/30 mx-auto mb-4" />
+                <h4 className="font-semibold text-[#111827] mb-2">Aucun membre</h4>
+                <p className="text-sm text-[#4B5563] mb-4">
+                  Invitez des producteurs et artisans à rejoindre votre coopérative
                 </p>
+                <Button className="bg-[#059669]">
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Inviter des membres
+                </Button>
               </CardContent>
             </Card>
-
-            <Card className="hover:shadow-lg transition-all">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Membres actifs</CardTitle>
-                <Users className="h-4 w-4 text-secondary" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats.totalMembers}</div>
-                <p className="text-xs text-muted-foreground">
-                  {members.filter(m => m.is_verified).length} verifies
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="hover:shadow-lg transition-all">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Commandes en cours</CardTitle>
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats.pendingOrders}</div>
-                <p className="text-xs text-muted-foreground">
-                  A traiter
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="grid gap-6 lg:grid-cols-3">
-            {/* Membres et production */}
-            <Card className="lg:col-span-2">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>Membres de la Cooperative</CardTitle>
-                    <CardDescription>Producteurs et artisans de votre region</CardDescription>
-                  </div>
-                  <Button size="sm">
-                    <UserPlus className="mr-2 h-4 w-4" />
-                    Inviter
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {members.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <h3 className="text-lg font-medium mb-2">Aucun membre</h3>
-                    <p className="text-muted-foreground mb-4">
-                      Invitez des producteurs et artisans a rejoindre la cooperative
-                    </p>
-                    <Button>
-                      <UserPlus className="mr-2 h-4 w-4" />
-                      Inviter des membres
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {members.map((member) => (
-                      <div key={member.id} className="p-4 rounded-lg border hover:border-primary transition-colors">
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                              <span className="font-bold text-primary">
-                                {member.full_name?.split(' ').map(n => n[0]).join('').slice(0, 2) || "?"}
-                              </span>
-                            </div>
-                            <div>
-                              <h3 className="font-semibold">{member.full_name || "Membre"}</h3>
-                              <p className="text-sm text-muted-foreground">
-                                {member.user_type === 'farmer' ? 'Producteur' : 'Artisan'}
-                              </p>
-                            </div>
-                          </div>
-                          <Badge variant={member.is_verified ? "default" : "secondary"}>
-                            {member.is_verified ? "Verifie" : "Non verifie"}
-                          </Badge>
-                        </div>
-                        <div className="grid grid-cols-3 gap-4 text-sm">
-                          <div>
-                            <p className="text-muted-foreground">Localisation</p>
-                            <p className="font-medium flex items-center gap-1">
-                              <MapPin className="h-3 w-3" />
-                              {member.city || member.country?.toUpperCase() || "N/A"}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-muted-foreground">Produits</p>
-                            <p className="font-medium">{member.products_count || 0}</p>
-                          </div>
-                          <div className="flex justify-end">
-                            <Button size="sm" variant="outline" className="bg-transparent">Voir profil</Button>
-                          </div>
-                        </div>
+          ) : (
+            <div className="space-y-3">
+              {members.map((member) => (
+                <Card key={member.id} className="bg-white border-0 shadow-sm">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-full bg-[#F0FDF4] flex items-center justify-center overflow-hidden">
+                        {member.avatar_url ? (
+                          <Image src={member.avatar_url || "/placeholder.svg"} alt="" width={48} height={48} className="object-cover" />
+                        ) : (
+                          <span className="text-[#059669] font-bold">
+                            {member.full_name?.split(' ').map(n => n[0]).join('').slice(0, 2) || "?"}
+                          </span>
+                        )}
                       </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Actions et stats */}
-            <div className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Actions Rapides</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <Button variant="outline" className="w-full justify-start bg-transparent">
-                    <UserPlus className="mr-2 h-4 w-4" />
-                    Inviter un membre
-                  </Button>
-                  <Link href="/dashboard/products/new">
-                    <Button variant="outline" className="w-full justify-start bg-transparent">
-                      <Package className="mr-2 h-4 w-4" />
-                      Ajouter un produit
-                    </Button>
-                  </Link>
-                  <Button variant="outline" className="w-full justify-start bg-transparent">
-                    <FileText className="mr-2 h-4 w-4" />
-                    Generer un rapport
-                  </Button>
-                  <Button variant="outline" className="w-full justify-start bg-transparent">
-                    <BarChart3 className="mr-2 h-4 w-4" />
-                    Voir les statistiques
-                  </Button>
-                  <Button variant="outline" className="w-full justify-start bg-transparent">
-                    <Settings className="mr-2 h-4 w-4" />
-                    Parametres
-                  </Button>
-                </CardContent>
-              </Card>
-
-              {/* Repartition des types de membres */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Repartition des Membres</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {(() => {
-                    const farmers = members.filter(m => m.user_type === 'farmer').length
-                    const artisans = members.filter(m => m.user_type === 'artisan').length
-                    const total = members.length || 1
-                    
-                    return [
-                      { 
-                        type: "Producteurs", 
-                        count: farmers, 
-                        percentage: Math.round((farmers / total) * 100), 
-                        color: "bg-primary" 
-                      },
-                      { 
-                        type: "Artisans", 
-                        count: artisans, 
-                        percentage: Math.round((artisans / total) * 100), 
-                        color: "bg-secondary" 
-                      },
-                    ].map((item, i) => (
-                      <div key={i} className="space-y-2">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="font-medium">{item.type}</span>
-                          <span className="text-muted-foreground">
-                            {item.count} ({item.percentage}%)
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-[#111827]">{member.full_name || "Membre"}</p>
+                          {member.is_verified && (
+                            <CheckCircle2 className="h-4 w-4 text-[#059669]" />
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 mt-1">
+                          <Badge className={
+                            member.user_type === 'farmer' 
+                              ? "bg-[#2F7D32]/10 text-[#2F7D32]" 
+                              : "bg-[#8B4513]/10 text-[#8B4513]"
+                          }>
+                            {member.user_type === 'farmer' ? 'Producteur' : 'Artisan'}
+                          </Badge>
+                          <span className="text-xs text-[#4B5563] flex items-center gap-1">
+                            <MapPin className="h-3 w-3" />
+                            {member.city || "N/A"}
                           </span>
                         </div>
-                        <div className="h-2 rounded-full bg-muted overflow-hidden">
-                          <div 
-                            className={`h-full ${item.color}`} 
-                            style={{ width: `${item.percentage}%` }} 
-                          />
-                        </div>
-                      </div>
-                    ))
-                  })()}
-                </CardContent>
-              </Card>
-
-              {/* Alertes */}
-              <Card className="border-yellow-500/50">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <AlertCircle className="h-5 w-5 text-yellow-500" />
-                    Alertes
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {stats.pendingOrders > 0 && (
-                    <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
-                      <p className="text-sm font-medium">Commandes en attente</p>
-                      <p className="text-xs text-muted-foreground">
-                        {stats.pendingOrders} commande(s) a traiter
-                      </p>
-                    </div>
-                  )}
-                  {members.filter(m => !m.is_verified).length > 0 && (
-                    <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                      <p className="text-sm font-medium">Membres non verifies</p>
-                      <p className="text-xs text-muted-foreground">
-                        {members.filter(m => !m.is_verified).length} membre(s) en attente
-                      </p>
-                    </div>
-                  )}
-                  {members.length === 0 && (
-                    <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
-                      <p className="text-sm font-medium">Commencez maintenant</p>
-                      <p className="text-xs text-muted-foreground">
-                        Invitez des membres pour developper la cooperative
-                      </p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-
-          {/* Commandes recentes */}
-          <Card className="mt-6">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Commandes Recentes</CardTitle>
-                  <CardDescription>Transactions de la cooperative</CardDescription>
-                </div>
-                <Link href="/dashboard/commandes">
-                  <Button variant="outline" size="sm" className="bg-transparent">Voir tout</Button>
-                </Link>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {orders.length === 0 ? (
-                <div className="text-center py-8">
-                  <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="text-lg font-medium mb-2">Aucune commande</h3>
-                  <p className="text-muted-foreground">
-                    Les commandes des membres apparaitront ici
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {orders.map((order) => (
-                    <div key={order.id} className="flex items-center justify-between p-4 rounded-lg border">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-1">
-                          <span className="font-semibold">#{order.id.slice(0, 8)}</span>
-                          <Badge variant={
-                            order.status === 'delivered' ? "default" : 
-                            order.status === 'shipping' ? "secondary" : "outline"
-                          }>
-                            {order.status === "delivered" && <CheckCircle2 className="h-3 w-3 mr-1" />}
-                            {order.status === 'delivered' ? 'Livre' :
-                             order.status === 'shipping' ? 'En livraison' :
-                             order.status === 'confirmed' ? 'Confirme' :
-                             order.status === 'pending' ? 'En attente' : order.status}
-                          </Badge>
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          {order.profiles?.full_name || "Client"}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {order.order_items?.[0]?.products?.name || "Produit"} 
-                          {order.order_items && order.order_items.length > 1 && 
-                            ` + ${order.order_items.length - 1} autre(s)`}
-                        </p>
                       </div>
                       <div className="text-right">
-                        <p className="font-bold text-primary text-lg">
-                          {order.total_amount?.toLocaleString() || 0} FCFA
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(order.created_at).toLocaleDateString('fr-FR')}
-                        </p>
+                        <p className="text-lg font-bold text-[#111827]">{member.products_count || 0}</p>
+                        <p className="text-xs text-[#4B5563]">produits</p>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </div>
+
+        {/* Alertes */}
+        <Card className="bg-white border-0 shadow-sm border-l-4 border-l-yellow-500 mb-6">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-yellow-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <h4 className="font-semibold text-[#111827] mb-1">À faire</h4>
+                <ul className="text-sm text-[#4B5563] space-y-1">
+                  {members.filter(m => !m.is_verified).length > 0 && (
+                    <li>• {members.filter(m => !m.is_verified).length} membre(s) en attente de vérification</li>
+                  )}
+                  <li>• Complétez le profil de la coopérative</li>
+                  <li>• Ajoutez une photo de couverture</li>
+                </ul>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Paramètres */}
+        <Card className="bg-gradient-to-r from-[#059669]/10 to-[#10B981]/10 border-0">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Settings className="h-6 w-6 text-[#059669]" />
+                <div>
+                  <h4 className="font-semibold text-[#111827]">Paramètres</h4>
+                  <p className="text-sm text-[#4B5563]">Gérez votre coopérative</p>
+                </div>
+              </div>
+              <ChevronRight className="h-5 w-5 text-[#4B5563]" />
+            </div>
+          </CardContent>
+        </Card>
       </main>
+
+      <DashboardNav userType={profile?.user_type} />
     </div>
   )
 }
