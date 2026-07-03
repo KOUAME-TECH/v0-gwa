@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   Settings, LogOut, ChevronRight, Package, Heart, ShoppingBag,
-  MessageCircle, MapPin, BadgeCheck, Wallet, Bell, HelpCircle, Star, Shield, Download, TrendingUp
+  MessageCircle, MapPin, BadgeCheck, Wallet, Bell, HelpCircle, Star, Shield, Download
 } from "lucide-react"
 
 type Profile = {
@@ -173,11 +173,6 @@ export default function ProfilPage() {
     {
       items: getMainMenuItems()
     },
-    ...((isSeller || isCooperative) ? [{
-      items: [
-        { icon: TrendingUp, label: "Score de Confiance GWA", href: "/scg", highlight: true },
-      ]
-    }] : []),
     {
       items: [
         { icon: MessageCircle, label: "Messages", href: "/messages" },
