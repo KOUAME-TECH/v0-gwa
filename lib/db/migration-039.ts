@@ -14,6 +14,21 @@ export function getPostgresConnectionString(): string | null {
   )
 }
 
+function normalizeConnectionString(raw: string): string {
+  if (raw.includes("localhost") || raw.includes("127.0.0.1")) return raw
+  if (/[?&]sslmode=/i.test(raw)) return raw
+  return `${raw}${raw.includes("?") ? "&" : "?"}sslmode=no-verify`
+}
+
+function createPgClient(connectionString: string): pg.Client {
+  const normalized = normalizeConnectionString(connectionString)
+  const isLocal = normalized.includes("localhost") || normalized.includes("127.0.0.1")
+  return new Client({
+    connectionString: normalized,
+    ssl: isLocal ? false : { rejectUnauthorized: false },
+  })
+}
+
 export async function withPostgresClient<T>(
   fn: (client: pg.Client) => Promise<T>,
 ): Promise<T> {
@@ -22,10 +37,7 @@ export async function withPostgresClient<T>(
     throw new Error("POSTGRES_URL_NON_POOLING / POSTGRES_URL / DATABASE_URL manquant sur le serveur")
   }
 
-  const client = new Client({
-    connectionString,
-    ssl: connectionString.includes("localhost") ? undefined : { rejectUnauthorized: false },
-  })
+  const client = createPgClient(connectionString)
   await client.connect()
   try {
     return await fn(client)
