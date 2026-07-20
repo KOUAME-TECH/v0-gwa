@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef, Suspense } from "react"
+import { useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,6 +15,8 @@ import { ListenMicButton } from "@/components/media/clickable-listen-text"
 import { buildProductListenText } from "@/lib/media/product-listen"
 import { ListenModeToggle } from "@/components/media/listen-mode-toggle"
 import { ShopVoiceTourButton } from "@/components/media/shop-voice-tour-button"
+import { DigestBanner } from "@/components/media/digest-banner"
+import { AudioLangBadge } from "@/components/media/audio-lang-badge"
 import { useListenMode } from "@/hooks/use-listen-mode"
 import { useShopVoiceTour } from "@/hooks/use-shop-voice-tour"
 
@@ -24,6 +27,8 @@ type Product = {
   unit: string
   description: string | null
   audio_url: string | null
+  audio_lang: string | null
+  created_at: string
   images: string[] | null
   origin_country: string
   origin_region: string | null
@@ -40,6 +45,20 @@ type Category = { id: string; name: string; slug: string; category_type: string 
 type ViewMode = "compact" | "list" | "grid"
 
 export default function MarketplacePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#FFF6E5] p-6 text-sm text-muted-foreground">Chargement…</div>}>
+      <MarketplaceContent />
+    </Suspense>
+  )
+}
+
+function MarketplaceContent() {
+  const searchParams = useSearchParams()
+  const isDigest = searchParams.get("digest") === "1"
+  const sinceParam = searchParams.get("since")
+  const idsParam = searchParams.get("ids")
+  const digestStartedRef = useRef(false)
+
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -50,6 +69,7 @@ export default function MarketplacePage() {
   const [showFilters, setShowFilters] = useState(false)
   const [viewMode, setViewMode] = useState<ViewMode>("compact")
   const [userId, setUserId] = useState<string | null>(null)
+  const [userCity, setUserCity] = useState<string | null>(null)
   const { enabled: listenMode } = useListenMode()
   const supabase = createClient()
 
@@ -60,11 +80,16 @@ export default function MarketplacePage() {
     const { data: { user } } = await supabase.auth.getUser()
     setUserId(user?.id || null)
 
-    const [productsRes, categoriesRes, favsRes] = await Promise.all([
+    const profilePromise = user
+      ? supabase.from("profiles").select("city, digest_enabled").eq("id", user.id).maybeSingle()
+      : Promise.resolve({ data: null as { city?: string | null } | null })
+
+    const [productsRes, categoriesRes, favsRes, profileRes] = await Promise.all([
       supabase
         .from("products")
         .select(`
-          id, name, price, unit, description, audio_url, images, origin_country, origin_region,
+          id, name, price, unit, description, audio_url, audio_lang, created_at, images,
+          origin_country, origin_region,
           is_organic, is_fair_trade, product_type, category_id, seller_id,
           profiles:seller_id(full_name, avatar_url, is_verified),
           categories:category_id(name, slug)
@@ -73,12 +98,14 @@ export default function MarketplacePage() {
         .order("created_at", { ascending: false })
         .limit(60),
       supabase.from("categories").select("id, name, slug, category_type").eq("category_type", "agriculture").is("parent_id", null).order("name"),
-      user ? supabase.from("favorites").select("product_id").eq("user_id", user.id) : Promise.resolve({ data: [] as { product_id: string }[] })
+      user ? supabase.from("favorites").select("product_id").eq("user_id", user.id) : Promise.resolve({ data: [] as { product_id: string }[] }),
+      profilePromise,
     ])
 
     if (productsRes.data) setProducts(productsRes.data as Product[])
     if (categoriesRes.data) setCategories(categoriesRes.data)
     if (favsRes.data) setFavorites(new Set((favsRes.data as { product_id: string }[]).map(f => f.product_id)))
+    if (profileRes.data?.city) setUserCity(profileRes.data.city)
     setIsLoading(false)
   }
 
@@ -116,9 +143,27 @@ export default function MarketplacePage() {
   const fmt = (n: number) => new Intl.NumberFormat("fr-FR").format(n)
   const activeFiltersCount = (selectedType !== "all" ? 1 : 0) + (selectedCategory !== "all" ? 1 : 0)
 
+  const digestProducts = useMemo(() => {
+    if (!isDigest) return [] as Product[]
+    let list = filteredProducts
+    if (sinceParam) {
+      const sinceMs = new Date(sinceParam).getTime()
+      if (!Number.isNaN(sinceMs)) {
+        list = list.filter((p) => new Date(p.created_at).getTime() >= sinceMs)
+      }
+    }
+    if (idsParam) {
+      const ids = new Set(idsParam.split(",").filter(Boolean))
+      if (ids.size > 0) list = list.filter((p) => ids.has(p.id))
+    }
+    return list
+  }, [filteredProducts, idsParam, isDigest, sinceParam])
+
+  const tourSource = isDigest && digestProducts.length > 0 ? digestProducts : filteredProducts
+
   const tourProducts = useMemo(
     () =>
-      filteredProducts.map((p) => ({
+      tourSource.map((p) => ({
         id: p.id,
         name: p.name,
         price: p.price,
@@ -129,19 +174,33 @@ export default function MarketplacePage() {
         product_type: p.product_type,
         is_organic: p.is_organic,
         audio_url: p.audio_url,
+        audio_lang: p.audio_lang,
       })),
-    [filteredProducts],
+    [tourSource],
   )
 
-  const { active: tourActive, index: tourIndex, total: tourTotal, start: toggleTour } =
+  const { active: tourActive, index: tourIndex, total: tourTotal, start: toggleTour, startTour } =
     useShopVoiceTour(tourProducts)
+
+  useEffect(() => {
+    if (!isDigest || digestProducts.length === 0 || digestStartedRef.current || isLoading) return
+    digestStartedRef.current = true
+    try {
+      localStorage.setItem("gwa-listen-mode", "1")
+    } catch {
+      /* ignore */
+    }
+    const timer = setTimeout(() => startTour(), 900)
+    return () => clearTimeout(timer)
+  }, [digestProducts.length, isDigest, isLoading, startTour])
 
   function productListenProps(p: Product) {
     return {
       text: buildProductListenText(p),
       audioUrl: p.audio_url,
+      audioLang: p.audio_lang,
       fallbackLabel: p.name,
-      highlight: listenMode,
+      highlight: listenMode || isDigest,
     }
   }
 
@@ -170,6 +229,7 @@ export default function MarketplacePage() {
           <div className="flex items-center gap-0.5">
             <p className="text-[11px] font-medium leading-tight line-clamp-1 flex-1 min-w-0">{p.name}</p>
             <ProductListenBtn p={p} />
+            <AudioLangBadge lang={p.audio_lang} />
           </div>
           <div className="flex items-center justify-between mt-1">
             <span className="text-[11px] font-bold text-red-600">{fmt(p.price)} F</span>
@@ -365,6 +425,16 @@ export default function MarketplacePage() {
 
       {/* Content */}
       <main className="p-3">
+        {isDigest && digestProducts.length > 0 && (
+          <DigestBanner
+            count={digestProducts.length}
+            city={userCity}
+            tourActive={tourActive}
+            tourIndex={tourIndex}
+            tourTotal={tourTotal}
+            onStartTour={toggleTour}
+          />
+        )}
         {isLoading ? (
           <div className={`grid gap-2 ${viewMode === "compact" ? "grid-cols-3" : viewMode === "list" ? "grid-cols-1" : "grid-cols-2"}`}>
             {[...Array(viewMode === "compact" ? 9 : 6)].map((_, i) => (

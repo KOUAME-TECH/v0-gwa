@@ -19,7 +19,9 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { ArrowLeft, Camera, Loader2, Check } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
 import { toast } from "sonner"
+import { AUDIO_LANGS } from "@/lib/media/audio-langs"
 
 type Profile = {
   id: string
@@ -32,6 +34,7 @@ type Profile = {
   city: string | null
   country: string | null
   address: string | null
+  digest_enabled?: boolean | null
 }
 
 const userTypes = [
@@ -63,6 +66,7 @@ export default function EditProfilPage() {
     city: "",
     country: "",
     address: "",
+    digest_enabled: true,
   })
   const [emailLinkMsg, setEmailLinkMsg] = useState<string | null>(null)
 
@@ -92,6 +96,7 @@ export default function EditProfilPage() {
           city: profileData.city || "",
           country: profileData.country || "",
           address: profileData.address || "",
+          digest_enabled: profileData.digest_enabled !== false,
         })
       }
 
@@ -170,6 +175,12 @@ export default function EditProfilPage() {
         .eq("id", profile.id)
 
       if (error) throw error
+
+      await fetch(`/api/profiles/${profile.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ digest_enabled: formData.digest_enabled }),
+      }).catch(() => null)
 
       // Lier l'email au numéro déjà enregistré
       if (formData.email?.trim()) {
@@ -353,6 +364,21 @@ export default function EditProfilPage() {
               onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
               className="min-h-[100px] rounded-xl border-[#E5E7EB] bg-[#FFF6E5]/50 resize-none"
               placeholder="Parlez-nous de vous et de votre activité..."
+            />
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl p-4 space-y-3">
+          <h2 className="font-semibold text-[#111827]">Harmattan Digest</h2>
+          <p className="text-xs text-[#6B7280]">
+            Résumé vocal quotidien des nouveaux produits près de chez vous (push + parcours audio).
+          </p>
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-[#E5E7EB] px-3 py-2.5">
+            <span className="text-sm text-[#374151]">Recevoir le digest</span>
+            <Switch
+              checked={formData.digest_enabled}
+              onCheckedChange={(checked) => setFormData({ ...formData, digest_enabled: checked })}
+              aria-label="Activer Harmattan Digest"
             />
           </div>
         </div>

@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { buildProductListenText, type ProductListenInput } from "@/lib/media/product-listen"
+import { resolveUtterLang } from "@/lib/media/audio-langs"
 
 export type ShopTourProduct = ProductListenInput & {
   id: string
   audio_url?: string | null
+  audio_lang?: string | null
 }
 
 /** Parcours vocal séquentiel — lit les produits filtrés (inclusion + rétention). */
@@ -59,7 +61,7 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
 
       window.speechSynthesis.cancel()
       const utter = new SpeechSynthesisUtterance(buildProductListenText(product))
-      utter.lang = "fr-FR"
+      utter.lang = resolveUtterLang(product.audio_lang)
       utter.rate = 0.92
       utter.onend = continueNext
       utter.onerror = continueNext
@@ -68,16 +70,21 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
     [products, stop],
   )
 
-  const start = useCallback(() => {
+  const startTour = useCallback(() => {
+    if (!products.length || typeof window === "undefined" || active) return
+    stoppedRef.current = false
+    setActive(true)
+    playAt(0)
+  }, [active, playAt, products.length])
+
+  const toggle = useCallback(() => {
     if (!products.length || typeof window === "undefined") return
     if (active) {
       stop()
       return
     }
-    stoppedRef.current = false
-    setActive(true)
-    playAt(0)
-  }, [active, playAt, products.length, stop])
+    startTour()
+  }, [active, products.length, startTour, stop])
 
   useEffect(() => () => stop(), [stop])
 
@@ -85,7 +92,8 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
     active,
     index,
     total: products.length,
-    start,
+    start: toggle,
+    startTour,
     stop,
   }
 }

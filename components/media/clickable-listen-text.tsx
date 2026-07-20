@@ -5,7 +5,12 @@ import { Square } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { AudioWaveIcon } from "@/components/media/audio-wave-icon"
 import { VoiceMessageChip } from "@/components/media/voice-message-chip"
+import { AudioLangBadge } from "@/components/media/audio-lang-badge"
 import { AUDIO_LABELS } from "@/lib/accessibility/audio-labels"
+import { buildCognitiveSummary } from "@/lib/accessibility/cognitive-summary"
+import { resolveUtterLang } from "@/lib/media/audio-langs"
+import { recordListenActivity } from "@/hooks/use-listen-ritual"
+import { useAutoListenOnView } from "@/hooks/use-contextual-listen"
 
 type ListenMode = "audio" | "tts" | "none"
 
@@ -20,14 +25,17 @@ export type ListenPlaybackProps = {
   audioUrl?: string | null
   fallbackLabel?: string
   lang?: string
+  audioLang?: string | null
 }
 
 function useListenPlayback({
   text,
   audioUrl,
   fallbackLabel,
-  lang = "fr-FR",
+  lang,
+  audioLang,
 }: ListenPlaybackProps) {
+  const utterLang = lang ?? resolveUtterLang(audioLang)
   const mode = resolveListenMode(text, audioUrl)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const [playing, setPlaying] = useState(false)
@@ -63,6 +71,7 @@ function useListenPlayback({
         audioRef.current.src = audioUrl
       }
       setPlaying(true)
+      recordListenActivity()
       try {
         await audioRef.current.play()
       } catch {
@@ -74,14 +83,15 @@ function useListenPlayback({
     if (mode === "tts" && typeof window !== "undefined" && window.speechSynthesis && text?.trim()) {
       window.speechSynthesis.cancel()
       const utter = new SpeechSynthesisUtterance(text.trim())
-      utter.lang = lang
+      utter.lang = utterLang
       utter.rate = 0.95
       utter.onend = () => setPlaying(false)
       utter.onerror = () => setPlaying(false)
       setPlaying(true)
+      recordListenActivity()
       window.speechSynthesis.speak(utter)
     }
-  }, [audioUrl, canListen, lang, mode, playing, stopAll, text])
+  }, [audioUrl, canListen, utterLang, mode, playing, stopAll, text])
 
   useEffect(() => () => stopAll(), [stopAll])
 
@@ -151,6 +161,7 @@ export function ListenMicButton({
   audioUrl,
   fallbackLabel,
   lang,
+  audioLang,
   className,
   size = "sm",
   highlight,
@@ -160,6 +171,7 @@ export function ListenMicButton({
     audioUrl,
     fallbackLabel,
     lang,
+    audioLang,
   })
 
   if (!canListen) return null
@@ -181,6 +193,10 @@ export type ClickableListenTextProps = ListenPlaybackProps & {
   showText?: boolean
   textClassName?: string
   highlight?: boolean
+  /** Résumé cognitif 1 phrase (contraste cognitif) */
+  showSummary?: boolean
+  /** Écoute auto au scroll (mode écoute feed) */
+  autoListen?: boolean
 }
 
 /** Texte + onde, ou puce vocale sans « appuyez pour… ». */
@@ -189,17 +205,24 @@ export function ClickableListenText({
   audioUrl,
   fallbackLabel,
   className,
-  lang = "fr-FR",
+  lang,
+  audioLang,
   showText = true,
   textClassName,
   highlight,
+  showSummary,
+  autoListen,
 }: ClickableListenTextProps) {
   const { mode, playing, canListen, toggleListen, speechText } = useListenPlayback({
     text,
     audioUrl,
     fallbackLabel,
     lang,
+    audioLang,
   })
+
+  const autoRef = useAutoListenOnView(!!autoListen, canListen, toggleListen, playing)
+  const summary = showSummary ? buildCognitiveSummary(speechText) : null
 
   if (!canListen && !speechText) return null
 
@@ -237,30 +260,37 @@ export function ClickableListenText({
   }
 
   return (
-    <p
-      className={cn(
-        "flex items-start gap-1.5 text-[15px] leading-relaxed",
-        playing ? "text-[#1F5C2E]" : "text-[#374151]",
-        className,
-      )}
-    >
-      <ListenControl
-        mode={mode}
-        playing={playing}
-        size="sm"
-        onClick={toggleListen}
-        highlight={highlight}
-      />
-      <span
-        role="button"
-        tabIndex={0}
-        onClick={toggleListen}
-        onKeyDown={(e) => e.key === "Enter" && toggleListen()}
-        className={cn("flex-1 min-w-0 cursor-pointer", textClassName)}
+    <div ref={autoRef} className={cn("space-y-1", className)}>
+      <p
+        className={cn(
+          "flex items-start gap-1.5 text-[15px] leading-relaxed",
+          playing ? "text-[#1F5C2E]" : "text-[#374151]",
+        )}
       >
-        {speechText}
-      </span>
-    </p>
+        <ListenControl
+          mode={mode}
+          playing={playing}
+          size="sm"
+          onClick={toggleListen}
+          highlight={highlight}
+        />
+        <span
+          role="button"
+          tabIndex={0}
+          onClick={toggleListen}
+          onKeyDown={(e) => e.key === "Enter" && toggleListen()}
+          className={cn("flex-1 min-w-0 cursor-pointer", textClassName)}
+        >
+          {speechText}
+        </span>
+        <AudioLangBadge lang={audioLang} />
+      </p>
+      {summary && (
+        <p className="pl-8 text-xs text-[#6B7280] leading-snug" aria-hidden>
+          {summary}
+        </p>
+      )}
+    </div>
   )
 }
 

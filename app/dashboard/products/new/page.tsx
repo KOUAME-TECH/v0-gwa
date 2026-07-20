@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ArrowLeft, Upload, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { createClient } from "@/lib/supabase/client"
+import { AUDIO_LANGS } from "@/lib/media/audio-langs"
 
 const categories = [
   { value: "agriculture", label: "Produits Agricoles", subcategories: [
@@ -51,6 +52,7 @@ export default function NewProductPage() {
     stock: "",
     minOrder: "1",
     origin: "",
+    audioLang: "fr",
     certifications: [] as string[],
     imageUrl: "",
   })
@@ -166,6 +168,8 @@ export default function NewProductPage() {
         min_order_quantity: parseInt(formData.minOrder),
         origin_country: formData.origin,
         origin_region: formData.origin,
+        ville: formData.origin,
+        audio_lang: formData.audioLang,
         certifications: formData.certifications.length > 0 ? formData.certifications : null,
         images: formData.imageUrl ? [formData.imageUrl] : [],
         status: 'active',
@@ -349,6 +353,28 @@ export default function NewProductPage() {
                     value={formData.origin}
                     onChange={(e) => setFormData({...formData, origin: e.target.value})}
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="audioLang">Langue de la voix (voix communautaire)</Label>
+                  <Select
+                    value={formData.audioLang}
+                    onValueChange={(value) => setFormData({ ...formData, audioLang: value })}
+                  >
+                    <SelectTrigger id="audioLang">
+                      <SelectValue placeholder="Langue" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {AUDIO_LANGS.map((lang) => (
+                        <SelectItem key={lang.code} value={lang.code}>
+                          {lang.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Pour un enregistrement vocal futur ou la synthèse adaptée à votre communauté.
+                  </p>
                 </div>
               </div>
 

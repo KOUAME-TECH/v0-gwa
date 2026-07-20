@@ -24,6 +24,9 @@ export async function GET(request: NextRequest) {
     const status = statusParam === "all" ? null : statusParam || "active"
     const limit = Math.min(Number(searchParams.get("limit") || 24), 100)
     const offset = Math.max(Number(searchParams.get("offset") || 0), 0)
+    const createdSince = searchParams.get("created_since")?.trim()
+    const regionFilter = searchParams.get("region")?.trim()
+    const villeFilter = searchParams.get("ville")?.trim()
 
     const supabase = await createClient()
     const {
@@ -33,7 +36,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from("products")
       .select(
-        "id, seller_id, category_id, name, description, price, unit, stock_quantity, images, origin_country, origin_region, is_organic, product_type, status, views_count, created_at, region, ville, offer_status",
+        "id, seller_id, category_id, name, description, price, unit, stock_quantity, images, audio_url, origin_country, origin_region, is_organic, product_type, status, views_count, created_at, region, ville, offer_status, audio_lang",
         { count: "exact" },
       )
       .order("created_at", { ascending: false })
@@ -52,6 +55,20 @@ export async function GET(request: NextRequest) {
     if (q) {
       const safe = sanitizeForQuery(q)
       if (safe) query = query.or(`name.ilike.%${safe}%,description.ilike.%${safe}%`)
+    }
+    if (createdSince) {
+      const parsed = new Date(createdSince)
+      if (!Number.isNaN(parsed.getTime())) {
+        query = query.gte("created_at", parsed.toISOString())
+      }
+    }
+    if (regionFilter) {
+      const safe = sanitizeForQuery(regionFilter)
+      if (safe) query = query.ilike("origin_region", `%${safe}%`)
+    }
+    if (villeFilter) {
+      const safe = sanitizeForQuery(villeFilter)
+      if (safe) query = query.ilike("ville", `%${safe}%`)
     }
 
     const { data, error, count } = await query
@@ -117,6 +134,7 @@ export async function POST(request: NextRequest) {
       is_fair_trade: !!body?.is_fair_trade,
       region: body?.region || null,
       ville: body?.ville || null,
+      audio_lang: body?.audio_lang ? String(body.audio_lang).slice(0, 8) : "fr",
       // Statut imposé serveur — ignore body.status (anti-escalade)
       status: "active",
       offer_status: "active",

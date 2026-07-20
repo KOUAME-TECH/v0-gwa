@@ -7,7 +7,7 @@ const PUBLIC_FIELDS =
   "id, full_name, avatar_url, bio, user_type, sub_type, country, city, is_verified, rating, total_reviews, scg_score, scg_badge, scg_bancable, created_at"
 
 const OWNER_EXTRA_FIELDS =
-  ", email, phone, address, auth_method, preferred_language, profile_completion_pct, onboarding_completed_at, scg_calculated_at, updated_at"
+  ", email, phone, address, auth_method, preferred_language, digest_enabled, profile_completion_pct, onboarding_completed_at, scg_calculated_at, updated_at"
 
 const PATCHABLE_FIELDS = [
   "full_name",
@@ -19,6 +19,7 @@ const PATCHABLE_FIELDS = [
   "user_type",
   "sub_type",
   "preferred_language",
+  "digest_enabled",
   "production_type",
   "surface_area",
   "craft_type",

@@ -32,7 +32,9 @@ import { GwaMark } from "@/components/brand/gwa-mark"
 import { WeatherWidget } from "@/components/weather-widget"
 import { ClickableListenText, ListenMicButton } from "@/components/media/clickable-listen-text"
 import { ListenModeToggle } from "@/components/media/listen-mode-toggle"
+import { ListenRitualBadge } from "@/components/media/listen-ritual-badge"
 import { useListenMode } from "@/hooks/use-listen-mode"
+import { useListenRitual } from "@/hooks/use-listen-ritual"
 import { CommentComposer } from "@/components/comments/comment-composer"
 import {
   VOICE_COMMENT_PLACEHOLDER,
@@ -123,6 +125,7 @@ export default function HomePage() {
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null)
   const [userType, setUserType] = useState<string | null>(null)
   const { enabled: listenMode } = useListenMode()
+  const { streak: listenStreak } = useListenRitual()
   const [activeCategory, setActiveCategory] = useState("all")
   const [activeTab, setActiveTab] = useState<"tout" | "produits" | "publications">("tout")
   
@@ -566,6 +569,7 @@ export default function HomePage() {
               <GwaMark size={36} showWordmark wordmarkClassName="text-2xl" />
             </Link>
             <div className="flex items-center gap-2">
+              <ListenRitualBadge streak={listenStreak} />
               <ListenModeToggle compact className="shrink-0" />
               <Link href="/recherche">
                 <Button variant="ghost" size="icon" className="rounded-full h-10 w-10">
@@ -798,6 +802,7 @@ export default function HomePage() {
                           fallbackLabel={VOICE_COMMENT_PLACEHOLDER}
                           textClassName="text-sm"
                           highlight={listenMode}
+                          showSummary={listenMode}
                         />
                       </div>
                       <p className="text-xs text-[#9CA3AF] mt-1 ml-2">
@@ -1071,6 +1076,8 @@ function FeedCard({
             audioUrl={postAudioUrl}
             fallbackLabel={VOICE_COMMENT_PLACEHOLDER}
             highlight={listenModeHighlight}
+            showSummary={listenModeHighlight}
+            autoListen={listenModeHighlight}
           />
         </div>
       )}
