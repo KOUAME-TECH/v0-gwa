@@ -13,7 +13,12 @@ const MALICIOUS_UA = ['sqlmap', 'nikto', 'nmap', 'masscan', 'zgrab', 'dirbuster'
 
 // Security: Rate limiting (in-memory)
 const RL_MAP = new Map<string, { count: number; ts: number }>()
-const RL_LIMITS: Record<string, number> = { auth: 10, api: 60, default: 120 }
+const RL_LIMITS: Record<string, number> = {
+  auth: 10,
+  admin: 20,
+  api: 60,
+  default: 120,
+}
 
 function getClientIP(req: NextRequest): string {
   return (
@@ -36,8 +41,14 @@ export async function middleware(request: NextRequest) {
     }
   } catch { /* malformed URL */ }
 
-  // Layer 2: Rate limiting
-  const rlKey = pathname.startsWith('/auth') ? 'auth' : pathname.startsWith('/api') ? 'api' : 'default'
+  // Layer 2: Rate limiting (admin plus strict que API générale)
+  const rlKey = pathname.startsWith('/auth')
+    ? 'auth'
+    : pathname.startsWith('/api/admin')
+      ? 'admin'
+      : pathname.startsWith('/api')
+        ? 'api'
+        : 'default'
   const limit = RL_LIMITS[rlKey]
   const mapKey = `${ip}:${rlKey}`
   const now = Date.now()

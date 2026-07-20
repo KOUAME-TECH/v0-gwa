@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -78,12 +77,6 @@ interface User {
   admin_role?: AdminRole | null
 }
 
-interface AdminRoleRow {
-  user_id: string
-  role: AdminRole
-  is_active: boolean
-}
-
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
@@ -108,74 +101,36 @@ export default function AdminUsersPage() {
   }, [filterType, filterStatus, page])
 
   const loadCallerRole = async () => {
-    const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-
-    const { data } = await supabase
-      .from("admin_roles")
-      .select("role")
-      .eq("user_id", user.id)
-      .eq("is_active", true)
-      .maybeSingle()
-
-    if (data?.role && isAdminRole(data.role)) {
-      setCallerRole(data.role)
-    }
-  }
-
-  const attachAdminRoles = async (rows: User[]) => {
-    if (rows.length === 0) return rows
-
-    const supabase = createClient()
-    const ids = rows.map((u) => u.id)
-    const { data: roles } = await supabase
-      .from("admin_roles")
-      .select("user_id, role, is_active")
-      .in("user_id", ids)
-      .eq("is_active", true)
-
-    const roleByUser = new Map<string, AdminRole>()
-    for (const row of (roles || []) as AdminRoleRow[]) {
-      if (isAdminRole(row.role)) {
-        roleByUser.set(row.user_id, row.role)
+    try {
+      const res = await fetch("/api/auth/admin-status")
+      const data = await res.json()
+      if (data?.role && isAdminRole(data.role)) {
+        setCallerRole(data.role)
       }
+    } catch {
+      /* ignore */
     }
-
-    return rows.map((u) => ({
-      ...u,
-      admin_role: roleByUser.get(u.id) ?? null,
-    }))
   }
 
   const fetchUsers = async () => {
     setLoading(true)
-    const supabase = createClient()
-
-    let query = supabase
-      .from("profiles")
-      .select("*", { count: "exact" })
-      .order("created_at", { ascending: false })
-      .range(page * pageSize, (page + 1) * pageSize - 1)
-
-    if (filterType !== "all") {
-      query = query.eq("user_type", filterType)
-    }
-
-    if (filterStatus === "verified") {
-      query = query.eq("is_verified", true)
-    } else if (filterStatus === "suspended") {
-      query = query.eq("is_suspended", true)
-    } else if (filterStatus === "unverified") {
-      query = query.eq("is_verified", false)
-    }
-
-    const { data, count, error } = await query
-
-    if (!error && data) {
-      const enriched = await attachAdminRoles(data as User[])
-      setUsers(enriched)
-      setTotalCount(count || 0)
+    try {
+      const params = new URLSearchParams({
+        page: String(page),
+        pageSize: String(pageSize),
+        type: filterType,
+        status: filterStatus,
+      })
+      const res = await fetch(`/api/admin/users?${params}`)
+      const payload = await res.json()
+      if (!res.ok) throw new Error(payload.error || "Chargement impossible")
+      setUsers(payload.users || [])
+      setTotalCount(payload.total || 0)
+      if (payload.callerRole && isAdminRole(payload.callerRole)) {
+        setCallerRole(payload.callerRole)
+      }
+    } catch (err) {
+      console.error("[admin/users]", err)
     }
     setLoading(false)
   }
@@ -187,18 +142,15 @@ export default function AdminUsersPage() {
     }
 
     setLoading(true)
-    const supabase = createClient()
-
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("*")
-      .or(`full_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%,phone.ilike.%${searchQuery}%`)
-      .order("created_at", { ascending: false })
-      .limit(50)
-
-    if (!error && data) {
-      const enriched = await attachAdminRoles(data as User[])
-      setUsers(enriched)
+    try {
+      const params = new URLSearchParams({ q: searchQuery.trim() })
+      const res = await fetch(`/api/admin/users?${params}`)
+      const payload = await res.json()
+      if (!res.ok) throw new Error(payload.error || "Recherche impossible")
+      setUsers(payload.users || [])
+      setTotalCount(payload.total || payload.users?.length || 0)
+    } catch (err) {
+      console.error("[admin/users search]", err)
     }
     setLoading(false)
   }

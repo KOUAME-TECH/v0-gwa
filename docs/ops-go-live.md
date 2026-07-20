@@ -82,14 +82,29 @@ critical row blocks launch. Owner column: **F**ounder / **C**ode / **I**ntern.
 ## Sécurité Supabase (migration `035`)
 - [ ] **Leaked password protection** activée dans Supabase Dashboard → Authentication →
       Password security (plan Pro+). Message FR côté app : `lib/auth/auth-errors.ts`.
+      Bannière campagne login/signup : `components/auth/hibp-password-banner.tsx` (fenêtre ~7 j).
 - [x] Storage : plus de SELECT public sur tout un bucket ; URLs CDN `/object/public/…` OK ;
       listing réservé dossier `{uid}/…` + `service_role` — `035_security_hardening_storage_rpc_audit.sql`
 - [x] RPC `is_super_admin` / `is_active_admin` : EXECUTE révoqué pour `anon`/`authenticated`
 - [x] `audit_logs` : INSERT permissif supprimé ; écriture backend via `service_role` uniquement
 - [ ] Re-smoke après `035` : images produits, upload avatar, admin login, formulaire contact
+- [ ] Appliquer `036_partner_foundation.sql` (tables partner_* sans UI)
+- [ ] Post-bêta : appliquer `037_profiles_pii_restrict.sql` (PII)
 
 **Workflow migrations** : toute policy SQL → fichier `scripts/schema/0xx_*.sql` versionné Git ;
 appliquer via SQL Editor ou `supabase db push` ; jamais uniquement en UI sans commit.
+
+## Partenaires financiers (bêta lean)
+
+En bêta, **pas de dashboard `/partner`**. Process :
+
+1. Admin examine `/admin/factoring` (approve / reject / disburse semi-manuel).
+2. Export sécurisé : `GET /api/admin/export?entity=factoring` (CSV).
+3. Transmission hors plateforme sous **NDA** au partenaire pilote (email chiffré / canal convenu).
+4. Architecture prête : `partner_organizations` + `partner_roles` (`036`) — provisioning `service_role` only.
+5. UI lecture seule + `requirePartner()` = **post-bêta**.
+
+Ne jamais : `user_type=banque` au signup ; fusionner partenaires dans `admin_roles`.
 
 ## Launch decision
 GO only when **all Section 1–2 critical rows are GO** and Sections 3–6 are GO or have a

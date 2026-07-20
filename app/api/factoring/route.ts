@@ -2,9 +2,14 @@ import { type NextRequest, NextResponse } from "next/server"
 import { requireUser } from "@/lib/auth/require-admin"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
+import {
+  FACTORING_MIN_SCORE,
+  isFactoringEligible,
+  roleCanRequestFactoring,
+} from "@/lib/factoring/eligibility"
 
 /** Seuil d'éligibilité affacturage (aligné sur bancable du moteur SCG) */
-const SCG_SEUIL_ELIGIBILITE = 500
+const SCG_SEUIL_ELIGIBILITE = FACTORING_MIN_SCORE
 
 /**
  * GET /api/factoring — demandes de l'utilisateur (ou toutes si admin)
@@ -88,13 +93,27 @@ export async function POST(request: NextRequest) {
     // Profil + snapshot SCG au moment de la demande
     const { data: profile } = await admin
       .from("profiles")
-      .select("id, scg_score, scg_badge, scg_bancable")
+      .select("id, user_type, scg_score, scg_badge, scg_bancable")
       .eq("id", user.id)
       .maybeSingle()
 
+    if (!roleCanRequestFactoring(profile?.user_type)) {
+      return NextResponse.json(
+        {
+          error:
+            "Seuls les producteurs et coopératives peuvent demander de l'affacturage.",
+          code: "ROLE_NOT_ELIGIBLE",
+          user_type: profile?.user_type ?? null,
+        },
+        { status: 403 },
+      )
+    }
+
     const score = profile?.scg_score ?? 0
-    const bancable = profile?.scg_bancable ?? false
-    const eligible = bancable || score >= SCG_SEUIL_ELIGIBILITE
+    const eligible = isFactoringEligible({
+      scg_bancable: profile?.scg_bancable,
+      scg_score: score,
+    })
 
     if (!eligible) {
       return NextResponse.json(

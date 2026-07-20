@@ -12,6 +12,7 @@ import { mapAuthErrorMessage } from "@/lib/auth/auth-errors"
 import { PhoneInput } from "@/components/auth/phone-input"
 import { OtpInput, OtpCountdown } from "@/components/auth/otp-input"
 import { maskPhone } from "@/lib/auth/phone"
+import { HibpPasswordBanner } from "@/components/auth/hibp-password-banner"
 
 function LoginForm() {
   const router = useRouter()
@@ -180,6 +181,8 @@ function LoginForm() {
           <h1 className="text-3xl font-bold tracking-tight mb-2">Connexion</h1>
           <p className="text-neutral-500">Heureux de vous revoir</p>
         </div>
+
+        <HibpPasswordBanner />
 
         {error && (
           <div className="mb-5 p-4 rounded-xl bg-red-50 text-red-600 text-sm font-medium">

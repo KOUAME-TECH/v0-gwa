@@ -1,207 +1,189 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Slider } from "@/components/ui/slider"
-import { Switch } from "@/components/ui/switch"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { 
-  Shield, Star, TrendingUp, Save, RefreshCw, History,
-  AlertTriangle, CheckCircle, Settings, Users, Award
-} from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { RefreshCw, Download, Shield, Info } from "lucide-react"
 
-const defaultWeights = {
-  transactions: 25,
-  ratings: 20,
-  compliance: 20,
-  engagement: 15,
-  certifications: 10,
-  seniority: 10,
+type Dims = {
+  fiabilite: number
+  qualite: number
+  engagement: number
+  volumes: number
+  stabilite: number
 }
 
-const badgeLevels = [
-  { name: "Diamant", minScore: 900, color: "bg-purple-500", icon: "💎" },
-  { name: "Or", minScore: 750, color: "bg-yellow-500", icon: "🥇" },
-  { name: "Argent", minScore: 500, color: "bg-gray-400", icon: "🥈" },
-  { name: "Bronze", minScore: 250, color: "bg-orange-600", icon: "🥉" },
-  { name: "Debutant", minScore: 0, color: "bg-green-600", icon: "🌱" },
-]
+type ScgUser = {
+  id: string
+  full_name: string | null
+  user_type: string | null
+  city: string | null
+  scg_score: number | null
+  scg_badge: string | null
+  scg_bancable: boolean | null
+  dimensions: Dims | null
+  recommandation: string | null
+}
 
+type DimMeta = { key: keyof Dims; label: string; weight: number }
+
+/**
+ * Admin SCG v1 lean — dimensions réelles + export.
+ * Configuration poids interactive (ancienne UI) retirée : non branchée au moteur.
+ */
 export default function AdminSCGPage() {
-  const [weights, setWeights] = useState(defaultWeights)
-  const [thresholds, setThresholds] = useState(badgeLevels)
-  const [autoRecalc, setAutoRecalc] = useState(true)
-  const [saving, setSaving] = useState(false)
+  const [users, setUsers] = useState<ScgUser[]>([])
+  const [meta, setMeta] = useState<DimMeta[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const totalWeight = Object.values(weights).reduce((sum, w) => sum + w, 0)
-
-  const handleWeightChange = (key: string, value: number[]) => {
-    setWeights(prev => ({ ...prev, [key]: value[0] }))
+  const load = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch("/api/admin/scg")
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Chargement impossible")
+      setUsers(data.users || [])
+      setMeta(data.dimensions_meta || [])
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erreur")
+    }
+    setLoading(false)
   }
 
-  const handleSave = async () => {
-    setSaving(true)
-    await new Promise(r => setTimeout(r, 1000))
-    setSaving(false)
+  useEffect(() => {
+    void load()
+  }, [])
+
+  const exportCsv = () => {
+    window.location.href = "/api/admin/export?entity=users"
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Configuration SCG</h1>
-          <p className="text-muted-foreground">Score de Confiance Garanti - Parametres et poids</p>
+          <h1 className="text-2xl font-bold text-[#111827]">SCG — Score de Confiance</h1>
+          <p className="text-sm text-[#4B5563]">
+            Moteur v1 (bêta) · dimensions transactionnelles · seuils 500 / 600 / 800
+          </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline">
-            <History className="h-4 w-4 mr-2" />
-            Historique
+          <Button variant="outline" onClick={() => void load()} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+            Actualiser
           </Button>
-          <Button onClick={handleSave} disabled={saving || totalWeight !== 100}>
-            <Save className="h-4 w-4 mr-2" />
-            {saving ? "Sauvegarde..." : "Sauvegarder"}
+          <Button variant="outline" onClick={exportCsv}>
+            <Download className="h-4 w-4 mr-2" />
+            Export CSV
           </Button>
         </div>
       </div>
 
-      {totalWeight !== 100 && (
-        <div className="bg-destructive/10 text-destructive rounded-lg p-4 flex items-center gap-3">
-          <AlertTriangle className="h-5 w-5" />
-          <span>Le total des poids doit etre egal a 100%. Actuel: {totalWeight}%</span>
+      <Card className="border-[var(--gwa-primary,#1F5C2E)]/20 bg-[var(--gwa-primary-soft,#F0F7F2)]">
+        <CardContent className="p-4 flex gap-3 text-sm text-[#111827]">
+          <Info className="h-5 w-5 shrink-0 text-[var(--gwa-primary,#1F5C2E)]" />
+          <div>
+            <p className="font-medium">Bêta lean — SCG v2 5C reporté post-bêta</p>
+            <p className="text-[#4B5563] mt-1">
+              Le modèle bancaire Character / Capacity / Capital / Collateral / Conditions
+              et le service FastAPI sont documentés dans{" "}
+              <code className="text-xs">docs/scg-v2-fastapi-contract.md</code>. En bêta :
+              score 0–1000, <strong>bancable ≥ 500</strong>, snapshot sur demandes d&apos;affacturage.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {meta.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+          {meta.map((d) => (
+            <Card key={d.key} className="border-0 shadow-sm">
+              <CardContent className="p-3">
+                <p className="text-xs text-[#4B5563] line-clamp-2">{d.label}</p>
+                <p className="text-lg font-bold text-[var(--gwa-primary,#1F5C2E)]">{d.weight}%</p>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       )}
 
-      <Tabs defaultValue="weights">
-        <TabsList>
-          <TabsTrigger value="weights">Poids des criteres</TabsTrigger>
-          <TabsTrigger value="badges">Niveaux badges</TabsTrigger>
-          <TabsTrigger value="settings">Parametres</TabsTrigger>
-        </TabsList>
+      {error && (
+        <div className="rounded-lg bg-red-50 text-red-700 p-3 text-sm">{error}</div>
+      )}
 
-        <TabsContent value="weights" className="space-y-4 mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Poids des 6 criteres SCG</CardTitle>
-              <CardDescription>
-                Ajustez l'importance relative de chaque critere dans le calcul du score (total = 100%)
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {Object.entries(weights).map(([key, value]) => (
-                <div key={key} className="space-y-2">
-                  <div className="flex justify-between">
-                    <Label className="capitalize">{key.replace("_", " ")}</Label>
-                    <span className="font-mono font-bold">{value}%</span>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Shield className="h-5 w-5" />
+            Profils scorés
+          </CardTitle>
+          <CardDescription>Dernier snapshot dimensions (table scg_scores)</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {loading ? (
+            <p className="text-sm text-[#4B5563]">Chargement…</p>
+          ) : users.length === 0 ? (
+            <p className="text-sm text-[#4B5563]">Aucun score SCG enregistré.</p>
+          ) : (
+            users.map((u) => (
+              <div
+                key={u.id}
+                className="rounded-xl border border-[#E5E7EB] p-3 flex flex-col gap-2"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-semibold truncate">{u.full_name || "Sans nom"}</p>
+                    <p className="text-xs text-[#4B5563]">
+                      {[u.user_type, u.city].filter(Boolean).join(" · ")}
+                    </p>
                   </div>
-                  <Slider
-                    value={[value]}
-                    onValueChange={(v) => handleWeightChange(key, v)}
-                    max={50}
-                    step={5}
-                    className="w-full"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {key === "transactions" && "Nombre et valeur des transactions completees"}
-                    {key === "ratings" && "Moyenne des notes recues (1-5 etoiles)"}
-                    {key === "compliance" && "Respect des delais, qualite, litiges"}
-                    {key === "engagement" && "Activite sur la plateforme, reponses, partages"}
-                    {key === "certifications" && "Documents verifies, certifications obtenues"}
-                    {key === "seniority" && "Anciennete sur la plateforme"}
-                  </p>
-                </div>
-              ))}
-
-              <div className="pt-4 border-t">
-                <div className="flex justify-between items-center">
-                  <span className="font-medium">Total</span>
-                  <Badge variant={totalWeight === 100 ? "default" : "destructive"}>
-                    {totalWeight}%
-                  </Badge>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="badges" className="space-y-4 mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Seuils des badges</CardTitle>
-              <CardDescription>Score minimum requis pour chaque niveau de badge</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {thresholds.map((level, idx) => (
-                <div key={level.name} className="flex items-center gap-4 p-4 rounded-lg border">
-                  <div className={`w-12 h-12 rounded-full ${level.color} flex items-center justify-center text-2xl`}>
-                    {level.icon}
+                  <div className="text-right shrink-0">
+                    <p className="text-xl font-bold text-[var(--gwa-primary,#1F5C2E)]">
+                      {u.scg_score ?? 0}
+                    </p>
+                    {u.scg_bancable ? (
+                      <Badge className="bg-green-100 text-green-700">Bancable</Badge>
+                    ) : (
+                      <Badge className="bg-gray-100 text-gray-600">{u.scg_badge || "—"}</Badge>
+                    )}
                   </div>
-                  <div className="flex-1">
-                    <p className="font-semibold">{level.name}</p>
-                    <p className="text-sm text-muted-foreground">Score minimum</p>
+                </div>
+                {u.dimensions && (
+                  <div className="grid grid-cols-5 gap-1 text-center text-[10px] sm:text-xs">
+                    {(
+                      [
+                        ["F", u.dimensions.fiabilite],
+                        ["Q", u.dimensions.qualite],
+                        ["E", u.dimensions.engagement],
+                        ["V", u.dimensions.volumes],
+                        ["S", u.dimensions.stabilite],
+                      ] as const
+                    ).map(([label, val]) => (
+                      <div key={label} className="rounded-lg bg-[#F9FAFB] py-1">
+                        <div className="font-semibold text-[#111827]">{val}</div>
+                        <div className="text-[#4B5563]">{label}</div>
+                      </div>
+                    ))}
                   </div>
-                  <Input
-                    type="number"
-                    value={level.minScore}
-                    onChange={(e) => {
-                      const newThresholds = [...thresholds]
-                      newThresholds[idx].minScore = parseInt(e.target.value) || 0
-                      setThresholds(newThresholds)
-                    }}
-                    className="w-24 text-center"
-                    min={0}
-                    max={1000}
-                  />
-                  <span className="text-muted-foreground">/ 1000</span>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="settings" className="space-y-4 mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Parametres generaux</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Recalcul automatique</p>
-                  <p className="text-sm text-muted-foreground">Recalculer les scores apres chaque transaction</p>
-                </div>
-                <Switch checked={autoRecalc} onCheckedChange={setAutoRecalc} />
+                )}
+                {u.recommandation && (
+                  <p className="text-xs text-[#4B5563]">{u.recommandation}</p>
+                )}
+                <Link
+                  href={`/admin/users`}
+                  className="text-xs text-[var(--gwa-primary,#1F5C2E)] font-medium"
+                >
+                  Voir utilisateurs →
+                </Link>
               </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Score visible publiquement</p>
-                  <p className="text-sm text-muted-foreground">Afficher le score sur les profils vendeurs</p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Notifications de changement</p>
-                  <p className="text-sm text-muted-foreground">Notifier les utilisateurs des changements de score</p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-
-              <div className="pt-4 border-t">
-                <Button variant="outline" className="w-full">
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Recalculer tous les scores (batch)
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+            ))
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }

@@ -28,6 +28,7 @@ import {
   USER_TYPE_MAP,
 } from "@/lib/auth/post-auth"
 import { cn } from "@/lib/utils"
+import { HibpPasswordBanner } from "@/components/auth/hibp-password-banner"
 
 const userTypes = [
   { value: "farmer", label: "Producteur", icon: Sprout },
@@ -362,6 +363,7 @@ function SignupForm() {
       </header>
 
       <main className="flex-1 px-5 pt-8 pb-10">
+        <HibpPasswordBanner />
         <form onSubmit={handleSubmit} className="space-y-6">
           {error && (
             <div className="p-4 rounded-xl bg-red-50 text-red-600 text-sm font-medium">

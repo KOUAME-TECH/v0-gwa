@@ -86,3 +86,42 @@ export async function requireAdminAction(action: AdminAction) {
 
   return gate
 }
+
+/**
+ * Partenaire financier actif (post-bêta UI).
+ * Lecture partner_roles via service role — tables créées en migration 036.
+ */
+export async function requirePartner() {
+  const base = await requireUser()
+  if (!base.user) {
+    return { ...base, isPartner: false as const, partner: null }
+  }
+
+  const admin = createAdminClient()
+  const { data: role, error } = await admin
+    .from("partner_roles")
+    .select("id, role, organization_id, is_active")
+    .eq("user_id", base.user.id)
+    .eq("is_active", true)
+    .maybeSingle()
+
+  if (error || !role) {
+    return {
+      user: base.user,
+      supabase: base.supabase,
+      admin,
+      error: (error?.message || "Accès partenaire refusé") as string,
+      isPartner: false as const,
+      partner: null,
+    }
+  }
+
+  return {
+    user: base.user,
+    supabase: base.supabase,
+    admin,
+    partner: role,
+    error: null,
+    isPartner: true as const,
+  }
+}
