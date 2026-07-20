@@ -10,5 +10,7 @@ export function resolveCommentMediaType(input: {
   return "text"
 }
 
-/** Libellé affiché pour un commentaire vocal sans texte. */
-export const VOICE_COMMENT_PLACEHOLDER = "Message vocal — appuyez pour écouter"
+import { VOICE_VISIBLE_LABEL } from "@/lib/accessibility/audio-labels"
+
+/** Libellé affiché pour un commentaire vocal sans texte (puce onde, pas « appuyez pour… »). */
+export const VOICE_COMMENT_PLACEHOLDER = VOICE_VISIBLE_LABEL

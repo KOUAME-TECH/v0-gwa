@@ -361,6 +361,16 @@
 .gwa-dot:nth-child(2) { animation-delay: 0.2s; }
 .gwa-dot:nth-child(3) { animation-delay: 0.4s; }
 
+/* Harmattan Wave — symbole audio GWA */
+@keyframes gwa-wave {
+  0%, 100% { height: 0.35rem; opacity: 0.55; }
+  50% { height: 0.85rem; opacity: 1; }
+}
+.animate-gwa-wave {
+  animation: gwa-wave 0.75s ease-in-out infinite;
+  height: 0.35rem;
+}
+
 /* iOS safe area */
 .gwa-safe-bottom { padding-bottom: max(env(safe-area-inset-bottom, 0px), 8px); }
 

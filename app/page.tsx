@@ -31,6 +31,8 @@ import { toast } from "sonner"
 import { GwaMark } from "@/components/brand/gwa-mark"
 import { WeatherWidget } from "@/components/weather-widget"
 import { ClickableListenText, ListenMicButton } from "@/components/media/clickable-listen-text"
+import { ListenModeToggle } from "@/components/media/listen-mode-toggle"
+import { useListenMode } from "@/hooks/use-listen-mode"
 import { CommentComposer } from "@/components/comments/comment-composer"
 import {
   VOICE_COMMENT_PLACEHOLDER,
@@ -120,6 +122,7 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(true)
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null)
   const [userType, setUserType] = useState<string | null>(null)
+  const { enabled: listenMode } = useListenMode()
   const [activeCategory, setActiveCategory] = useState("all")
   const [activeTab, setActiveTab] = useState<"tout" | "produits" | "publications">("tout")
   
@@ -563,6 +566,7 @@ export default function HomePage() {
               <GwaMark size={36} showWordmark wordmarkClassName="text-2xl" />
             </Link>
             <div className="flex items-center gap-2">
+              <ListenModeToggle compact className="shrink-0" />
               <Link href="/recherche">
                 <Button variant="ghost" size="icon" className="rounded-full h-10 w-10">
                   <Search className="h-5 w-5 text-[#4B5563]" />
@@ -736,6 +740,7 @@ export default function HomePage() {
               }
               formatPrice={formatPrice}
               formatTimeAgo={formatTimeAgo}
+              listenModeHighlight={listenMode}
             />
           ))
         )}
@@ -792,6 +797,7 @@ export default function HomePage() {
                           audioUrl={comment.audio_url}
                           fallbackLabel={VOICE_COMMENT_PLACEHOLDER}
                           textClassName="text-sm"
+                          highlight={listenMode}
                         />
                       </div>
                       <p className="text-xs text-[#9CA3AF] mt-1 ml-2">
@@ -914,7 +920,8 @@ function FeedCard({
   followPending,
   onDelete,
   formatPrice,
-  formatTimeAgo
+  formatTimeAgo,
+  listenModeHighlight,
 }: { 
   item: FeedItem
   onLike: () => void
@@ -929,6 +936,7 @@ function FeedCard({
   onDelete?: () => void
   formatPrice: (price: number) => string
   formatTimeAgo: (date: string) => string
+  listenModeHighlight?: boolean
 }) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   
@@ -1062,6 +1070,7 @@ function FeedCard({
             text={(data as Post).content}
             audioUrl={postAudioUrl}
             fallbackLabel={VOICE_COMMENT_PLACEHOLDER}
+            highlight={listenModeHighlight}
           />
         </div>
       )}
@@ -1140,6 +1149,7 @@ function FeedCard({
                 text={buildProductListenText(data as Product)}
                 audioUrl={(data as Product).audio_url}
                 fallbackLabel={(data as Product).name}
+                highlight={listenModeHighlight}
                 className="!bg-white/20 !text-white hover:!bg-white/30 ring-0"
               />
             </div>

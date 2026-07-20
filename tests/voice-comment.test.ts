@@ -34,7 +34,8 @@ describe("resolveListenMode (tap pour écouter)", () => {
 })
 
 describe("VOICE_COMMENT_PLACEHOLDER", () => {
-  it("libellé FR explicite", () => {
-    expect(VOICE_COMMENT_PLACEHOLDER).toMatch(/écouter/i)
+  it("libellé onde sans « appuyez pour… »", () => {
+    expect(VOICE_COMMENT_PLACEHOLDER).toBe("Note vocale")
+    expect(VOICE_COMMENT_PLACEHOLDER).not.toMatch(/appuyez/i)
   })
 })

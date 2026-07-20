@@ -1,13 +1,16 @@
 "use client"
 
 import React from "react"
-import { Mic, Send, Square, X } from "lucide-react"
+import { Send, Square, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder"
 import { toast } from "sonner"
 import { validateAudioFile } from "@/lib/media/compress"
+import { AudioWaveIcon } from "@/components/media/audio-wave-icon"
+import { VoiceMessageChip } from "@/components/media/voice-message-chip"
+import { AUDIO_LABELS } from "@/lib/accessibility/audio-labels"
 
 export type CommentComposerProps = {
   userInitial?: string
@@ -60,9 +63,9 @@ export function CommentComposer({
     <div className="space-y-2 pt-3 border-t border-[#E5E7EB]/80">
       {isRecording && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-red-50/80 text-red-700 text-sm">
-          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
-          <span className="flex-1">Enregistrement…</span>
-          <button type="button" onClick={stopRecording} className="p-1 rounded-full hover:bg-red-100" aria-label="Arrêter">
+          <AudioWaveIcon playing size="sm" variant="recorded" className="shrink-0" />
+          <span className="flex-1">{AUDIO_LABELS.recording}</span>
+          <button type="button" onClick={stopRecording} className="p-1 rounded-full hover:bg-red-100" aria-label={AUDIO_LABELS.stop}>
             <Square className="h-4 w-4 fill-current" />
           </button>
         </div>
@@ -70,7 +73,7 @@ export function CommentComposer({
 
       {recording && !isRecording && (
         <div className="flex items-center gap-2 px-2 py-1.5 rounded-xl bg-[#1F5C2E]/5 border border-[#1F5C2E]/10">
-          <Mic className="h-3.5 w-3.5 text-[#1F5C2E] shrink-0" />
+          <VoiceMessageChip showLabel={false} size="sm" className="pointer-events-none shrink-0" />
           <audio src={recording.url} controls preload="none" className="flex-1 h-8 min-w-0 [&::-webkit-media-controls-panel]:bg-transparent" />
           <button type="button" onClick={clearRecording} className="p-1 text-[#6B7280] hover:text-[#111827]" aria-label="Supprimer">
             <X className="h-4 w-4" />
@@ -112,12 +115,12 @@ export function CommentComposer({
                 ? "bg-red-500 text-white"
                 : "text-[#1F5C2E] hover:bg-[#1F5C2E]/8",
             )}
-            aria-label={isRecording ? "Arrêter" : "Note vocale"}
+            aria-label={isRecording ? AUDIO_LABELS.stop : AUDIO_LABELS.playVoice}
           >
             {isRecording ? (
               <Square className="h-3.5 w-3.5 fill-current" />
             ) : (
-              <Mic className="h-4 w-4" />
+              <AudioWaveIcon playing={false} size="sm" variant="recorded" />
             )}
           </button>
 

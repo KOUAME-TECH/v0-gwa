@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,12 +10,20 @@ import Image from "next/image"
 import Link from "next/link"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { toast } from "sonner"
+import { ListenMicButton } from "@/components/media/clickable-listen-text"
+import { buildProductListenText } from "@/lib/media/product-listen"
+import { ListenModeToggle } from "@/components/media/listen-mode-toggle"
+import { ShopVoiceTourButton } from "@/components/media/shop-voice-tour-button"
+import { useListenMode } from "@/hooks/use-listen-mode"
+import { useShopVoiceTour } from "@/hooks/use-shop-voice-tour"
 
 type Product = {
   id: string
   name: string
   price: number
   unit: string
+  description: string | null
+  audio_url: string | null
   images: string[] | null
   origin_country: string
   origin_region: string | null
@@ -42,6 +50,7 @@ export default function MarketplacePage() {
   const [showFilters, setShowFilters] = useState(false)
   const [viewMode, setViewMode] = useState<ViewMode>("compact")
   const [userId, setUserId] = useState<string | null>(null)
+  const { enabled: listenMode } = useListenMode()
   const supabase = createClient()
 
   useEffect(() => { fetchData() }, [])
@@ -55,7 +64,7 @@ export default function MarketplacePage() {
       supabase
         .from("products")
         .select(`
-          id, name, price, unit, images, origin_country, origin_region,
+          id, name, price, unit, description, audio_url, images, origin_country, origin_region,
           is_organic, is_fair_trade, product_type, category_id, seller_id,
           profiles:seller_id(full_name, avatar_url, is_verified),
           categories:category_id(name, slug)
@@ -107,6 +116,41 @@ export default function MarketplacePage() {
   const fmt = (n: number) => new Intl.NumberFormat("fr-FR").format(n)
   const activeFiltersCount = (selectedType !== "all" ? 1 : 0) + (selectedCategory !== "all" ? 1 : 0)
 
+  const tourProducts = useMemo(
+    () =>
+      filteredProducts.map((p) => ({
+        id: p.id,
+        name: p.name,
+        price: p.price,
+        unit: p.unit,
+        description: p.description,
+        origin_region: p.origin_region,
+        origin_country: p.origin_country,
+        product_type: p.product_type,
+        is_organic: p.is_organic,
+        audio_url: p.audio_url,
+      })),
+    [filteredProducts],
+  )
+
+  const { active: tourActive, index: tourIndex, total: tourTotal, start: toggleTour } =
+    useShopVoiceTour(tourProducts)
+
+  function productListenProps(p: Product) {
+    return {
+      text: buildProductListenText(p),
+      audioUrl: p.audio_url,
+      fallbackLabel: p.name,
+      highlight: listenMode,
+    }
+  }
+
+  function ProductListenBtn({ p, size = "xs" as const }: { p: Product; size?: "xs" | "sm" }) {
+    return (
+      <ListenMicButton size={size} {...productListenProps(p)} />
+    )
+  }
+
   // ---- COMPACT CARD (3 cols) ----
   function CompactCard({ p }: { p: Product }) {
     return (
@@ -123,7 +167,10 @@ export default function MarketplacePage() {
           </button>
         </div>
         <div className="p-1.5">
-          <p className="text-[11px] font-medium leading-tight line-clamp-1">{p.name}</p>
+          <div className="flex items-center gap-0.5">
+            <p className="text-[11px] font-medium leading-tight line-clamp-1 flex-1 min-w-0">{p.name}</p>
+            <ProductListenBtn p={p} />
+          </div>
           <div className="flex items-center justify-between mt-1">
             <span className="text-[11px] font-bold text-red-600">{fmt(p.price)} F</span>
             <button onClick={(e) => addToCart(p.id, e)}
@@ -148,7 +195,10 @@ export default function MarketplacePage() {
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-[13px] font-medium leading-tight line-clamp-1">{p.name}</p>
+          <div className="flex items-center gap-1">
+            <p className="text-[13px] font-medium leading-tight line-clamp-1 flex-1 min-w-0">{p.name}</p>
+            <ProductListenBtn p={p} size="xs" />
+          </div>
           <div className="flex items-center gap-1.5 mt-0.5">
             {p.categories && <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded-full text-muted-foreground">{p.categories.name}</span>}
             {p.origin_region && (
@@ -192,7 +242,10 @@ export default function MarketplacePage() {
           )}
         </div>
         <div className="p-2.5">
-          <p className="text-sm font-medium leading-tight line-clamp-2">{p.name}</p>
+          <div className="flex items-start gap-1">
+            <p className="text-sm font-medium leading-tight line-clamp-2 flex-1 min-w-0">{p.name}</p>
+            <ProductListenBtn p={p} size="sm" />
+          </div>
           {p.profiles && (
             <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
               {p.profiles.full_name}
@@ -218,6 +271,14 @@ export default function MarketplacePage() {
         <div className="flex items-center gap-3 p-3">
           <Link href="/" className="lg:hidden"><ChevronLeft className="h-6 w-6" /></Link>
           <h1 className="text-lg font-semibold flex-1 text-[#111827]">Marketplace</h1>
+          <ListenModeToggle compact className="shrink-0" />
+          <ShopVoiceTourButton
+            active={tourActive}
+            index={tourIndex}
+            total={tourTotal}
+            onClick={toggleTour}
+            className="shrink-0 hidden sm:inline-flex"
+          />
           <Link href="/panier">
             <Button variant="ghost" size="icon" className="rounded-full h-9 w-9">
               <ShoppingCart className="h-5 w-5 text-[#4B5563]" />
@@ -324,9 +385,18 @@ export default function MarketplacePage() {
           </div>
         ) : (
           <>
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-2 gap-2">
               <p className="text-xs text-muted-foreground">{filteredProducts.length} produit{filteredProducts.length > 1 ? "s" : ""}</p>
-              <Badge variant="outline" className="text-[10px] text-[#2F7D32] border-[#2F7D32]/30 capitalize">{viewMode}</Badge>
+              <div className="flex items-center gap-2">
+                <ShopVoiceTourButton
+                  active={tourActive}
+                  index={tourIndex}
+                  total={tourTotal}
+                  onClick={toggleTour}
+                  className="sm:hidden"
+                />
+                <Badge variant="outline" className="text-[10px] text-[#2F7D32] border-[#2F7D32]/30 capitalize">{viewMode}</Badge>
+              </div>
             </div>
 
             {viewMode === "compact" && (
