@@ -4,7 +4,7 @@
   "description": "Marketplace agricole + escrow + affacturage — Côte d'Ivoire",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#FFF6E5",
+  "background_color": "#1F5C2E",
   "theme_color": "#1F5C2E",
   "orientation": "portrait-primary",
   "scope": "/",
@@ -47,25 +47,21 @@
     {
       "name": "Agriculture",
       "short_name": "Agri",
-      "description": "Voir les produits agricoles",
       "url": "/agriculture",
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     },
     {
       "name": "Mon Panier",
       "short_name": "Panier",
-      "description": "Voir mon panier",
       "url": "/panier",
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     },
     {
       "name": "Installer",
       "short_name": "Install",
-      "description": "Installer l'application",
       "url": "/download",
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     }
   ],
-  "related_applications": [],
   "prefer_related_applications": false
 }

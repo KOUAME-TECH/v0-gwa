@@ -1,6 +1,9 @@
-<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="512" height="512" rx="96" fill="#4a7c59"/>
-  <text x="256" y="320" font-family="system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="160" font-weight="700" fill="white" text-anchor="middle">GWA</text>
-  <!-- Leaf accent -->
-  <path d="M256 380 Q276 360 296 380 Q276 400 256 380" fill="#8fbc8f" opacity="0.8"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="GWA">
+  <!-- Harmattan Signal — marque G + grain or -->
+  <rect width="512" height="512" rx="112" fill="#1F5C2E"/>
+  <!-- Grain / feuille or -->
+  <path fill="#C27D10" d="M286 96c52 48 72 118 58 178-38-28-72-40-108-44 18-52 34-94 50-134z"/>
+  <path fill="#A86B0C" d="M286 96c-8 42-22 86-42 128 22 4 44 14 66 32 10-54-2-110-24-160z" opacity=".55"/>
+  <!-- G blanc géométrique -->
+  <path fill="#FFFFFF" d="M256 148c-58 0-104 46-104 108s46 108 104 108c38 0 72-20 90-52l-46-28c-10 16-28 26-44 26-28 0-50-22-50-54s22-54 50-54c16 0 30 8 40 20h-40v44h96c4-18 6-36 6-54 0-62-46-114-102-114z"/>
 </svg>

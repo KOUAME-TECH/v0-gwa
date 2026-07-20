@@ -22,8 +22,16 @@ Canaux : **GitHub** (PR comment / check) + **Slack** (alertes uniquement).
 ## Setup
 
 1. Créer chaque automation dans Cursor Automations (repo `MYSTERE-arch/v0-gwa`).
-2. Brancher Slack `#gwa-alerts` (ou canal choisi).
-3. QA Full déjà prérempli via éditeur Automations — sauver puis dupliquer le pattern pour les 4 autres.
+2. Copier le prompt depuis `docs/agents/<agent>.prompt.md`.
+3. Brancher Slack `#gwa-alerts` (ou canal choisi).
+4. QA Full en premier, puis Security, Scope, Health, Notion.
+
+Prompts versionnés :
+- `docs/agents/qa-full.prompt.md`
+- `docs/agents/security.prompt.md`
+- `docs/agents/scope.prompt.md`
+- `docs/agents/health.prompt.md`
+- `docs/agents/notion.prompt.md`
 
 ## Anti-bruit
 
