@@ -1,12 +1,16 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { requireAdmin } from "@/lib/auth/require-admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
+import { productStatusAfterModeration } from "@/lib/media/compress"
 
 type Ctx = { params: Promise<{ id: string }> }
 
 /**
  * PATCH /api/admin/products/[id]
  * Body: { action: "approve"|"reject", notes? } — idempotent
+ *
+ * Reject maps catalogue status to "paused" (CHECK allows draft|active|paused|sold_out),
+ * never "rejected" — that value breaks the row update.
  */
 export async function PATCH(request: NextRequest, context: Ctx) {
   try {
@@ -33,7 +37,23 @@ export async function PATCH(request: NextRequest, context: Ctx) {
     }
 
     const targetModeration = action === "approve" ? "approved" : "rejected"
-    const targetStatus = action === "approve" ? "active" : "rejected"
+    const targetStatus = productStatusAfterModeration(action as "approve" | "reject")
+
+    // #region agent log
+    fetch("http://127.0.0.1:7537/ingest/f4c7759a-8e1e-4a41-b5d0-55e7c4d75f0d", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "d90786" },
+      body: JSON.stringify({
+        sessionId: "d90786",
+        runId: "post-fix",
+        hypothesisId: "H2",
+        location: "app/api/admin/products/[id]/route.ts:PATCH",
+        message: "admin product moderation",
+        data: { productId: id, action, targetStatus, targetModeration },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {})
+    // #endregion
 
     const { data: existing, error: findErr } = await gate.admin
       .from("products")
@@ -68,6 +88,27 @@ export async function PATCH(request: NextRequest, context: Ctx) {
       .single()
 
     if (error) {
+      // #region agent log
+      fetch("http://127.0.0.1:7537/ingest/f4c7759a-8e1e-4a41-b5d0-55e7c4d75f0d", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "d90786" },
+        body: JSON.stringify({
+          sessionId: "d90786",
+          runId: "post-fix",
+          hypothesisId: "H2",
+          location: "app/api/admin/products/[id]/route.ts:error",
+          message: "admin product update failed",
+          data: {
+            productId: id,
+            action,
+            targetStatus,
+            errorCode: error.code ?? null,
+            errorMessage: error.message,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {})
+      // #endregion
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
 
@@ -76,7 +117,7 @@ export async function PATCH(request: NextRequest, context: Ctx) {
       action: `${action}_product`,
       entity_type: "product",
       entity_id: id,
-      new_data: { moderation_status: targetModeration, notes },
+      new_data: { moderation_status: targetModeration, status: targetStatus, notes },
     })
 
     return NextResponse.json({ success: true, idempotent: false, product: data })

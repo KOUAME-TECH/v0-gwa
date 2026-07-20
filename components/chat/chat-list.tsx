@@ -4,10 +4,12 @@ import React, { useState } from "react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   Search, MoreVertical, Plus, MessageCircle,
-  Pin, CheckCheck, Mic, ImageIcon, FileText, Edit
+  Pin, Check, CheckCheck, Mic, ImageIcon, FileText, Edit
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
+import { GwaMark } from "@/components/brand/gwa-mark"
+import { resolveReadReceipt } from "@/lib/chat/read-receipt"
 
 interface ConversationItem {
   id: string
@@ -20,6 +22,8 @@ interface ConversationItem {
   other_user?: { id: string; full_name: string; avatar_url: string; user_type: string }
   last_message?: string
   last_message_type?: string
+  last_message_sender_id?: string
+  last_message_is_read?: boolean
   unread_count?: number
 }
 
@@ -85,10 +89,13 @@ export function ChatList({ conversations, userId, onSelectConversation }: ChatLi
   return (
     <div className="min-h-[100dvh] bg-white flex flex-col">
       {/* HEADER */}
-      <header className="bg-[#1DA1F2] text-white shrink-0 sticky top-0 z-40">
+      <header className="bg-[#1F5C2E] text-white shrink-0 sticky top-0 z-40">
         <div className="px-4 pt-safe-top">
           <div className="flex items-center justify-between py-2.5">
-            <h1 className="text-[22px] font-bold tracking-tight">GWA Chat</h1>
+            <div className="flex items-center gap-2.5">
+              <GwaMark size={32} />
+              <h1 className="text-[22px] font-bold tracking-tight">GWA Chat</h1>
+            </div>
             <div className="flex items-center">
               <button onClick={() => router.push("/recherche")} className="p-2.5 rounded-full active:bg-white/20" aria-label="Nouveau message">
                 <Edit className="h-5 w-5" />
@@ -131,12 +138,12 @@ export function ChatList({ conversations, userId, onSelectConversation }: ChatLi
               <Pin className="h-3 w-3 text-[#667781]" />
               <span className="text-[11px] font-semibold text-[#667781] uppercase tracking-wider">Épinglées</span>
             </div>
-            {pinned.map(c => <ConvRow key={c.id} c={c} fmtTime={fmtTime} preview={lastMsgPreview}
+            {pinned.map(c => <ConvRow key={c.id} c={c} userId={userId} fmtTime={fmtTime} preview={lastMsgPreview}
               icon={lastMsgIcon} tag={typeTag} onClick={() => onSelectConversation(c)} />)}
           </>
         )}
         {regular.length > 0 ? (
-          regular.map(c => <ConvRow key={c.id} c={c} fmtTime={fmtTime} preview={lastMsgPreview}
+          regular.map(c => <ConvRow key={c.id} c={c} userId={userId} fmtTime={fmtTime} preview={lastMsgPreview}
             icon={lastMsgIcon} tag={typeTag} onClick={() => onSelectConversation(c)} />)
         ) : pinned.length === 0 && (
           <Empty onAction={() => router.push("/recherche")} />
@@ -145,15 +152,28 @@ export function ChatList({ conversations, userId, onSelectConversation }: ChatLi
 
       {/* FAB */}
       <button onClick={() => router.push("/recherche")}
-        className="fixed bottom-24 right-5 w-14 h-14 bg-[#1DA1F2] text-white rounded-2xl shadow-lg flex items-center justify-center active:scale-90 transition-transform z-30">
+        className="fixed bottom-24 right-5 w-14 h-14 bg-[#1F5C2E] text-white rounded-2xl shadow-lg flex items-center justify-center active:scale-90 transition-transform z-30">
         <Plus className="h-6 w-6" />
       </button>
     </div>
   )
 }
 
-function ConvRow({ c, fmtTime, preview, icon, tag, onClick }: {
-  c: ConversationItem; fmtTime: (d: string | undefined) => string;
+function ReadReceipt({ c, userId }: { c: ConversationItem; userId: string }) {
+  const state = resolveReadReceipt({
+    viewerId: userId,
+    lastSenderId: c.last_message_sender_id,
+    isRead: c.last_message_is_read,
+  })
+  if (state === "none") return null
+  if (state === "read") {
+    return <CheckCheck className="h-4 w-4 text-[#53bdeb] shrink-0" aria-label="Lu" />
+  }
+  return <Check className="h-4 w-4 text-[#667781] shrink-0" aria-label="Envoyé" />
+}
+
+function ConvRow({ c, userId, fmtTime, preview, icon, tag, onClick }: {
+  c: ConversationItem; userId: string; fmtTime: (d: string | undefined) => string;
   preview: (c: ConversationItem) => string; icon: (t?: string) => React.ReactNode;
   tag: (t?: string) => string; onClick: () => void
 }) {
@@ -184,7 +204,7 @@ function ConvRow({ c, fmtTime, preview, icon, tag, onClick }: {
         </div>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1 min-w-0">
-            <CheckCheck className="h-4 w-4 text-[#53bdeb] shrink-0" />
+            <ReadReceipt c={c} userId={userId} />
             {icon(c.last_message_type)}
             <p className={`text-[13px] truncate ${c.unread_count ? "text-[#111b21] font-medium" : "text-[#667781]"}`}>
               {preview(c)}
@@ -212,7 +232,7 @@ function Empty({ onAction }: { onAction: () => void }) {
         Contactez un producteur ou un acheteur depuis un produit ou la recherche pour démarrer une discussion.
       </p>
       <button onClick={onAction}
-        className="px-7 py-3 bg-[#1DA1F2] text-white rounded-full text-sm font-semibold active:scale-95 transition-transform shadow-sm">
+        className="px-7 py-3 bg-[#1F5C2E] text-white rounded-full text-sm font-semibold active:scale-95 transition-transform shadow-sm">
         Trouver des contacts
       </button>
     </div>

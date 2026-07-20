@@ -6,6 +6,8 @@ import {
   buildPostMediaPayload,
   humanFileSize,
   extensionForType,
+  resolvePostType,
+  productStatusAfterModeration,
   MAX_VIDEO_BYTES,
   MAX_AUDIO_BYTES,
 } from "@/lib/media/compress"
@@ -61,5 +63,20 @@ describe("buildPostMediaPayload (P6)", () => {
 
   it("aucun média → tableau vide", () => {
     expect(buildPostMediaPayload([], null)).toEqual([])
+  })
+})
+
+describe("resolvePostType (H1 audio CHECK)", () => {
+  it("ne renvoie jamais 'audio' (interdit par le CHECK DB)", () => {
+    expect(resolvePostType({ hasAudio: true })).toBe("media")
+    expect(resolvePostType({ hasImages: true, hasVideo: true, hasAudio: true })).toBe("media")
+    expect(resolvePostType({})).toBe("general")
+  })
+})
+
+describe("productStatusAfterModeration (H2 reject CHECK)", () => {
+  it("reject → paused (pas rejected)", () => {
+    expect(productStatusAfterModeration("reject")).toBe("paused")
+    expect(productStatusAfterModeration("approve")).toBe("active")
   })
 })

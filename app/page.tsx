@@ -28,6 +28,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { GwaMark } from "@/components/brand/gwa-mark"
 import { WeatherWidget } from "@/components/weather-widget"
 
 type Product = {
@@ -527,7 +528,9 @@ export default function HomePage() {
       <header className="sticky top-0 z-40 bg-white border-b border-[#E5E7EB]">
         <div className="px-4 py-3">
           <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold text-[#2F7D32]">GWA</h1>
+            <Link href="/" className="flex items-center gap-2" aria-label="GWA accueil">
+              <GwaMark size={36} showWordmark wordmarkClassName="text-2xl" />
+            </Link>
             <div className="flex items-center gap-2">
               <Link href="/recherche">
                 <Button variant="ghost" size="icon" className="rounded-full h-10 w-10">

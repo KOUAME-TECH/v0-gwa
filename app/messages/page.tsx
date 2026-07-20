@@ -22,6 +22,8 @@ interface Conversation {
   }
   last_message?: string
   last_message_type?: string
+  last_message_sender_id?: string
+  last_message_is_read?: boolean
   unread_count?: number
 }
 
@@ -62,7 +64,7 @@ function MessagesContent() {
     const msgResults = await Promise.all(
       convIds.map(cid =>
         supabase.from("messages")
-          .select("content, message_type, conversation_id")
+          .select("content, message_type, conversation_id, sender_id, is_read")
           .eq("conversation_id", cid)
           .order("created_at", { ascending: false })
           .limit(1)
@@ -70,9 +72,21 @@ function MessagesContent() {
       )
     )
 
-    const lastMsgMap = new Map<string, { content: string; message_type: string }>()
+    const lastMsgMap = new Map<string, {
+      content: string
+      message_type: string
+      sender_id: string
+      is_read: boolean
+    }>()
     for (const r of msgResults) {
-      if (r.data) lastMsgMap.set(r.data.conversation_id, { content: r.data.content, message_type: r.data.message_type })
+      if (r.data) {
+        lastMsgMap.set(r.data.conversation_id, {
+          content: r.data.content,
+          message_type: r.data.message_type,
+          sender_id: r.data.sender_id,
+          is_read: !!r.data.is_read,
+        })
+      }
     }
 
     // Batch count unreads in parallel
@@ -96,6 +110,8 @@ function MessagesContent() {
         other_user: profileMap.get(otherId) || undefined,
         last_message: lm?.content,
         last_message_type: lm?.message_type,
+        last_message_sender_id: lm?.sender_id,
+        last_message_is_read: lm?.is_read,
         unread_count: unreadMap.get(c.id) || 0,
       }
     })

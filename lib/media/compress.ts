@@ -90,6 +90,26 @@ export function buildPostMediaPayload(
   return media
 }
 
+/**
+ * post_type compatible avec le CHECK DB (pas de valeur "audio").
+ * Image + vidéo + audio → "media" ; sinon "general".
+ */
+export function resolvePostType(input: {
+  hasImages?: boolean
+  hasVideo?: boolean
+  hasAudio?: boolean
+}): "media" | "general" {
+  if (input.hasImages || input.hasVideo || input.hasAudio) return "media"
+  return "general"
+}
+
+/** Statut catalogue après modération admin (CHECK: draft|active|paused|sold_out). */
+export function productStatusAfterModeration(
+  action: "approve" | "reject",
+): "active" | "paused" {
+  return action === "approve" ? "active" : "paused"
+}
+
 function supportsWebp(): boolean {
   try {
     const canvas = document.createElement("canvas")
