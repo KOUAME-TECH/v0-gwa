@@ -357,17 +357,10 @@ export default function PublierPage() {
 
       if (error) throw error
 
-      // #region agent log
-      fetch('http://127.0.0.1:7537/ingest/534f5630-8b7e-4f06-8ef7-d986a86a2203',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d90786'},body:JSON.stringify({sessionId:'d90786',runId:'post-fix',hypothesisId:'H1',location:'publier/page.tsx:post',message:'post_insert_ok',data:{hasImages:imageUrls.length,hasVideo:!!videoUrl,hasAudio:!!audioUrl,post_type:resolvePostType({hasImages:imageUrls.length>0,hasVideo:!!videoUrl,hasAudio:!!audioUrl})},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-
       toast.success("Publication créée !")
       router.push("/")
     } catch (error: any) {
       console.error("Error:", error)
-      // #region agent log
-      fetch('http://127.0.0.1:7537/ingest/534f5630-8b7e-4f06-8ef7-d986a86a2203',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d90786'},body:JSON.stringify({sessionId:'d90786',runId:'post-fix',hypothesisId:'H1',location:'publier/page.tsx:post',message:'post_insert_fail',data:{err:String(error?.message||error)},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       toast.error(error.message || "Erreur lors de la publication")
     } finally {
       setIsSubmitting(false)

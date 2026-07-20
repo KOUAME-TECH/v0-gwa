@@ -39,22 +39,6 @@ export async function PATCH(request: NextRequest, context: Ctx) {
     const targetModeration = action === "approve" ? "approved" : "rejected"
     const targetStatus = productStatusAfterModeration(action as "approve" | "reject")
 
-    // #region agent log
-    fetch("http://127.0.0.1:7537/ingest/f4c7759a-8e1e-4a41-b5d0-55e7c4d75f0d", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "d90786" },
-      body: JSON.stringify({
-        sessionId: "d90786",
-        runId: "post-fix",
-        hypothesisId: "H2",
-        location: "app/api/admin/products/[id]/route.ts:PATCH",
-        message: "admin product moderation",
-        data: { productId: id, action, targetStatus, targetModeration },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {})
-    // #endregion
-
     const { data: existing, error: findErr } = await gate.admin
       .from("products")
       .select("id, moderation_status, status, name")
@@ -88,27 +72,6 @@ export async function PATCH(request: NextRequest, context: Ctx) {
       .single()
 
     if (error) {
-      // #region agent log
-      fetch("http://127.0.0.1:7537/ingest/f4c7759a-8e1e-4a41-b5d0-55e7c4d75f0d", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "d90786" },
-        body: JSON.stringify({
-          sessionId: "d90786",
-          runId: "post-fix",
-          hypothesisId: "H2",
-          location: "app/api/admin/products/[id]/route.ts:error",
-          message: "admin product update failed",
-          data: {
-            productId: id,
-            action,
-            targetStatus,
-            errorCode: error.code ?? null,
-            errorMessage: error.message,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {})
-      // #endregion
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
 

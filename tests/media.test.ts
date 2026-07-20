@@ -66,10 +66,26 @@ describe("buildPostMediaPayload (P6)", () => {
   })
 })
 
-describe("resolvePostType (H1 audio CHECK)", () => {
-  it("ne renvoie jamais 'audio' (interdit par le CHECK DB)", () => {
-    expect(resolvePostType({ hasAudio: true })).toBe("media")
-    expect(resolvePostType({ hasImages: true, hasVideo: true, hasAudio: true })).toBe("media")
+describe("resolvePostType (038 WhatsApp audio)", () => {
+  it("voix seule → audio (pas media générique)", () => {
+    expect(resolvePostType({ hasAudio: true })).toBe("audio")
+  })
+
+  it("image + vidéo + audio → rich_media", () => {
+    expect(
+      resolvePostType({ hasImages: true, hasVideo: true, hasAudio: true }),
+    ).toBe("rich_media")
+  })
+
+  it("photo + voix → rich_media", () => {
+    expect(resolvePostType({ hasImages: true, hasAudio: true })).toBe("rich_media")
+  })
+
+  it("photo seule → media", () => {
+    expect(resolvePostType({ hasImages: true })).toBe("media")
+  })
+
+  it("texte seul → general", () => {
     expect(resolvePostType({})).toBe("general")
   })
 })
