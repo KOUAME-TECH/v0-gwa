@@ -167,7 +167,7 @@ function ReadReceipt({ c, userId }: { c: ConversationItem; userId: string }) {
   })
   if (state === "none") return null
   if (state === "read") {
-    return <CheckCheck className="h-4 w-4 text-[#53bdeb] shrink-0" aria-label="Lu" />
+    return <CheckCheck className="h-4 w-4 text-[#C27D10] shrink-0" aria-label="Lu" />
   }
   return <Check className="h-4 w-4 text-[#667781] shrink-0" aria-label="Envoyé" />
 }
@@ -198,7 +198,7 @@ function ConvRow({ c, userId, fmtTime, preview, icon, tag, onClick }: {
               </span>
             )}
           </div>
-          <span className={`text-[12px] shrink-0 ml-2 ${c.unread_count ? "text-[#1DA1F2] font-semibold" : "text-[#667781]"}`}>
+          <span className={`text-[12px] shrink-0 ml-2 ${c.unread_count ? "text-[#1F5C2E] font-semibold" : "text-[#667781]"}`}>
             {c.last_message_at && fmtTime(c.last_message_at)}
           </span>
         </div>
@@ -225,7 +225,7 @@ function Empty({ onAction }: { onAction: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center py-20 px-8 text-center min-h-[50vh]">
       <div className="w-20 h-20 bg-[#f0f2f5] rounded-full flex items-center justify-center mb-5">
-        <MessageCircle className="h-9 w-9 text-[#1DA1F2]" />
+        <MessageCircle className="h-9 w-9 text-[#1F5C2E]" />
       </div>
       <h3 className="text-lg font-semibold text-[#111b21] mb-2">Aucune conversation</h3>
       <p className="text-[#667781] text-sm max-w-[260px] mb-6 leading-relaxed">

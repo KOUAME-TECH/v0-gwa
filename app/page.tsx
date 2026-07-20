@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback, useRef } from "react"
+import { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
@@ -23,20 +23,24 @@ import {
 import { 
   Heart, MessageCircle, Share2, UserPlus, Search, Bell,
   ShoppingBag, BadgeCheck, MapPin, Bookmark, MoreHorizontal,
-  Send, ChevronLeft, ChevronRight, X, Flag, EyeOff, LinkIcon,
-  Trash2, Mic, Square
+  ChevronLeft, ChevronRight, X, Flag, EyeOff, LinkIcon,
+  Trash2, UserCheck
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { GwaMark } from "@/components/brand/gwa-mark"
 import { WeatherWidget } from "@/components/weather-widget"
 import { ClickableListenText } from "@/components/media/clickable-listen-text"
-import { useVoiceRecorder } from "@/hooks/use-voice-recorder"
+import { CommentComposer } from "@/components/comments/comment-composer"
 import {
   resolveCommentMediaType,
   VOICE_COMMENT_PLACEHOLDER,
 } from "@/lib/comments/voice-comment"
-import { extensionForType, validateAudioFile } from "@/lib/media/compress"
+import { extensionForType } from "@/lib/media/compress"
+import {
+  followButtonLabel,
+  shouldShowFollowButton,
+} from "@/lib/social/follow"
 
 type Product = {
   id: string
@@ -121,15 +125,8 @@ export default function HomePage() {
   const [loadingComments, setLoadingComments] = useState(false)
   const [newComment, setNewComment] = useState("")
   const [submittingComment, setSubmittingComment] = useState(false)
-  const commentAudioInputRef = useRef<HTMLInputElement>(null)
-  const {
-    recording: commentVoice,
-    isRecording: isRecordingComment,
-    startRecording: startCommentRecording,
-    stopRecording: stopCommentRecording,
-    clearRecording: clearCommentVoice,
-    setFromFile: setCommentVoiceFromFile,
-  } = useVoiceRecorder()
+  const [followingIds, setFollowingIds] = useState<Set<string>>(new Set())
+  const [followPendingId, setFollowPendingId] = useState<string | null>(null)
   
   // États pour le partage
   const [showShareSheet, setShowShareSheet] = useState(false)
@@ -171,13 +168,17 @@ export default function HomePage() {
       let userFavorites: string[] = []
       
       if (currentUser) {
-        const [likesRes, favsRes, profileRes] = await Promise.all([
+        const [likesRes, favsRes, profileRes, followsRes] = await Promise.all([
           supabase.from("post_likes").select("post_id").eq("user_id", currentUser.id),
           supabase.from("favorites").select("product_id").eq("user_id", currentUser.id),
-          supabase.from("profiles").select("user_type").eq("id", currentUser.id).single()
+          supabase.from("profiles").select("user_type").eq("id", currentUser.id).single(),
+          supabase.from("followers").select("following_id").eq("follower_id", currentUser.id),
         ])
         if (profileRes.data) {
           setUserType(profileRes.data.user_type)
+        }
+        if (followsRes.data) {
+          setFollowingIds(new Set(followsRes.data.map((f) => f.following_id)))
         }
         userLikes = likesRes.data?.map(l => l.post_id) || []
         userFavorites = favsRes.data?.map(f => f.product_id) || []
@@ -389,13 +390,13 @@ export default function HomePage() {
   }
 
   // Envoyer un commentaire
-  const submitComment = async () => {
+  const submitComment = async (voice: { file: File; url: string } | null) => {
     if (!user) {
       toast.error("Connectez-vous pour commenter")
       return
     }
     const hasText = !!newComment.trim()
-    const hasVoice = !!commentVoice
+    const hasVoice = !!voice
     if ((!hasText && !hasVoice) || !selectedItem) return
 
     setSubmittingComment(true)
@@ -406,14 +407,14 @@ export default function HomePage() {
       const countTable = selectedItem.type === "post" ? "posts" : "products"
 
       let audioUrl: string | null = null
-      if (commentVoice) {
-        const ext = extensionForType(commentVoice.file.type) || "webm"
+      if (voice) {
+        const ext = extensionForType(voice.file.type) || "webm"
         const fileName = `${user.id}/comments/${Date.now()}_${Math.random()
           .toString(36)
           .slice(2)}.${ext}`
         const { error: uploadError } = await supabase.storage
           .from("posts")
-          .upload(fileName, commentVoice.file, { cacheControl: "3600", upsert: false })
+          .upload(fileName, voice.file, { cacheControl: "3600", upsert: false })
         if (uploadError) throw uploadError
         const {
           data: { publicUrl },
@@ -487,7 +488,6 @@ export default function HomePage() {
         .eq("id", selectedItem.data.id)
 
       setNewComment("")
-      clearCommentVoice()
       toast.success(hasVoice ? "Commentaire vocal publié" : "Commentaire publié")
     } catch (error) {
       console.error("[comments]", error)
@@ -556,15 +556,46 @@ export default function HomePage() {
       toast.error("Connectez-vous pour suivre cet utilisateur")
       return
     }
+    if (userId === user.id) return
+    if (followPendingId === userId) return
+
+    const wasFollowing = followingIds.has(userId)
+    setFollowPendingId(userId)
+
+    setFollowingIds((prev) => {
+      const next = new Set(prev)
+      if (wasFollowing) next.delete(userId)
+      else next.add(userId)
+      return next
+    })
 
     try {
-      await supabase.from("followers").insert({
-        follower_id: user.id,
-        following_id: userId
-      })
-      toast.success("Vous suivez maintenant cet utilisateur")
+      if (wasFollowing) {
+        const { error } = await supabase
+          .from("followers")
+          .delete()
+          .eq("follower_id", user.id)
+          .eq("following_id", userId)
+        if (error) throw error
+        toast.success("Abonnement retiré")
+      } else {
+        const { error } = await supabase.from("followers").insert({
+          follower_id: user.id,
+          following_id: userId,
+        })
+        if (error) throw error
+        toast.success("Vous suivez maintenant cet utilisateur")
+      }
     } catch (error) {
+      setFollowingIds((prev) => {
+        const next = new Set(prev)
+        if (wasFollowing) next.add(userId)
+        else next.delete(userId)
+        return next
+      })
       toast.error("Erreur lors du suivi")
+    } finally {
+      setFollowPendingId(null)
     }
   }
 
@@ -750,6 +781,21 @@ export default function HomePage() {
                 ? (item.data as Product).seller_id 
                 : (item.data as Post).author_id
               )}
+              isFollowing={followingIds.has(
+                item.type === "product"
+                  ? (item.data as Product).seller_id
+                  : (item.data as Post).author_id,
+              )}
+              followPending={followPendingId === (
+                item.type === "product"
+                  ? (item.data as Product).seller_id
+                  : (item.data as Post).author_id
+              )}
+              authorUserId={
+                item.type === "product"
+                  ? (item.data as Product).seller_id
+                  : (item.data as Post).author_id
+              }
               currentUserId={user?.id || null}
               onDelete={
                 item.type === "post"
@@ -770,19 +816,17 @@ export default function HomePage() {
           if (!open) {
             setSelectedItem(null)
             setNewComment("")
-            clearCommentVoice()
           }
         }}
       >
-        <SheetContent side="bottom" className="h-[80vh] rounded-t-3xl">
-          <SheetHeader className="border-b border-[#E5E7EB] pb-4">
+        <SheetContent side="bottom" className="h-[85vh] rounded-t-3xl flex flex-col p-4">
+          <SheetHeader className="border-b border-[#E5E7EB] pb-4 shrink-0">
             <SheetTitle className="text-center text-[#111827]">
               Commentaires ({selectedItem?.data.comments_count || 0})
             </SheetTitle>
           </SheetHeader>
           
-          <div className="flex flex-col h-[calc(100%-120px)]">
-            <div className="flex-1 overflow-y-auto py-4 space-y-4">
+          <div className="flex-1 overflow-y-auto py-4 space-y-4 min-h-0">
               {loadingComments ? (
                 Array.from({ length: 3 }).map((_, i) => (
                   <div key={i} className="flex gap-3">
@@ -825,94 +869,17 @@ export default function HomePage() {
                   </div>
                 ))
               )}
-            </div>
+          </div>
 
-            <div className="border-t border-[#E5E7EB] pt-4 space-y-2">
-              {isRecordingComment && (
-                <div className="flex items-center gap-2 px-1 text-red-600 text-xs font-medium">
-                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                  Enregistrement en cours…
-                </div>
-              )}
-              {commentVoice && !isRecordingComment && (
-                <div className="flex items-center gap-2 px-1">
-                  <Mic className="h-4 w-4 text-[#F39A1F] shrink-0" />
-                  <audio src={commentVoice.url} controls preload="none" className="flex-1 h-9 min-w-0" />
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    className="shrink-0"
-                    onClick={clearCommentVoice}
-                    aria-label="Supprimer la note vocale"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              )}
-              <input
-                ref={commentAudioInputRef}
-                type="file"
-                accept="audio/*"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  if (!file) return
-                  const check = validateAudioFile(file)
-                  if (!check.ok) {
-                    toast.error(check.error!)
-                    return
-                  }
-                  setCommentVoiceFromFile(file)
-                  if (commentAudioInputRef.current) commentAudioInputRef.current.value = ""
-                }}
-              />
-              <div className="flex items-center gap-3">
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback className="bg-[#2F7D32] text-white text-xs">
-                    {user?.email?.charAt(0)?.toUpperCase() || "?"}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1 flex items-center gap-1 bg-[#F3F4F6] rounded-full px-3">
-                  <Input
-                    value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)}
-                    placeholder="Commentaire ou note vocale…"
-                    className="border-0 bg-transparent focus-visible:ring-0 px-0 flex-1"
-                    onKeyDown={(e) => e.key === "Enter" && submitComment()}
-                  />
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    className={cn("shrink-0", isRecordingComment && "text-red-600")}
-                    aria-label={isRecordingComment ? "Arrêter l'enregistrement" : "Enregistrer une note vocale"}
-                    onClick={() => {
-                      if (isRecordingComment) stopCommentRecording()
-                      else {
-                        startCommentRecording(() => commentAudioInputRef.current?.click())
-                      }
-                    }}
-                  >
-                    {isRecordingComment ? (
-                      <Square className="h-5 w-5 fill-current" />
-                    ) : (
-                      <Mic className="h-5 w-5 text-[#2F7D32]" />
-                    )}
-                  </Button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={submitComment}
-                    disabled={(!newComment.trim() && !commentVoice) || submittingComment || isRecordingComment}
-                    className="text-[#2F7D32] hover:text-[#256427] shrink-0"
-                    aria-label="Envoyer"
-                  >
-                    <Send className="h-5 w-5" />
-                  </Button>
-                </div>
-              </div>
-            </div>
+          <div className="shrink-0 pb-safe-bottom">
+            <CommentComposer
+              userInitial={user?.email?.charAt(0)?.toUpperCase() || "?"}
+              value={newComment}
+              onChange={setNewComment}
+              onSubmit={submitComment}
+              submitting={submittingComment}
+              disabled={!user}
+            />
           </div>
         </SheetContent>
       </Sheet>
@@ -1006,6 +973,9 @@ function FeedCard({
   onSave,
   onFollow,
   currentUserId,
+  authorUserId,
+  isFollowing,
+  followPending,
   onDelete,
   formatPrice,
   formatTimeAgo
@@ -1017,6 +987,9 @@ function FeedCard({
   onSave: () => void
   onFollow: () => void
   currentUserId?: string | null
+  authorUserId: string
+  isFollowing: boolean
+  followPending?: boolean
   onDelete?: () => void
   formatPrice: (price: number) => string
   formatTimeAgo: (date: string) => string
@@ -1087,15 +1060,27 @@ function FeedCard({
         </Link>
         
         <div className="flex items-center gap-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={onFollow}
-            className="rounded-full h-8 px-3 bg-transparent border-[#F39A1F] text-[#F39A1F] text-xs font-semibold hover:bg-[#F39A1F]/10"
-          >
-            <UserPlus className="h-3.5 w-3.5 mr-1" />
-            Suivre
-          </Button>
+          {shouldShowFollowButton(currentUserId, authorUserId) && (
+            <Button
+              variant={isFollowing ? "default" : "outline"}
+              size="sm"
+              onClick={onFollow}
+              disabled={followPending}
+              className={cn(
+                "rounded-full h-8 px-3 text-xs font-semibold transition-all",
+                isFollowing
+                  ? "bg-[#1F5C2E] hover:bg-[#174A24] text-white border-transparent"
+                  : "bg-transparent border-[#1F5C2E] text-[#1F5C2E] hover:bg-[#1F5C2E]/10",
+              )}
+            >
+              {isFollowing ? (
+                <UserCheck className="h-3.5 w-3.5 mr-1" />
+              ) : (
+                <UserPlus className="h-3.5 w-3.5 mr-1" />
+              )}
+              {followButtonLabel(isFollowing)}
+            </Button>
+          )}
 <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" className="rounded-full h-9 w-9">

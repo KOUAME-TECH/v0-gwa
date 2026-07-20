@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useCallback, useEffect, useRef, useState } from "react"
-import { Volume2, Square } from "lucide-react"
+import { Mic, Square, Volume2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 type ListenMode = "audio" | "tts" | "none"
@@ -15,21 +15,18 @@ function resolveListenMode(text?: string | null, audioUrl?: string | null): List
 export type ClickableListenTextProps = {
   text?: string | null
   audioUrl?: string | null
-  /** Texte affiché si pas de texte (ex. placeholder vocal) */
   fallbackLabel?: string
   className?: string
   lang?: string
 }
 
 /**
- * WhatsApp+ agri : tap sur le texte pour écouter.
- * - audio_url → lecture du fichier
- * - sinon texte → synthèse vocale (fr-FR) pour illettrés / terrain
+ * Texte + micro vert visible (48px) — tap micro ou texte pour écouter.
  */
 export function ClickableListenText({
   text,
   audioUrl,
-  fallbackLabel = "Appuyez pour écouter",
+  fallbackLabel = "Message vocal — appuyez pour écouter",
   className,
   lang = "fr-FR",
 }: ClickableListenTextProps) {
@@ -38,6 +35,8 @@ export function ClickableListenText({
   const [playing, setPlaying] = useState(false)
 
   const displayText = text?.trim() || (mode !== "none" ? fallbackLabel : "")
+  const listenLabel =
+    mode === "audio" ? "Écouter la note vocale" : mode === "tts" ? "Écouter le texte" : ""
 
   const stopAll = useCallback(() => {
     if (audioRef.current) {
@@ -50,7 +49,7 @@ export function ClickableListenText({
     setPlaying(false)
   }, [])
 
-  const handleClick = useCallback(async () => {
+  const handleListen = useCallback(async () => {
     if (mode === "none" || !displayText) return
 
     if (playing) {
@@ -95,35 +94,50 @@ export function ClickableListenText({
   }
 
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      className={cn(
-        "group text-left w-full rounded-lg transition-colors",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1F5C2E]/40",
-        playing
-          ? "bg-[#1F5C2E]/10 ring-1 ring-[#1F5C2E]/25"
-          : "hover:bg-[#1F5C2E]/5 active:bg-[#1F5C2E]/10",
-        className,
-      )}
-      aria-label={playing ? "Arrêter la lecture" : "Écouter le texte"}
-    >
-      <span className="inline-flex items-start gap-1.5">
-        {playing ? (
-          <Square className="h-3.5 w-3.5 mt-0.5 shrink-0 text-[#1F5C2E]" aria-hidden />
-        ) : (
-          <Volume2 className="h-3.5 w-3.5 mt-0.5 shrink-0 text-[#1F5C2E]/70 group-hover:text-[#1F5C2E]" aria-hidden />
+    <div className={cn("flex gap-3 items-start", className)}>
+      <button
+        type="button"
+        onClick={handleListen}
+        className={cn(
+          "shrink-0 w-12 h-12 rounded-full flex items-center justify-center shadow-md transition-transform active:scale-95",
+          playing ? "bg-[#C27D10] ring-2 ring-[#C27D10]/40" : "bg-[#1F5C2E] hover:bg-[#174A24]",
         )}
-        <span
+        aria-label={playing ? "Arrêter" : listenLabel}
+      >
+        {playing ? (
+          <Square className="h-5 w-5 text-white fill-white" />
+        ) : mode === "audio" ? (
+          <Mic className="h-6 w-6 text-white" />
+        ) : (
+          <Volume2 className="h-6 w-6 text-white" />
+        )}
+      </button>
+
+      <button
+        type="button"
+        onClick={handleListen}
+        className={cn(
+          "flex-1 text-left rounded-xl px-3 py-2.5 min-w-0 transition-colors",
+          "border border-[#1F5C2E]/15",
+          playing
+            ? "bg-[#1F5C2E]/10 ring-1 ring-[#1F5C2E]/25"
+            : "bg-[#1F5C2E]/5 hover:bg-[#1F5C2E]/10 active:bg-[#1F5C2E]/15",
+        )}
+        aria-label={listenLabel}
+      >
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-[#1F5C2E] mb-1">
+          {playing ? "Lecture en cours…" : listenLabel}
+        </p>
+        <p
           className={cn(
-            "text-sm leading-relaxed whitespace-pre-wrap",
+            "text-sm leading-relaxed whitespace-pre-wrap text-[#111827]",
             playing && "text-[#1F5C2E] font-medium",
           )}
         >
           {displayText}
-        </span>
-      </span>
-    </button>
+        </p>
+      </button>
+    </div>
   )
 }
 

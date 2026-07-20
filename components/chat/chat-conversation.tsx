@@ -4,6 +4,8 @@ import React, { useState, useRef, useEffect, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { toast } from "sonner"
+import { GwaMark } from "@/components/brand/gwa-mark"
+import { CHAT_THEME } from "@/lib/chat/theme"
 import {
   ArrowLeft, Send, Mic, Smile, Phone, Video, MoreVertical,
   Check, CheckCheck, ImageIcon, FileText, X, Trash2, Copy, Reply,
@@ -98,13 +100,15 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
         scroll()
       }
 
-      // Mark unread as read
-      await supabase
-        .from("messages")
-        .update({ is_read: true })
-        .eq("conversation_id", conversation.id)
-        .neq("sender_id", userId)
-        .eq("is_read", false)
+      // Mark unread as read only when l'utilisateur voit vraiment la conversation
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        await supabase
+          .from("messages")
+          .update({ is_read: true })
+          .eq("conversation_id", conversation.id)
+          .neq("sender_id", userId)
+          .eq("is_read", false)
+      }
     }
     load()
 
@@ -119,7 +123,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
           const msg = payload.new as Message
           setMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg])
           scroll()
-          if (msg.sender_id !== userId) {
+          if (msg.sender_id !== userId && document.visibilityState === "visible") {
             supabase.from("messages").update({ is_read: true }).eq("id", msg.id)
           }
         }
@@ -364,7 +368,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       return (
         <button type="button" onClick={(e) => { e.stopPropagation(); playVoiceMsg(msg) }}
           className="flex items-center gap-2 min-w-[180px]">
-          <div className="w-8 h-8 bg-[#1DA1F2] rounded-full flex items-center justify-center shrink-0">
+          <div className="w-8 h-8 bg-[#1F5C2E] rounded-full flex items-center justify-center shrink-0">
             {msg.media_url ? (
               <svg viewBox="0 0 24 24" className="h-4 w-4 text-white fill-current"><polygon points="6,4 20,12 6,20" /></svg>
             ) : (
@@ -373,7 +377,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
           </div>
           <div className="flex-1 flex items-center gap-0.5">
             {Array.from({ length: 24 }).map((_, i) => (
-              <div key={i} className="w-[3px] rounded-full bg-[#1DA1F2]/40" style={{ height: `${4 + Math.sin(i * 0.7) * 8}px` }} />
+              <div key={i} className="w-[3px] rounded-full bg-[#1F5C2E]/40" style={{ height: `${4 + Math.sin(i * 0.7) * 8}px` }} />
             ))}
           </div>
           <span className="text-[11px] opacity-60 shrink-0">{msg.content.match(/\((.*?)\)/)?.[1] || "0:00"}</span>
@@ -384,13 +388,13 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       return msg.media_url ? (
         <img src={msg.media_url || "/placeholder.svg"} alt="" className="rounded-lg max-w-[240px] max-h-[280px] object-cover" crossOrigin="anonymous" />
       ) : (
-        <div className="flex items-center gap-2"><ImageIcon className="h-4 w-4 text-[#1DA1F2]" /><span className="text-sm">{msg.content}</span></div>
+        <div className="flex items-center gap-2"><ImageIcon className="h-4 w-4 text-[#1F5C2E]" /><span className="text-sm">{msg.content}</span></div>
       )
     }
     if (msg.message_type === "file") {
       return (
         <div className="flex items-center gap-2 bg-black/5 rounded-lg p-2.5 min-w-[180px]">
-          <FileText className="h-8 w-8 text-[#1DA1F2] shrink-0" />
+          <FileText className="h-8 w-8 text-[#1F5C2E] shrink-0" />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium truncate">{msg.content.replace(/^\[|\]$/g, '')}</p>
             <p className="text-[11px] opacity-50">Document</p>
@@ -404,10 +408,12 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   return (
     <div className="fixed inset-0 z-[100] flex flex-col bg-[#efeae2]">
       {/* HEADER */}
-      <header className="bg-[#1DA1F2] text-white flex items-center gap-1 px-1 py-1.5 shrink-0 safe-top">
+      <header className="text-white flex items-center gap-1 px-1 py-1.5 shrink-0 safe-top" style={{ backgroundColor: CHAT_THEME.primary }}>
         <button onClick={onBack} className="p-2 rounded-full active:bg-white/20 transition-colors" aria-label="Retour">
           <ArrowLeft className="h-5 w-5" />
         </button>
+
+        <GwaMark size={28} className="shrink-0 mr-0.5" />
 
         <button onClick={() => menuAction("profile")} className="flex items-center gap-2.5 flex-1 min-w-0 py-1">
           <Avatar className="h-10 w-10 border-2 border-white/30">
@@ -462,12 +468,12 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       }}>
         {loadingMsgs ? (
           <div className="flex items-center justify-center h-full">
-            <div className="w-8 h-8 border-3 border-[#1DA1F2] border-t-transparent rounded-full animate-spin" />
+            <div className="w-8 h-8 border-3 border-[#1F5C2E] border-t-transparent rounded-full animate-spin" />
           </div>
         ) : messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center px-6">
             <div className="w-16 h-16 bg-white/80 rounded-2xl flex items-center justify-center mb-4 shadow-sm">
-              <Send className="h-7 w-7 text-[#1DA1F2]" />
+              <Send className="h-7 w-7 text-[#1F5C2E]" />
             </div>
             <p className="text-[#5f6368] text-sm font-medium">Envoyez un message pour démarrer la conversation</p>
           </div>
@@ -496,8 +502,8 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
                       }`}
                     >
                       {replyMsg && (
-                        <div className="border-l-[3px] border-[#1DA1F2] pl-2 mb-1 py-0.5 rounded-r-md bg-black/5">
-                          <p className="text-[11px] font-semibold text-[#1DA1F2]">
+                        <div className="border-l-[3px] border-[#1F5C2E] pl-2 mb-1 py-0.5 rounded-r-md bg-black/5">
+                          <p className="text-[11px] font-semibold text-[#1F5C2E]">
                             {replyMsg.sender_id === userId ? "Vous" : otherName}
                           </p>
                           <p className="text-[11px] text-[#667781] truncate max-w-[200px]">{replyMsg.content}</p>
@@ -508,7 +514,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
                         <span className="text-[11px] text-[#667781]">{fmtTime(msg.created_at)}</span>
                         {msg.is_edited && <span className="text-[10px] text-[#667781] italic">modifié</span>}
                         {own && (msg.is_read
-                          ? <CheckCheck className="h-[14px] w-[14px] text-[#53bdeb]" />
+                          ? <CheckCheck className="h-[14px] w-[14px] text-[#C27D10]" />
                           : <Check className="h-[14px] w-[14px] text-[#667781]" />
                         )}
                       </div>
@@ -544,8 +550,8 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       {/* REPLY PREVIEW */}
       {replyTo && (
         <div className="bg-white border-t border-gray-200 px-3 py-2 flex items-center gap-2 shrink-0">
-          <div className="flex-1 border-l-[3px] border-[#1DA1F2] pl-2 min-w-0">
-            <p className="text-[11px] font-semibold text-[#1DA1F2]">
+          <div className="flex-1 border-l-[3px] border-[#1F5C2E] pl-2 min-w-0">
+            <p className="text-[11px] font-semibold text-[#1F5C2E]">
               {replyTo.sender_id === userId ? "Vous" : otherName}
             </p>
             <p className="text-[12px] text-[#667781] truncate">{replyTo.content}</p>
@@ -571,7 +577,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
               <div key={i} className="w-[2px] bg-red-400/60 rounded-full shrink-0" style={{ height: `${3 + Math.sin((recordSec + i) * 0.5) * 10 + Math.random() * 4}px` }} />
             ))}
           </div>
-          <button onClick={toggleVoice} className="w-11 h-11 rounded-full bg-[#1DA1F2] text-white flex items-center justify-center active:scale-90 transition-transform">
+          <button onClick={toggleVoice} className="w-11 h-11 rounded-full bg-[#1F5C2E] text-white flex items-center justify-center active:scale-90 transition-transform">
             <Check className="h-5 w-5" />
           </button>
         </div>
@@ -584,7 +590,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
             <Trash2 className="h-5 w-5 text-red-500" />
           </button>
           <div className="flex-1 bg-[#f0f2f5] rounded-full px-4 py-2.5 flex items-center gap-3">
-            <button type="button" onClick={playPreview} className="w-8 h-8 rounded-full bg-[#1DA1F2] flex items-center justify-center shrink-0 active:scale-90 transition-transform" aria-label={isPlayingPreview ? "Pause" : "Ecouter"}>
+            <button type="button" onClick={playPreview} className="w-8 h-8 rounded-full bg-[#1F5C2E] flex items-center justify-center shrink-0 active:scale-90 transition-transform" aria-label={isPlayingPreview ? "Pause" : "Ecouter"}>
               {isPlayingPreview ? (
                 <svg viewBox="0 0 24 24" className="h-4 w-4 text-white fill-current"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
               ) : (
@@ -593,12 +599,12 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
             </button>
             <div className="flex-1 flex items-center gap-[2px]">
               {Array.from({ length: 30 }).map((_, i) => (
-                <div key={i} className="w-[3px] bg-[#1DA1F2]/40 rounded-full shrink-0" style={{ height: `${4 + Math.sin(i * 0.4) * 8}px` }} />
+                <div key={i} className="w-[3px] bg-[#1F5C2E]/40 rounded-full shrink-0" style={{ height: `${4 + Math.sin(i * 0.4) * 8}px` }} />
               ))}
             </div>
             <span className="text-sm font-mono text-[#667781] shrink-0">{audioPreview.duration}</span>
           </div>
-          <button onClick={sendVoiceMessage} className="w-11 h-11 rounded-full bg-[#1DA1F2] text-white flex items-center justify-center active:scale-90 transition-transform" aria-label="Envoyer vocal">
+          <button onClick={sendVoiceMessage} className="w-11 h-11 rounded-full bg-[#1F5C2E] text-white flex items-center justify-center active:scale-90 transition-transform" aria-label="Envoyer vocal">
             <Send className="h-5 w-5" />
           </button>
         </div>
@@ -646,7 +652,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
           <form onSubmit={handleSend} className="flex items-end gap-1.5">
             <div className="flex-1 flex items-center bg-white rounded-[25px] shadow-sm min-h-[48px] px-2">
               <button type="button" onClick={() => setShowEmojis(!showEmojis)}
-                className={`p-2 shrink-0 ${showEmojis ? "text-[#1DA1F2]" : "text-[#54656f]"} active:text-[#1DA1F2]`} aria-label="Emojis">
+                className={`p-2 shrink-0 ${showEmojis ? "text-[#1F5C2E]" : "text-[#54656f]"} active:text-[#1F5C2E]`} aria-label="Emojis">
                 <Smile className="h-6 w-6" />
               </button>
 
@@ -661,13 +667,13 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
               />
 
               <button type="button" onClick={() => setShowAttach(true)}
-                className="p-2 text-[#54656f] active:text-[#1DA1F2] shrink-0" aria-label="Joindre un fichier">
+                className="p-2 text-[#54656f] active:text-[#1F5C2E] shrink-0" aria-label="Joindre un fichier">
                 <Paperclip className="h-6 w-6" />
               </button>
 
               {!newMessage.trim() && (
                 <button type="button" onClick={() => imgRef.current?.click()}
-                  className="p-2 text-[#54656f] active:text-[#1DA1F2] shrink-0" aria-label="Photo rapide">
+                  className="p-2 text-[#54656f] active:text-[#1F5C2E] shrink-0" aria-label="Photo rapide">
                   <Camera className="h-6 w-6" />
                 </button>
               )}
@@ -675,13 +681,13 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
 
             {newMessage.trim() ? (
               <button type="submit" disabled={sending}
-                className="w-[48px] h-[48px] rounded-full bg-[#1DA1F2] text-white flex items-center justify-center shrink-0 active:scale-90 transition-transform disabled:opacity-50 shadow-sm"
+                className="w-[48px] h-[48px] rounded-full bg-[#1F5C2E] text-white flex items-center justify-center shrink-0 active:scale-90 transition-transform disabled:opacity-50 shadow-sm"
                 aria-label="Envoyer">
                 <Send className="h-5 w-5" />
               </button>
             ) : (
               <button type="button" onClick={toggleVoice}
-                className="w-[48px] h-[48px] rounded-full bg-[#1DA1F2] text-white flex items-center justify-center shrink-0 active:scale-90 transition-transform shadow-sm"
+                className="w-[48px] h-[48px] rounded-full bg-[#1F5C2E] text-white flex items-center justify-center shrink-0 active:scale-90 transition-transform shadow-sm"
                 aria-label="Enregistrement vocal">
                 <Mic className="h-5 w-5" />
               </button>
