@@ -33,8 +33,8 @@ export const signupSchema = z.object({
     .regex(/[^A-Za-z0-9]/, 'Au moins un caractere special'),
   fullName: z.string().min(2).max(100)
     .regex(/^[a-zA-Z\u00C0-\u00FF\s\-']+$/, 'Caracteres invalides'),
-  role: z.enum(['farmer','artisan','buyer','cooperative',
-    'student','business','transformer','admin']),
+  role: z.enum(['farmer','buyer','cooperative',
+    'student','business','transformer']),
   phone: phoneCI.optional(),
 })
 

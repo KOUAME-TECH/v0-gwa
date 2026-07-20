@@ -26,10 +26,9 @@ type Product = {
 const filters = [
   { value: "all", label: "Tout" },
   { value: "agriculture", label: "Agriculture" },
-  { value: "artisanat", label: "Artisanat" },
 ]
 
-const trending = ["Cacao", "Café", "Mangue", "Tissage", "Karité", "Miel"]
+const trending = ["Cacao", "Café", "Mangue", "Anacarde", "Karité", "Miel"]
 
 function RechercheContent() {
   const searchParams = useSearchParams()

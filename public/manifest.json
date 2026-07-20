@@ -1,7 +1,7 @@
 {
-  "name": "GWA - Marketplace Agricole et Artisanale",
+  "name": "GWA - Marketplace Agricole",
   "short_name": "GWA",
-  "description": "La premiere plateforme integree panafricaine pour l'agriculture et l'artisanat",
+  "description": "La premiere plateforme integree panafricaine pour l'agriculture",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
@@ -12,52 +12,16 @@
   "categories": ["business", "shopping", "productivity"],
   "icons": [
     {
-      "src": "/icon-72x72.png",
-      "sizes": "72x72",
-      "type": "image/png",
-      "purpose": "maskable any"
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
     },
     {
-      "src": "/icon-96x96.png",
-      "sizes": "96x96",
+      "src": "/apple-icon.png",
+      "sizes": "180x180",
       "type": "image/png",
-      "purpose": "maskable any"
-    },
-    {
-      "src": "/icon-128x128.png",
-      "sizes": "128x128",
-      "type": "image/png",
-      "purpose": "maskable any"
-    },
-    {
-      "src": "/icon-144x144.png",
-      "sizes": "144x144",
-      "type": "image/png",
-      "purpose": "maskable any"
-    },
-    {
-      "src": "/icon-152x152.png",
-      "sizes": "152x152",
-      "type": "image/png",
-      "purpose": "maskable any"
-    },
-    {
-      "src": "/icon-192x192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "maskable any"
-    },
-    {
-      "src": "/icon-384x384.png",
-      "sizes": "384x384",
-      "type": "image/png",
-      "purpose": "maskable any"
-    },
-    {
-      "src": "/icon-512x512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable any"
+      "purpose": "any"
     }
   ],
   "shortcuts": [
@@ -65,22 +29,13 @@
       "name": "Agriculture",
       "short_name": "Agri",
       "description": "Voir les produits agricoles",
-      "url": "/agriculture",
-      "icons": [{ "src": "/icon-agriculture.png", "sizes": "96x96" }]
-    },
-    {
-      "name": "Artisanat",
-      "short_name": "Artisan",
-      "description": "Voir les creations artisanales",
-      "url": "/artisans",
-      "icons": [{ "src": "/icon-artisan.png", "sizes": "96x96" }]
+      "url": "/agriculture"
     },
     {
       "name": "Mon Panier",
       "short_name": "Panier",
       "description": "Voir mon panier",
-      "url": "/panier",
-      "icons": [{ "src": "/icon-cart.png", "sizes": "96x96" }]
+      "url": "/panier"
     }
   ],
   "related_applications": [],

@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 const WEATHER_CODES: Record<number, { label: string; icon: string }> = {
   0: { label: "Ensoleillé", icon: "sun" },
   1: { label: "Peu nuageux", icon: "cloud-sun" },
@@ -33,7 +36,7 @@ export async function GET(request: Request) {
   try {
     const res = await fetch(
       `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_sum&timezone=auto&forecast_days=5`,
-      { next: { revalidate: 1800 } }
+      { cache: "no-store" },
     )
 
     if (!res.ok) throw new Error("Open-Meteo API error")

@@ -106,7 +106,7 @@ export default function PublicProfilePage() {
   const isOwnProfile = currentUser === profileId
 
   const userTypeLabels: Record<string, string> = {
-    farmer: "Agriculteur", artisan: "Artisan", buyer: "Acheteur",
+    farmer: "Agriculteur", buyer: "Acheteur",
     cooperative: "Cooperative", business: "Entreprise",
   }
 

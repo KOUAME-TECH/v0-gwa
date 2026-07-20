@@ -10,10 +10,21 @@ import { Input } from "@/components/ui/input"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { 
   Heart, MessageCircle, Share2, UserPlus, Search, Bell,
   ShoppingBag, BadgeCheck, MapPin, Bookmark, MoreHorizontal,
-  Send, ChevronLeft, ChevronRight, X, Flag, EyeOff, LinkIcon
+  Send, ChevronLeft, ChevronRight, X, Flag, EyeOff, LinkIcon,
+  Trash2, Mic
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -46,6 +57,8 @@ type Post = {
   id: string
   content: string
   media_urls: { url: string; type: string }[] | null
+  video_url: string | null
+  audio_url: string | null
   likes_count: number
   comments_count: number
   shares_count: number
@@ -82,7 +95,6 @@ const categories = [
   { id: "cafe", name: "Café", icon: "☕" },
   { id: "fruits", name: "Fruits", icon: "🥭" },
   { id: "legumes", name: "Légumes", icon: "🥬" },
-  { id: "artisanat", name: "Artisanat", icon: "🎨" },
 ]
 
 export default function HomePage() {
@@ -103,8 +115,31 @@ export default function HomePage() {
   // États pour le partage
   const [showShareSheet, setShowShareSheet] = useState(false)
   const [shareItem, setShareItem] = useState<FeedItem | null>(null)
-  
+
+  // Suppression d'une publication (post) — propriétaire uniquement
+  const [pendingDeletePost, setPendingDeletePost] = useState<Post | null>(null)
+  const [deletingPost, setDeletingPost] = useState(false)
+
   const supabase = createClient()
+
+  const handleConfirmDeletePost = async () => {
+    if (!pendingDeletePost) return
+    setDeletingPost(true)
+    try {
+      const res = await fetch(`/api/posts/${pendingDeletePost.id}`, { method: "DELETE" })
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(payload.error || "Suppression impossible")
+      setFeed((prev) =>
+        prev.filter((f) => !(f.type === "post" && f.data.id === pendingDeletePost.id)),
+      )
+      toast.success("Publication supprimée")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erreur")
+    } finally {
+      setDeletingPost(false)
+      setPendingDeletePost(null)
+    }
+  }
 
   // Charger l'utilisateur et le feed
   useEffect(() => {
@@ -144,7 +179,7 @@ export default function HomePage() {
       // Charger posts (sans join FK car posts.author_id -> auth.users, pas profiles)
       const { data: rawPosts } = await supabase
         .from("posts")
-        .select("id, content, media_urls, likes_count, comments_count, shares_count, created_at, author_id")
+        .select("id, content, media_urls, video_url, audio_url, likes_count, comments_count, shares_count, created_at, author_id")
         .eq("visibility", "public")
         .order("created_at", { ascending: false })
         .limit(20)
@@ -580,15 +615,15 @@ export default function HomePage() {
               <>
                 <h3 className="font-semibold text-lg text-[#111827] mb-2">Aucune publication pour le moment</h3>
                 <p className="text-[#4B5563] text-sm mb-6">
-                  {["farmer", "artisan", "cooperative", "processor"].includes(userType || "")
+                  {["producteur", "cooperative", "transformateur", "entreprise", "farmer", "processor"].includes(userType || "")
                     ? "Publiez votre premier produit pour commencer a vendre"
-                    : userType === "business"
+                    : userType === "entreprise" || userType === "business"
                     ? "Explorez le marketplace pour trouver des fournisseurs"
-                    : "Decouvrez les produits des producteurs et artisans africains"
+                    : "Decouvrez les produits des producteurs agricoles africains"
                   }
                 </p>
                 <div className="flex flex-col gap-3">
-                  {["farmer", "artisan", "cooperative", "processor"].includes(userType || "") ? (
+                  {["producteur", "cooperative", "transformateur", "entreprise", "farmer", "processor"].includes(userType || "") ? (
                     <Link href="/publier">
                       <Button className="w-full rounded-full bg-[#2F7D32] hover:bg-[#256427]">
                         Publier un produit
@@ -601,8 +636,8 @@ export default function HomePage() {
                       </Button>
                     </Link>
                   )}
-                  {["farmer", "artisan", "cooperative", "processor"].includes(userType || "") && (
-                    <Link href="/dashboard/business">
+                  {["producteur", "cooperative", "transformateur", "entreprise", "farmer", "processor"].includes(userType || "") && (
+                    <Link href="/dashboard/farmer">
                       <Button variant="outline" className="w-full rounded-full bg-transparent">
                         Mon tableau de bord
                       </Button>
@@ -614,7 +649,7 @@ export default function HomePage() {
               <>
                 <h3 className="font-semibold text-lg text-[#111827] mb-2">Bienvenue sur GWA</h3>
                 <p className="text-[#4B5563] text-sm mb-6">
-                  Découvrez et connectez-vous avec des producteurs et artisans africains
+                  Découvrez et connectez-vous avec des producteurs agricoles africains
                 </p>
                 <div className="flex flex-col gap-3">
                   <Link href="/auth/signup">
@@ -644,6 +679,12 @@ export default function HomePage() {
                 ? (item.data as Product).seller_id 
                 : (item.data as Post).author_id
               )}
+              currentUserId={user?.id || null}
+              onDelete={
+                item.type === "post"
+                  ? () => setPendingDeletePost(item.data as Post)
+                  : undefined
+              }
               formatPrice={formatPrice}
               formatTimeAgo={formatTimeAgo}
             />
@@ -779,6 +820,35 @@ export default function HomePage() {
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* Confirmation suppression publication */}
+      <AlertDialog
+        open={!!pendingDeletePost}
+        onOpenChange={(open) => !open && setPendingDeletePost(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer cette publication ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Votre publication sera définitivement retirée du fil. Cette action est
+              irréversible.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingPost}>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                handleConfirmDeletePost()
+              }}
+              disabled={deletingPost}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {deletingPost ? "Suppression…" : "Supprimer"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
@@ -791,6 +861,8 @@ function FeedCard({
   onShare, 
   onSave,
   onFollow,
+  currentUserId,
+  onDelete,
   formatPrice,
   formatTimeAgo
 }: { 
@@ -800,6 +872,8 @@ function FeedCard({
   onShare: () => void
   onSave: () => void
   onFollow: () => void
+  currentUserId?: string | null
+  onDelete?: () => void
   formatPrice: (price: number) => string
   formatTimeAgo: (date: string) => string
 }) {
@@ -810,6 +884,9 @@ function FeedCard({
   const isProduct = item.type === "product"
   const data = item.data
   const profile = data.profiles
+  const isOwnPost =
+    !isProduct && !!currentUserId && (data as Post).author_id === currentUserId
+  const postAudioUrl = !isProduct ? (data as Post).audio_url : null
   
   // Normalize medias: products have string[], posts have {url,type}[]
   const rawMedias = isProduct ? (data as Product).images : (data as Post).media_urls
@@ -894,10 +971,20 @@ function FeedCard({
                     <EyeOff className="h-4 w-4 mr-2" />
                     Masquer
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => toast.success("Signalement envoyé")} className="text-destructive">
-                    <Flag className="h-4 w-4 mr-2" />
-                    Signaler
-                  </DropdownMenuItem>
+                  {isOwnPost && onDelete ? (
+                    <DropdownMenuItem
+                      onClick={onDelete}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Supprimer
+                    </DropdownMenuItem>
+                  ) : (
+                    <DropdownMenuItem onClick={() => toast.success("Signalement envoyé")} className="text-destructive">
+                      <Flag className="h-4 w-4 mr-2" />
+                      Signaler
+                    </DropdownMenuItem>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
         </div>
@@ -909,6 +996,21 @@ function FeedCard({
           <p className="text-[#111827] text-sm leading-relaxed whitespace-pre-wrap">
             {(data as Post).content}
           </p>
+        </div>
+      )}
+
+      {/* Note vocale (posts) */}
+      {postAudioUrl && (
+        <div className="px-4 pb-3">
+          <div className="flex items-center gap-3 rounded-2xl bg-[#F39A1F]/5 border border-[#F39A1F]/20 p-3">
+            <div className="w-9 h-9 rounded-full bg-[#F39A1F]/15 flex items-center justify-center flex-shrink-0">
+              <Mic className="h-5 w-5 text-[#F39A1F]" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-[#111827] mb-1">Note vocale</p>
+              <audio src={postAudioUrl} controls preload="none" className="w-full h-9" />
+            </div>
+          </div>
         </div>
       )}
 

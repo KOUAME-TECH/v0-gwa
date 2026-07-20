@@ -51,7 +51,14 @@ import {
   Filter,
   Download,
   RefreshCw,
+  UserPlus,
 } from "lucide-react"
+import {
+  ADMIN_ROLE_LABELS,
+  type AdminRole,
+  isAdminRole,
+  isSuperAdmin,
+} from "@/lib/auth/admin-permissions"
 
 interface User {
   id: string
@@ -68,6 +75,13 @@ interface User {
   total_reviews?: number
   created_at: string
   avatar_url?: string
+  admin_role?: AdminRole | null
+}
+
+interface AdminRoleRow {
+  user_id: string
+  role: AdminRole
+  is_active: boolean
 }
 
 export default function AdminUsersPage() {
@@ -82,11 +96,57 @@ export default function AdminUsersPage() {
   const [actionLoading, setActionLoading] = useState(false)
   const [totalCount, setTotalCount] = useState(0)
   const [page, setPage] = useState(0)
+  const [callerRole, setCallerRole] = useState<AdminRole | null>(null)
   const pageSize = 20
+
+  useEffect(() => {
+    void loadCallerRole()
+  }, [])
 
   useEffect(() => {
     fetchUsers()
   }, [filterType, filterStatus, page])
+
+  const loadCallerRole = async () => {
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const { data } = await supabase
+      .from("admin_roles")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("is_active", true)
+      .maybeSingle()
+
+    if (data?.role && isAdminRole(data.role)) {
+      setCallerRole(data.role)
+    }
+  }
+
+  const attachAdminRoles = async (rows: User[]) => {
+    if (rows.length === 0) return rows
+
+    const supabase = createClient()
+    const ids = rows.map((u) => u.id)
+    const { data: roles } = await supabase
+      .from("admin_roles")
+      .select("user_id, role, is_active")
+      .in("user_id", ids)
+      .eq("is_active", true)
+
+    const roleByUser = new Map<string, AdminRole>()
+    for (const row of (roles || []) as AdminRoleRow[]) {
+      if (isAdminRole(row.role)) {
+        roleByUser.set(row.user_id, row.role)
+      }
+    }
+
+    return rows.map((u) => ({
+      ...u,
+      admin_role: roleByUser.get(u.id) ?? null,
+    }))
+  }
 
   const fetchUsers = async () => {
     setLoading(true)
@@ -113,7 +173,8 @@ export default function AdminUsersPage() {
     const { data, count, error } = await query
 
     if (!error && data) {
-      setUsers(data as User[])
+      const enriched = await attachAdminRoles(data as User[])
+      setUsers(enriched)
       setTotalCount(count || 0)
     }
     setLoading(false)
@@ -136,7 +197,8 @@ export default function AdminUsersPage() {
       .limit(50)
 
     if (!error && data) {
-      setUsers(data as User[])
+      const enriched = await attachAdminRoles(data as User[])
+      setUsers(enriched)
     }
     setLoading(false)
   }
@@ -145,31 +207,15 @@ export default function AdminUsersPage() {
     if (!selectedUser) return
     setActionLoading(true)
 
-    const supabase = createClient()
-    const { data: { user: adminUser } } = await supabase.auth.getUser()
+    const res = await fetch(`/api/admin/users/${selectedUser.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "suspend", reason: suspendReason }),
+    })
 
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        is_suspended: true,
-        suspended_reason: suspendReason,
-        suspended_at: new Date().toISOString(),
-        suspended_by: adminUser?.id,
-      })
-      .eq("id", selectedUser.id)
-
-    if (!error) {
-      // Log action
-      await supabase.from("admin_logs").insert({
-        admin_id: adminUser?.id,
-        action: "suspend_user",
-        entity_type: "user",
-        entity_id: selectedUser.id,
-        new_data: { suspended_reason: suspendReason },
-      })
-
-      setUsers(users.map(u => 
-        u.id === selectedUser.id 
+    if (res.ok) {
+      setUsers(users.map(u =>
+        u.id === selectedUser.id
           ? { ...u, is_suspended: true, suspended_reason: suspendReason }
           : u
       ))
@@ -182,29 +228,16 @@ export default function AdminUsersPage() {
 
   const handleUnsuspendUser = async (user: User) => {
     setActionLoading(true)
-    const supabase = createClient()
-    const { data: { user: adminUser } } = await supabase.auth.getUser()
 
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        is_suspended: false,
-        suspended_reason: null,
-        suspended_at: null,
-        suspended_by: null,
-      })
-      .eq("id", user.id)
+    const res = await fetch(`/api/admin/users/${user.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "unsuspend" }),
+    })
 
-    if (!error) {
-      await supabase.from("admin_logs").insert({
-        admin_id: adminUser?.id,
-        action: "unsuspend_user",
-        entity_type: "user",
-        entity_id: user.id,
-      })
-
-      setUsers(users.map(u => 
-        u.id === user.id 
+    if (res.ok) {
+      setUsers(users.map(u =>
+        u.id === user.id
           ? { ...u, is_suspended: false, suspended_reason: undefined }
           : u
       ))
@@ -214,24 +247,61 @@ export default function AdminUsersPage() {
 
   const handleVerifyUser = async (user: User) => {
     setActionLoading(true)
-    const supabase = createClient()
-    const { data: { user: adminUser } } = await supabase.auth.getUser()
 
-    const { error } = await supabase
-      .from("profiles")
-      .update({ is_verified: true })
-      .eq("id", user.id)
+    const res = await fetch(`/api/admin/users/${user.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "verify" }),
+    })
 
-    if (!error) {
-      await supabase.from("admin_logs").insert({
-        admin_id: adminUser?.id,
-        action: "verify_user",
-        entity_type: "user",
-        entity_id: user.id,
-      })
-
-      setUsers(users.map(u => 
+    if (res.ok) {
+      setUsers(users.map(u =>
         u.id === user.id ? { ...u, is_verified: true } : u
+      ))
+    }
+    setActionLoading(false)
+  }
+
+  const handleGrantSupport = async (user: User) => {
+    setActionLoading(true)
+    const res = await fetch(`/api/admin/users/${user.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "grant_support" }),
+    })
+    if (res.ok) {
+      setUsers(users.map((u) =>
+        u.id === user.id ? { ...u, admin_role: "support" } : u,
+      ))
+    }
+    setActionLoading(false)
+  }
+
+  const handleGrantAdmin = async (user: User) => {
+    setActionLoading(true)
+    const res = await fetch(`/api/admin/users/${user.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "grant_admin" }),
+    })
+    if (res.ok) {
+      setUsers(users.map((u) =>
+        u.id === user.id ? { ...u, admin_role: "admin" } : u,
+      ))
+    }
+    setActionLoading(false)
+  }
+
+  const handleRevokeAdmin = async (user: User) => {
+    setActionLoading(true)
+    const res = await fetch(`/api/admin/users/${user.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "revoke_admin" }),
+    })
+    if (res.ok) {
+      setUsers(users.map((u) =>
+        u.id === user.id ? { ...u, admin_role: null } : u,
       ))
     }
     setActionLoading(false)
@@ -247,16 +317,25 @@ export default function AdminUsersPage() {
 
   const getUserTypeBadge = (type: string) => {
     const typeConfig: Record<string, { label: string; variant: "default" | "secondary" | "outline" }> = {
-      producer: { label: "Producteur", variant: "default" },
-      artisan: { label: "Artisan", variant: "default" },
-      transformer: { label: "Transformateur", variant: "secondary" },
-      buyer: { label: "Acheteur", variant: "outline" },
+      producteur: { label: "Producteur", variant: "default" },
+      acheteur: { label: "Acheteur", variant: "outline" },
       cooperative: { label: "Coopérative", variant: "default" },
-      business: { label: "Entreprise", variant: "secondary" },
     }
     const config = typeConfig[type] || { label: type, variant: "outline" as const }
     return <Badge variant={config.variant}>{config.label}</Badge>
   }
+
+  const getAdminRoleBadge = (role: AdminRole | null | undefined) => {
+    if (!role) return null
+    return (
+      <Badge variant="outline" className="border-[#2F7D32] text-[#2F7D32]">
+        <Shield className="h-3 w-3 mr-1" />
+        {ADMIN_ROLE_LABELS[role]}
+      </Badge>
+    )
+  }
+
+  const canManageRoles = callerRole ? isSuperAdmin(callerRole) : false
 
   return (
     <div className="space-y-6">
@@ -265,10 +344,18 @@ export default function AdminUsersPage() {
           <h1 className="text-2xl md:text-3xl font-bold">Utilisateurs</h1>
           <p className="text-muted-foreground">{totalCount} utilisateurs inscrits</p>
         </div>
-        <Button variant="outline" onClick={fetchUsers} className="bg-transparent">
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Actualiser
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" asChild className="bg-transparent">
+            <a href="/api/admin/export?entity=users" download>
+              <Download className="h-4 w-4 mr-2" />
+              Export CSV
+            </a>
+          </Button>
+          <Button variant="outline" onClick={fetchUsers} className="bg-transparent">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Actualiser
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -294,12 +381,9 @@ export default function AdminUsersPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Tous les types</SelectItem>
-                  <SelectItem value="producer">Producteur</SelectItem>
-                  <SelectItem value="artisan">Artisan</SelectItem>
-                  <SelectItem value="transformer">Transformateur</SelectItem>
-                  <SelectItem value="buyer">Acheteur</SelectItem>
+                  <SelectItem value="producteur">Producteur</SelectItem>
+                  <SelectItem value="acheteur">Acheteur</SelectItem>
                   <SelectItem value="cooperative">Coopérative</SelectItem>
-                  <SelectItem value="business">Entreprise</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={filterStatus} onValueChange={setFilterStatus}>
@@ -374,6 +458,7 @@ export default function AdminUsersPage() {
                             {!user.is_verified && !user.is_suspended && (
                               <Badge variant="secondary">Non vérifié</Badge>
                             )}
+                            {getAdminRoleBadge(user.admin_role)}
                           </div>
                         </TableCell>
                         <TableCell>{formatDate(user.created_at)}</TableCell>
@@ -387,7 +472,11 @@ export default function AdminUsersPage() {
                             <DropdownMenuContent align="end">
                               <DropdownMenuLabel>Actions</DropdownMenuLabel>
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  window.open(`/profil/${user.id}`, "_blank", "noopener,noreferrer")
+                                }}
+                              >
                                 <Eye className="h-4 w-4 mr-2" />
                                 Voir le profil
                               </DropdownMenuItem>
@@ -414,6 +503,48 @@ export default function AdminUsersPage() {
                                   <Ban className="h-4 w-4 mr-2" />
                                   Suspendre
                                 </DropdownMenuItem>
+                              )}
+                              {canManageRoles && user.admin_role !== "super_admin" && (
+                                <>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuLabel>Accès back-office</DropdownMenuLabel>
+                                  {!user.admin_role && (
+                                    <>
+                                      <DropdownMenuItem onClick={() => handleGrantSupport(user)}>
+                                        <UserPlus className="h-4 w-4 mr-2" />
+                                        Donner accès Support
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem onClick={() => handleGrantAdmin(user)}>
+                                        <Shield className="h-4 w-4 mr-2" />
+                                        Donner accès Admin
+                                      </DropdownMenuItem>
+                                    </>
+                                  )}
+                                  {user.admin_role === "support" && (
+                                    <>
+                                      <DropdownMenuItem onClick={() => handleGrantAdmin(user)}>
+                                        <Shield className="h-4 w-4 mr-2" />
+                                        Promouvoir Admin
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onClick={() => handleRevokeAdmin(user)}
+                                        className="text-destructive"
+                                      >
+                                        <UserX className="h-4 w-4 mr-2" />
+                                        Révoquer
+                                      </DropdownMenuItem>
+                                    </>
+                                  )}
+                                  {user.admin_role === "admin" && (
+                                    <DropdownMenuItem
+                                      onClick={() => handleRevokeAdmin(user)}
+                                      className="text-destructive"
+                                    >
+                                      <UserX className="h-4 w-4 mr-2" />
+                                      Révoquer
+                                    </DropdownMenuItem>
+                                  )}
+                                </>
                               )}
                             </DropdownMenuContent>
                           </DropdownMenu>

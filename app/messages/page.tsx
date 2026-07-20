@@ -5,7 +5,6 @@ import { createClient } from "@/lib/supabase/client"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ChatList } from "@/components/chat/chat-list"
 import { ChatConversation } from "@/components/chat/chat-conversation"
-import { toast } from "sonner"
 
 interface Conversation {
   id: string
@@ -26,18 +25,6 @@ interface Conversation {
   unread_count?: number
 }
 
-interface GroupConversation {
-  id: string
-  name: string
-  avatar_url?: string
-  group_type: string
-  last_message?: string
-  last_sender?: string
-  last_message_at?: string
-  unread_count?: number
-  member_count?: number
-}
-
 function MessagesContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -47,7 +34,6 @@ function MessagesContent() {
   const [user, setUser] = useState<{ id: string } | null>(null)
   const [userType, setUserType] = useState<string | null>(null)
   const [conversations, setConversations] = useState<Conversation[]>([])
-  const [groups, setGroups] = useState<GroupConversation[]>([])
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null)
   const [loading, setLoading] = useState(true)
   const handledRef = useRef<string | null>(null)
@@ -125,31 +111,14 @@ function MessagesContent() {
         if (!mounted) return
         setUser(u)
 
-        const [profRes, convs, grpRes] = await Promise.all([
+        const [profRes, convs] = await Promise.all([
           supabase.from("profiles").select("user_type").eq("id", u.id).single(),
           loadConversations(u.id),
-          supabase.from("group_members")
-            .select("group_id, group_conversations(id, name, avatar_url, group_type, updated_at)")
-            .eq("user_id", u.id),
         ])
 
         if (!mounted) return
         if (profRes.data) setUserType(profRes.data.user_type)
         setConversations(convs)
-
-        if (grpRes.data) {
-          const g: GroupConversation[] = grpRes.data
-            .filter((m: any) => m.group_conversations)
-            .map((m: any) => {
-              const gc = m.group_conversations
-              return {
-                id: gc.id, name: gc.name, avatar_url: gc.avatar_url,
-                group_type: gc.group_type || "private",
-                last_message_at: gc.updated_at, unread_count: 0, member_count: 0
-              }
-            })
-          setGroups(g)
-        }
       } catch (err) {
         console.error("[v0] Messages init error:", err)
       } finally {
@@ -243,12 +212,9 @@ function MessagesContent() {
   return (
     <ChatList
       conversations={conversations}
-      groups={groups}
       userId={user?.id || ""}
       userType={userType}
       onSelectConversation={setSelectedConv}
-      onSelectGroup={(g) => toast.info(`Groupe "${g.name}" - Chat de groupe bientôt disponible`)}
-      onGroupCreated={(g) => setGroups(prev => [g, ...prev])}
     />
   )
 }

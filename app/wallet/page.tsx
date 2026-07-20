@@ -300,6 +300,10 @@ export default function WalletPage() {
             <RefreshCw className="h-5 w-5 mr-2" />
             Actualiser
           </Button>
+          <Button variant="outline" size="lg" onClick={() => router.push("/affacturage")}>
+            <Building2 className="h-5 w-5 mr-2" />
+            Affacturage
+          </Button>
         </div>
 
         {/* Info Card */}

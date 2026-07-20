@@ -67,7 +67,7 @@ export default function DownloadPage() {
       {/* Header */}
       <header className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b">
         <div className="container flex items-center h-14 px-4">
-          <Link href="/" className="flex items-center gap-2 text-muted-foreground">
+          <Link href="/profil" className="flex items-center gap-2 text-muted-foreground">
             <ArrowLeft className="h-5 w-5" />
             <span>Retour</span>
           </Link>

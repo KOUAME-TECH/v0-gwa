@@ -1,30 +1,54 @@
-# GWA
+# GWA Platform
 
-*Automatically synced with your [v0.app](https://v0.app) deployments*
+Marketplace agroalimentaire PWA (Next.js) — Côte d’Ivoire.  
+Prod : [https://v0-gwa-mu.vercel.app](https://v0-gwa-mu.vercel.app)
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/gwa/v0-gwa)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.app-black?style=for-the-badge)](https://v0.app/chat/iWTdvhTHFTe)
+## Stack
 
-## Overview
+- **Next.js 16** (App Router) + React 19
+- **Supabase** (Auth, Postgres, Realtime, Storage)
+- **Vercel** (hébergement)
+- **Upstash Redis** (rate-limit / OTP store)
+- **OneSignal** (push PWA)
+- **AgentMail** (contact)
+- **Africa’s Talking** (SMS OTP)
 
-This repository will stay in sync with your deployed chats on [v0.app](https://v0.app).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.app](https://v0.app).
+## Démarrage local
 
-## Deployment
+```bash
+npm install --legacy-peer-deps
+cp .env.example .env.local   # renseigner les clés
+npm run dev
+```
 
-Your project is live at:
+Variables : voir `.env.example`.  
+Statut des routes : `lib/routes/inventory.ts` ou `/dev/routes` en local.
 
-**[https://vercel.com/gwa/v0-gwa](https://vercel.com/gwa/v0-gwa)**
+## Architecture
 
-## Build your app
+Voir [`docs/architecture.md`](docs/architecture.md) et [`docs/scope-beta.md`](docs/scope-beta.md) (lock F1–F6).
 
-Continue building your app on:
+| Dossier | Rôle |
+|---------|------|
+| `app/` | Pages + API Routes (App Router) |
+| `components/` | UI réutilisable (auth, chat, PWA, scg, ui) |
+| `lib/auth` | OTP, téléphone, SMS |
+| `lib/scg` | Moteur score de confiance |
+| `lib/supabase` | Clients browser / server / admin |
+| `lib/security` | Rate-limit, validation |
+| `lib/email` | AgentMail |
+| `lib/notifications` | Push OneSignal |
+| `lib/routes` | Inventaire de statut des routes |
+| `scripts/schema` | Migrations SQL (ordre numérique) |
+| `scripts/ops` | Admin / checks |
+| `scripts/demo` | Seed démo (jamais en prod sans intention) |
 
-**[https://v0.app/chat/iWTdvhTHFTe](https://v0.app/chat/iWTdvhTHFTe)**
+## Déploiement
 
-## How It Works
+Push sur la branche suivie par Vercel (`v0-gwa`).  
+Install command Vercel : `npm install --legacy-peer-deps` (voir `vercel.json`).
 
-1. Create and modify your project using [v0.app](https://v0.app)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository
+## Scripts SQL
+
+Appliquer dans l’ordre sous `scripts/schema/` via le SQL Editor Supabase.  
+Ops et démo : `scripts/ops/`, `scripts/demo/`.

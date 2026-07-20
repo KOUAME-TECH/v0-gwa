@@ -24,14 +24,6 @@ const categories = [
     { value: "cacao-cafe", label: "Cacao & Cafe" },
     { value: "epices", label: "Epices" },
   ]},
-  { value: "artisanat", label: "Artisanat", subcategories: [
-    { value: "vannerie", label: "Vannerie" },
-    { value: "sculpture", label: "Sculpture" },
-    { value: "textile", label: "Textile" },
-    { value: "bijouterie", label: "Bijouterie" },
-    { value: "poterie", label: "Poterie" },
-    { value: "maroquinerie", label: "Maroquinerie" },
-  ]},
 ]
 
 const units = [
@@ -147,7 +139,7 @@ export default function NewProductPage() {
         .insert({
           name: formData.subcategory || formData.category,
           slug: (formData.subcategory || formData.category).toLowerCase().replace(/\s+/g, '-'),
-          category_type: formData.category === 'agriculture' ? 'agriculture' : 'artisanat'
+          category_type: 'agriculture'
         })
         .select('id')
         .single()
@@ -177,7 +169,7 @@ export default function NewProductPage() {
         certifications: formData.certifications.length > 0 ? formData.certifications : null,
         images: formData.imageUrl ? [formData.imageUrl] : [],
         status: 'active',
-        product_type: formData.category === 'agriculture' ? 'agriculture' : 'artisanat',
+        product_type: 'agriculture',
       })
 
     if (productError) {

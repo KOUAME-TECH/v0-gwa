@@ -22,7 +22,7 @@ import {
 } from "lucide-react"
 
 interface PlatformSettings {
-  commission_rate: { agriculture: number; artisanat: number; default: number }
+  commission_rate: { agriculture: number; default: number }
   min_withdrawal: { XOF: number; EUR: number; USD: number }
   max_images_per_product: number
   auto_approve_verified_sellers: boolean
@@ -56,7 +56,7 @@ export default function AdminSettingsPage() {
         settingsMap[item.key] = item.value
       }
       setSettings({
-        commission_rate: (settingsMap.commission_rate as PlatformSettings["commission_rate"]) || { agriculture: 5, artisanat: 7, default: 6 },
+        commission_rate: (settingsMap.commission_rate as PlatformSettings["commission_rate"]) || { agriculture: 5, default: 6 },
         min_withdrawal: (settingsMap.min_withdrawal as PlatformSettings["min_withdrawal"]) || { XOF: 5000, EUR: 10, USD: 10 },
         max_images_per_product: Number(settingsMap.max_images_per_product) || 10,
         auto_approve_verified_sellers: settingsMap.auto_approve_verified_sellers === true || settingsMap.auto_approve_verified_sellers === "true",
@@ -262,22 +262,6 @@ export default function AdminSettingsPage() {
                         commission_rate: { 
                           ...settings.commission_rate, 
                           agriculture: parseFloat(e.target.value) || 0 
-                        } 
-                      })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Artisanat (%)</Label>
-                  <Input
-                    type="number"
-                    value={settings.commission_rate.artisanat}
-                    onChange={(e) => 
-                      setSettings({ 
-                        ...settings, 
-                        commission_rate: { 
-                          ...settings.commission_rate, 
-                          artisanat: parseFloat(e.target.value) || 0 
                         } 
                       })
                     }

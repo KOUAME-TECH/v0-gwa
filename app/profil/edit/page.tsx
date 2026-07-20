@@ -36,11 +36,8 @@ type Profile = {
 
 const userTypes = [
   { value: "producteur", label: "Producteur agricole" },
-  { value: "artisan", label: "Artisan" },
-  { value: "transformateur", label: "Transformateur" },
   { value: "acheteur", label: "Acheteur" },
   { value: "cooperative", label: "Coopérative" },
-  { value: "entreprise", label: "Entreprise" },
 ]
 
 const countries = [
@@ -59,6 +56,7 @@ export default function EditProfilPage() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [formData, setFormData] = useState({
     full_name: "",
+    email: "",
     bio: "",
     user_type: "",
     phone: "",
@@ -66,6 +64,7 @@ export default function EditProfilPage() {
     country: "",
     address: "",
   })
+  const [emailLinkMsg, setEmailLinkMsg] = useState<string | null>(null)
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -86,9 +85,10 @@ export default function EditProfilPage() {
         setProfile({ ...profileData, email: user.email || "" })
         setFormData({
           full_name: profileData.full_name || "",
+          email: profileData.linked_email || profileData.email || user.email || "",
           bio: profileData.bio || "",
           user_type: profileData.user_type || "",
-          phone: profileData.phone || "",
+          phone: profileData.phone || user.phone || "",
           city: profileData.city || "",
           country: profileData.country || "",
           address: profileData.address || "",
@@ -144,18 +144,26 @@ export default function EditProfilPage() {
     if (!profile) return
 
     setIsSaving(true)
+    setEmailLinkMsg(null)
 
     try {
+      // Téléphone obligatoire : l'email y est rattaché
+      if (!formData.phone?.trim()) {
+        toast.error("Le numéro de téléphone est obligatoire")
+        setIsSaving(false)
+        return
+      }
+
       const updateData = {
-          full_name: formData.full_name,
-          bio: formData.bio || null,
-          user_type: formData.user_type || null,
-          phone: formData.phone || null,
-          city: formData.city || null,
-          country: formData.country || null,
-          address: formData.address || null,
-          updated_at: new Date().toISOString(),
-        }
+        full_name: formData.full_name,
+        bio: formData.bio || null,
+        user_type: formData.user_type || null,
+        phone: formData.phone || null,
+        city: formData.city || null,
+        country: formData.country || null,
+        address: formData.address || null,
+        updated_at: new Date().toISOString(),
+      }
       const { error } = await supabase
         .from("profiles")
         .update(updateData)
@@ -163,7 +171,31 @@ export default function EditProfilPage() {
 
       if (error) throw error
 
-      toast.success("Profil mis à jour avec succès")
+      // Lier l'email au numéro déjà enregistré
+      if (formData.email?.trim()) {
+        const res = await fetch("/api/auth/link-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: formData.email.trim(),
+            phone: formData.phone.trim(),
+            countryCode: "ci",
+          }),
+        })
+        const data = await res.json()
+        if (!res.ok) {
+          toast.error(data.error || "Impossible de lier l'email")
+          setIsSaving(false)
+          return
+        }
+        setEmailLinkMsg(
+          data.needs_email_confirmation
+            ? "Email lié au téléphone. Vérifiez votre boîte mail si demandé."
+            : "Email lié à votre numéro de téléphone.",
+        )
+      }
+
+      toast.success("Profil mis à jour — email lié au téléphone")
       router.push("/profil")
     } catch (error) {
       console.error("Erreur mise à jour profil:", error)
@@ -257,26 +289,41 @@ export default function EditProfilPage() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="email" className="text-sm text-[#4B5563]">Email</Label>
-            <Input
-              id="email"
-              value={profile.email}
-              disabled
-              className="h-12 rounded-xl border-[#E5E7EB] bg-[#F3F4F6] text-[#9CA3AF]"
-            />
-            <p className="text-xs text-[#9CA3AF]">L&apos;email ne peut pas être modifié</p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="phone" className="text-sm text-[#4B5563]">Téléphone</Label>
+            <Label htmlFor="phone" className="text-sm text-[#4B5563]">
+              Téléphone (identifiant principal)
+            </Label>
             <Input
               id="phone"
               type="tel"
               value={formData.phone}
               onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
               className="h-12 rounded-xl border-[#E5E7EB] bg-[#FFF6E5]/50"
-              placeholder="+225 00 00 00 00"
+              placeholder="07 XX XX XX XX"
+              required
             />
+            <p className="text-xs text-[#6B7280]">
+              Votre numéro est la clé du compte. L&apos;email ci-dessous y sera rattaché.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="email" className="text-sm text-[#4B5563]">
+              Email (lié au téléphone)
+            </Label>
+            <Input
+              id="email"
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              className="h-12 rounded-xl border-[#E5E7EB] bg-[#FFF6E5]/50"
+              placeholder="votre@email.com"
+            />
+            <p className="text-xs text-[#6B7280]">
+              Cet email est connecté au numéro enregistré — même compte GWA.
+            </p>
+            {emailLinkMsg && (
+              <p className="text-xs text-[#2F7D32] font-medium">{emailLinkMsg}</p>
+            )}
           </div>
 
           <div className="space-y-2">

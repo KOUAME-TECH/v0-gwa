@@ -12,7 +12,7 @@ import {
   NavigationMenuList,
   NavigationMenuTrigger,
 } from "@/components/ui/navigation-menu"
-import { Search, Menu, Globe, Bell, Sprout, Hammer, User, LogOut, Package, Settings, ShoppingCart, Shield, Wallet } from 'lucide-react'
+import { Search, Menu, Globe, Bell, Sprout, User, LogOut, Package, Settings, ShoppingCart, Shield, Wallet } from 'lucide-react'
 import { Input } from "@/components/ui/input"
 import {
   Sheet,
@@ -143,11 +143,10 @@ export function Navigation() {
   const getDashboardRoute = () => {
     const routes: Record<string, string> = {
       producteur: "/dashboard/farmer",
-      artisan: "/dashboard/artisan",
-      transformateur: "/dashboard/business",
+      transformateur: "/dashboard/farmer",
       acheteur: "/dashboard/buyer",
       cooperative: "/dashboard/cooperative",
-      entreprise: "/dashboard/business",
+      entreprise: "/dashboard/farmer",
     }
     return routes[user?.user_type || ''] || "/dashboard"
   }
@@ -194,7 +193,7 @@ export function Navigation() {
                     </NavigationMenuLink>
                     <NavigationMenuLink asChild>
                       <Link
-                        href="/agriculture/producteurs"
+                        href="/recherche"
                         className="block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground"
                       >
                         <div className="text-sm font-medium leading-none">Producteurs</div>
@@ -205,7 +204,7 @@ export function Navigation() {
                     </NavigationMenuLink>
                     <NavigationMenuLink asChild>
                       <Link
-                        href="/agriculture/acheteurs"
+                        href="/marketplace"
                         className="block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground"
                       >
                         <div className="text-sm font-medium leading-none">Acheteurs</div>
@@ -219,47 +218,6 @@ export function Navigation() {
               </NavigationMenuItem>
 
               <NavigationMenuItem>
-                <NavigationMenuTrigger className="hover:text-primary transition-colors">
-                  <Hammer className="h-4 w-4 mr-2" />
-                  Artisanat
-                </NavigationMenuTrigger>
-                <NavigationMenuContent>
-                  <div className="grid gap-3 p-6 w-[400px]">
-                    <NavigationMenuLink asChild>
-                      <Link
-                        href="/artisans"
-                        className="block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground"
-                      >
-                        <div className="text-sm font-medium leading-none">Galerie Artisanale</div>
-                        <p className="line-clamp-2 text-sm leading-snug text-muted-foreground">
-                          Découvrez les créations africaines
-                        </p>
-                      </Link>
-                    </NavigationMenuLink>
-                    <NavigationMenuLink asChild>
-                      <Link
-                        href="/artisans/commissions"
-                        className="block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground"
-                      >
-                        <div className="text-sm font-medium leading-none">Commandes Sur-Mesure</div>
-                        <p className="line-clamp-2 text-sm leading-snug text-muted-foreground">
-                          Créations personnalisées selon vos besoins
-                        </p>
-                      </Link>
-                    </NavigationMenuLink>
-                  </div>
-                </NavigationMenuContent>
-              </NavigationMenuItem>
-
-              <NavigationMenuItem>
-                <Link href="/formations" legacyBehavior passHref>
-                  <NavigationMenuLink className="group inline-flex h-10 w-max items-center justify-center rounded-md bg-transparent px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground">
-                    Formations
-                  </NavigationMenuLink>
-                </Link>
-              </NavigationMenuItem>
-
-              <NavigationMenuItem>
                 <Link href="/cooperatives" legacyBehavior passHref>
                   <NavigationMenuLink className="group inline-flex h-10 w-max items-center justify-center rounded-md bg-transparent px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground">
                     Coopératives
@@ -268,17 +226,17 @@ export function Navigation() {
               </NavigationMenuItem>
 
               <NavigationMenuItem>
-                <Link href="/communaute" legacyBehavior passHref>
+                <Link href="/affacturage" legacyBehavior passHref>
                   <NavigationMenuLink className="group inline-flex h-10 w-max items-center justify-center rounded-md bg-transparent px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground">
-                    Communauté
+                    Affacturage
                   </NavigationMenuLink>
                 </Link>
               </NavigationMenuItem>
 
               <NavigationMenuItem>
-                <Link href="/b2b" legacyBehavior passHref>
+                <Link href="/scg" legacyBehavior passHref>
                   <NavigationMenuLink className="group inline-flex h-10 w-max items-center justify-center rounded-md bg-transparent px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground">
-                    B2B
+                    SCG
                   </NavigationMenuLink>
                 </Link>
               </NavigationMenuItem>
@@ -291,7 +249,7 @@ export function Navigation() {
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
               <Input
                 type="search"
-                placeholder="Rechercher produits, artisans..."
+                placeholder="Rechercher produits, producteurs..."
                 className="pl-8 bg-muted/50 focus:bg-background transition-colors"
               />
             </div>
@@ -446,21 +404,18 @@ export function Navigation() {
                   <Sprout className="h-5 w-5" />
                   Agriculture
                 </Link>
-                <Link href="/artisans" className="text-lg font-medium hover:text-primary transition-colors p-2 rounded-lg hover:bg-accent flex items-center gap-2">
-                  <Hammer className="h-5 w-5" />
-                  Artisanat
+                <Link href="/cooperatives" className="text-lg font-medium hover:text-primary transition-colors p-2 rounded-lg hover:bg-accent flex items-center gap-2">
+                  <Sprout className="h-5 w-5" />
+                  Coopératives
                 </Link>
-                <Link href="/formations" className="text-lg font-medium hover:text-primary transition-colors p-2 rounded-lg hover:bg-accent">
-                  Formations
+                <Link href="/affacturage" className="text-lg font-medium hover:text-primary transition-colors p-2 rounded-lg hover:bg-accent">
+                  Affacturage
                 </Link>
-                <Link href="/cooperatives" className="text-lg font-medium hover:text-primary transition-colors p-2 rounded-lg hover:bg-accent">
-                  Cooperatives
+                <Link href="/scg" className="text-lg font-medium hover:text-primary transition-colors p-2 rounded-lg hover:bg-accent">
+                  SCG
                 </Link>
-                <Link href="/communaute" className="text-lg font-medium hover:text-primary transition-colors p-2 rounded-lg hover:bg-accent">
-                  Communaute
-                </Link>
-                <Link href="/b2b" className="text-lg font-medium hover:text-primary transition-colors p-2 rounded-lg hover:bg-accent">
-                  B2B
+                <Link href="/messages" className="text-lg font-medium hover:text-primary transition-colors p-2 rounded-lg hover:bg-accent">
+                  Messages
                 </Link>
                 
                 <div className="border-t pt-4 mt-4">

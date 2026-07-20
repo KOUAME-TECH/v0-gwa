@@ -1,12 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { aggregateProducerData } from "@/lib/scg/aggregate"
 import { calculateSCG } from "@/lib/scg/engine"
 
 /**
  * POST /api/scg/calculate
- * Calcule le SCG du producteur connecté (ou d'un userId fourni si admin),
- * persiste un snapshot et met à jour le profil.
+ * Calcule le SCG du producteur connecté (ou d'un userId fourni si admin actif).
  */
 export async function POST(request: NextRequest) {
   try {
@@ -19,16 +19,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
     }
 
-    // Par défaut on calcule pour soi-même
     let targetUserId = user.id
-
     const body = await request.json().catch(() => ({}))
+
     if (body?.userId && body.userId !== user.id) {
-      // Vérifier que l'appelant est admin
       const { data: adminRole } = await supabase
         .from("admin_roles")
         .select("id")
         .eq("user_id", user.id)
+        .eq("is_active", true)
         .limit(1)
         .maybeSingle()
       if (!adminRole) {
@@ -37,12 +36,11 @@ export async function POST(request: NextRequest) {
       targetUserId = body.userId
     }
 
-    // Agréger les données réelles
     const data = await aggregateProducerData(targetUserId)
     const result = calculateSCG(data)
+    const admin = createAdminClient()
 
-    // Persister snapshot
-    await supabase.from("scg_scores").insert({
+    await admin.from("scg_scores").insert({
       user_id: targetUserId,
       score_total: result.score_total,
       badge: result.badge,
@@ -55,8 +53,7 @@ export async function POST(request: NextRequest) {
       recommandation: result.recommandation,
     })
 
-    // Mettre à jour le profil
-    await supabase
+    await admin
       .from("profiles")
       .update({
         scg_score: result.score_total,
@@ -68,7 +65,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(result)
   } catch (error) {
-    console.error("[v0] SCG calculate error:", error)
+    console.error("[api/scg/calculate]", error)
     return NextResponse.json({ error: "Erreur lors du calcul du SCG" }, { status: 500 })
   }
 }

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, Suspense } from "react"
-import { useSearchParams } from "next/navigation"
+import { useSearchParams, useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -50,6 +50,7 @@ import {
   Package,
   RefreshCw,
   ExternalLink,
+  Download,
 } from "lucide-react"
 
 interface Product {
@@ -77,11 +78,12 @@ interface Product {
 
 function AdminProductsContent() {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [filterStatus, setFilterStatus] = useState<string>(searchParams.get("status") || "all")
-  const [filterType, setFilterType] = useState<string>("all")
+  const [filterType, setFilterType] = useState<string>(searchParams.get("type") || "all")
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [moderationDialogOpen, setModerationDialogOpen] = useState(false)
   const [moderationAction, setModerationAction] = useState<"approve" | "reject">("approve")
@@ -94,6 +96,14 @@ function AdminProductsContent() {
   useEffect(() => {
     fetchProducts()
   }, [filterStatus, filterType, page])
+
+  useEffect(() => {
+    const params = new URLSearchParams()
+    if (filterStatus !== "all") params.set("status", filterStatus)
+    if (filterType !== "all") params.set("type", filterType)
+    const qs = params.toString()
+    router.replace(qs ? `/admin/products?${qs}` : "/admin/products", { scroll: false })
+  }, [filterStatus, filterType, router])
 
   const fetchProducts = async () => {
     setLoading(true)
@@ -164,39 +174,35 @@ function AdminProductsContent() {
     if (!selectedProduct) return
     setActionLoading(true)
 
-    const supabase = createClient()
-    const { data: { user: adminUser } } = await supabase.auth.getUser()
-
-    const newStatus = moderationAction === "approve" ? "approved" : "rejected"
-
-    const { error } = await supabase
-      .from("products")
-      .update({
-        moderation_status: newStatus,
-        moderation_notes: moderationNotes || null,
-        moderated_by: adminUser?.id,
-        moderated_at: new Date().toISOString(),
-        status: moderationAction === "approve" ? "active" : "rejected",
+    try {
+      const res = await fetch(`/api/admin/products/${selectedProduct.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: moderationAction === "approve" ? "approve" : "reject",
+          notes: moderationNotes || null,
+        }),
       })
-      .eq("id", selectedProduct.id)
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        alert(data.error || "Modération impossible")
+        setActionLoading(false)
+        return
+      }
 
-    if (!error) {
-      await supabase.from("admin_logs").insert({
-        admin_id: adminUser?.id,
-        action: `${moderationAction}_product`,
-        entity_type: "product",
-        entity_id: selectedProduct.id,
-        new_data: { moderation_status: newStatus, moderation_notes: moderationNotes },
-      })
-
-      setProducts(products.map(p => 
-        p.id === selectedProduct.id 
-          ? { ...p, moderation_status: newStatus, moderation_notes: moderationNotes }
-          : p
-      ))
+      const newStatus = moderationAction === "approve" ? "approved" : "rejected"
+      setProducts((prev) =>
+        prev.map((p) =>
+          p.id === selectedProduct.id
+            ? { ...p, moderation_status: newStatus, moderation_notes: moderationNotes }
+            : p,
+        ),
+      )
       setModerationDialogOpen(false)
       setModerationNotes("")
       setSelectedProduct(null)
+    } catch {
+      alert("Erreur réseau")
     }
     setActionLoading(false)
   }
@@ -234,10 +240,18 @@ function AdminProductsContent() {
           <h1 className="text-2xl md:text-3xl font-bold">Produits</h1>
           <p className="text-muted-foreground">{totalCount} produits au total</p>
         </div>
-        <Button variant="outline" onClick={fetchProducts} className="bg-transparent">
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Actualiser
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" asChild className="bg-transparent">
+            <a href="/api/admin/export?entity=products" download>
+              <Download className="h-4 w-4 mr-2" />
+              Export CSV
+            </a>
+          </Button>
+          <Button variant="outline" onClick={fetchProducts} className="bg-transparent">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Actualiser
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -275,7 +289,6 @@ function AdminProductsContent() {
                 <SelectContent>
                   <SelectItem value="all">Tous les types</SelectItem>
                   <SelectItem value="agriculture">Agriculture</SelectItem>
-                  <SelectItem value="artisanat">Artisanat</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -364,11 +377,27 @@ function AdminProductsContent() {
                             <DropdownMenuContent align="end">
                               <DropdownMenuLabel>Actions</DropdownMenuLabel>
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  window.open(
+                                    `/produit/${product.id}`,
+                                    "_blank",
+                                    "noopener,noreferrer",
+                                  )
+                                }}
+                              >
                                 <Eye className="h-4 w-4 mr-2" />
                                 Voir le produit
                               </DropdownMenuItem>
-                              <DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  window.open(
+                                    `/produit/${product.id}`,
+                                    "_blank",
+                                    "noopener,noreferrer",
+                                  )
+                                }}
+                              >
                                 <ExternalLink className="h-4 w-4 mr-2" />
                                 Voir sur le site
                               </DropdownMenuItem>

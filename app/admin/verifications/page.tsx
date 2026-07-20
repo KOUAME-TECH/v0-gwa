@@ -86,44 +86,11 @@ export default function AdminVerificationsPage() {
 
   async function handleApprove(request: VerificationRequest) {
     setProcessing(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    // Update verification request
-    await supabase
-      .from('verification_requests')
-      .update({
-        status: 'approved',
-        reviewed_at: new Date().toISOString(),
-        reviewed_by: user?.id
-      })
-      .eq('id', request.id)
-
-    // Update profile or cooperative
-    if (request.request_type === 'profile' || request.request_type === 'certification') {
-      await supabase
-        .from('profiles')
-        .update({ is_verified: true })
-        .eq('id', request.user_id)
-    } else if (request.request_type === 'cooperative' && request.cooperative_id) {
-      await supabase
-        .from('cooperatives')
-        .update({ 
-          is_verified: true,
-          verification_date: new Date().toISOString()
-        })
-        .eq('id', request.cooperative_id)
-    }
-
-    // Send notification
-    await supabase
-      .from('notifications')
-      .insert({
-        user_id: request.user_id,
-        type: 'verification',
-        title: 'Vérification approuvée',
-        message: 'Votre demande de vérification a été approuvée. Votre profil est maintenant vérifié.',
-        link: '/profile'
-      })
+    await fetch(`/api/admin/verifications/${request.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "approve" }),
+    })
 
     setSelectedRequest(null)
     await loadRequests()
@@ -132,30 +99,13 @@ export default function AdminVerificationsPage() {
 
   async function handleReject(request: VerificationRequest) {
     if (!rejectionReason.trim()) return
-    
-    setProcessing(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    await supabase
-      .from('verification_requests')
-      .update({
-        status: 'rejected',
-        notes: rejectionReason,
-        reviewed_at: new Date().toISOString(),
-        reviewed_by: user?.id
-      })
-      .eq('id', request.id)
 
-    // Send notification
-    await supabase
-      .from('notifications')
-      .insert({
-        user_id: request.user_id,
-        type: 'verification',
-        title: 'Verification refusee',
-        message: `Votre demande de verification a ete refusee. Raison: ${rejectionReason}`,
-        link: '/profile'
-      })
+    setProcessing(true)
+    await fetch(`/api/admin/verifications/${request.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "reject", notes: rejectionReason }),
+    })
 
     setSelectedRequest(null)
     setRejectionReason("")

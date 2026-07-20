@@ -34,7 +34,7 @@ export default function EditProductPage() {
 
       const [{ data: product }, { data: cats }] = await Promise.all([
         supabase.from("products").select("*").eq("id", productId).eq("seller_id", user.id).single(),
-        supabase.from("categories").select("id, name, slug, category_type").is("parent_id", null).order("name"),
+        supabase.from("categories").select("id, name, slug, category_type").eq("category_type", "agriculture").is("parent_id", null).order("name"),
       ])
 
       if (!product) { toast.error("Produit introuvable"); router.push("/dashboard/products"); return }

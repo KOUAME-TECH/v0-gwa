@@ -11,7 +11,7 @@ interface DashboardNavProps {
 
 export function DashboardNav({ userType }: DashboardNavProps) {
   const pathname = usePathname()
-  const isSeller = ["producteur", "artisan", "transformateur"].includes(userType || "")
+  const isSeller = ["producteur", "transformateur"].includes(userType || "")
 
   const navItems = [
     { href: "/", icon: Home, label: "Feed", color: "text-[#F39A1F]" },
