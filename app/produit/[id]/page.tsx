@@ -13,7 +13,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { ClickableListenText } from "@/components/media/clickable-listen-text"
+import { ListenMicButton } from "@/components/media/clickable-listen-text"
 import { buildProductListenText } from "@/lib/media/product-listen"
 
 type Product = {
@@ -267,17 +267,16 @@ export default function ProduitPage() {
 
       {/* Content */}
       <div className="px-5 py-6 space-y-6">
-        {/* Note vocale / description audio */}
-        <ClickableListenText
-          text={buildProductListenText(product)}
-          audioUrl={product.audio_url}
-          fallbackLabel={`${product.name} — appuyez pour écouter la description`}
-        />
-
         {/* Category & Badges */}
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="px-3 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">
+          <span className="px-3 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 flex items-center gap-1.5">
             Agriculture
+            <ListenMicButton
+              size="xs"
+              text={buildProductListenText(product)}
+              audioUrl={product.audio_url}
+              fallbackLabel={product.name}
+            />
           </span>
           {product.categories && (
             <span className="px-3 py-1 rounded-full bg-neutral-100 text-neutral-600 text-xs font-medium">
@@ -293,7 +292,15 @@ export default function ProduitPage() {
 
         {/* Title & Price */}
         <div>
-          <h1 className="text-2xl font-bold text-neutral-900 leading-tight mb-2">{product.name}</h1>
+          <div className="flex items-start gap-2 mb-2">
+            <h1 className="text-2xl font-bold text-neutral-900 leading-tight flex-1">{product.name}</h1>
+            <ListenMicButton
+              text={buildProductListenText(product)}
+              audioUrl={product.audio_url}
+              fallbackLabel={product.name}
+              className="mt-1"
+            />
+          </div>
           <div className="flex items-baseline gap-1">
             <span className="text-3xl font-bold">{formatPrice(product.price)}</span>
             <span className="text-lg text-neutral-500">FCFA/{product.unit}</span>
@@ -345,12 +352,10 @@ export default function ProduitPage() {
         {/* Description */}
         {product.description && (
           <div>
-            <h3 className="font-semibold mb-2 text-neutral-800">Description</h3>
-            <ClickableListenText
-              text={product.description}
-              variant="compact"
-              className="mb-2"
-            />
+            <div className="flex items-center gap-2 mb-2">
+              <h3 className="font-semibold text-neutral-800">Description</h3>
+              <ListenMicButton size="xs" text={product.description} />
+            </div>
             <p className="text-neutral-600 leading-relaxed text-[15px]">{product.description}</p>
           </div>
         )}

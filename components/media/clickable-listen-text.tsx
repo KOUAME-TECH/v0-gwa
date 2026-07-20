@@ -12,35 +12,25 @@ function resolveListenMode(text?: string | null, audioUrl?: string | null): List
   return "none"
 }
 
-export type ClickableListenTextProps = {
+export type ListenPlaybackProps = {
   text?: string | null
   audioUrl?: string | null
   fallbackLabel?: string
-  className?: string
   lang?: string
-  /** soft = carte arrondie moderne ; compact = micro plus petit dans le feed */
-  variant?: "soft" | "compact"
 }
 
-/**
- * Texte + micro — tap pour écouter (TTS ou fichier audio).
- * Style doux, lisible pour ceux qui préfèrent lire.
- */
-export function ClickableListenText({
+function useListenPlayback({
   text,
   audioUrl,
-  fallbackLabel = "Message vocal — appuyez pour écouter",
-  className,
+  fallbackLabel = "Message vocal",
   lang = "fr-FR",
-  variant = "soft",
-}: ClickableListenTextProps) {
+}: ListenPlaybackProps) {
   const mode = resolveListenMode(text, audioUrl)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const [playing, setPlaying] = useState(false)
 
-  const displayText = text?.trim() || (mode !== "none" ? fallbackLabel : "")
-  const listenLabel =
-    mode === "audio" ? "Écouter la note vocale" : mode === "tts" ? "Écouter" : ""
+  const speechText = text?.trim() || fallbackLabel
+  const canListen = mode !== "none" && !!speechText
 
   const stopAll = useCallback(() => {
     if (audioRef.current) {
@@ -53,8 +43,8 @@ export function ClickableListenText({
     setPlaying(false)
   }, [])
 
-  const handleListen = useCallback(async () => {
-    if (mode === "none" || !displayText) return
+  const toggleListen = useCallback(async () => {
+    if (!canListen) return
 
     if (playing) {
       stopAll()
@@ -80,7 +70,7 @@ export function ClickableListenText({
 
     if (mode === "tts" && typeof window !== "undefined" && window.speechSynthesis) {
       window.speechSynthesis.cancel()
-      const utter = new SpeechSynthesisUtterance(text!.trim())
+      const utter = new SpeechSynthesisUtterance(speechText)
       utter.lang = lang
       utter.rate = 0.95
       utter.onend = () => setPlaying(false)
@@ -88,72 +78,152 @@ export function ClickableListenText({
       setPlaying(true)
       window.speechSynthesis.speak(utter)
     }
-  }, [audioUrl, displayText, lang, mode, playing, stopAll, text])
+  }, [audioUrl, canListen, lang, mode, playing, speechText, stopAll])
 
   useEffect(() => () => stopAll(), [stopAll])
 
-  if (!displayText) return null
+  return { mode, playing, canListen, toggleListen, speechText }
+}
 
-  if (mode === "none") {
-    return <span className={cn("text-[15px] leading-relaxed text-[#374151]", className)}>{displayText}</span>
-  }
+type MicIconProps = {
+  mode: ListenMode
+  playing: boolean
+  size: "xs" | "sm"
+}
 
-  const isCompact = variant === "compact"
-  const btnSize = isCompact ? "w-11 h-11" : "w-12 h-12"
-  const iconSize = isCompact ? "h-5 w-5" : "h-6 w-6"
+function MicIcon({ mode, playing, size }: MicIconProps) {
+  const icon = size === "xs" ? "h-3 w-3" : "h-3.5 w-3.5"
+  if (playing) return <Square className={cn(icon, "fill-current")} />
+  if (mode === "audio") return <Mic className={icon} />
+  return <Volume2 className={icon} />
+}
+
+export type ListenMicButtonProps = ListenPlaybackProps & {
+  className?: string
+  size?: "xs" | "sm"
+}
+
+/** Micro minimaliste — icône seule. */
+export function ListenMicButton({
+  text,
+  audioUrl,
+  fallbackLabel,
+  lang,
+  className,
+  size = "sm",
+}: ListenMicButtonProps) {
+  const { mode, playing, canListen, toggleListen } = useListenPlayback({
+    text,
+    audioUrl,
+    fallbackLabel,
+    lang,
+  })
+
+  if (!canListen) return null
+
+  const dim = size === "xs" ? "h-6 w-6" : "h-7 w-7"
 
   return (
-    <div
+    <button
+      type="button"
+      onClick={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        toggleListen()
+      }}
       className={cn(
-        "flex gap-2.5 items-stretch",
-        variant === "soft" && "rounded-2xl bg-gradient-to-br from-[#FFF9F0] to-[#F0F7F1] p-2.5 shadow-sm border border-[#1F5C2E]/8",
+        "inline-flex shrink-0 items-center justify-center rounded-full transition-all duration-200 active:scale-90",
+        dim,
+        playing
+          ? "bg-[#C27D10]/15 text-[#C27D10] ring-1 ring-[#C27D10]/30"
+          : "bg-[#1F5C2E]/8 text-[#1F5C2E] hover:bg-[#1F5C2E]/14",
+        className,
+      )}
+      aria-label={playing ? "Arrêter" : mode === "audio" ? "Écouter la note vocale" : "Écouter le texte"}
+    >
+      <MicIcon mode={mode} playing={playing} size={size} />
+    </button>
+  )
+}
+
+export type ClickableListenTextProps = ListenPlaybackProps & {
+  className?: string
+  showText?: boolean
+  textClassName?: string
+}
+
+/** Texte + micro inline discret. */
+export function ClickableListenText({
+  text,
+  audioUrl,
+  fallbackLabel = "Message vocal — appuyez pour écouter",
+  className,
+  lang = "fr-FR",
+  showText = true,
+  textClassName,
+}: ClickableListenTextProps) {
+  const { mode, playing, canListen, toggleListen, speechText } = useListenPlayback({
+    text,
+    audioUrl,
+    fallbackLabel,
+    lang,
+  })
+
+  if (!speechText) return null
+
+  if (!canListen) {
+    return (
+      <span className={cn("text-[15px] leading-relaxed text-[#374151]", className, textClassName)}>
+        {speechText}
+      </span>
+    )
+  }
+
+  if (!showText) {
+    return (
+      <ListenMicButton
+        text={text}
+        audioUrl={audioUrl}
+        fallbackLabel={fallbackLabel}
+        lang={lang}
+        className={className}
+      />
+    )
+  }
+
+  const display = mode === "audio" && !text?.trim() ? fallbackLabel : speechText
+
+  return (
+    <p
+      className={cn(
+        "flex items-start gap-1.5 text-[15px] leading-relaxed",
+        playing ? "text-[#1F5C2E]" : "text-[#374151]",
         className,
       )}
     >
       <button
         type="button"
-        onClick={handleListen}
+        onClick={toggleListen}
         className={cn(
-          "shrink-0 rounded-full flex items-center justify-center transition-all duration-200 active:scale-95 self-start",
-          btnSize,
+          "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full mt-0.5 transition-all active:scale-90",
           playing
-            ? "bg-[#C27D10] shadow-md ring-2 ring-[#C27D10]/25"
-            : "bg-[#1F5C2E] hover:bg-[#174A24] shadow-sm",
+            ? "bg-[#C27D10]/15 text-[#C27D10]"
+            : "bg-[#1F5C2E]/8 text-[#1F5C2E] hover:bg-[#1F5C2E]/14",
         )}
-        aria-label={playing ? "Arrêter la lecture" : listenLabel}
+        aria-label={playing ? "Arrêter" : "Écouter"}
       >
-        {playing ? (
-          <Square className={cn(iconSize, "text-white fill-white")} />
-        ) : mode === "audio" ? (
-          <Mic className={cn(iconSize, "text-white")} />
-        ) : (
-          <Volume2 className={cn(iconSize, "text-white")} />
-        )}
+        <MicIcon mode={mode} playing={playing} size="sm" />
       </button>
-
-      <button
-        type="button"
-        onClick={handleListen}
-        className={cn(
-          "flex-1 text-left min-w-0 rounded-xl px-3 py-2 transition-colors duration-200",
-          playing ? "bg-white/80" : "hover:bg-white/50 active:bg-white/70",
-        )}
-        aria-label={listenLabel}
+      <span
+        role="button"
+        tabIndex={0}
+        onClick={toggleListen}
+        onKeyDown={(e) => e.key === "Enter" && toggleListen()}
+        className={cn("flex-1 min-w-0 cursor-pointer", textClassName)}
       >
-        <p className="text-[11px] font-medium text-[#1F5C2E]/80 mb-0.5 tracking-wide">
-          {playing ? "Lecture…" : listenLabel}
-        </p>
-        <p
-          className={cn(
-            "leading-relaxed whitespace-pre-wrap text-[#1F2937]",
-            isCompact ? "text-sm" : "text-[15px]",
-            playing && "text-[#1F5C2E]",
-          )}
-        >
-          {displayText}
-        </p>
-      </button>
-    </div>
+        {display}
+      </span>
+    </p>
   )
 }
 

@@ -30,7 +30,7 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { GwaMark } from "@/components/brand/gwa-mark"
 import { WeatherWidget } from "@/components/weather-widget"
-import { ClickableListenText } from "@/components/media/clickable-listen-text"
+import { ClickableListenText, ListenMicButton } from "@/components/media/clickable-listen-text"
 import { CommentComposer } from "@/components/comments/comment-composer"
 import {
   VOICE_COMMENT_PLACEHOLDER,
@@ -751,7 +751,7 @@ export default function HomePage() {
           }
         }}
       >
-        <SheetContent side="bottom" className="h-[85vh] rounded-t-3xl flex flex-col p-4 bg-[#FFFBF5]">
+        <SheetContent side="bottom" className="h-[85vh] rounded-t-3xl flex flex-col p-4 bg-white">
           <SheetHeader className="border-b border-[#E5E7EB] pb-4 shrink-0">
             <SheetTitle className="text-center text-[#111827]">
               Commentaires ({selectedItem?.data.comments_count || 0})
@@ -783,7 +783,7 @@ export default function HomePage() {
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-1">
-                      <div className="bg-white/90 rounded-2xl px-3 py-2.5 shadow-sm border border-[#1F5C2E]/6">
+                      <div className="bg-[#F9FAFB] rounded-2xl px-3 py-2 border border-[#E5E7EB]/60">
                         <p className="font-medium text-sm text-[#111827] mb-1.5">
                           {comment.author?.full_name || "Utilisateur"}
                         </p>
@@ -791,8 +791,7 @@ export default function HomePage() {
                           text={comment.content}
                           audioUrl={comment.audio_url}
                           fallbackLabel={VOICE_COMMENT_PLACEHOLDER}
-                          variant="compact"
-                          className="!p-1.5 !bg-transparent !border-0 !shadow-none"
+                          textClassName="text-sm"
                         />
                       </div>
                       <p className="text-xs text-[#9CA3AF] mt-1 ml-2">
@@ -1063,8 +1062,6 @@ function FeedCard({
             text={(data as Post).content}
             audioUrl={postAudioUrl}
             fallbackLabel={VOICE_COMMENT_PLACEHOLDER}
-            variant="compact"
-            className="px-1 py-0.5"
           />
         </div>
       )}
@@ -1135,32 +1132,35 @@ function FeedCard({
           )}
 
           {isProduct && (
-            <div className="absolute top-3 left-3 bg-[#2F7D32] text-white px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1">
-              <ShoppingBag className="h-3 w-3" />
-              Produit
+            <div className="absolute top-3 left-3 bg-[#2F7D32]/95 backdrop-blur-sm text-white pl-2.5 pr-1.5 py-1 rounded-full text-xs font-medium flex items-center gap-1 shadow-sm">
+              <ShoppingBag className="h-3 w-3 shrink-0" />
+              <span>Produit</span>
+              <ListenMicButton
+                size="xs"
+                text={buildProductListenText(data as Product)}
+                audioUrl={(data as Product).audio_url}
+                fallbackLabel={(data as Product).name}
+                className="!bg-white/20 !text-white hover:!bg-white/30 ring-0"
+              />
             </div>
           )}
         </div>
       )}
 
-      {/* Info produit — tap micro pour entendre la description */}
+      {/* Info produit */}
       {isProduct && (
-        <div className="px-4 py-3 border-b border-[#E5E7EB]/60 space-y-2">
+        <div className="px-4 py-3 border-b border-[#E5E7EB]/50">
           <Link href={`/produit/${data.id}`}>
             <h3 className="font-semibold text-[#111827] mb-1">{(data as Product).name}</h3>
-          </Link>
-          <ClickableListenText
-            variant="compact"
-            text={buildProductListenText(data as Product)}
-            audioUrl={(data as Product).audio_url}
-            fallbackLabel={`${(data as Product).name} — appuyez pour écouter`}
-            className="!p-2 !shadow-none"
-          />
-          <Link href={`/produit/${data.id}`}>
-            <p className="text-lg font-bold text-[#2F7D32] pt-1">
+            <p className="text-lg font-bold text-[#2F7D32]">
               {formatPrice((data as Product).price)} FCFA
               <span className="text-sm font-normal text-[#4B5563]">/{(data as Product).unit}</span>
             </p>
+            {(data as Product).description?.trim() && (
+              <p className="text-sm text-[#6B7280] mt-1.5 line-clamp-2 leading-snug">
+                {(data as Product).description}
+              </p>
+            )}
           </Link>
         </div>
       )}

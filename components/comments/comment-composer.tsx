@@ -3,7 +3,6 @@
 import React from "react"
 import { Mic, Send, Square, X } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder"
@@ -16,14 +15,11 @@ export type CommentComposerProps = {
   onChange: (v: string) => void
   onSubmit: (voice: { file: File; url: string } | null) => void
   submitting?: boolean
-  /** false = invité : micro visible mais redirige vers connexion */
   loggedIn?: boolean
   onAuthRequired?: () => void
 }
 
-/**
- * Barre commentaire style WhatsApp : micro vert bien visible (48px), pas caché dans l'input.
- */
+/** Barre commentaire épurée — micro discret dans le champ. */
 export function CommentComposer({
   userInitial = "?",
   value,
@@ -51,34 +47,34 @@ export function CommentComposer({
     clearRecording()
   }
 
+  const handleMic = () => {
+    if (!loggedIn) {
+      onAuthRequired?.()
+      return
+    }
+    if (isRecording) stopRecording()
+    else startRecording(() => audioInputRef.current?.click())
+  }
+
   return (
-    <div className="space-y-3 pt-3 border-t border-[#1F5C2E]/10 bg-gradient-to-t from-[#FFFBF5] to-transparent">
+    <div className="space-y-2 pt-3 border-t border-[#E5E7EB]/80">
       {isRecording && (
-        <div className="flex items-center gap-3 px-3 py-2.5 rounded-2xl bg-red-50/90 border border-red-100/80">
-          <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse shrink-0" />
-          <span className="text-sm font-medium text-red-700 flex-1">Enregistrement… appuyez sur ■ pour terminer</span>
-          <Button
-            type="button"
-            size="icon"
-            variant="destructive"
-            className="shrink-0 rounded-full h-10 w-10"
-            onClick={stopRecording}
-            aria-label="Terminer l'enregistrement"
-          >
-            <Square className="h-5 w-5 fill-current" />
-          </Button>
+        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-red-50/80 text-red-700 text-sm">
+          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
+          <span className="flex-1">Enregistrement…</span>
+          <button type="button" onClick={stopRecording} className="p-1 rounded-full hover:bg-red-100" aria-label="Arrêter">
+            <Square className="h-4 w-4 fill-current" />
+          </button>
         </div>
       )}
 
       {recording && !isRecording && (
-        <div className="flex items-center gap-2 px-3 py-2.5 rounded-2xl bg-white border border-[#1F5C2E]/12 shadow-sm">
-          <div className="w-10 h-10 rounded-full bg-[#1F5C2E] flex items-center justify-center shrink-0">
-            <Mic className="h-5 w-5 text-white" />
-          </div>
-          <audio src={recording.url} controls preload="none" className="flex-1 h-10 min-w-0" />
-          <Button type="button" size="icon" variant="ghost" onClick={clearRecording} aria-label="Supprimer">
-            <X className="h-5 w-5" />
-          </Button>
+        <div className="flex items-center gap-2 px-2 py-1.5 rounded-xl bg-[#1F5C2E]/5 border border-[#1F5C2E]/10">
+          <Mic className="h-3.5 w-3.5 text-[#1F5C2E] shrink-0" />
+          <audio src={recording.url} controls preload="none" className="flex-1 h-8 min-w-0 [&::-webkit-media-controls-panel]:bg-transparent" />
+          <button type="button" onClick={clearRecording} className="p-1 text-[#6B7280] hover:text-[#111827]" aria-label="Supprimer">
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
 
@@ -100,62 +96,51 @@ export function CommentComposer({
         }}
       />
 
-      <div className="flex items-end gap-2">
-        <Avatar className="h-9 w-9 shrink-0 mb-0.5">
-          <AvatarFallback className="bg-[#1F5C2E] text-white text-xs">{userInitial}</AvatarFallback>
+      <div className="flex items-center gap-2">
+        <Avatar className="h-8 w-8 shrink-0">
+          <AvatarFallback className="bg-[#1F5C2E]/90 text-white text-xs">{userInitial}</AvatarFallback>
         </Avatar>
 
-        <Button
-          type="button"
-          size="icon"
-          disabled={submitting}
-          className={cn(
-            "shrink-0 rounded-full h-12 w-12 shadow-md mb-0.5 ring-2 ring-[#1F5C2E]/30",
-            isRecording ? "bg-red-600 hover:bg-red-700 ring-red-300" : "bg-[#1F5C2E] hover:bg-[#174A24]",
-          )}
-          aria-label={isRecording ? "Arrêter" : "Enregistrer une note vocale"}
-          onClick={() => {
-            if (!loggedIn) {
-              onAuthRequired?.()
-              return
-            }
-            if (isRecording) stopRecording()
-            else startRecording(() => audioInputRef.current?.click())
-          }}
-        >
-          {isRecording ? (
-            <Square className="h-6 w-6 fill-white text-white" />
-          ) : (
-            <Mic className="h-6 w-6 text-white" />
-          )}
-        </Button>
+        <div className="flex-1 flex items-center gap-1 bg-white rounded-full px-2 min-h-[42px] border border-[#E5E7EB] shadow-sm">
+          <button
+            type="button"
+            disabled={submitting}
+            onClick={handleMic}
+            className={cn(
+              "shrink-0 h-8 w-8 rounded-full flex items-center justify-center transition-all active:scale-90",
+              isRecording
+                ? "bg-red-500 text-white"
+                : "text-[#1F5C2E] hover:bg-[#1F5C2E]/8",
+            )}
+            aria-label={isRecording ? "Arrêter" : "Note vocale"}
+          >
+            {isRecording ? (
+              <Square className="h-3.5 w-3.5 fill-current" />
+            ) : (
+              <Mic className="h-4 w-4" />
+            )}
+          </button>
 
-        <div className="flex-1 flex items-center gap-1 bg-white rounded-2xl px-3 min-h-[48px] border border-[#1F5C2E]/10 shadow-sm">
           <Input
             value={value}
             onChange={(e) => onChange(e.target.value)}
-            placeholder={loggedIn ? "Commentaire texte (optionnel)…" : "Connectez-vous pour commenter…"}
+            placeholder={loggedIn ? "Commentaire…" : "Connectez-vous…"}
             disabled={!loggedIn || submitting}
-            className="border-0 bg-transparent focus-visible:ring-0 px-0 flex-1 h-11"
+            className="border-0 bg-transparent focus-visible:ring-0 px-0 flex-1 h-9 text-[15px]"
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
           />
-          <Button
+
+          <button
             type="button"
-            size="icon"
-            variant="ghost"
             disabled={!canSend}
             onClick={handleSend}
-            className="shrink-0 text-[#1F5C2E] disabled:opacity-30"
+            className="shrink-0 h-8 w-8 rounded-full flex items-center justify-center text-[#1F5C2E] disabled:opacity-25 hover:bg-[#1F5C2E]/8 transition-colors"
             aria-label="Envoyer"
           >
-            <Send className="h-5 w-5" />
-          </Button>
+            <Send className="h-4 w-4" />
+          </button>
         </div>
       </div>
-
-      <p className="text-[11px] text-center text-[#6B7280]/90 px-2 pb-1">
-        🎤 Note vocale · 🔊 Tap sur le texte pour écouter
-      </p>
     </div>
   )
 }
