@@ -149,7 +149,11 @@ function MarketplaceContent() {
     if (sinceParam) {
       const sinceMs = new Date(sinceParam).getTime()
       if (!Number.isNaN(sinceMs)) {
-        list = list.filter((p) => new Date(p.created_at).getTime() >= sinceMs)
+        list = list.filter((p) => {
+          if (!p.created_at) return true
+          const createdMs = new Date(p.created_at).getTime()
+          return Number.isNaN(createdMs) || createdMs >= sinceMs
+        })
       }
     }
     if (idsParam) {
