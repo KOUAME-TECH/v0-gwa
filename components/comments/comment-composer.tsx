@@ -15,7 +15,9 @@ export type CommentComposerProps = {
   onChange: (v: string) => void
   onSubmit: (voice: { file: File; url: string } | null) => void
   submitting?: boolean
-  disabled?: boolean
+  /** false = invité : micro visible mais redirige vers connexion */
+  loggedIn?: boolean
+  onAuthRequired?: () => void
 }
 
 /**
@@ -27,7 +29,8 @@ export function CommentComposer({
   onChange,
   onSubmit,
   submitting = false,
-  disabled = false,
+  loggedIn = true,
+  onAuthRequired,
 }: CommentComposerProps) {
   const audioInputRef = React.useRef<HTMLInputElement>(null)
   const {
@@ -101,13 +104,17 @@ export function CommentComposer({
         <Button
           type="button"
           size="icon"
-          disabled={disabled || submitting}
+          disabled={submitting}
           className={cn(
-            "shrink-0 rounded-full h-12 w-12 shadow-md mb-0.5",
-            isRecording ? "bg-red-600 hover:bg-red-700" : "bg-[#1F5C2E] hover:bg-[#174A24]",
+            "shrink-0 rounded-full h-12 w-12 shadow-md mb-0.5 ring-2 ring-[#1F5C2E]/30",
+            isRecording ? "bg-red-600 hover:bg-red-700 ring-red-300" : "bg-[#1F5C2E] hover:bg-[#174A24]",
           )}
           aria-label={isRecording ? "Arrêter" : "Enregistrer une note vocale"}
           onClick={() => {
+            if (!loggedIn) {
+              onAuthRequired?.()
+              return
+            }
             if (isRecording) stopRecording()
             else startRecording(() => audioInputRef.current?.click())
           }}
@@ -123,8 +130,8 @@ export function CommentComposer({
           <Input
             value={value}
             onChange={(e) => onChange(e.target.value)}
-            placeholder="Commentaire texte (optionnel)…"
-            disabled={disabled || submitting}
+            placeholder={loggedIn ? "Commentaire texte (optionnel)…" : "Connectez-vous pour commenter…"}
+            disabled={!loggedIn || submitting}
             className="border-0 bg-transparent focus-visible:ring-0 px-0 flex-1 h-11"
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
           />

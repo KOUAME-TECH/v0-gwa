@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -111,6 +112,7 @@ const categories = [
 ]
 
 export default function HomePage() {
+  const router = useRouter()
   const [feed, setFeed] = useState<FeedItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null)
@@ -350,38 +352,55 @@ export default function HomePage() {
       const idField = item.type === "post" ? "post_id" : "product_id"
       const authorField = table === "post_comments" ? "author_id" : "reviewer_id"
 
-      // Charger les commentaires/reviews sans FK join
-      const selectQuery = table === "post_comments"
-        ? "id, content, comment_type, audio_url, created_at, author_id"
-        : "id, comment, review_type, audio_url, created_at, reviewer_id"
+      const voiceSelect =
+        table === "post_comments"
+          ? "id, content, comment_type, audio_url, created_at, author_id"
+          : "id, comment, review_type, audio_url, created_at, reviewer_id"
+      const basicSelect =
+        table === "post_comments"
+          ? "id, content, created_at, author_id"
+          : "id, comment, created_at, reviewer_id"
 
-      const { data: rawData, error } = await supabase
+      let rawData: Record<string, unknown>[] | null = null
+      let res = await supabase
         .from(table)
-        .select(selectQuery)
+        .select(voiceSelect)
         .eq(idField, item.data.id)
         .order("created_at", { ascending: false })
         .limit(50)
 
-      if (error) throw error
+      if (res.error) {
+        res = await supabase
+          .from(table)
+          .select(basicSelect)
+          .eq(idField, item.data.id)
+          .order("created_at", { ascending: false })
+          .limit(50)
+      }
+      if (res.error) throw res.error
+      rawData = res.data as Record<string, unknown>[] | null
 
-      // Charger les profiles separement
-      let commentsWithProfiles: any[] = []
+      let commentsWithProfiles: Comment[] = []
       if (rawData && rawData.length > 0) {
-        const userIds = [...new Set(rawData.map((c: any) => c[authorField]))]
-        const { data: profiles } = await supabase.from("profiles").select("id, full_name, avatar_url").in("id", userIds)
-        const profileMap = new Map(profiles?.map(p => [p.id, p]) || [])
-        commentsWithProfiles = rawData.map((c: any) => ({
-          id: c.id,
-          content: c.content ?? c.comment ?? null,
-          audio_url: c.audio_url ?? null,
-          comment_type: c.comment_type ?? c.review_type ?? "text",
-          created_at: c.created_at,
-          author: profileMap.get(c[authorField]) || null,
+        const userIds = [...new Set(rawData.map((c) => c[authorField] as string))]
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("id, full_name, avatar_url")
+          .in("id", userIds)
+        const profileMap = new Map(profiles?.map((p) => [p.id, p]) || [])
+        commentsWithProfiles = rawData.map((c) => ({
+          id: c.id as string,
+          content: (c.content ?? c.comment ?? null) as string | null,
+          audio_url: (c.audio_url ?? null) as string | null,
+          comment_type: (c.comment_type ?? c.review_type ?? "text") as string,
+          created_at: c.created_at as string,
+          author: profileMap.get(c[authorField] as string) || null,
         }))
       }
 
       setComments(commentsWithProfiles)
     } catch (error) {
+      console.error("openComments", error)
       toast.error("Erreur lors du chargement des commentaires")
     } finally {
       setLoadingComments(false)
@@ -553,6 +572,7 @@ export default function HomePage() {
   const handleFollow = async (userId: string) => {
     if (!user) {
       toast.error("Connectez-vous pour suivre cet utilisateur")
+      router.push("/auth/login?redirect=/")
       return
     }
     if (userId === user.id) return
@@ -877,7 +897,11 @@ export default function HomePage() {
               onChange={setNewComment}
               onSubmit={submitComment}
               submitting={submittingComment}
-              disabled={!user}
+              loggedIn={!!user}
+              onAuthRequired={() => {
+                toast.error("Connectez-vous pour commenter")
+                router.push("/auth/login?redirect=/")
+              }}
             />
           </div>
         </SheetContent>
