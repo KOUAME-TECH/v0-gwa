@@ -33,10 +33,10 @@ import { WeatherWidget } from "@/components/weather-widget"
 import { ClickableListenText } from "@/components/media/clickable-listen-text"
 import { CommentComposer } from "@/components/comments/comment-composer"
 import {
-  resolveCommentMediaType,
   VOICE_COMMENT_PLACEHOLDER,
 } from "@/lib/comments/voice-comment"
-import { extensionForType } from "@/lib/media/compress"
+import { loadFeedComments } from "@/lib/comments/feed-comments"
+import { buildProductListenText } from "@/lib/media/product-listen"
 import {
   followButtonLabel,
   shouldShowFollowButton,
@@ -45,9 +45,11 @@ import {
 type Product = {
   id: string
   name: string
+  description?: string | null
   price: number
   unit: string
   images: string[]
+  audio_url?: string | null
   origin_region: string | null
   origin_country: string | null
   product_type: string
@@ -56,6 +58,7 @@ type Product = {
   comments_count: number
   shares_count: number
   created_at: string
+  is_organic?: boolean | null
   profiles: {
     id: string
     full_name: string
@@ -189,7 +192,7 @@ export default function HomePage() {
       const { data: products } = await supabase
         .from("products")
         .select(`
-          id, name, price, unit, images, origin_region, origin_country, product_type, seller_id,
+          id, name, description, price, unit, images, audio_url, origin_region, origin_country, product_type, seller_id,
           likes_count, comments_count, shares_count, created_at, is_organic, is_fair_trade,
           profiles:seller_id(id, full_name, avatar_url, is_verified, city)
         `)
@@ -348,57 +351,13 @@ export default function HomePage() {
     setComments([])
 
     try {
-      const table = item.type === "post" ? "post_comments" : "reviews"
-      const idField = item.type === "post" ? "post_id" : "product_id"
-      const authorField = table === "post_comments" ? "author_id" : "reviewer_id"
+      const target =
+        item.type === "post"
+          ? { type: "post" as const, id: item.data.id }
+          : { type: "product" as const, id: item.data.id }
 
-      const voiceSelect =
-        table === "post_comments"
-          ? "id, content, comment_type, audio_url, created_at, author_id"
-          : "id, comment, review_type, audio_url, created_at, reviewer_id"
-      const basicSelect =
-        table === "post_comments"
-          ? "id, content, created_at, author_id"
-          : "id, comment, created_at, reviewer_id"
-
-      let rawData: Record<string, unknown>[] | null = null
-      let res = await supabase
-        .from(table)
-        .select(voiceSelect)
-        .eq(idField, item.data.id)
-        .order("created_at", { ascending: false })
-        .limit(50)
-
-      if (res.error) {
-        res = await supabase
-          .from(table)
-          .select(basicSelect)
-          .eq(idField, item.data.id)
-          .order("created_at", { ascending: false })
-          .limit(50)
-      }
-      if (res.error) throw res.error
-      rawData = res.data as Record<string, unknown>[] | null
-
-      let commentsWithProfiles: Comment[] = []
-      if (rawData && rawData.length > 0) {
-        const userIds = [...new Set(rawData.map((c) => c[authorField] as string))]
-        const { data: profiles } = await supabase
-          .from("profiles")
-          .select("id, full_name, avatar_url")
-          .in("id", userIds)
-        const profileMap = new Map(profiles?.map((p) => [p.id, p]) || [])
-        commentsWithProfiles = rawData.map((c) => ({
-          id: c.id as string,
-          content: (c.content ?? c.comment ?? null) as string | null,
-          audio_url: (c.audio_url ?? null) as string | null,
-          comment_type: (c.comment_type ?? c.review_type ?? "text") as string,
-          created_at: c.created_at as string,
-          author: profileMap.get(c[authorField] as string) || null,
-        }))
-      }
-
-      setComments(commentsWithProfiles)
+      const loaded = await loadFeedComments(supabase, target)
+      setComments(loaded)
     } catch (error) {
       console.error("openComments", error)
       toast.error("Erreur lors du chargement des commentaires")
@@ -407,89 +366,43 @@ export default function HomePage() {
     }
   }
 
-  // Envoyer un commentaire
   const submitComment = async (voice: { file: File; url: string } | null) => {
     if (!user) {
       toast.error("Connectez-vous pour commenter")
       return
     }
     const hasText = !!newComment.trim()
-    const hasVoice = !!voice
+    const hasVoice = !!voice?.file?.size
     if ((!hasText && !hasVoice) || !selectedItem) return
 
     setSubmittingComment(true)
 
     try {
-      const table = selectedItem.type === "post" ? "post_comments" : "reviews"
-      const idField = selectedItem.type === "post" ? "post_id" : "product_id"
-      const countTable = selectedItem.type === "post" ? "posts" : "products"
+      const form = new FormData()
+      form.append("type", selectedItem.type === "post" ? "post" : "product")
+      form.append("id", selectedItem.data.id)
+      if (hasText) form.append("text", newComment.trim())
+      if (hasVoice && voice) form.append("audio", voice.file)
 
-      let audioUrl: string | null = null
-      if (voice) {
-        const ext = extensionForType(voice.file.type) || "webm"
-        const fileName = `${user.id}/comments/${Date.now()}_${Math.random()
-          .toString(36)
-          .slice(2)}.${ext}`
-        const { error: uploadError } = await supabase.storage
-          .from("posts")
-          .upload(fileName, voice.file, { cacheControl: "3600", upsert: false })
-        if (uploadError) throw uploadError
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from("posts").getPublicUrl(fileName)
-        audioUrl = publicUrl
+      const res = await fetch("/api/comments", { method: "POST", body: form })
+      const payload = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        const msg = payload.error || "Erreur lors de l'envoi du commentaire"
+        if (payload.code === "SCHEMA") {
+          toast.error(msg, { duration: 6000 })
+        } else {
+          toast.error(msg)
+        }
+        return
       }
 
-      const mediaType = resolveCommentMediaType({ hasText, hasAudio: !!audioUrl })
+      const { comment: created, voiceStored } = payload as {
+        comment: Comment
+        voiceStored: boolean
+      }
 
-      const insertData =
-        table === "post_comments"
-          ? {
-              [idField]: selectedItem.data.id,
-              author_id: user.id,
-              content: hasText ? newComment.trim() : null,
-              comment_type: mediaType,
-              audio_url: audioUrl,
-            }
-          : {
-              [idField]: selectedItem.data.id,
-              reviewer_id: user.id,
-              comment: hasText ? newComment.trim() : null,
-              review_type: mediaType,
-              audio_url: audioUrl,
-              rating: 5,
-            }
-
-      const insertSelect =
-        table === "post_comments"
-          ? "id, content, comment_type, audio_url, created_at, author_id"
-          : "id, comment, review_type, audio_url, created_at, reviewer_id"
-
-      const { data, error } = await supabase
-        .from(table)
-        .insert(insertData)
-        .select(insertSelect)
-        .single()
-
-      if (error) throw error
-
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("id, full_name, avatar_url")
-        .eq("id", user.id)
-        .single()
-
-      setComments((prev) => [
-        {
-          id: data.id,
-          content: data.content ?? data.comment ?? null,
-          audio_url: data.audio_url ?? null,
-          comment_type: data.comment_type ?? data.review_type ?? mediaType,
-          created_at: data.created_at,
-          author: profile,
-        },
-        ...prev,
-      ])
+      setComments((prev) => [created, ...prev])
 
       const newCount = selectedItem.data.comments_count + 1
       setFeed((prev) =>
@@ -499,14 +412,14 @@ export default function HomePage() {
             : f,
         ),
       )
-
-      await supabase
-        .from(countTable)
-        .update({ comments_count: newCount })
-        .eq("id", selectedItem.data.id)
+      setSelectedItem((prev) =>
+        prev ? { ...prev, data: { ...prev.data, comments_count: newCount } } : prev,
+      )
 
       setNewComment("")
-      toast.success(hasVoice ? "Commentaire vocal publié" : "Commentaire publié")
+      toast.success(
+        voiceStored ? "Commentaire vocal publié" : hasVoice ? "Commentaire publié (texte uniquement)" : "Commentaire publié",
+      )
     } catch (error) {
       console.error("[comments]", error)
       toast.error("Erreur lors de l'envoi du commentaire")
@@ -838,7 +751,7 @@ export default function HomePage() {
           }
         }}
       >
-        <SheetContent side="bottom" className="h-[85vh] rounded-t-3xl flex flex-col p-4">
+        <SheetContent side="bottom" className="h-[85vh] rounded-t-3xl flex flex-col p-4 bg-[#FFFBF5]">
           <SheetHeader className="border-b border-[#E5E7EB] pb-4 shrink-0">
             <SheetTitle className="text-center text-[#111827]">
               Commentaires ({selectedItem?.data.comments_count || 0})
@@ -870,15 +783,16 @@ export default function HomePage() {
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-1">
-                      <div className="bg-[#F3F4F6] rounded-2xl px-4 py-2">
-                        <p className="font-medium text-sm text-[#111827] mb-1">
+                      <div className="bg-white/90 rounded-2xl px-3 py-2.5 shadow-sm border border-[#1F5C2E]/6">
+                        <p className="font-medium text-sm text-[#111827] mb-1.5">
                           {comment.author?.full_name || "Utilisateur"}
                         </p>
                         <ClickableListenText
                           text={comment.content}
                           audioUrl={comment.audio_url}
                           fallbackLabel={VOICE_COMMENT_PLACEHOLDER}
-                          className="px-1 py-0.5 -mx-1"
+                          variant="compact"
+                          className="!p-1.5 !bg-transparent !border-0 !shadow-none"
                         />
                       </div>
                       <p className="text-xs text-[#9CA3AF] mt-1 ml-2">
@@ -1149,6 +1063,7 @@ function FeedCard({
             text={(data as Post).content}
             audioUrl={postAudioUrl}
             fallbackLabel={VOICE_COMMENT_PLACEHOLDER}
+            variant="compact"
             className="px-1 py-0.5"
           />
         </div>
@@ -1228,12 +1143,21 @@ function FeedCard({
         </div>
       )}
 
-      {/* Info produit */}
+      {/* Info produit — tap micro pour entendre la description */}
       {isProduct && (
-        <div className="px-4 py-3 border-b border-[#E5E7EB]">
+        <div className="px-4 py-3 border-b border-[#E5E7EB]/60 space-y-2">
           <Link href={`/produit/${data.id}`}>
             <h3 className="font-semibold text-[#111827] mb-1">{(data as Product).name}</h3>
-            <p className="text-lg font-bold text-[#2F7D32]">
+          </Link>
+          <ClickableListenText
+            variant="compact"
+            text={buildProductListenText(data as Product)}
+            audioUrl={(data as Product).audio_url}
+            fallbackLabel={`${(data as Product).name} — appuyez pour écouter`}
+            className="!p-2 !shadow-none"
+          />
+          <Link href={`/produit/${data.id}`}>
+            <p className="text-lg font-bold text-[#2F7D32] pt-1">
               {formatPrice((data as Product).price)} FCFA
               <span className="text-sm font-normal text-[#4B5563]">/{(data as Product).unit}</span>
             </p>

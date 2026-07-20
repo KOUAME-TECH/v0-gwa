@@ -227,7 +227,15 @@ export function humanFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`
 }
 
+/** Normalise le MIME audio (retire codecs=…) pour upload Supabase. */
+export function normalizeAudioMime(type: string): string {
+  const base = (type || "audio/webm").split(";")[0].trim().toLowerCase()
+  if (base.startsWith("audio/")) return base
+  return "audio/webm"
+}
+
 export function extensionForType(type: string): string {
+  const normalized = type.includes("audio") ? normalizeAudioMime(type) : type
   const map: Record<string, string> = {
     "image/jpeg": "jpg",
     "image/png": "png",
@@ -244,5 +252,5 @@ export function extensionForType(type: string): string {
     "audio/ogg": "ogg",
     "audio/aac": "aac",
   }
-  return map[type] || type.split("/")[1] || "bin"
+  return map[normalized] || map[type] || type.split("/")[1] || "bin"
 }

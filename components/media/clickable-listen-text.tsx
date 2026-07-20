@@ -18,10 +18,13 @@ export type ClickableListenTextProps = {
   fallbackLabel?: string
   className?: string
   lang?: string
+  /** soft = carte arrondie moderne ; compact = micro plus petit dans le feed */
+  variant?: "soft" | "compact"
 }
 
 /**
- * Texte + micro vert visible (48px) — tap micro ou texte pour écouter.
+ * Texte + micro — tap pour écouter (TTS ou fichier audio).
+ * Style doux, lisible pour ceux qui préfèrent lire.
  */
 export function ClickableListenText({
   text,
@@ -29,6 +32,7 @@ export function ClickableListenText({
   fallbackLabel = "Message vocal — appuyez pour écouter",
   className,
   lang = "fr-FR",
+  variant = "soft",
 }: ClickableListenTextProps) {
   const mode = resolveListenMode(text, audioUrl)
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -36,7 +40,7 @@ export function ClickableListenText({
 
   const displayText = text?.trim() || (mode !== "none" ? fallbackLabel : "")
   const listenLabel =
-    mode === "audio" ? "Écouter la note vocale" : mode === "tts" ? "Écouter le texte" : ""
+    mode === "audio" ? "Écouter la note vocale" : mode === "tts" ? "Écouter" : ""
 
   const stopAll = useCallback(() => {
     if (audioRef.current) {
@@ -78,6 +82,7 @@ export function ClickableListenText({
       window.speechSynthesis.cancel()
       const utter = new SpeechSynthesisUtterance(text!.trim())
       utter.lang = lang
+      utter.rate = 0.95
       utter.onend = () => setPlaying(false)
       utter.onerror = () => setPlaying(false)
       setPlaying(true)
@@ -90,26 +95,39 @@ export function ClickableListenText({
   if (!displayText) return null
 
   if (mode === "none") {
-    return <span className={className}>{displayText}</span>
+    return <span className={cn("text-[15px] leading-relaxed text-[#374151]", className)}>{displayText}</span>
   }
 
+  const isCompact = variant === "compact"
+  const btnSize = isCompact ? "w-11 h-11" : "w-12 h-12"
+  const iconSize = isCompact ? "h-5 w-5" : "h-6 w-6"
+
   return (
-    <div className={cn("flex gap-3 items-start", className)}>
+    <div
+      className={cn(
+        "flex gap-2.5 items-stretch",
+        variant === "soft" && "rounded-2xl bg-gradient-to-br from-[#FFF9F0] to-[#F0F7F1] p-2.5 shadow-sm border border-[#1F5C2E]/8",
+        className,
+      )}
+    >
       <button
         type="button"
         onClick={handleListen}
         className={cn(
-          "shrink-0 w-12 h-12 rounded-full flex items-center justify-center shadow-md transition-transform active:scale-95",
-          playing ? "bg-[#C27D10] ring-2 ring-[#C27D10]/40" : "bg-[#1F5C2E] hover:bg-[#174A24]",
+          "shrink-0 rounded-full flex items-center justify-center transition-all duration-200 active:scale-95 self-start",
+          btnSize,
+          playing
+            ? "bg-[#C27D10] shadow-md ring-2 ring-[#C27D10]/25"
+            : "bg-[#1F5C2E] hover:bg-[#174A24] shadow-sm",
         )}
-        aria-label={playing ? "Arrêter" : listenLabel}
+        aria-label={playing ? "Arrêter la lecture" : listenLabel}
       >
         {playing ? (
-          <Square className="h-5 w-5 text-white fill-white" />
+          <Square className={cn(iconSize, "text-white fill-white")} />
         ) : mode === "audio" ? (
-          <Mic className="h-6 w-6 text-white" />
+          <Mic className={cn(iconSize, "text-white")} />
         ) : (
-          <Volume2 className="h-6 w-6 text-white" />
+          <Volume2 className={cn(iconSize, "text-white")} />
         )}
       </button>
 
@@ -117,21 +135,19 @@ export function ClickableListenText({
         type="button"
         onClick={handleListen}
         className={cn(
-          "flex-1 text-left rounded-xl px-3 py-2.5 min-w-0 transition-colors",
-          "border border-[#1F5C2E]/15",
-          playing
-            ? "bg-[#1F5C2E]/10 ring-1 ring-[#1F5C2E]/25"
-            : "bg-[#1F5C2E]/5 hover:bg-[#1F5C2E]/10 active:bg-[#1F5C2E]/15",
+          "flex-1 text-left min-w-0 rounded-xl px-3 py-2 transition-colors duration-200",
+          playing ? "bg-white/80" : "hover:bg-white/50 active:bg-white/70",
         )}
         aria-label={listenLabel}
       >
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-[#1F5C2E] mb-1">
-          {playing ? "Lecture en cours…" : listenLabel}
+        <p className="text-[11px] font-medium text-[#1F5C2E]/80 mb-0.5 tracking-wide">
+          {playing ? "Lecture…" : listenLabel}
         </p>
         <p
           className={cn(
-            "text-sm leading-relaxed whitespace-pre-wrap text-[#111827]",
-            playing && "text-[#1F5C2E] font-medium",
+            "leading-relaxed whitespace-pre-wrap text-[#1F2937]",
+            isCompact ? "text-sm" : "text-[15px]",
+            playing && "text-[#1F5C2E]",
           )}
         >
           {displayText}

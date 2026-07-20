@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder"
+import { toast } from "sonner"
 import { validateAudioFile } from "@/lib/media/compress"
 
 export type CommentComposerProps = {
@@ -51,9 +52,9 @@ export function CommentComposer({
   }
 
   return (
-    <div className="space-y-3 pt-3 border-t border-[#E5E7EB]">
+    <div className="space-y-3 pt-3 border-t border-[#1F5C2E]/10 bg-gradient-to-t from-[#FFFBF5] to-transparent">
       {isRecording && (
-        <div className="flex items-center gap-3 px-2 py-2 rounded-xl bg-red-50 border border-red-100">
+        <div className="flex items-center gap-3 px-3 py-2.5 rounded-2xl bg-red-50/90 border border-red-100/80">
           <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse shrink-0" />
           <span className="text-sm font-medium text-red-700 flex-1">Enregistrement… appuyez sur ■ pour terminer</span>
           <Button
@@ -70,7 +71,7 @@ export function CommentComposer({
       )}
 
       {recording && !isRecording && (
-        <div className="flex items-center gap-2 px-2 py-2 rounded-xl bg-[#1F5C2E]/5 border border-[#1F5C2E]/20">
+        <div className="flex items-center gap-2 px-3 py-2.5 rounded-2xl bg-white border border-[#1F5C2E]/12 shadow-sm">
           <div className="w-10 h-10 rounded-full bg-[#1F5C2E] flex items-center justify-center shrink-0">
             <Mic className="h-5 w-5 text-white" />
           </div>
@@ -90,7 +91,10 @@ export function CommentComposer({
           const file = e.target.files?.[0]
           if (!file) return
           const check = validateAudioFile(file)
-          if (!check.ok) return
+          if (!check.ok) {
+            toast.error(check.error || "Fichier audio invalide")
+            return
+          }
           setFromFile(file)
           if (audioInputRef.current) audioInputRef.current.value = ""
         }}
@@ -126,7 +130,7 @@ export function CommentComposer({
           )}
         </Button>
 
-        <div className="flex-1 flex items-center gap-1 bg-[#F3F4F6] rounded-2xl px-3 min-h-[48px] border border-[#E5E7EB]">
+        <div className="flex-1 flex items-center gap-1 bg-white rounded-2xl px-3 min-h-[48px] border border-[#1F5C2E]/10 shadow-sm">
           <Input
             value={value}
             onChange={(e) => onChange(e.target.value)}
@@ -149,8 +153,8 @@ export function CommentComposer({
         </div>
       </div>
 
-      <p className="text-[11px] text-center text-[#6B7280] px-2">
-        Micro vert = note vocale · Texte = tap sur 🔊 pour écouter
+      <p className="text-[11px] text-center text-[#6B7280]/90 px-2 pb-1">
+        🎤 Note vocale · 🔊 Tap sur le texte pour écouter
       </p>
     </div>
   )

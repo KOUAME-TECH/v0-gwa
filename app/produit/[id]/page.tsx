@@ -13,7 +13,8 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { shouldShowVerifiedBadge } from "@/lib/verification/badge"
+import { ClickableListenText } from "@/components/media/clickable-listen-text"
+import { buildProductListenText } from "@/lib/media/product-listen"
 
 type Product = {
   id: string
@@ -266,20 +267,12 @@ export default function ProduitPage() {
 
       {/* Content */}
       <div className="px-5 py-6 space-y-6">
-        {/* Note vocale */}
-        {product.audio_url && (
-          <div className="flex items-center gap-3 rounded-2xl bg-[#F39A1F]/5 border border-[#F39A1F]/20 p-3">
-            <div className="w-9 h-9 rounded-full bg-[#F39A1F]/15 flex items-center justify-center flex-shrink-0">
-              <MessageCircle className="h-5 w-5 text-[#F39A1F]" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-[#111827] mb-1">
-                Note vocale du vendeur
-              </p>
-              <audio src={product.audio_url} controls className="w-full h-9" />
-            </div>
-          </div>
-        )}
+        {/* Note vocale / description audio */}
+        <ClickableListenText
+          text={buildProductListenText(product)}
+          audioUrl={product.audio_url}
+          fallbackLabel={`${product.name} — appuyez pour écouter la description`}
+        />
 
         {/* Category & Badges */}
         <div className="flex items-center gap-2 flex-wrap">
@@ -352,7 +345,12 @@ export default function ProduitPage() {
         {/* Description */}
         {product.description && (
           <div>
-            <h3 className="font-semibold mb-2">Description</h3>
+            <h3 className="font-semibold mb-2 text-neutral-800">Description</h3>
+            <ClickableListenText
+              text={product.description}
+              variant="compact"
+              className="mb-2"
+            />
             <p className="text-neutral-600 leading-relaxed text-[15px]">{product.description}</p>
           </div>
         )}
