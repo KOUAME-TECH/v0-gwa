@@ -1,12 +1,16 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { requireAdmin } from "@/lib/auth/require-admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
+import { productStatusAfterModeration } from "@/lib/media/compress"
 
 type Ctx = { params: Promise<{ id: string }> }
 
 /**
  * PATCH /api/admin/products/[id]
  * Body: { action: "approve"|"reject", notes? } — idempotent
+ *
+ * Reject maps catalogue status to "paused" (CHECK allows draft|active|paused|sold_out),
+ * never "rejected" — that value breaks the row update.
  */
 export async function PATCH(request: NextRequest, context: Ctx) {
   try {
@@ -33,7 +37,7 @@ export async function PATCH(request: NextRequest, context: Ctx) {
     }
 
     const targetModeration = action === "approve" ? "approved" : "rejected"
-    const targetStatus = action === "approve" ? "active" : "rejected"
+    const targetStatus = productStatusAfterModeration(action as "approve" | "reject")
 
     const { data: existing, error: findErr } = await gate.admin
       .from("products")
@@ -76,7 +80,7 @@ export async function PATCH(request: NextRequest, context: Ctx) {
       action: `${action}_product`,
       entity_type: "product",
       entity_id: id,
-      new_data: { moderation_status: targetModeration, notes },
+      new_data: { moderation_status: targetModeration, status: targetStatus, notes },
     })
 
     return NextResponse.json({ success: true, idempotent: false, product: data })

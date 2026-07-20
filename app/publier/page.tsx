@@ -34,6 +34,7 @@ import {
   validateVideoFile,
   validateAudioFile,
   buildPostMediaPayload,
+  resolvePostType,
 } from "@/lib/media/compress"
 import { filterBetaCategories } from "@/lib/catalog/categories"
 
@@ -347,7 +348,11 @@ export default function PublierPage() {
         video_url: videoUrl,
         audio_url: audioUrl,
         visibility: "public",
-        post_type: audioUrl ? "audio" : mediaUrls.length > 0 ? "media" : "general",
+        post_type: resolvePostType({
+          hasImages: imageUrls.length > 0,
+          hasVideo: !!videoUrl,
+          hasAudio: !!audioUrl,
+        }),
       })
 
       if (error) throw error

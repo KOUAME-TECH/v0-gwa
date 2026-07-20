@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
@@ -24,11 +24,19 @@ import {
   Heart, MessageCircle, Share2, UserPlus, Search, Bell,
   ShoppingBag, BadgeCheck, MapPin, Bookmark, MoreHorizontal,
   Send, ChevronLeft, ChevronRight, X, Flag, EyeOff, LinkIcon,
-  Trash2, Mic
+  Trash2, Mic, Square
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { GwaMark } from "@/components/brand/gwa-mark"
 import { WeatherWidget } from "@/components/weather-widget"
+import { ClickableListenText } from "@/components/media/clickable-listen-text"
+import { useVoiceRecorder } from "@/hooks/use-voice-recorder"
+import {
+  resolveCommentMediaType,
+  VOICE_COMMENT_PLACEHOLDER,
+} from "@/lib/comments/voice-comment"
+import { extensionForType, validateAudioFile } from "@/lib/media/compress"
 
 type Product = {
   id: string
@@ -75,13 +83,15 @@ type Post = {
 
 type Comment = {
   id: string
-  content: string
+  content: string | null
+  audio_url?: string | null
+  comment_type?: string
   created_at: string
   author: {
     id: string
     full_name: string
     avatar_url: string | null
-  }
+  } | null
 }
 
 type FeedItem = 
@@ -111,6 +121,15 @@ export default function HomePage() {
   const [loadingComments, setLoadingComments] = useState(false)
   const [newComment, setNewComment] = useState("")
   const [submittingComment, setSubmittingComment] = useState(false)
+  const commentAudioInputRef = useRef<HTMLInputElement>(null)
+  const {
+    recording: commentVoice,
+    isRecording: isRecordingComment,
+    startRecording: startCommentRecording,
+    stopRecording: stopCommentRecording,
+    clearRecording: clearCommentVoice,
+    setFromFile: setCommentVoiceFromFile,
+  } = useVoiceRecorder()
   
   // États pour le partage
   const [showShareSheet, setShowShareSheet] = useState(false)
@@ -333,8 +352,8 @@ export default function HomePage() {
 
       // Charger les commentaires/reviews sans FK join
       const selectQuery = table === "post_comments"
-        ? "id, content, created_at, author_id"
-        : "id, comment, created_at, reviewer_id"
+        ? "id, content, comment_type, audio_url, created_at, author_id"
+        : "id, comment, review_type, audio_url, created_at, reviewer_id"
 
       const { data: rawData, error } = await supabase
         .from(table)
@@ -353,9 +372,11 @@ export default function HomePage() {
         const profileMap = new Map(profiles?.map(p => [p.id, p]) || [])
         commentsWithProfiles = rawData.map((c: any) => ({
           id: c.id,
-          content: c.content || c.comment,
+          content: c.content ?? c.comment ?? null,
+          audio_url: c.audio_url ?? null,
+          comment_type: c.comment_type ?? c.review_type ?? "text",
           created_at: c.created_at,
-          author: profileMap.get(c[authorField]) || null
+          author: profileMap.get(c[authorField]) || null,
         }))
       }
 
@@ -373,7 +394,9 @@ export default function HomePage() {
       toast.error("Connectez-vous pour commenter")
       return
     }
-    if (!newComment.trim() || !selectedItem) return
+    const hasText = !!newComment.trim()
+    const hasVoice = !!commentVoice
+    if ((!hasText && !hasVoice) || !selectedItem) return
 
     setSubmittingComment(true)
 
@@ -382,13 +405,46 @@ export default function HomePage() {
       const idField = selectedItem.type === "post" ? "post_id" : "product_id"
       const countTable = selectedItem.type === "post" ? "posts" : "products"
 
-      const insertData = table === "post_comments"
-        ? { [idField]: selectedItem.data.id, author_id: user.id, content: newComment.trim() }
-        : { [idField]: selectedItem.data.id, reviewer_id: user.id, comment: newComment.trim(), rating: 5 }
+      let audioUrl: string | null = null
+      if (commentVoice) {
+        const ext = extensionForType(commentVoice.file.type) || "webm"
+        const fileName = `${user.id}/comments/${Date.now()}_${Math.random()
+          .toString(36)
+          .slice(2)}.${ext}`
+        const { error: uploadError } = await supabase.storage
+          .from("posts")
+          .upload(fileName, commentVoice.file, { cacheControl: "3600", upsert: false })
+        if (uploadError) throw uploadError
+        const {
+          data: { publicUrl },
+        } = supabase.storage.from("posts").getPublicUrl(fileName)
+        audioUrl = publicUrl
+      }
 
-      const insertSelect = table === "post_comments"
-        ? "id, content, created_at, author_id"
-        : "id, comment, created_at, reviewer_id"
+      const mediaType = resolveCommentMediaType({ hasText, hasAudio: !!audioUrl })
+
+      const insertData =
+        table === "post_comments"
+          ? {
+              [idField]: selectedItem.data.id,
+              author_id: user.id,
+              content: hasText ? newComment.trim() : null,
+              comment_type: mediaType,
+              audio_url: audioUrl,
+            }
+          : {
+              [idField]: selectedItem.data.id,
+              reviewer_id: user.id,
+              comment: hasText ? newComment.trim() : null,
+              review_type: mediaType,
+              audio_url: audioUrl,
+              rating: 5,
+            }
+
+      const insertSelect =
+        table === "post_comments"
+          ? "id, content, comment_type, audio_url, created_at, author_id"
+          : "id, comment, review_type, audio_url, created_at, reviewer_id"
 
       const { data, error } = await supabase
         .from(table)
@@ -398,30 +454,43 @@ export default function HomePage() {
 
       if (error) throw error
 
-      // Charger le profil de l'utilisateur
-      const { data: profile } = await supabase.from("profiles").select("id, full_name, avatar_url").eq("id", user.id).single()
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id, full_name, avatar_url")
+        .eq("id", user.id)
+        .single()
 
-      // Ajouter le commentaire
-      setComments(prev => [{
-        id: data.id,
-        content: data.content || data.comment,
-        created_at: data.created_at,
-        author: profile
-      }, ...prev])
+      setComments((prev) => [
+        {
+          id: data.id,
+          content: data.content ?? data.comment ?? null,
+          audio_url: data.audio_url ?? null,
+          comment_type: data.comment_type ?? data.review_type ?? mediaType,
+          created_at: data.created_at,
+          author: profile,
+        },
+        ...prev,
+      ])
 
-      // Mettre à jour le compteur
       const newCount = selectedItem.data.comments_count + 1
-      setFeed(prev => prev.map(f => 
-        f.data.id === selectedItem.data.id 
-          ? { ...f, data: { ...f.data, comments_count: newCount } }
-          : f
-      ))
+      setFeed((prev) =>
+        prev.map((f) =>
+          f.data.id === selectedItem.data.id
+            ? { ...f, data: { ...f.data, comments_count: newCount } }
+            : f,
+        ),
+      )
 
-      await supabase.from(countTable).update({ comments_count: newCount }).eq("id", selectedItem.data.id)
+      await supabase
+        .from(countTable)
+        .update({ comments_count: newCount })
+        .eq("id", selectedItem.data.id)
 
       setNewComment("")
-      toast.success("Commentaire publié")
+      clearCommentVoice()
+      toast.success(hasVoice ? "Commentaire vocal publié" : "Commentaire publié")
     } catch (error) {
+      console.error("[comments]", error)
       toast.error("Erreur lors de l'envoi du commentaire")
     } finally {
       setSubmittingComment(false)
@@ -527,7 +596,9 @@ export default function HomePage() {
       <header className="sticky top-0 z-40 bg-white border-b border-[#E5E7EB]">
         <div className="px-4 py-3">
           <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold text-[#2F7D32]">GWA</h1>
+            <Link href="/" className="flex items-center gap-2" aria-label="GWA accueil">
+              <GwaMark size={36} showWordmark wordmarkClassName="text-2xl" />
+            </Link>
             <div className="flex items-center gap-2">
               <Link href="/recherche">
                 <Button variant="ghost" size="icon" className="rounded-full h-10 w-10">
@@ -693,7 +764,16 @@ export default function HomePage() {
       </div>
 
       {/* Sheet commentaires */}
-      <Sheet open={!!selectedItem} onOpenChange={() => setSelectedItem(null)}>
+      <Sheet
+        open={!!selectedItem}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedItem(null)
+            setNewComment("")
+            clearCommentVoice()
+          }
+        }}
+      >
         <SheetContent side="bottom" className="h-[80vh] rounded-t-3xl">
           <SheetHeader className="border-b border-[#E5E7EB] pb-4">
             <SheetTitle className="text-center text-[#111827]">
@@ -728,10 +808,15 @@ export default function HomePage() {
                     </Avatar>
                     <div className="flex-1">
                       <div className="bg-[#F3F4F6] rounded-2xl px-4 py-2">
-                        <p className="font-medium text-sm text-[#111827]">
+                        <p className="font-medium text-sm text-[#111827] mb-1">
                           {comment.author?.full_name || "Utilisateur"}
                         </p>
-                        <p className="text-sm text-[#4B5563]">{comment.content}</p>
+                        <ClickableListenText
+                          text={comment.content}
+                          audioUrl={comment.audio_url}
+                          fallbackLabel={VOICE_COMMENT_PLACEHOLDER}
+                          className="px-1 py-0.5 -mx-1"
+                        />
                       </div>
                       <p className="text-xs text-[#9CA3AF] mt-1 ml-2">
                         {formatTimeAgo(comment.created_at)}
@@ -742,27 +827,86 @@ export default function HomePage() {
               )}
             </div>
 
-            <div className="border-t border-[#E5E7EB] pt-4">
+            <div className="border-t border-[#E5E7EB] pt-4 space-y-2">
+              {isRecordingComment && (
+                <div className="flex items-center gap-2 px-1 text-red-600 text-xs font-medium">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  Enregistrement en cours…
+                </div>
+              )}
+              {commentVoice && !isRecordingComment && (
+                <div className="flex items-center gap-2 px-1">
+                  <Mic className="h-4 w-4 text-[#F39A1F] shrink-0" />
+                  <audio src={commentVoice.url} controls preload="none" className="flex-1 h-9 min-w-0" />
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="shrink-0"
+                    onClick={clearCommentVoice}
+                    aria-label="Supprimer la note vocale"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+              <input
+                ref={commentAudioInputRef}
+                type="file"
+                accept="audio/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (!file) return
+                  const check = validateAudioFile(file)
+                  if (!check.ok) {
+                    toast.error(check.error!)
+                    return
+                  }
+                  setCommentVoiceFromFile(file)
+                  if (commentAudioInputRef.current) commentAudioInputRef.current.value = ""
+                }}
+              />
               <div className="flex items-center gap-3">
                 <Avatar className="h-8 w-8">
                   <AvatarFallback className="bg-[#2F7D32] text-white text-xs">
                     {user?.email?.charAt(0)?.toUpperCase() || "?"}
                   </AvatarFallback>
                 </Avatar>
-                <div className="flex-1 flex items-center gap-2 bg-[#F3F4F6] rounded-full px-4">
+                <div className="flex-1 flex items-center gap-1 bg-[#F3F4F6] rounded-full px-3">
                   <Input
                     value={newComment}
                     onChange={(e) => setNewComment(e.target.value)}
-                    placeholder="Écrire un commentaire..."
-                    className="border-0 bg-transparent focus-visible:ring-0 px-0"
+                    placeholder="Commentaire ou note vocale…"
+                    className="border-0 bg-transparent focus-visible:ring-0 px-0 flex-1"
                     onKeyDown={(e) => e.key === "Enter" && submitComment()}
                   />
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className={cn("shrink-0", isRecordingComment && "text-red-600")}
+                    aria-label={isRecordingComment ? "Arrêter l'enregistrement" : "Enregistrer une note vocale"}
+                    onClick={() => {
+                      if (isRecordingComment) stopCommentRecording()
+                      else {
+                        startCommentRecording(() => commentAudioInputRef.current?.click())
+                      }
+                    }}
+                  >
+                    {isRecordingComment ? (
+                      <Square className="h-5 w-5 fill-current" />
+                    ) : (
+                      <Mic className="h-5 w-5 text-[#2F7D32]" />
+                    )}
+                  </Button>
                   <Button
                     size="icon"
                     variant="ghost"
                     onClick={submitComment}
-                    disabled={!newComment.trim() || submittingComment}
-                    className="text-[#2F7D32] hover:text-[#256427]"
+                    disabled={(!newComment.trim() && !commentVoice) || submittingComment || isRecordingComment}
+                    className="text-[#2F7D32] hover:text-[#256427] shrink-0"
+                    aria-label="Envoyer"
                   >
                     <Send className="h-5 w-5" />
                   </Button>
@@ -990,27 +1134,15 @@ function FeedCard({
         </div>
       </div>
 
-      {/* Contenu texte (posts) */}
-      {!isProduct && (data as Post).content && (
+      {/* Texte / voix — tap pour écouter (TTS ou audio_url) */}
+      {!isProduct && ((data as Post).content || postAudioUrl) && (
         <div className="px-4 pb-3">
-          <p className="text-[#111827] text-sm leading-relaxed whitespace-pre-wrap">
-            {(data as Post).content}
-          </p>
-        </div>
-      )}
-
-      {/* Note vocale (posts) */}
-      {postAudioUrl && (
-        <div className="px-4 pb-3">
-          <div className="flex items-center gap-3 rounded-2xl bg-[#F39A1F]/5 border border-[#F39A1F]/20 p-3">
-            <div className="w-9 h-9 rounded-full bg-[#F39A1F]/15 flex items-center justify-center flex-shrink-0">
-              <Mic className="h-5 w-5 text-[#F39A1F]" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-[#111827] mb-1">Note vocale</p>
-              <audio src={postAudioUrl} controls preload="none" className="w-full h-9" />
-            </div>
-          </div>
+          <ClickableListenText
+            text={(data as Post).content}
+            audioUrl={postAudioUrl}
+            fallbackLabel={VOICE_COMMENT_PLACEHOLDER}
+            className="px-1 py-0.5"
+          />
         </div>
       )}
 

@@ -13,6 +13,7 @@ import { PhoneInput } from "@/components/auth/phone-input"
 import { OtpInput, OtpCountdown } from "@/components/auth/otp-input"
 import { maskPhone } from "@/lib/auth/phone"
 import { HibpPasswordBanner } from "@/components/auth/hibp-password-banner"
+import { GwaMark } from "@/components/brand/gwa-mark"
 
 function LoginForm() {
   const router = useRouter()
@@ -367,8 +368,8 @@ function LoginForm() {
         </p>
       </main>
 
-      <div className="py-6 text-center">
-        <span className="text-2xl font-bold tracking-tight">GWA</span>
+      <div className="py-6 flex justify-center">
+        <GwaMark size={40} showWordmark wordmarkClassName="text-2xl tracking-tight" />
       </div>
     </div>
   )

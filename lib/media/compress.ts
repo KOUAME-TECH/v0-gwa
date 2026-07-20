@@ -90,6 +90,54 @@ export function buildPostMediaPayload(
   return media
 }
 
+/** Valeurs autorisées par scripts/schema/038_whatsapp_audio_rich_media.sql */
+export const ALLOWED_POST_TYPES = [
+  "post",
+  "story",
+  "repost",
+  "general",
+  "media",
+  "audio",
+  "rich_media",
+  "question",
+  "astuce",
+  "temoignage",
+  "annonce",
+] as const
+
+export type GwaPostType = "general" | "media" | "audio" | "rich_media"
+
+/**
+ * post_type aligné sur le CHECK DB (038 : audio + rich_media).
+ * WhatsApp-style :
+ *   • voix seule → audio
+ *   • 2+ canaux (photo+voix, photo+vidéo+voix…) → rich_media
+ *   • photo ou vidéo seule → media
+ */
+export function resolvePostType(input: {
+  hasImages?: boolean
+  hasVideo?: boolean
+  hasAudio?: boolean
+}): GwaPostType {
+  const channels = [
+    Boolean(input.hasImages),
+    Boolean(input.hasVideo),
+    Boolean(input.hasAudio),
+  ].filter(Boolean).length
+
+  if (channels >= 2) return "rich_media"
+  if (input.hasAudio) return "audio"
+  if (input.hasImages || input.hasVideo) return "media"
+  return "general"
+}
+
+/** Statut catalogue après modération admin (CHECK: draft|active|paused|sold_out). */
+export function productStatusAfterModeration(
+  action: "approve" | "reject",
+): "active" | "paused" {
+  return action === "approve" ? "active" : "paused"
+}
+
 function supportsWebp(): boolean {
   try {
     const canvas = document.createElement("canvas")

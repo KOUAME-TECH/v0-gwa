@@ -190,11 +190,17 @@ function AdminProductsContent() {
         return
       }
 
-      const newStatus = moderationAction === "approve" ? "approved" : "rejected"
+      const newModeration = moderationAction === "approve" ? "approved" : "rejected"
+      const newCatalogStatus = moderationAction === "approve" ? "active" : "paused"
       setProducts((prev) =>
         prev.map((p) =>
           p.id === selectedProduct.id
-            ? { ...p, moderation_status: newStatus, moderation_notes: moderationNotes }
+            ? {
+                ...p,
+                moderation_status: newModeration,
+                moderation_notes: moderationNotes,
+                status: newCatalogStatus,
+              }
             : p,
         ),
       )

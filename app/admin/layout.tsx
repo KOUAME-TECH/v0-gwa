@@ -8,6 +8,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { GwaMark } from "@/components/brand/gwa-mark"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -185,13 +186,11 @@ export default function AdminLayout({
         sidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         <div className="flex flex-col h-full">
-          {/* Logo */}
+          {/* Logo Harmattan */}
           <div className="flex items-center justify-between h-16 px-4 border-b">
-            <Link href="/admin" className="flex items-center gap-2">
-              <div className="h-8 w-8 bg-[#2F7D32] rounded-lg flex items-center justify-center">
-                <Shield className="h-5 w-5 text-white" />
-              </div>
-              <span className="font-bold text-lg text-[#2F7D32]">GWA Admin</span>
+            <Link href="/admin" className="flex items-center gap-2 min-w-0">
+              <GwaMark size={32} showWordmark wordmarkClassName="text-lg text-[#1F5C2E]" />
+              <span className="text-xs font-medium text-muted-foreground shrink-0">Admin</span>
             </Link>
             <Button
               variant="ghost"

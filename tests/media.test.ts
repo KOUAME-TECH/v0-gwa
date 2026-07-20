@@ -6,6 +6,8 @@ import {
   buildPostMediaPayload,
   humanFileSize,
   extensionForType,
+  resolvePostType,
+  productStatusAfterModeration,
   MAX_VIDEO_BYTES,
   MAX_AUDIO_BYTES,
 } from "@/lib/media/compress"
@@ -61,5 +63,36 @@ describe("buildPostMediaPayload (P6)", () => {
 
   it("aucun média → tableau vide", () => {
     expect(buildPostMediaPayload([], null)).toEqual([])
+  })
+})
+
+describe("resolvePostType (038 WhatsApp audio)", () => {
+  it("voix seule → audio (pas media générique)", () => {
+    expect(resolvePostType({ hasAudio: true })).toBe("audio")
+  })
+
+  it("image + vidéo + audio → rich_media", () => {
+    expect(
+      resolvePostType({ hasImages: true, hasVideo: true, hasAudio: true }),
+    ).toBe("rich_media")
+  })
+
+  it("photo + voix → rich_media", () => {
+    expect(resolvePostType({ hasImages: true, hasAudio: true })).toBe("rich_media")
+  })
+
+  it("photo seule → media", () => {
+    expect(resolvePostType({ hasImages: true })).toBe("media")
+  })
+
+  it("texte seul → general", () => {
+    expect(resolvePostType({})).toBe("general")
+  })
+})
+
+describe("productStatusAfterModeration (H2 reject CHECK)", () => {
+  it("reject → paused (pas rejected)", () => {
+    expect(productStatusAfterModeration("reject")).toBe("paused")
+    expect(productStatusAfterModeration("approve")).toBe("active")
   })
 })

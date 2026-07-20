@@ -12,7 +12,8 @@ import {
   NavigationMenuList,
   NavigationMenuTrigger,
 } from "@/components/ui/navigation-menu"
-import { Search, Menu, Globe, Bell, Sprout, User, LogOut, Package, Settings, ShoppingCart, Shield, Wallet } from 'lucide-react'
+import { Search, Menu, Globe, Bell, Sprout, User, LogOut, Package, Settings, ShoppingCart, Shield, Wallet } from "lucide-react"
+import { GwaMark } from "@/components/brand/gwa-mark"
 import { Input } from "@/components/ui/input"
 import {
   Sheet,
@@ -161,12 +162,9 @@ export function Navigation() {
   return (
     <header className="hidden md:block sticky top-0 z-50 w-full border-b border-border/50 bg-background/95 backdrop-blur-xl">
       <nav className="max-w-7xl mx-auto flex h-16 items-center justify-between px-4 sm:px-6">
-        {/* Logo */}
+        {/* Logo Harmattan */}
         <Link href="/" className="flex items-center gap-2 group">
-          <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center">
-            <span className="text-lg font-bold text-primary-foreground">G</span>
-          </div>
-          <span className="text-xl font-bold text-foreground group-hover:text-primary transition-colors hidden sm:block">GWA</span>
+          <GwaMark size={36} showWordmark wordmarkClassName="text-xl text-foreground group-hover:text-primary transition-colors hidden sm:inline" />
         </Link>
 
         {/* Desktop Navigation */}
