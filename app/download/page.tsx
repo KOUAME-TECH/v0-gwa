@@ -77,9 +77,13 @@ export default function DownloadPage() {
       <main className="container px-4 py-8 max-w-lg mx-auto">
         {/* Hero */}
         <div className="text-center mb-8">
-          <div className="w-20 h-20 bg-[var(--gwa-primary,#1F5C2E)] rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
-            <span className="text-white text-3xl font-bold">G</span>
-          </div>
+          <img
+            src="/icon-192.png"
+            alt="GWA"
+            width={80}
+            height={80}
+            className="w-20 h-20 rounded-2xl mx-auto mb-4 shadow-lg"
+          />
           <h1 className="text-2xl font-bold mb-2">Installer GWA</h1>
           <p className="text-muted-foreground">
             Ajoutez GWA a votre ecran d'accueil pour un acces rapide

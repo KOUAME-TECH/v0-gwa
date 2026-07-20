@@ -1,6 +1,6 @@
 /* GWA PWA — cache shell minimal pour 3G/offline */
-const CACHE = "gwa-v2"
-const SHELL = ["/", "/manifest.json", "/icon-192.png", "/icon-512.png", "/download"]
+const CACHE = "gwa-v3-icon"
+const SHELL = ["/", "/manifest.json", "/icon-192.png", "/icon-512.png", "/icon.svg", "/download"]
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)))
