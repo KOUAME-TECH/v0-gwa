@@ -261,9 +261,9 @@ export default function BuyerDashboard() {
               Agriculture
             </Button>
           </Link>
-          <Link href="/artisans">
-            <Button variant="outline" className="rounded-full whitespace-nowrap border-[#8B4513] text-[#8B4513] bg-transparent">
-              Artisanat
+          <Link href="/cooperatives">
+            <Button variant="outline" className="rounded-full whitespace-nowrap bg-transparent">
+              Coopératives
             </Button>
           </Link>
           <Link href="/panier">
@@ -391,7 +391,7 @@ export default function BuyerDashboard() {
 
           <div className="grid grid-cols-2 gap-3">
             {recommendations.slice(0, 4).map((product) => (
-              <Link key={product.id} href={`/agriculture/produit/${product.id}`}>
+              <Link key={product.id} href={`/produit/${product.id}`}>
                 <Card className="bg-white border-0 shadow-sm overflow-hidden">
                   <div className="aspect-square bg-[#F8FAFC] relative">
                     {product.images?.[0] ? (

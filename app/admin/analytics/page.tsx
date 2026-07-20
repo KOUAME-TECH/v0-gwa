@@ -236,7 +236,6 @@ export default function AdminAnalyticsPage() {
   const getUserTypeLabel = (type: string) => {
     const labels: Record<string, string> = {
       'producteur': 'Producteurs',
-      'artisan': 'Artisans',
       'acheteur': 'Acheteurs',
       'cooperative': 'Coopératives',
       'entreprise': 'Entreprises',

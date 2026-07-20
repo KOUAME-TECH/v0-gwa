@@ -156,9 +156,9 @@ Créer une coopérative
               </div>
               <div>
                 <p className="text-2xl font-bold">
-                  {cooperatives.filter(c => c.cooperative_type === 'artisanat').length}
+                  {cooperatives.filter(c => c.cooperative_type === 'mixte').length}
                 </p>
-                <p className="text-xs text-muted-foreground">Artisanales</p>
+                <p className="text-xs text-muted-foreground">Mixtes</p>
               </div>
             </CardContent>
           </Card>
@@ -182,7 +182,6 @@ Créer une coopérative
             <SelectContent>
               <SelectItem value="all">Tous les types</SelectItem>
               <SelectItem value="agriculture">Agriculture</SelectItem>
-              <SelectItem value="artisanat">Artisanat</SelectItem>
               <SelectItem value="mixte">Mixte</SelectItem>
             </SelectContent>
           </Select>

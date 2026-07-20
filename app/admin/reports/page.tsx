@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -67,27 +66,17 @@ export default function AdminReportsPage() {
 
   const fetchReports = async () => {
     setLoading(true)
-    const supabase = createClient()
-
-    let query = supabase
-      .from("reports")
-      .select(`
-        *,
-        reporter:profiles!reports_reporter_id_fkey(id, full_name, avatar_url)
-      `)
-      .order("created_at", { ascending: false })
-
-    if (filterStatus !== "all") {
-      query = query.eq("status", filterStatus)
-    }
-
-    const { data, error } = await query
-
-    if (!error && data) {
-      setReports(data.map(r => ({
-        ...r,
-        reporter: Array.isArray(r.reporter) ? r.reporter[0] : r.reporter
-      })) as Report[])
+    try {
+      const res = await fetch(`/api/admin/reports?status=${encodeURIComponent(filterStatus)}`)
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setReports([])
+        setLoading(false)
+        return
+      }
+      setReports((data.reports || []) as Report[])
+    } catch {
+      setReports([])
     }
     setLoading(false)
   }
@@ -96,32 +85,25 @@ export default function AdminReportsPage() {
     if (!selectedReport) return
     setActionLoading(true)
 
-    const supabase = createClient()
-    const { data: { user: adminUser } } = await supabase.auth.getUser()
-
-    const { error } = await supabase
-      .from("reports")
-      .update({
-        status: action,
-        resolution_notes: resolutionNotes || null,
-        resolved_by: adminUser?.id,
-        resolved_at: new Date().toISOString(),
+    try {
+      const res = await fetch(`/api/admin/reports/${selectedReport.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, notes: resolutionNotes || null }),
       })
-      .eq("id", selectedReport.id)
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        alert(data.error || "Action impossible")
+        setActionLoading(false)
+        return
+      }
 
-    if (!error) {
-      await supabase.from("admin_logs").insert({
-        admin_id: adminUser?.id,
-        action: `${action}_report`,
-        entity_type: "report",
-        entity_id: selectedReport.id,
-        new_data: { status: action, resolution_notes: resolutionNotes },
-      })
-
-      setReports(reports.filter(r => r.id !== selectedReport.id))
+      setReports((prev) => prev.filter((r) => r.id !== selectedReport.id))
       setResolveDialogOpen(false)
       setResolutionNotes("")
       setSelectedReport(null)
+    } catch {
+      alert("Erreur réseau")
     }
     setActionLoading(false)
   }

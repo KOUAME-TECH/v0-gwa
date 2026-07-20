@@ -7,6 +7,24 @@ const securityHeaders = [
   { key: 'X-XSS-Protection', value: '1; mode=block' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   { key: 'Permissions-Policy', value: 'camera=(), microphone=(self), geolocation=(self), payment=(self)' },
+  {
+    key: 'Content-Security-Policy',
+    value: [
+      "default-src 'self'",
+      "base-uri 'self'",
+      "form-action 'self'",
+      "frame-ancestors 'self'",
+      "object-src 'none'",
+      "img-src 'self' data: blob: https:",
+      "media-src 'self' blob: https:",
+      "font-src 'self' data:",
+      "style-src 'self' 'unsafe-inline'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.onesignal.com https://onesignal.com",
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://onesignal.com https://*.onesignal.com https://api.open-meteo.com https://*.upstash.io",
+      "worker-src 'self' blob:",
+      "manifest-src 'self'",
+    ].join('; '),
+  },
 ]
 
 const nextConfig = {
@@ -19,6 +37,31 @@ const nextConfig = {
   poweredByHeader: false,
   compress: true,
   headers: async () => [{ source: '/(.*)', headers: securityHeaders }],
+  /** Alias legacy — une seule source de vérité pour les redirections */
+  redirects: async () => [
+    // Alias legacy
+    { source: '/profile', destination: '/profil', permanent: true },
+    { source: '/artisans', destination: '/agriculture', permanent: true },
+    { source: '/artisans/:path*', destination: '/agriculture', permanent: true },
+    { source: '/dashboard/artisan', destination: '/dashboard/farmer', permanent: true },
+    { source: '/agriculture/produit/:id', destination: '/produit/:id', permanent: true },
+    { source: '/marketplace/product/:id', destination: '/produit/:id', permanent: true },
+    // Hors scope bêta F1–F6 (soft-lock) — pages conservées mais inaccessibles
+    { source: '/formations', destination: '/', permanent: false },
+    { source: '/formations/:path*', destination: '/', permanent: false },
+    { source: '/learning', destination: '/', permanent: false },
+    { source: '/learning/:path*', destination: '/', permanent: false },
+    { source: '/dashboard/student', destination: '/dashboard', permanent: false },
+    { source: '/b2b', destination: '/marketplace', permanent: false },
+    { source: '/business', destination: '/agriculture', permanent: false },
+    { source: '/dashboard/business', destination: '/dashboard/farmer', permanent: false },
+    { source: '/network', destination: '/messages', permanent: false },
+    { source: '/network/profile/:id', destination: '/profil/:id', permanent: false },
+    { source: '/communaute', destination: '/messages', permanent: false },
+    { source: '/communaute/:path*', destination: '/messages', permanent: false },
+    { source: '/agriculture/producteurs', destination: '/recherche', permanent: false },
+    { source: '/agriculture/acheteurs', destination: '/marketplace', permanent: false },
+  ],
 }
 
 export default nextConfig

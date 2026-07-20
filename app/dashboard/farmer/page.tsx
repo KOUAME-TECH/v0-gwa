@@ -14,6 +14,9 @@ import {
 } from 'lucide-react'
 import { createClient } from "@/lib/supabase/client"
 import { DashboardNav } from "@/components/dashboard-nav"
+import { WeatherWidget } from "@/components/weather-widget"
+import { isFactoringEligible } from "@/lib/factoring/eligibility"
+import { Banknote } from "lucide-react"
 
 interface Product {
   id: string
@@ -68,11 +71,13 @@ export default function FarmerDashboard() {
       setProfile(profileData)
 
       // Produits
-      const { data: productsData } = await supabase
+      const { data: productsData, error: productsError } = await supabase
         .from('products')
-        .select('id, name, price, unit, images, description, origin_country, origin_region, is_organic, is_fair_trade, is_bulk_available, min_bulk_quantity, product_type, seller_id, category_id, status, likes_count, comments_count, shares_count, created_at, updated_at, stock_quantity')
+        .select('id, name, price, unit, images, description, origin_country, origin_region, is_organic, is_fair_trade, product_type, seller_id, category_id, status, likes_count, comments_count, shares_count, created_at, updated_at, stock_quantity')
         .eq('seller_id', authUser.id)
+        .neq('status', 'archived')
         .order('created_at', { ascending: false })
+      if (productsError) console.error('[dashboard/farmer products]', productsError.message)
       setProducts(productsData || [])
 
       // Commandes (en tant que vendeur via order_items)
@@ -157,29 +162,14 @@ export default function FarmerDashboard() {
           </div>
         </div>
 
-        {/* Météo simplifiée */}
-        <div className="bg-white/10 rounded-2xl p-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Sun className="h-10 w-10 text-yellow-300" />
-            <div>
-              <p className="text-2xl font-bold">28°C</p>
-              <p className="text-white/70 text-sm">Ensoleillé</p>
-            </div>
-          </div>
-          <div className="flex gap-4 text-sm">
-            <div className="text-center">
-              <Droplets className="h-5 w-5 mx-auto text-blue-300" />
-              <p className="text-white/70">65%</p>
-            </div>
-            <div className="text-center">
-              <Wind className="h-5 w-5 mx-auto text-white/70" />
-              <p className="text-white/70">12 km/h</p>
-            </div>
-          </div>
-        </div>
       </header>
 
       <main className="px-4 -mt-4">
+        {/* Météo réelle (Open-Meteo via /api/weather) */}
+        <div className="mb-4">
+          <WeatherWidget />
+        </div>
+
         {/* Stats Cards */}
         <div className="grid grid-cols-2 gap-3 mb-6">
           <Card className="bg-white border-0 shadow-sm">
@@ -253,6 +243,41 @@ export default function FarmerDashboard() {
           </Link>
         </div>
 
+        {/* Bloc affacturage (préfinancement) — visible selon éligibilité SCG */}
+        <Link href="/affacturage" className="block mb-6">
+          <Card className="bg-white border-0 shadow-sm overflow-hidden">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-xl bg-[#2F7D32]/10 flex items-center justify-center flex-shrink-0">
+                  <Banknote className="h-6 w-6 text-[#2F7D32]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-semibold text-[#111827]">Affacturage</h4>
+                    {isFactoringEligible({
+                      scg_bancable: profile?.scg_bancable,
+                      scg_score: profile?.scg_score,
+                    }) ? (
+                      <Badge className="bg-green-100 text-green-700">Éligible</Badge>
+                    ) : (
+                      <Badge className="bg-gray-100 text-gray-600">Score requis</Badge>
+                    )}
+                  </div>
+                  <p className="text-sm text-[#4B5563]">
+                    {isFactoringEligible({
+                      scg_bancable: profile?.scg_bancable,
+                      scg_score: profile?.scg_score,
+                    })
+                      ? "Obtenez une avance de trésorerie sur vos ventes."
+                      : "Améliorez votre Score de Confiance GWA pour y accéder."}
+                  </p>
+                </div>
+                <ChevronRight className="h-5 w-5 text-[#4B5563]" />
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+
         {/* Mes Produits */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-4">
@@ -284,7 +309,11 @@ export default function FarmerDashboard() {
                 <Card key={product.id} className="bg-white border-0 shadow-sm overflow-hidden">
                   <CardContent className="p-0">
                     <div className="flex items-center">
-                      <div className="w-20 h-20 bg-[#FFF6E5] flex-shrink-0">
+                      <Link
+                        href={`/produit/${product.id}`}
+                        className="w-20 h-20 bg-[#FFF6E5] flex-shrink-0 active:opacity-80"
+                        aria-label={`Voir ${product.name}`}
+                      >
                         {product.images?.[0] ? (
                           <Image
                             src={product.images[0] || "/placeholder.svg"}
@@ -298,15 +327,15 @@ export default function FarmerDashboard() {
                             <Sprout className="h-8 w-8 text-[#2F7D32]/30" />
                           </div>
                         )}
-                      </div>
-                      <div className="flex-1 p-3">
-                        <div className="flex items-start justify-between">
-                          <div>
+                      </Link>
+                      <div className="flex-1 p-3 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <Link href={`/produit/${product.id}`} className="min-w-0 flex-1 active:opacity-80">
                             <h4 className="font-semibold text-[#111827] line-clamp-1">{product.name}</h4>
                             <p className="text-sm text-[#2F7D32] font-medium">
                               {product.price.toLocaleString()} FCFA/{product.unit}
                             </p>
-                          </div>
+                          </Link>
                           <Badge 
                             className={product.status === 'active' 
                               ? "bg-green-100 text-green-700" 
@@ -320,12 +349,16 @@ export default function FarmerDashboard() {
                             Stock: {product.stock_quantity} {product.unit}
                           </p>
                           <div className="flex gap-1">
-                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0">
-                              <Eye className="h-4 w-4 text-[#4B5563]" />
-                            </Button>
-                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0">
-                              <Edit2 className="h-4 w-4 text-[#4B5563]" />
-                            </Button>
+                            <Link href={`/produit/${product.id}`} aria-label="Voir le produit">
+                              <Button size="sm" variant="ghost" className="h-7 w-7 p-0">
+                                <Eye className="h-4 w-4 text-[#4B5563]" />
+                              </Button>
+                            </Link>
+                            <Link href={`/dashboard/products/${product.id}/edit`} aria-label="Modifier le produit">
+                              <Button size="sm" variant="ghost" className="h-7 w-7 p-0">
+                                <Edit2 className="h-4 w-4 text-[#4B5563]" />
+                              </Button>
+                            </Link>
                           </div>
                         </div>
                       </div>

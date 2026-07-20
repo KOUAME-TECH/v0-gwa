@@ -63,7 +63,7 @@ export default function MarketplacePage() {
         .eq("status", "active")
         .order("created_at", { ascending: false })
         .limit(60),
-      supabase.from("categories").select("id, name, slug, category_type").is("parent_id", null).order("name"),
+      supabase.from("categories").select("id, name, slug, category_type").eq("category_type", "agriculture").is("parent_id", null).order("name"),
       user ? supabase.from("favorites").select("product_id").eq("user_id", user.id) : Promise.resolve({ data: [] as { product_id: string }[] })
     ])
 
@@ -252,7 +252,7 @@ export default function MarketplacePage() {
                 <div>
                   <label className="text-sm font-medium mb-2 block">Type</label>
                   <div className="flex flex-wrap gap-2">
-                    {[{ value: "all", label: "Tout" }, { value: "agriculture", label: "Agriculture" }, { value: "artisanat", label: "Artisanat" }].map(t => (
+                    {[{ value: "all", label: "Tout" }, { value: "agriculture", label: "Agriculture" }].map(t => (
                       <button key={t.value} onClick={() => { setSelectedType(t.value); setSelectedCategory("all") }}
                         className={`px-4 py-2 rounded-full text-sm font-medium ${selectedType === t.value ? "bg-[#2F7D32] text-white" : "bg-muted text-muted-foreground"}`}>{t.label}</button>
                     ))}
@@ -281,7 +281,7 @@ export default function MarketplacePage() {
         {/* Quick filters + view toggle */}
         <div className="flex items-center gap-2 px-3 pb-2">
           <div className="flex gap-1.5 overflow-x-auto gwa-no-scroll flex-1">
-            {[{ value: "all", label: "Tout" }, { value: "agriculture", label: "Agriculture" }, { value: "artisanat", label: "Artisanat" }].map(t => (
+            {[{ value: "all", label: "Tout" }, { value: "agriculture", label: "Agriculture" }].map(t => (
               <button key={t.value} onClick={() => { setSelectedType(t.value); setSelectedCategory("all") }}
                 className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${selectedType === t.value ? "bg-[#2F7D32] text-white" : "bg-white text-[#4B5563] border border-[#E5E7EB]"}`}>{t.label}</button>
             ))}

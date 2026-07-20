@@ -12,7 +12,6 @@ import { cn } from "@/lib/utils"
 
 const TYPES = [
   { value: "agriculture", label: "Agriculture" },
-  { value: "artisanat", label: "Artisanat" },
   { value: "commerce", label: "Commerce" },
   { value: "elevage", label: "Elevage" },
   { value: "peche", label: "Peche" },
@@ -54,10 +53,10 @@ export default function CreateCooperativePage() {
         }
       }
 
-      const { error } = await supabase.from("cooperatives").insert({
+      const { data: coop, error } = await supabase.from("cooperatives").insert({
         name: form.name,
         description: form.description || null,
-        cooperative_type: form.cooperative_type,
+        sector: form.cooperative_type,
         country: form.country,
         city: form.city,
         address: form.address || null,
@@ -66,21 +65,20 @@ export default function CreateCooperativePage() {
         registration_number: form.registration_number || null,
         founded_year: parseInt(form.founded_year) || null,
         logo_url: logoUrl,
-        created_by: user.id,
+        admin_id: user.id,
         is_verified: false,
-        member_count: 1,
-      })
+      }).select("id").single()
 
       if (error) throw error
 
-      // Add creator as member
-      const { data: coop } = await supabase.from("cooperatives").select("id").eq("name", form.name).eq("created_by", user.id).single()
+      // Rattache le créateur : membre admin + coop_id + type cooperative
       if (coop) {
         await supabase.from("cooperative_members").insert({ cooperative_id: coop.id, user_id: user.id, role: "admin" })
+        await supabase.from("profiles").update({ coop_id: coop.id, user_type: "cooperative" }).eq("id", user.id)
       }
 
       toast.success("Cooperative creee avec succes !")
-      router.push("/cooperatives")
+      router.push("/dashboard/cooperative")
     } catch (err: any) {
       console.error(err)
       toast.error(err.message || "Erreur lors de la creation")

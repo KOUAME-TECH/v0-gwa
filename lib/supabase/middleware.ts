@@ -41,16 +41,42 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (
-    // if the user is not logged in and the app path, in this case, /protected, is accessed, redirect to the login page
-    request.nextUrl.pathname.startsWith('/protected') &&
-    !user
-  ) {
-    // no user, potentially respond by redirecting the user to the login page
+  const path = request.nextUrl.pathname
+  const protectedPrefixes = [
+    '/protected',
+    '/admin',
+    '/dashboard',
+    '/profil/edit',
+    '/panier',
+    '/publier',
+    '/messages',
+    '/notifications',
+    '/wallet',
+    '/commandes',
+  ]
+  const needsAuth = protectedPrefixes.some(
+    (p) => path === p || path.startsWith(`${p}/`),
+  )
+
+  if (needsAuth && !user) {
     const url = request.nextUrl.clone()
     url.pathname = '/auth/login'
+    url.searchParams.set('redirect', path)
     return NextResponse.redirect(url)
   }
+
+  // Inventaire interne — jamais en production
+  if (
+    path.startsWith('/dev') &&
+    (process.env.VERCEL_ENV === 'production' || process.env.NODE_ENV === 'production')
+  ) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/'
+    return NextResponse.redirect(url)
+  }
+
+  // /admin : session requise ; rôle admin vérifié dans app/admin/layout (server)
+  // Les mutations admin doivent passer par API + service role (pas le client anon).
 
   // IMPORTANT: You *must* return the supabaseResponse object as it is.
   // If you're creating a new response object with NextResponse.next() make sure to:

@@ -13,6 +13,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { shouldShowVerifiedBadge } from "@/lib/verification/badge"
 
 type Product = {
   id: string
@@ -23,6 +24,8 @@ type Product = {
   stock_quantity: number
   min_order_quantity: number | null
   images: string[] | null
+  video_url: string | null
+  audio_url: string | null
   origin_region: string | null
   product_type: string
   is_organic: boolean | null
@@ -57,29 +60,33 @@ export default function ProduitPage() {
       const { data: { user: currentUser } } = await supabase.auth.getUser()
       setUser(currentUser)
 
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("products")
         .select(`
-          id, name, price, unit, images, description, origin_country, origin_region,
-          is_organic, is_fair_trade, is_bulk_available, min_bulk_quantity, product_type,
-          seller_id, category_id, status, likes_count, comments_count, shares_count, created_at, updated_at,
+          id, name, price, unit, images, video_url, audio_url, description, origin_country, origin_region,
+          is_organic, is_fair_trade, product_type, stock_quantity, min_order_quantity,
+          seller_id, category_id, status, created_at, updated_at,
           profiles!products_seller_id_fkey(id, full_name, avatar_url, is_verified, city, country, rating),
           categories(name)
         `)
         .eq("id", params.id)
-        .single()
+        .maybeSingle()
+
+      if (error) {
+        console.error("[produit/[id]] load error:", error.message)
+      }
 
       if (data) {
         setProduct(data as Product)
         setQuantity(data.min_order_quantity || 1)
-        
+
         if (currentUser) {
           const { data: fav } = await supabase
             .from("favorites")
             .select("id")
             .eq("product_id", params.id)
             .eq("user_id", currentUser.id)
-            .single()
+            .maybeSingle()
           setIsFavorite(!!fav)
         }
       }
@@ -159,11 +166,30 @@ export default function ProduitPage() {
 
   if (!product) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center p-5">
-        <div className="text-center">
-          <h2 className="text-xl font-semibold mb-2">Produit non trouvé</h2>
-          <Link href="/recherche">
-            <Button className="rounded-full">Retour</Button>
+      <div className="min-h-dvh bg-[#FFF6E5] flex flex-col items-center justify-center p-6 text-center safe-top">
+        <div className="w-20 h-20 rounded-full bg-[#2F7D32]/10 flex items-center justify-center mb-5">
+          <ShoppingBag className="h-9 w-9 text-[#2F7D32]" />
+        </div>
+        <h2 className="text-xl font-semibold text-[#111827] mb-2">
+          Produit introuvable
+        </h2>
+        <p className="text-[#4B5563] text-sm mb-6 max-w-xs">
+          Ce produit n&apos;existe plus ou a été retiré de la vente par le vendeur.
+          Découvrez les autres offres disponibles.
+        </p>
+        <div className="flex flex-col gap-2 w-full max-w-xs">
+          <Button
+            onClick={() => router.back()}
+            variant="outline"
+            className="rounded-full h-11 bg-white"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Retour
+          </Button>
+          <Link href="/agriculture">
+            <Button className="w-full rounded-full h-11 bg-[#2F7D32] hover:bg-[#256025]">
+              Voir le marché
+            </Button>
           </Link>
         </div>
       </div>
@@ -226,17 +252,39 @@ export default function ProduitPage() {
         )}
       </div>
 
+      {/* Video */}
+      {product.video_url && (
+        <div className="px-5 pt-5">
+          <video
+            src={product.video_url}
+            controls
+            playsInline
+            className="w-full rounded-2xl bg-black max-h-80"
+          />
+        </div>
+      )}
+
       {/* Content */}
       <div className="px-5 py-6 space-y-6">
+        {/* Note vocale */}
+        {product.audio_url && (
+          <div className="flex items-center gap-3 rounded-2xl bg-[#F39A1F]/5 border border-[#F39A1F]/20 p-3">
+            <div className="w-9 h-9 rounded-full bg-[#F39A1F]/15 flex items-center justify-center flex-shrink-0">
+              <MessageCircle className="h-5 w-5 text-[#F39A1F]" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-[#111827] mb-1">
+                Note vocale du vendeur
+              </p>
+              <audio src={product.audio_url} controls className="w-full h-9" />
+            </div>
+          </div>
+        )}
+
         {/* Category & Badges */}
         <div className="flex items-center gap-2 flex-wrap">
-          <span className={cn(
-            "px-3 py-1 rounded-full text-xs font-medium",
-            product.product_type === "agriculture" 
-              ? "bg-emerald-100 text-emerald-700" 
-              : "bg-amber-100 text-amber-700"
-          )}>
-            {product.product_type === "agriculture" ? "Agriculture" : "Artisanat"}
+          <span className="px-3 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">
+            Agriculture
           </span>
           {product.categories && (
             <span className="px-3 py-1 rounded-full bg-neutral-100 text-neutral-600 text-xs font-medium">
@@ -261,7 +309,7 @@ export default function ProduitPage() {
 
         {/* Seller Card */}
         <div className="bg-neutral-50 rounded-2xl p-4">
-          <Link href={`/vendeur/${profile?.id}`} className="flex items-center gap-3">
+          <Link href={`/profil/${profile?.id}`} className="flex items-center gap-3">
             <Avatar className="h-14 w-14 ring-2 ring-white">
               <AvatarImage src={profile?.avatar_url || undefined} />
               <AvatarFallback className="bg-neutral-200 text-neutral-600 font-medium">
@@ -271,7 +319,7 @@ export default function ProduitPage() {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5">
                 <span className="font-semibold text-[15px] truncate">{profile?.full_name}</span>
-                {profile?.is_verified && (
+                {shouldShowVerifiedBadge(profile) && (
                   <BadgeCheck className="h-5 w-5 text-emerald-600 flex-shrink-0" />
                 )}
               </div>

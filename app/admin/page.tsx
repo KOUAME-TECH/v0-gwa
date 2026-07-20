@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -85,108 +84,20 @@ export default function AdminDashboardPage() {
   }, [])
 
   const fetchDashboardData = async () => {
-    const supabase = createClient()
-    
-    // Fetch counts
-    const [
-      usersResult,
-      productsResult,
-      pendingProductsResult,
-      ordersResult,
-      reportsResult,
-      disputesResult,
-      verificationsResult,
-    ] = await Promise.all([
-      supabase.from("profiles").select("*", { count: "exact", head: true }),
-      supabase.from("products").select("*", { count: "exact", head: true }),
-      supabase.from("products").select("*", { count: "exact", head: true }).eq("moderation_status", "pending"),
-      supabase.from("orders").select("*", { count: "exact", head: true }),
-      supabase.from("reports").select("*", { count: "exact", head: true }).eq("status", "pending"),
-      supabase.from("disputes").select("*", { count: "exact", head: true }).in("status", ["open", "under_review"]),
-      supabase.from("verification_requests").select("*", { count: "exact", head: true }).eq("status", "pending"),
-    ])
-
-    // Fetch today's new users
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const { count: newUsersToday } = await supabase
-      .from("profiles")
-      .select("*", { count: "exact", head: true })
-      .gte("created_at", today.toISOString())
-
-    // Fetch total revenue
-    const { data: revenueData } = await supabase
-      .from("orders")
-      .select("total_amount")
-      .eq("payment_status", "paid")
-    
-    const totalRevenue = revenueData?.reduce((sum, order) => sum + (order.total_amount || 0), 0) || 0
-
-    // Fetch pending orders
-    const { count: pendingOrders } = await supabase
-      .from("orders")
-      .select("*", { count: "exact", head: true })
-      .in("status", ["pending", "confirmed"])
-
-    setStats({
-      totalUsers: usersResult.count || 0,
-      newUsersToday: newUsersToday || 0,
-      totalProducts: productsResult.count || 0,
-      pendingProducts: pendingProductsResult.count || 0,
-      totalOrders: ordersResult.count || 0,
-      pendingOrders: pendingOrders || 0,
-      totalRevenue,
-      openReports: reportsResult.count || 0,
-      openDisputes: disputesResult.count || 0,
-      pendingVerifications: verificationsResult.count || 0,
-    })
-
-    // Fetch recent orders
-    const { data: ordersData } = await supabase
-      .from("orders")
-      .select(`
-        id, order_number, total_amount, status, created_at,
-        buyer:profiles!orders_buyer_id_fkey(full_name, avatar_url)
-      `)
-      .order("created_at", { ascending: false })
-      .limit(5)
-
-    if (ordersData) {
-      setRecentOrders(ordersData.map(order => ({
-        ...order,
-        buyer: Array.isArray(order.buyer) ? order.buyer[0] : order.buyer
-      })) as RecentOrder[])
+    try {
+      const res = await fetch("/api/admin/stats")
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setLoading(false)
+        return
+      }
+      if (data.stats) setStats(data.stats)
+      if (data.recentOrders) setRecentOrders(data.recentOrders)
+      if (data.recentUsers) setRecentUsers(data.recentUsers)
+      if (data.pendingProducts) setPendingProducts(data.pendingProducts)
+    } catch {
+      /* ignore */
     }
-
-    // Fetch recent users
-    const { data: usersData } = await supabase
-      .from("profiles")
-      .select("id, full_name, email, user_type, created_at, avatar_url")
-      .order("created_at", { ascending: false })
-      .limit(5)
-
-    if (usersData) {
-      setRecentUsers(usersData as RecentUser[])
-    }
-
-    // Fetch pending products
-    const { data: productsData } = await supabase
-      .from("products")
-      .select(`
-        id, name, price, images, created_at,
-        seller:profiles!products_seller_id_fkey(full_name)
-      `)
-      .eq("moderation_status", "pending")
-      .order("created_at", { ascending: false })
-      .limit(5)
-
-    if (productsData) {
-      setPendingProducts(productsData.map(product => ({
-        ...product,
-        seller: Array.isArray(product.seller) ? product.seller[0] : product.seller
-      })) as PendingProduct[])
-    }
-
     setLoading(false)
   }
 
@@ -480,7 +391,7 @@ export default function AdminDashboardPage() {
                     </p>
                     <p className="text-sm font-medium">{formatCurrency(product.price)}</p>
                   </div>
-                  <Link href={`/admin/products/${product.id}`}>
+                  <Link href={`/produit/${product.id}`}>
                     <Button variant="ghost" size="icon">
                       <Eye className="h-4 w-4" />
                     </Button>

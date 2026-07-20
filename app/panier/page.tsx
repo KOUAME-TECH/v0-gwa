@@ -155,62 +155,42 @@ export default function CartPage() {
       const createdOrderIds: string[] = []
 
       for (const [sellerId, items] of itemsBySeller) {
-        const orderSubtotal = items.reduce(
-          (sum, it) => sum + it.product.price * it.quantity,
-          0,
-        )
-        // Repartir les frais au prorata du sous-total de chaque vendeur
-        const ratio = subtotal > 0 ? orderSubtotal / subtotal : 0
-        const orderShipping = Math.round(deliveryFee * ratio)
-        const orderService = Math.round(serviceFee * ratio)
-        const orderTotal = orderSubtotal + orderShipping + orderService
-
-        const { data: order, error: orderError } = await supabase
-          .from("orders")
-          .insert({
-            buyer_id: user.id,
+        const res = await fetch("/api/orders", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
             seller_id: sellerId,
-            subtotal: orderSubtotal,
-            total_amount: orderTotal,
-            shipping_cost: orderShipping,
-            service_fee: orderService,
-            status: "pending",
             payment_method: paymentMethod,
-            payment_status: "pending",
             shipping_address: deliveryAddress.address || deliveryAddress.name,
             shipping_city: deliveryAddress.city,
             shipping_country: deliveryAddress.country,
             shipping_phone: deliveryAddress.phone,
-            order_number: `GWA-${Date.now().toString(36).toUpperCase()}-${createdOrderIds.length + 1}`,
-          })
-          .select()
-          .single()
-
-        if (orderError) throw orderError
-
-        const orderItems = items.map((item) => ({
-          order_id: order.id,
-          product_id: item.product.id,
-          quantity: item.quantity,
-          unit_price: item.product.price,
-          total_price: item.product.price * item.quantity,
-        }))
-
-        const { error: itemsError } = await supabase
-          .from("order_items")
-          .insert(orderItems)
-        if (itemsError) throw itemsError
-
-        // Trace d'audit de creation de commande
-        await supabase.from("order_audit_log").insert({
-          order_id: order.id,
-          performed_by: user.id,
-          action: "order_created",
-          new_value: "pending",
-          notes: `Commande creee via panier (${items.length} article(s))`,
+            items: items.map((item) => ({
+              product_id: item.product.id,
+              quantity: item.quantity,
+            })),
+          }),
         })
 
-        createdOrderIds.push(order.id)
+        const payload = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          throw new Error(payload?.error || "Création commande échouée")
+        }
+
+        const orderId = payload?.order?.id as string | undefined
+        if (!orderId) throw new Error("Réponse commande invalide")
+        createdOrderIds.push(orderId)
+
+        // Paiement : live Feexpay ou simulation hors prod uniquement
+        const payRes = await fetch(`/api/orders/${orderId}/pay`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ payment_method: paymentMethod }),
+        })
+        if (!payRes.ok && payRes.status !== 503) {
+          const payErr = await payRes.json().catch(() => ({}))
+          console.error("[panier] pay", payErr)
+        }
       }
 
       // Vider le panier une fois toutes les commandes creees
@@ -271,14 +251,14 @@ export default function CartPage() {
         </div>
         <h2 className="text-xl font-bold mb-2">Panier vide</h2>
         <p className="text-muted-foreground text-sm text-center mb-6 max-w-xs">
-          Explorez nos produits agricoles et artisanaux
+          Explorez nos produits agricoles
         </p>
         <div className="flex gap-3">
           <Link href="/agriculture">
             <Button className="rounded-xl">Agriculture</Button>
           </Link>
-          <Link href="/artisans">
-            <Button variant="outline" className="rounded-xl bg-transparent">Artisanat</Button>
+          <Link href="/marketplace">
+            <Button variant="outline" className="rounded-xl bg-transparent">Marketplace</Button>
           </Link>
         </div>
       </div>

@@ -44,7 +44,7 @@ interface ChatConversationProps {
 }
 
 const userTypeLabels: Record<string, string> = {
-  farmer: "Producteur", producteur: "Producteur", artisan: "Artisan",
+  farmer: "Producteur", producteur: "Producteur",
   acheteur: "Acheteur", buyer: "Acheteur", cooperative: "Coopérative",
   business: "Entreprise", entreprise: "Entreprise", transformateur: "Transformateur",
 }
@@ -162,8 +162,10 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     scroll()
 
     try {
-      // Verify auth before sending
-      const { data: { user: authUser } } = await supabase.auth.getUser()
+      // Verify / refresh auth before sending (évite sessions stale après long séjour admin)
+      const { data: refreshed } = await supabase.auth.refreshSession()
+      const authUser = refreshed.session?.user
+        ?? (await supabase.auth.getUser()).data.user
       if (!authUser) {
         toast.error("Session expirée, reconnectez-vous")
         setSending(false)
@@ -185,6 +187,15 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
         toast.error(error.message || "Erreur d'envoi")
       } else if (data) {
         setMessages(prev => prev.map(m => m.id === tempId ? data : m))
+        // Push OneSignal + notif in-app pour le destinataire
+        void fetch("/api/messages/notify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            conversation_id: conversation.id,
+            preview: text,
+          }),
+        })
       }
 
       await supabase.from("conversations").update({ last_message_at: new Date().toISOString() }).eq("id", conversation.id)
@@ -321,7 +332,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   // Menu actions
   function menuAction(a: string) {
     setShowMenu(false)
-    if (a === "profile") window.location.href = `/network/profile/${other?.id}`
+    if (a === "profile") window.location.href = `/profil/${other?.id}`
     else if (a === "mute") toast.info("Conversation en sourdine")
     else if (a === "pin") toast.info("Conversation épinglée")
     else if (a === "clear") toast.info("Historique effacé")

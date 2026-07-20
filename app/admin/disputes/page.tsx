@@ -94,46 +94,31 @@ export default function AdminDisputesPage() {
     if (!newStatus) return
     
     setProcessing(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    const updates: any = {
-      status: newStatus,
-      updated_at: new Date().toISOString()
-    }
-
-    if (newStatus === 'resolved' || newStatus === 'closed') {
-      updates.resolved_at = new Date().toISOString()
-      updates.resolution = resolution
-      if (refundAmount) {
-        updates.refund_amount = parseFloat(refundAmount)
-      }
-    }
-
-    if (newStatus === 'under_review' && !dispute.assigned_to) {
-      updates.assigned_to = user?.id
-    }
-
-    await supabase
-      .from('disputes')
-      .update(updates)
-      .eq('id', dispute.id)
-
-    // Notify the user who opened the dispute
-    await supabase
-      .from('notifications')
-      .insert({
-        user_id: dispute.opened_by,
-        type: 'dispute',
-        title: `Litige ${newStatus === 'resolved' ? 'résolu' : 'mis à jour'}`,
-        message: resolution || `Le statut de votre litige a été mis à jour : ${getStatusLabel(newStatus)}`,
-        link: `/dashboard/commandes`
+    try {
+      const res = await fetch(`/api/admin/disputes/${dispute.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: newStatus,
+          resolution: resolution || null,
+          refund_amount: refundAmount || null,
+        }),
       })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        alert(data.error || "Mise à jour impossible")
+        setProcessing(false)
+        return
+      }
 
-    setSelectedDispute(null)
-    setResolution("")
-    setRefundAmount("")
-    setNewStatus("")
-    await loadDisputes()
+      setSelectedDispute(null)
+      setResolution("")
+      setRefundAmount("")
+      setNewStatus("")
+      await loadDisputes()
+    } catch {
+      alert("Erreur réseau")
+    }
     setProcessing(false)
   }
 

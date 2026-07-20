@@ -24,44 +24,50 @@ import {
   Package,
   ShoppingCart,
   Building2,
-  GraduationCap,
   Flag,
-  MessageSquare,
   Settings,
   LogOut,
   Menu,
   X,
   Shield,
   AlertTriangle,
-  Bell,
   TrendingUp,
   ChevronDown,
   Home,
+  Banknote,
 } from "lucide-react"
+import {
+  ADMIN_ROLE_LABELS,
+  type AdminRole,
+  canAccessSection,
+  filterNavForRole,
+  isAdminRole,
+  sectionFromPath,
+} from "@/lib/auth/admin-permissions"
+
+const NAV_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  Dashboard: LayoutDashboard,
+  Utilisateurs: Users,
+  Produits: Package,
+  Commandes: ShoppingCart,
+  Cooperatives: Building2,
+  Signalements: Flag,
+  Litiges: AlertTriangle,
+  Verifications: Shield,
+  "SCG Config": Shield,
+  Finances: TrendingUp,
+  Affacturage: Banknote,
+  Statistiques: TrendingUp,
+  Parametres: Settings,
+}
 
 interface AdminUser {
   id: string
   email: string
   full_name: string
   avatar_url?: string
-  role: string
+  role: AdminRole
 }
-
-const navigation = [
-  { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
-  { name: "Utilisateurs", href: "/admin/users", icon: Users },
-  { name: "Produits", href: "/admin/products", icon: Package },
-  { name: "Commandes", href: "/admin/orders", icon: ShoppingCart },
-  { name: "Cooperatives", href: "/admin/cooperatives", icon: Building2 },
-  { name: "Formations", href: "/admin/courses", icon: GraduationCap },
-  { name: "Signalements", href: "/admin/reports", icon: Flag },
-  { name: "Litiges", href: "/admin/disputes", icon: AlertTriangle },
-  { name: "Verifications", href: "/admin/verifications", icon: Shield },
-  { name: "SCG Config", href: "/admin/scg", icon: Shield },
-  { name: "Finances", href: "/admin/finances", icon: TrendingUp },
-  { name: "Statistiques", href: "/admin/analytics", icon: TrendingUp },
-  { name: "Parametres", href: "/admin/settings", icon: Settings },
-]
 
 export default function AdminLayout({
   children,
@@ -90,17 +96,13 @@ export default function AdminLayout({
           return
         }
 
-        // Check if user is admin
-        const { data: adminRole, error: adminError } = await supabase
-          .from("admin_roles")
-          .select("role")
-          .eq("user_id", user.id)
-          .eq("is_active", true)
-          .maybeSingle()
+        // Server gate (service role) — avoids RLS recursion on admin_roles
+        const statusRes = await fetch("/api/auth/admin-status")
+        const status = await statusRes.json().catch(() => ({}))
 
         if (!isMounted) return
 
-        if (!adminRole) {
+        if (!status.isAdmin || !isAdminRole(status.role)) {
           router.push("/dashboard")
           return
         }
@@ -119,7 +121,7 @@ export default function AdminLayout({
           email: user.email || "",
           full_name: profile?.full_name || "Admin",
           avatar_url: profile?.avatar_url,
-          role: adminRole.role,
+          role: status.role as AdminRole,
         })
         
         setLoading(false)
@@ -134,6 +136,17 @@ export default function AdminLayout({
       isMounted = false
     }
   }, [router])
+
+  useEffect(() => {
+    if (!adminUser) return
+    const section = sectionFromPath(pathname)
+    if (!canAccessSection(adminUser.role, section)) {
+      router.replace("/admin")
+    }
+  }, [adminUser, pathname, router])
+
+  const navigation = filterNavForRole(adminUser?.role ?? "support")
+  const canOpenSettings = adminUser ? canAccessSection(adminUser.role, "settings") : false
 
   const handleLogout = async () => {
     const supabase = createClient()
@@ -194,7 +207,9 @@ export default function AdminLayout({
           <ScrollArea className="flex-1 px-3 py-4">
             <nav className="space-y-1">
               {navigation.map((item) => {
-                const isActive = pathname === item.href || 
+                const Icon = NAV_ICONS[item.name] ?? LayoutDashboard
+                const isActive =
+                  pathname === item.href ||
                   (item.href !== "/admin" && pathname.startsWith(item.href))
                 return (
                   <Link
@@ -202,13 +217,13 @@ export default function AdminLayout({
                     href={item.href}
                     className={cn(
                       "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-                      isActive 
-                        ? "bg-[#2F7D32] text-white" 
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      isActive
+                        ? "bg-[#2F7D32] text-white"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
                     )}
                     onClick={() => setSidebarOpen(false)}
                   >
-                    <item.icon className="h-5 w-5 flex-shrink-0" />
+                    <Icon className="h-5 w-5 flex-shrink-0" />
                     {item.name}
                   </Link>
                 )
@@ -232,7 +247,7 @@ export default function AdminLayout({
               </Avatar>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">{adminUser.full_name}</p>
-                <p className="text-xs text-muted-foreground capitalize">{adminUser.role.replace("_", " ")}</p>
+                <p className="text-xs text-muted-foreground">{ADMIN_ROLE_LABELS[adminUser.role]}</p>
               </div>
             </div>
           </div>
@@ -273,13 +288,17 @@ export default function AdminLayout({
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem asChild>
-                <Link href="/admin/settings">
-                  <Settings className="h-4 w-4 mr-2" />
-                  Paramètres
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
+              {canOpenSettings && (
+                <>
+                  <DropdownMenuItem asChild>
+                    <Link href="/admin/settings">
+                      <Settings className="h-4 w-4 mr-2" />
+                      Paramètres
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              )}
               <DropdownMenuItem onClick={handleLogout} className="text-destructive">
                 <LogOut className="h-4 w-4 mr-2" />
                 Déconnexion

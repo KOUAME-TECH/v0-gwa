@@ -86,25 +86,48 @@ export default function ScgPage() {
     setLoading(false)
   }, [supabase, router])
 
-  useEffect(() => {
-    loadData()
-  }, [loadData])
-
-  const recalculate = async () => {
-    setCalculating(true)
+  const recalculate = useCallback(async (silent = false) => {
+    if (!silent) setCalculating(true)
     setError(null)
     try {
-      const res = await fetch("/api/scg/calculate", { method: "POST" })
-      if (!res.ok) throw new Error("Erreur de calcul")
+      const res = await fetch("/api/scg/calculate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || "Erreur de calcul")
+      }
       const data: SCGResult = await res.json()
       setResult(data)
       await loadData()
-    } catch (e) {
+    } catch {
       setError("Impossible de calculer le score. Réessayez.")
     } finally {
       setCalculating(false)
     }
-  }
+  }, [loadData])
+
+  useEffect(() => {
+    ;(async () => {
+      await loadData()
+      // Brancher le moteur : calcul auto si aucun score
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) return
+      const { data: latest } = await supabase
+        .from("scg_scores")
+        .select("id")
+        .eq("user_id", user.id)
+        .limit(1)
+        .maybeSingle()
+      if (!latest) {
+        await recalculate(true)
+      }
+    })()
+  }, [loadData, recalculate, supabase])
 
   if (loading) {
     return (
@@ -139,7 +162,7 @@ export default function ScgPage() {
               Le Score de Confiance GWA évalue votre fiabilité sur 5 dimensions. Il permet aux acheteurs et aux
               banques de vous faire confiance.
             </p>
-            <Button onClick={recalculate} disabled={calculating} className="bg-[#2F7D32] hover:bg-[#1B5E20]">
+            <Button onClick={() => recalculate(false)} disabled={calculating} className="bg-[#2F7D32] hover:bg-[#1B5E20]">
               {calculating ? <Spinner className="h-4 w-4 mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
               Calculer mon score
             </Button>
@@ -162,7 +185,7 @@ export default function ScgPage() {
                 })}
               </p>
               <Button
-                onClick={recalculate}
+                onClick={() => recalculate(false)}
                 disabled={calculating}
                 variant="outline"
                 size="sm"

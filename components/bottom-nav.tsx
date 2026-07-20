@@ -90,14 +90,14 @@ export function BottomNav() {
     return null
   }
 
-  const isSeller = ["farmer", "artisan", "cooperative", "processor"].includes(userType || "")
+  const isSeller = ["producteur", "cooperative", "transformateur", "entreprise"].includes(userType || "")
 
   // Determiner le "monde" actif pour le style de fond
   const getActiveWorld = (): "social" | "commerce" | "messaging" | "profile" | null => {
-    if (pathname === "/" || pathname?.startsWith("/communaute") || pathname?.startsWith("/recherche") || pathname?.startsWith("/network")) return "social"
-    if (pathname?.startsWith("/marketplace") || pathname?.startsWith("/produit") || pathname?.startsWith("/panier") || pathname?.startsWith("/b2b") || pathname?.startsWith("/agriculture") || pathname?.startsWith("/artisans")) return "commerce"
+    if (pathname === "/" || pathname?.startsWith("/recherche")) return "social"
+    if (pathname?.startsWith("/marketplace") || pathname?.startsWith("/produit") || pathname?.startsWith("/panier") || pathname?.startsWith("/agriculture")) return "commerce"
     if (pathname?.startsWith("/messages")) return "messaging"
-    if (pathname?.startsWith("/profil") || pathname?.startsWith("/wallet") || pathname?.startsWith("/favoris") || pathname?.startsWith("/notifications")) return "profile"
+    if (pathname?.startsWith("/profil") || pathname?.startsWith("/wallet") || pathname?.startsWith("/favoris") || pathname?.startsWith("/notifications") || pathname?.startsWith("/download") || pathname?.startsWith("/contact")) return "profile"
     return null
   }
 
@@ -178,7 +178,7 @@ export function BottomNav() {
         </div>
       )}
 
-      <nav className="fixed bottom-0 left-0 right-0 z-50 pb-safe" role="navigation" aria-label="Navigation principale">
+      <nav className="fixed bottom-0 left-0 right-0 z-50" role="navigation" aria-label="Navigation principale">
         {/* World indicator bar */}
         <div className="h-[2px] bg-[#E5E7EB] relative">
           {activeWorld && (
@@ -198,7 +198,7 @@ export function BottomNav() {
           )}
         </div>
 
-        <div className="bg-white/95 backdrop-blur-lg border-t border-white/50">
+        <div className="bg-white/95 backdrop-blur-lg border-t border-white/50 pb-safe">
           <div className="flex items-center justify-around max-w-lg mx-auto h-[60px] px-1">
             {navItems.map((item) => {
               const isActive = item.href === "/" 

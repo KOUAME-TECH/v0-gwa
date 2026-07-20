@@ -63,11 +63,11 @@ export default function DownloadPage() {
   ]
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#2F7D32]/10 to-background">
+    <div className="min-h-screen bg-gradient-to-b from-[var(--gwa-primary,#1F5C2E)]/10 to-background">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b">
         <div className="container flex items-center h-14 px-4">
-          <Link href="/" className="flex items-center gap-2 text-muted-foreground">
+          <Link href="/profil" className="flex items-center gap-2 text-muted-foreground">
             <ArrowLeft className="h-5 w-5" />
             <span>Retour</span>
           </Link>
@@ -77,7 +77,7 @@ export default function DownloadPage() {
       <main className="container px-4 py-8 max-w-lg mx-auto">
         {/* Hero */}
         <div className="text-center mb-8">
-          <div className="w-20 h-20 bg-[#2F7D32] rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+          <div className="w-20 h-20 bg-[var(--gwa-primary,#1F5C2E)] rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
             <span className="text-white text-3xl font-bold">G</span>
           </div>
           <h1 className="text-2xl font-bold mb-2">Installer GWA</h1>

@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -85,103 +84,72 @@ export default function AdminOrdersPage() {
 
   const fetchOrders = async () => {
     setLoading(true)
-    const supabase = createClient()
-
-    let query = supabase
-      .from("orders")
-      .select(`
-        *,
-        buyer:profiles!orders_buyer_id_fkey(id, full_name, email, avatar_url),
-        seller:profiles!orders_seller_id_fkey(id, full_name, avatar_url)
-      `, { count: "exact" })
-      .order("created_at", { ascending: false })
-      .range(page * pageSize, (page + 1) * pageSize - 1)
-
-    if (filterStatus !== "all") {
-      query = query.eq("status", filterStatus)
-    }
-
-    if (filterPayment !== "all") {
-      query = query.eq("payment_status", filterPayment)
-    }
-
-    const { data, count, error } = await query
-
-    if (!error && data) {
-      setOrders(data.map(o => ({
-        ...o,
-        buyer: Array.isArray(o.buyer) ? o.buyer[0] : o.buyer,
-        seller: Array.isArray(o.seller) ? o.seller[0] : o.seller
-      })) as Order[])
-      setTotalCount(count || 0)
+    try {
+      const params = new URLSearchParams({
+        status: filterStatus,
+        payment_status: filterPayment,
+        page: String(page),
+        pageSize: String(pageSize),
+      })
+      const res = await fetch(`/api/admin/orders?${params}`)
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setOrders([])
+        setTotalCount(0)
+        setLoading(false)
+        return
+      }
+      setOrders(data.orders || [])
+      setTotalCount(data.total || 0)
+    } catch {
+      setOrders([])
     }
     setLoading(false)
   }
 
   const searchOrders = async () => {
-    if (!searchQuery.trim()) {
-      fetchOrders()
-      return
-    }
-
     setLoading(true)
-    const supabase = createClient()
-
-    const { data, error } = await supabase
-      .from("orders")
-      .select(`
-        *,
-        buyer:profiles!orders_buyer_id_fkey(id, full_name, email, avatar_url),
-        seller:profiles!orders_seller_id_fkey(id, full_name, avatar_url)
-      `)
-      .ilike("order_number", `%${searchQuery}%`)
-      .order("created_at", { ascending: false })
-      .limit(50)
-
-    if (!error && data) {
-      setOrders(data.map(o => ({
-        ...o,
-        buyer: Array.isArray(o.buyer) ? o.buyer[0] : o.buyer,
-        seller: Array.isArray(o.seller) ? o.seller[0] : o.seller
-      })) as Order[])
+    try {
+      const params = new URLSearchParams({
+        status: filterStatus,
+        payment_status: filterPayment,
+        page: "0",
+        pageSize: String(pageSize),
+        q: searchQuery.trim(),
+      })
+      const res = await fetch(`/api/admin/orders?${params}`)
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setOrders([])
+        setLoading(false)
+        return
+      }
+      setOrders(data.orders || [])
+      setTotalCount(data.total || 0)
+      setPage(0)
+    } catch {
+      setOrders([])
     }
     setLoading(false)
   }
 
   const updateOrderStatus = async (orderId: string, newStatus: string) => {
-    const supabase = createClient()
-    const { data: { user: adminUser } } = await supabase.auth.getUser()
-
-    const { error } = await supabase
-      .from("orders")
-      .update({ 
-        status: newStatus,
-        updated_at: new Date().toISOString()
+    try {
+      const res = await fetch(`/api/admin/orders/${orderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
       })
-      .eq("id", orderId)
-
-    if (!error) {
-      // Log the action
-      await supabase.from("admin_logs").insert({
-        admin_id: adminUser?.id,
-        action: "update_order_status",
-        entity_type: "order",
-        entity_id: orderId,
-        new_data: { status: newStatus },
-      })
-
-      // Add to order audit log
-      await supabase.from("order_audit_log").insert({
-        order_id: orderId,
-        performed_by: adminUser?.id,
-        action: "status_change",
-        new_value: newStatus,
-        notes: "Mise à jour par administrateur",
-      })
-
-      setOrders(orders.map(o => 
-        o.id === orderId ? { ...o, status: newStatus } : o
-      ))
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        alert(data.error || "Mise à jour impossible")
+        return
+      }
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o)),
+      )
+    } catch {
+      alert("Erreur réseau")
     }
   }
 
@@ -357,7 +325,13 @@ export default function AdminOrdersPage() {
                             <DropdownMenuContent align="end">
                               <DropdownMenuLabel>Actions</DropdownMenuLabel>
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  alert(
+                                    `Commande ${order.order_number}\nStatut: ${order.status}\nPaiement: ${order.payment_status}\nMontant: ${order.total_amount} FCFA`,
+                                  )
+                                }}
+                              >
                                 <Eye className="h-4 w-4 mr-2" />
                                 Voir les détails
                               </DropdownMenuItem>

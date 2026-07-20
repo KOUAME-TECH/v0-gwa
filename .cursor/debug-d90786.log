@@ -1,0 +1,2 @@
+{"sessionId":"d90786","runId":"admin-fix","hypothesisId":"A","location":"api/admin/orders","message":"list_ok","data":{"total":2,"page":0,"status":"all","payment":"all"},"timestamp":1784510218175}
+{"sessionId":"d90786","runId":"admin-fix","hypothesisId":"A","location":"api/admin/orders","message":"list_ok","data":{"total":2,"page":0,"status":"all","payment":"all"},"timestamp":1784510219508}

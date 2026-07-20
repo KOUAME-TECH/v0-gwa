@@ -33,8 +33,8 @@ export default function EditProductPage() {
       if (!user) { router.push("/auth/login"); return }
 
       const [{ data: product }, { data: cats }] = await Promise.all([
-        supabase.from("products").select("id, name, price, unit, images, description, origin_country, origin_region, is_organic, is_fair_trade, is_bulk_available, min_bulk_quantity, product_type, seller_id, category_id, status, likes_count, comments_count, shares_count, created_at, updated_at, stock_quantity").eq("id", productId).eq("seller_id", user.id).single(),
-        supabase.from("categories").select("id, name, slug, category_type").is("parent_id", null).order("name"),
+        supabase.from("products").select("id, name, price, unit, images, description, origin_country, origin_region, is_organic, is_fair_trade, product_type, seller_id, category_id, status, created_at, updated_at, stock_quantity").eq("id", productId).eq("seller_id", user.id).single(),
+        supabase.from("categories").select("id, name, slug, category_type").eq("category_type", "agriculture").is("parent_id", null).order("name"),
       ])
 
       if (!product) { toast.error("Produit introuvable"); router.push("/dashboard/products"); return }
@@ -101,11 +101,16 @@ export default function EditProductPage() {
   }
 
   const handleDelete = async () => {
-    if (!confirm("Supprimer ce produit definitivement ?")) return
-    const { error } = await supabase.from("products").delete().eq("id", productId)
-    if (error) { toast.error("Erreur de suppression"); return }
-    toast.success("Produit supprime")
-    router.push("/dashboard/products")
+    if (!confirm("Supprimer ce produit ? Il sera retiré de la vente.")) return
+    try {
+      const res = await fetch(`/api/products/${productId}`, { method: "DELETE" })
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(payload.error || "Erreur de suppression")
+      toast.success("Produit supprimé")
+      router.push("/dashboard/products")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erreur de suppression")
+    }
   }
 
   const filteredCats = categories.filter(c => c.category_type === form.product_type)
@@ -253,7 +258,7 @@ export default function EditProductPage() {
       </div>
 
       {/* Fixed save button */}
-      <div className="fixed bottom-[76px] left-0 right-0 p-4 bg-white border-t border-[#E5E7EB] z-40">
+      <div className="fixed bottom-0 left-0 right-0 p-4 pb-[calc(env(safe-area-inset-bottom)+16px)] bg-white border-t border-[#E5E7EB] z-40">
         <Button onClick={handleSave} disabled={saving || !form.name || !form.price}
           className="w-full h-12 rounded-full bg-[#2F7D32] hover:bg-[#256025] text-white text-base font-semibold disabled:opacity-50">
           {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : "Enregistrer les modifications"}

@@ -102,6 +102,13 @@
 */
 
 :root {
+  /* Harmattan Signal — tokens additifs (bêta : coexistent avec palette historique #2F7D32) */
+  --gwa-primary: #1F5C2E;
+  --gwa-primary-soft: #F0F7F2;
+  --gwa-gold: #C27D10;
+  --gwa-gold-soft: #FFF8E8;
+  --gwa-cream: #FFF6E5;
+
   /* Palette GWA Officielle */
   --background: 39 100% 97%;
   --foreground: 220 13% 12%;
@@ -110,8 +117,8 @@
   --popover: 0 0% 100%;
   --popover-foreground: 220 13% 12%;
   
-  /* Vert Commerce - Acheter, Valider, Payer */
-  --primary: 123 45% 33%;
+  /* Vert Commerce - Acheter, Valider, Payer (HSL dérivé de #1F5C2E ≈ 135 50% 24%) */
+  --primary: 135 50% 24%;
   --primary-foreground: 0 0% 100%;
   
   /* Neutres */
@@ -120,9 +127,9 @@
   --muted: 220 13% 95%;
   --muted-foreground: 215 14% 45%;
   
-  /* Orange Social - Likes, Suivre, Partager */
-  --accent: 36 91% 53%;
-  --accent-foreground: 220 13% 12%;
+  /* Or Harmattan — accents (likes / CTA secondaires) ; orange social historique conservé en --accent-legacy via #F39A1F */
+  --accent: 36 85% 41%;
+  --accent-foreground: 0 0% 100%;
   
   --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 100%;
@@ -130,12 +137,12 @@
   /* Bordures et inputs */
   --border: 220 13% 90%;
   --input: 220 13% 90%;
-  --ring: 123 45% 33%;
+  --ring: 135 50% 24%;
   --radius: 0.75rem;
   
   /* Charts */
-  --chart-1: 123 45% 33%;
-  --chart-2: 36 91% 53%;
+  --chart-1: 135 50% 24%;
+  --chart-2: 36 85% 41%;
   --chart-3: 199 89% 48%;
   --chart-4: 280 65% 60%;
   --chart-5: 340 75% 55%;
@@ -143,12 +150,12 @@
   /* Sidebar */
   --sidebar: 0 0% 100%;
   --sidebar-foreground: 220 13% 12%;
-  --sidebar-primary: 123 45% 33%;
+  --sidebar-primary: 135 50% 24%;
   --sidebar-primary-foreground: 0 0% 100%;
   --sidebar-accent: 220 13% 95%;
   --sidebar-accent-foreground: 220 13% 12%;
   --sidebar-border: 220 13% 90%;
-  --sidebar-ring: 123 45% 33%;
+  --sidebar-ring: 135 50% 24%;
 }
 
 @theme inline {
@@ -291,6 +298,8 @@
   .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
   .safe-left { padding-left: env(safe-area-inset-left); }
   .safe-right { padding-right: env(safe-area-inset-right); }
+  .pt-safe { padding-top: env(safe-area-inset-top); }
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
 }
 
 /* Selection avec couleur primaire */
