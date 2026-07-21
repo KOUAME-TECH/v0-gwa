@@ -84,7 +84,13 @@ function LoginForm() {
       })
       const data = await res.json()
       if (!res.ok) {
-        setError(data.error || "Envoi impossible")
+        if (data.code === "SMS_SEND_FAILED") {
+          setError(
+            "SMS indisponible pour le moment. Connectez-vous par email, ou réessayez plus tard.",
+          )
+        } else {
+          setError(data.error || "Envoi impossible")
+        }
         setIsLoading(false)
         return
       }
