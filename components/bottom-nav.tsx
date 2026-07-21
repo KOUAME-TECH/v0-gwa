@@ -70,12 +70,17 @@ export function BottomNav() {
     const notificationsChannel = supabase
       .channel('notifications-changes')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, () => checkUser())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'notifications' }, () => checkUser())
       .subscribe()
+
+    const onNotifUpdated = () => { void checkUser() }
+    window.addEventListener('gwa:notifications-updated', onNotifUpdated)
     
     return () => {
       subscription.unsubscribe()
       supabase.removeChannel(messagesChannel)
       supabase.removeChannel(notificationsChannel)
+      window.removeEventListener('gwa:notifications-updated', onNotifUpdated)
     }
   }, [])
   

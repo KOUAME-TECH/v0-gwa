@@ -50,7 +50,20 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
         audioRef.current.src = product.audio_url
         audioRef.current.onended = continueNext
         audioRef.current.onerror = continueNext
-        audioRef.current.play().catch(continueNext)
+        void audioRef.current.play().then(undefined, () => {
+          // Autoplay bloqué — bascule TTS (nécessite souvent un geste)
+          if (typeof window === "undefined" || !window.speechSynthesis) {
+            stop()
+            return
+          }
+          window.speechSynthesis.cancel()
+          const utter = new SpeechSynthesisUtterance(buildProductListenText(product))
+          utter.lang = resolveUtterLang(product.audio_lang)
+          utter.rate = 0.92
+          utter.onend = continueNext
+          utter.onerror = () => stop()
+          window.speechSynthesis.speak(utter)
+        })
         return
       }
 
@@ -64,7 +77,10 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
       utter.lang = resolveUtterLang(product.audio_lang)
       utter.rate = 0.92
       utter.onend = continueNext
-      utter.onerror = continueNext
+      utter.onerror = () => {
+        // Ne pas enchaîner silencieusement si le navigateur bloque la synthèse
+        stop()
+      }
       window.speechSynthesis.speak(utter)
     },
     [products, stop],
@@ -74,6 +90,15 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
     if (!products.length || typeof window === "undefined" || active) return
     stoppedRef.current = false
     setActive(true)
+    // Débloque l'audio sur geste utilisateur (autoplay policies)
+    try {
+      const unlock = new Audio()
+      unlock.src =
+        "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="
+      void unlock.play().then(() => unlock.pause()).catch(() => {})
+    } catch {
+      /* ignore */
+    }
     playAt(0)
   }, [active, playAt, products.length])
 

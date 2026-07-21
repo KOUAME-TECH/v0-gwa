@@ -35,12 +35,12 @@ export async function sendSmsOtp(
 ): Promise<SmsResult> {
   const body = `GWA: votre code est ${code}. Valable 10 min. Ne le partagez pas.`
 
-  // Africa's Talking en premier (choix GWA)
-  const at = await sendViaAfricasTalking(phoneE164, body)
-  if (at.success) return at
-
+  // Twilio en premier (validé prod), puis Africa's Talking, puis Termii
   const twilio = await sendViaTwilio(phoneE164, body)
   if (twilio.success) return twilio
+
+  const at = await sendViaAfricasTalking(phoneE164, body)
+  if (at.success) return at
 
   const termii = await sendViaTermii(phoneE164, body)
   if (termii.success) return termii
@@ -48,10 +48,10 @@ export async function sendSmsOtp(
   return {
     success: false,
     error:
-      at.error ||
       twilio.error ||
+      at.error ||
       termii.error ||
-      "Aucun fournisseur SMS (AT_API_KEY / TWILIO_* / TERMII_API_KEY)",
+      "Aucun fournisseur SMS (TWILIO_* / AT_API_KEY / TERMII_API_KEY)",
   }
 }
 

@@ -45,6 +45,10 @@ import {
   followButtonLabel,
   shouldShowFollowButton,
 } from "@/lib/social/follow"
+import {
+  FEED_FILTER_CHIPS,
+  productMatchesFeedFilter,
+} from "@/lib/catalog/feed-filters"
 
 type Product = {
   id: string
@@ -63,6 +67,7 @@ type Product = {
   shares_count: number
   created_at: string
   is_organic?: boolean | null
+  categories?: { name: string; slug?: string | null } | null
   profiles: {
     id: string
     full_name: string
@@ -109,14 +114,7 @@ type FeedItem =
   | { type: "product"; data: Product; isLiked: boolean; isSaved: boolean }
   | { type: "post"; data: Post; isLiked: boolean; isSaved: boolean }
 
-const categories = [
-  { id: "all", name: "Tout", icon: "🌍" },
-  { id: "cereales", name: "Céréales", icon: "🌾" },
-  { id: "cacao", name: "Cacao", icon: "🍫" },
-  { id: "cafe", name: "Café", icon: "☕" },
-  { id: "fruits", name: "Fruits", icon: "🥭" },
-  { id: "legumes", name: "Légumes", icon: "🥬" },
-]
+const categories = FEED_FILTER_CHIPS.map((c) => ({ id: c.id, name: c.name }))
 
 export default function HomePage() {
   const router = useRouter()
@@ -128,6 +126,7 @@ export default function HomePage() {
   const { streak: listenStreak } = useListenRitual()
   const [activeCategory, setActiveCategory] = useState("all")
   const [activeTab, setActiveTab] = useState<"tout" | "produits" | "publications">("tout")
+  const [unreadNotifications, setUnreadNotifications] = useState(0)
   
   // États pour les commentaires
   const [selectedItem, setSelectedItem] = useState<FeedItem | null>(null)
@@ -178,11 +177,16 @@ export default function HomePage() {
       let userFavorites: string[] = []
       
       if (currentUser) {
-        const [likesRes, favsRes, profileRes, followsRes] = await Promise.all([
+        const [likesRes, favsRes, profileRes, followsRes, notifRes] = await Promise.all([
           supabase.from("post_likes").select("post_id").eq("user_id", currentUser.id),
           supabase.from("favorites").select("product_id").eq("user_id", currentUser.id),
           supabase.from("profiles").select("user_type").eq("id", currentUser.id).single(),
           supabase.from("followers").select("following_id").eq("follower_id", currentUser.id),
+          supabase
+            .from("notifications")
+            .select("*", { count: "exact", head: true })
+            .eq("user_id", currentUser.id)
+            .eq("is_read", false),
         ])
         if (profileRes.data) {
           setUserType(profileRes.data.user_type)
@@ -190,8 +194,11 @@ export default function HomePage() {
         if (followsRes.data) {
           setFollowingIds(new Set(followsRes.data.map((f) => f.following_id)))
         }
+        setUnreadNotifications(notifRes.count || 0)
         userLikes = likesRes.data?.map(l => l.post_id) || []
         userFavorites = favsRes.data?.map(f => f.product_id) || []
+      } else {
+        setUnreadNotifications(0)
       }
 
       // Charger produits
@@ -200,7 +207,8 @@ export default function HomePage() {
         .select(`
           id, name, description, price, unit, images, audio_url, origin_region, origin_country, product_type, seller_id,
           likes_count, comments_count, shares_count, created_at, is_organic, is_fair_trade,
-          profiles:seller_id(id, full_name, avatar_url, is_verified, city)
+          profiles:seller_id(id, full_name, avatar_url, is_verified, city),
+          categories:category_id(name, slug)
         `)
         .eq("status", "active")
         .order("created_at", { ascending: false })
@@ -257,6 +265,23 @@ export default function HomePage() {
       setIsLoading(false)
     }
     loadData()
+    const onNotifUpdated = () => {
+      void (async () => {
+        const { data: { user: u } } = await supabase.auth.getUser()
+        if (!u) {
+          setUnreadNotifications(0)
+          return
+        }
+        const { count } = await supabase
+          .from("notifications")
+          .select("*", { count: "exact", head: true })
+          .eq("user_id", u.id)
+          .eq("is_read", false)
+        setUnreadNotifications(count || 0)
+      })()
+    }
+    window.addEventListener("gwa:notifications-updated", onNotifUpdated)
+    return () => window.removeEventListener("gwa:notifications-updated", onNotifUpdated)
   }, [supabase])
 
   const formatPrice = (price: number) => new Intl.NumberFormat("fr-FR").format(price)
@@ -543,12 +568,17 @@ export default function HomePage() {
     if (activeTab === "produits" && item.type !== "product") return false
     if (activeTab === "publications" && item.type !== "post") return false
     
-    // Filtre par categorie (s'applique aux produits)
+    // Filtre par catégorie (slug réel, pas product_type)
     if (activeCategory !== "all" && item.type === "product") {
       const product = item.data as Product
-      const cat = product.product_type?.toLowerCase() || ""
-      if (!cat.includes(activeCategory)) return false
+      return productMatchesFeedFilter(activeCategory, {
+        categorySlug: product.categories?.slug,
+        categoryName: product.categories?.name,
+        productName: product.name,
+      })
     }
+    // En filtre catégorie, masquer les posts (pas de catégorie)
+    if (activeCategory !== "all" && item.type === "post") return false
     return true
   })
 
@@ -576,10 +606,12 @@ export default function HomePage() {
                   <Search className="h-5 w-5 text-[#4B5563]" />
                 </Button>
               </Link>
-              <Link href="/notifications">
+              <Link href="/notifications" aria-label="Notifications">
                 <Button variant="ghost" size="icon" className="rounded-full h-10 w-10 relative">
                   <Bell className="h-5 w-5 text-[#4B5563]" />
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-[#F39A1F] rounded-full" />
+                  {unreadNotifications > 0 && (
+                    <span className="absolute top-1 right-1 min-w-[8px] h-2 px-0.5 bg-[#F39A1F] rounded-full" />
+                  )}
                 </Button>
               </Link>
             </div>
@@ -608,21 +640,21 @@ export default function HomePage() {
           ))}
         </div>
         
-        {/* Catégories */}
+        {/* Catégories — texte seul, slugs cohérents */}
         <div className="flex gap-2 overflow-x-auto scrollbar-none px-4 py-3">
           {categories.map((cat) => (
             <button
               key={cat.id}
+              type="button"
               onClick={() => setActiveCategory(cat.id)}
               className={cn(
-                "flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors",
+                "px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors",
                 activeCategory === cat.id
                   ? "bg-[#2F7D32] text-white"
                   : "bg-white text-[#4B5563] border border-[#E5E7EB]"
               )}
             >
-              <span>{cat.icon}</span>
-              <span>{cat.name}</span>
+              {cat.name}
             </button>
           ))}
         </div>

@@ -17,6 +17,7 @@ import {
 import { formatDistanceToNow } from "date-fns"
 import { fr } from "date-fns/locale"
 import { PushSettingsCard } from "@/components/notifications/push-settings-card"
+import { Button } from "@/components/ui/button"
 
 interface Notification {
   id: string
@@ -84,6 +85,9 @@ export default function NotificationsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     })
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("gwa:notifications-updated"))
+    }
   }
 
   async function markAllAsRead() {
@@ -93,6 +97,9 @@ export default function NotificationsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ all: true }),
     })
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("gwa:notifications-updated"))
+    }
   }
 
   const unreadCount = notifications.filter((n) => !n.is_read).length

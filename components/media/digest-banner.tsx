@@ -40,7 +40,9 @@ export function DigestBanner({
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-[#1F5C2E]">Harmattan Digest</p>
         <p className="text-xs text-[#4B5563] truncate">
-          {count} nouveau{count > 1 ? "x" : ""} produit{count > 1 ? "s" : ""} — {place}
+          {tourActive
+            ? `Écoute ${tourIndex + 1}/${tourTotal} — ${place}`
+            : `${count} nouveau${count > 1 ? "x" : ""} produit${count > 1 ? "s" : ""} — appuie sur Parcours pour écouter`}
         </p>
       </div>
       <ShopVoiceTourButton

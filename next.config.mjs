@@ -36,6 +36,9 @@ const nextConfig = {
   },
   poweredByHeader: false,
   compress: true,
+  experimental: {
+    optimizePackageImports: ["lucide-react", "date-fns", "@radix-ui/react-icons"],
+  },
   headers: async () => [{ source: '/(.*)', headers: securityHeaders }],
   /** Alias legacy — une seule source de vérité pour les redirections */
   redirects: async () => [

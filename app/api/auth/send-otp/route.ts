@@ -17,12 +17,13 @@ import { hasSmsProvider, sendSmsOtp } from "@/lib/auth/sms"
 
 /**
  * POST /api/auth/send-otp
- * SMS obligatoire. Le numéro doit être lié au compte email de 1ère inscription.
+ * SMS via Twilio/AT/Termii (custom OTP). Login = numéro vérifié ;
+ * signup = intent signup ; bind = session authentifiée.
  */
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { phone, countryCode = "ci" } = body
+    const { phone, countryCode = "ci", intent = "login" } = body
 
     if (!phone || typeof phone !== "string") {
       return NextResponse.json(
@@ -70,20 +71,36 @@ export async function POST(request: Request) {
       )
     }
 
-    // Réponse générique anti-énumération : identique que le numéro soit inconnu,
-    // non lié ou non vérifié — n'expose jamais l'existence d'un compte.
-    const genericDenied = NextResponse.json(
+    // Messages actionnables (sans takeover) :
+    // - numéro vérifié ailleurs → connexion
+    // - numéro présent non vérifié → email puis bind
+    // - inconnu → inscription / email
+    const alreadyUsed = NextResponse.json(
       {
         error:
-          "Si ce numéro est lié à un compte vérifié, un code sera envoyé. Sinon connectez-vous par email puis liez votre numéro dans Profil.",
+          "Ce numéro est déjà associé à un compte. Connectez-vous avec ce numéro ou par email.",
+        code: "PHONE_ALREADY_USED",
+      },
+      { status: 400 },
+    )
+    const needEmailVerify = NextResponse.json(
+      {
+        error:
+          "Ce numéro est enregistré mais pas encore vérifié. Connectez-vous par email, puis validez-le dans Profil.",
+        code: "PHONE_UNVERIFIED",
+      },
+      { status: 400 },
+    )
+    const unknownPhone = NextResponse.json(
+      {
+        error:
+          "Aucun compte vérifié avec ce numéro. Inscrivez-vous ou connectez-vous par email.",
         code: "OTP_LOOKUP",
       },
       { status: 400 },
     )
 
-    // Détermine le flow : bind (utilisateur authentifié qui lie SON numéro) ou
-    // login (numéro déjà lié ET vérifié). On ne fait JAMAIS de lookup-then-login
-    // sur un numéro non vérifié (risque de takeover).
+    // Détermine le flow : bind | login | register
     const supabase = await createClient()
     const {
       data: { user: sessionUser },
@@ -100,17 +117,16 @@ export async function POST(request: Request) {
 
     let otpUserId: string
     let otpEmail: string
-    let mode: "login" | "bind"
+    let mode: "login" | "bind" | "register"
 
     if (sessionUser) {
       // BIND — l'utilisateur connecté lie ce numéro à son propre compte.
-      // Refus si le numéro est déjà vérifié sur un AUTRE compte (anti-takeover).
       if (
         profileByPhone &&
         profileByPhone.id !== sessionUser.id &&
         profileByPhone.phone_verified === true
       ) {
-        return genericDenied
+        return alreadyUsed
       }
       const { data: ownProfile } = await admin
         .from("profiles")
@@ -127,23 +143,28 @@ export async function POST(request: Request) {
         .trim()
         .toLowerCase()
       mode = "bind"
-    } else {
-      // LOGIN — autorisé uniquement si le numéro est lié ET vérifié.
-      if (!profileByPhone || profileByPhone.phone_verified !== true) {
-        return genericDenied
-      }
+    } else if (profileByPhone?.phone_verified === true) {
       otpUserId = profileByPhone.id
       otpEmail = (profileByPhone.linked_email || profileByPhone.email || "")
         .trim()
         .toLowerCase()
       mode = "login"
+    } else if (profileByPhone && profileByPhone.phone_verified !== true) {
+      return needEmailVerify
+    } else if (intent === "signup") {
+      // REGISTER — nouveau numéro (inscription téléphone uniquement)
+      otpUserId = "pending"
+      otpEmail = ""
+      mode = "register"
+    } else {
+      return unknownPhone
     }
 
     const linkedEmail = otpEmail
 
-    // 1) SMS natif Supabase (Path A) — login d'un numéro déjà vérifié seulement.
-    //    (En bind, l'utilisateur a déjà une session : on ne mint pas de session phone.)
-    if (mode === "login") {
+    // Préférer SMS custom (Twilio/AT) quand configuré — évite décalage Path A
+    // Supabase (code différent / SMS jamais reçu) vs verify custom.
+    if (mode === "login" && !hasSmsProvider()) {
       const { error: smsError } = await supabase.auth.signInWithOtp({
         phone: formatted,
         options: { shouldCreateUser: false },
@@ -161,13 +182,26 @@ export async function POST(request: Request) {
           linked_email_masked: linkedEmail
             ? maskEmail(linkedEmail)
             : undefined,
+          otp_mode: "supabase",
         })
       }
 
       console.warn("[auth/send-otp] supabase phone:", smsError.message)
+      return unknownPhone
     }
 
-    // 2) OTP custom + SMS Twilio/Termii (obligatoire)
+    if (mode === "login" && !linkedEmail) {
+      return NextResponse.json(
+        {
+          error:
+            "Compte téléphone incomplet. Contactez le support ou utilisez l'email.",
+          code: "PHONE_NO_EMAIL",
+        },
+        { status: 400 },
+      )
+    }
+
+    // OTP custom + Twilio / AT / Termii
     if (!(await canSendOtp(formatted, 55))) {
       return NextResponse.json(
         { error: "Patientez 1 minute avant de renvoyer un code." },
@@ -179,7 +213,7 @@ export async function POST(request: Request) {
     await storeOtp(formatted, {
       code,
       userId: otpUserId,
-      email: linkedEmail,
+      email: linkedEmail || `${formatted.replace(/\D/g, "")}@users.gwa.local`,
       phone: formatted,
       mode,
     })
@@ -206,8 +240,10 @@ export async function POST(request: Request) {
       message: "Code SMS envoyé",
       expires_in: 600,
       resend_after: 60,
-      linked_email_masked: linkedEmail ? maskEmail(linkedEmail) : undefined,
-      otp_mode: "sms",
+      linked_email_masked: linkedEmail
+        ? maskEmail(linkedEmail)
+        : undefined,
+      otp_mode: mode,
     })
   } catch (err) {
     console.error("[auth/send-otp]", err)

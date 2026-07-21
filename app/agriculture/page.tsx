@@ -9,6 +9,10 @@ import { Input } from "@/components/ui/input"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Leaf, MapPin, Search, Heart, SlidersHorizontal, ChevronLeft, X } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+import {
+  FEED_FILTER_CHIPS,
+  productMatchesFeedFilter,
+} from "@/lib/catalog/feed-filters"
 
 interface Product {
   id: string
@@ -23,16 +27,10 @@ interface Product {
   categories: { name: string; slug?: string } | null
 }
 
-const categories = [
-  { name: "Tout", icon: "🌍", slug: "all" },
-  { name: "Céréales", icon: "🌾", slug: "cereales" },
-  { name: "Cacao", icon: "🍫", slug: "cacao" },
-  { name: "Café", icon: "☕", slug: "cafe" },
-  { name: "Fruits", icon: "🥭", slug: "fruits" },
-  { name: "Légumes", icon: "🥬", slug: "legumes" },
-  { name: "Épices", icon: "🌶", slug: "epices" },
-  { name: "Élevage", icon: "🐄", slug: "elevage" }
-]
+const categories = FEED_FILTER_CHIPS.map((c) => ({
+  name: c.name,
+  slug: c.id,
+}))
 
 export default function AgriculturePage() {
   const [products, setProducts] = useState<Product[]>([])
@@ -84,15 +82,11 @@ export default function AgriculturePage() {
       p.name.toLowerCase().includes(q) ||
       (p.categories?.name || "").toLowerCase().includes(q)
     if (!matchesSearch) return false
-    if (selectedCategory === "all") return true
-    const slug = (p.categories?.slug || p.categories?.name || p.product_type || "")
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/\p{M}/gu, "")
-    return (
-      slug.includes(selectedCategory) ||
-      (p.name || "").toLowerCase().includes(selectedCategory)
-    )
+    return productMatchesFeedFilter(selectedCategory, {
+      categorySlug: p.categories?.slug,
+      categoryName: p.categories?.name,
+      productName: p.name,
+    })
   })
 
   const formatPrice = (price: number) => new Intl.NumberFormat("fr-FR").format(price)
@@ -163,15 +157,15 @@ export default function AgriculturePage() {
           {categories.map(cat => (
             <button
               key={cat.slug}
+              type="button"
               onClick={() => setSelectedCategory(cat.slug)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
+              className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
                 selectedCategory === cat.slug
                   ? "bg-white text-[#1a472a]"
                   : "bg-white/20 text-white"
               }`}
             >
-              <span>{cat.icon}</span>
-              <span>{cat.name}</span>
+              {cat.name}
             </button>
           ))}
         </div>

@@ -157,6 +157,125 @@ export async function POST(request: Request) {
         })
       }
 
+      // REGISTER — créer le compte téléphone après OTP SMS custom
+      if (stored.mode === "register") {
+        const syntheticEmail =
+          stored.email || `${formatted.replace(/\D/g, "")}@users.gwa.local`
+
+        let userId = stored.userId !== "pending" ? stored.userId : ""
+
+        if (!userId || userId === "pending") {
+          const { data: created, error: createErr } =
+            await admin.auth.admin.createUser({
+              email: syntheticEmail,
+              email_confirm: true,
+              phone: formatted,
+              phone_confirm: true,
+              user_metadata: {
+                phone: formatted,
+                auth_method: "phone",
+              },
+            })
+
+          if (createErr || !created.user) {
+            console.error("[auth/verify-otp] createUser", createErr?.message)
+            const msg = (createErr?.message || "").toLowerCase()
+            const taken =
+              msg.includes("already") ||
+              msg.includes("registered") ||
+              msg.includes("exists")
+            return NextResponse.json(
+              {
+                error: taken
+                  ? "Ce numéro est déjà associé à un compte. Connectez-vous."
+                  : "Impossible de créer le compte. Réessayez.",
+                code: taken ? "PHONE_ALREADY_USED" : "REGISTER_FAILED",
+              },
+              { status: 400 },
+            )
+          }
+          userId = created.user.id
+        }
+
+        await clearOtp(formatted)
+
+        const { data: linkData, error: linkError } =
+          await admin.auth.admin.generateLink({
+            type: "magiclink",
+            email: syntheticEmail,
+          })
+
+        if (linkError || !linkData?.properties?.hashed_token) {
+          console.error("[auth/verify-otp] register generateLink", linkError?.message)
+          return NextResponse.json(
+            { error: "Impossible de créer la session. Réessayez." },
+            { status: 500 },
+          )
+        }
+
+        const { data, error } = await supabase.auth.verifyOtp({
+          type: "email",
+          token_hash: linkData.properties.hashed_token,
+        })
+
+        if (error || !data.user) {
+          console.error("[auth/verify-otp] register session", error?.message)
+          return NextResponse.json(
+            { error: "Session expirée. Demandez un nouveau code." },
+            { status: 400 },
+          )
+        }
+
+        await admin.from("profiles").upsert({
+          id: data.user.id,
+          phone: formatted,
+          phone_verified: true,
+          email: syntheticEmail,
+          linked_email: syntheticEmail,
+          auth_method: "phone",
+          updated_at: new Date().toISOString(),
+        })
+
+        if (profileData) {
+          const mappedType = profileData.userType
+            ? USER_TYPE_MAP[profileData.userType] || profileData.userType
+            : undefined
+          const profileUpdate = {
+            phone: formatted,
+            full_name: profileData.name || undefined,
+            user_type: mappedType,
+            country: profileData.country || undefined,
+            city: profileData.city || undefined,
+            auth_method: "phone" as const,
+          }
+          const completion = computeProfileCompletion({
+            ...profileUpdate,
+            email: syntheticEmail,
+          })
+          await admin
+            .from("profiles")
+            .update({
+              ...profileUpdate,
+              profile_completion_pct: completion,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", data.user.id)
+        }
+
+        const { path, isNewUser } = await resolvePostAuthRedirect(
+          supabase,
+          data.user.id,
+        )
+        await runScg(data.user.id)
+
+        return NextResponse.json({
+          success: true,
+          is_new_user: isNewUser,
+          redirect_to: path,
+          user: { id: data.user.id, phone: formatted },
+        })
+      }
+
       const { data: linkData, error: linkError } =
         await admin.auth.admin.generateLink({
           type: "magiclink",

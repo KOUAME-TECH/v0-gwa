@@ -187,6 +187,8 @@ function MarketplaceContent() {
     useShopVoiceTour(tourProducts)
 
   useEffect(() => {
+    // Ne PAS auto-démarrer le TTS : les navigateurs bloquent sans geste utilisateur.
+    // On active seulement le mode écoute ; l'utilisateur tape « Parcours ».
     if (!isDigest || digestProducts.length === 0 || digestStartedRef.current || isLoading) return
     digestStartedRef.current = true
     try {
@@ -194,9 +196,7 @@ function MarketplaceContent() {
     } catch {
       /* ignore */
     }
-    const timer = setTimeout(() => startTour(), 900)
-    return () => clearTimeout(timer)
-  }, [digestProducts.length, isDigest, isLoading, startTour])
+  }, [digestProducts.length, isDigest, isLoading])
 
   function productListenProps(p: Product) {
     return {
