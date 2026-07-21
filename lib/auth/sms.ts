@@ -51,7 +51,11 @@ export async function sendSmsOtp(
 
   return {
     success: false,
+    provider: twilio.provider || at.provider || termii.provider,
     error:
+      (twilio.provider ? twilio.error : null) ||
+      (at.provider ? at.error : null) ||
+      (termii.provider ? termii.error : null) ||
       twilio.error ||
       at.error ||
       termii.error ||
