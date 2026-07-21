@@ -22,7 +22,10 @@ import { formatDistanceToNow } from "date-fns"
 import { fr } from "date-fns/locale"
 import { toast } from "sonner"
 import { EscrowStepper } from "@/components/orders/escrow-stepper"
+import { LitigeDialog } from "@/components/orders/litige-dialog"
 import {
+  canBuyerConfirmReception,
+  canOpenLitige,
   normalizeOrderStatus,
   ORDER_STATUS_LABELS,
 } from "@/lib/orders/escrow-flow"
@@ -89,6 +92,7 @@ export default function OrdersPage() {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
   const [loadingAudit, setLoadingAudit] = useState(false)
   const [user, setUser] = useState<any>(null)
+  const [litigeOrderId, setLitigeOrderId] = useState<string | null>(null)
   
   const supabase = createClient()
 
@@ -195,21 +199,8 @@ export default function OrdersPage() {
     loadOrders()
   }
 
-  async function openLitige(orderId: string) {
-    const description = window.prompt("Décris le problème (litige) :")
-    if (!description?.trim()) return
-    const res = await fetch(`/api/orders/${orderId}/litige`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ description: description.trim() }),
-    })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) {
-      toast.error(data.error || "Litige impossible")
-      return
-    }
-    toast.success("Litige ouvert — fonds gelés")
-    loadOrders()
+  function openLitige(orderId: string) {
+    setLitigeOrderId(orderId)
   }
 
   const filteredOrders = orders.filter(order => 
@@ -376,7 +367,7 @@ export default function OrdersPage() {
                     key={order.id} 
                     order={order} 
                     onViewDetails={() => handleViewDetails(order)}
-                    .onUpdateStatus={updateOrderStatus}
+                    onUpdateStatus={updateOrderStatus}
                     onConfirmReception={confirmReception}
                     onOpenLitige={openLitige}
                     currentUserId={user?.id}
@@ -413,7 +404,7 @@ export default function OrdersPage() {
                     key={order.id} 
                     order={order} 
                     onViewDetails={() => handleViewDetails(order)}
-                    .onUpdateStatus={updateOrderStatus}
+                    onUpdateStatus={updateOrderStatus}
                     onConfirmReception={confirmReception}
                     onOpenLitige={openLitige}
                     currentUserId={user?.id}
@@ -431,7 +422,7 @@ export default function OrdersPage() {
                     key={order.id} 
                     order={order} 
                     onViewDetails={() => handleViewDetails(order)}
-                    .onUpdateStatus={updateOrderStatus}
+                    onUpdateStatus={updateOrderStatus}
                     onConfirmReception={confirmReception}
                     onOpenLitige={openLitige}
                     currentUserId={user?.id}
@@ -537,6 +528,15 @@ export default function OrdersPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <LitigeDialog
+        orderId={litigeOrderId}
+        open={!!litigeOrderId}
+        onOpenChange={(open) => {
+          if (!open) setLitigeOrderId(null)
+        }}
+        onSuccess={() => loadOrders()}
+      />
     </div>
   )
 }
@@ -560,17 +560,17 @@ function OrderCard({
   const statusInfo = orderStatuses[status] || orderStatuses.pending
   const StatusIcon = statusInfo.icon
   const isSeller = order.seller_id === currentUserId
-  const canConfirmBuyer =
-    !isSeller &&
-    order.payment_status === "paid" &&
-    ["shipped", "processing", "confirmed"].includes(status) &&
-    order.escrow_status !== "released" &&
-    order.escrow_status !== "frozen"
-  const canLitige =
-    status !== "disputed" &&
-    status !== "cancelled" &&
-    status !== "delivered" &&
-    order.payment_status === "paid"
+  const canConfirmBuyer = canBuyerConfirmReception({
+    isSeller,
+    payment_status: order.payment_status,
+    escrow_status: order.escrow_status as "pending" | "held" | "released" | "frozen" | null | undefined,
+    status,
+  })
+  const canLitige = canOpenLitige({
+    payment_status: order.payment_status,
+    escrow_status: order.escrow_status as "pending" | "held" | "released" | "frozen" | null | undefined,
+    status,
+  })
 
   return (
     <Card className="hover:shadow-lg transition-shadow">

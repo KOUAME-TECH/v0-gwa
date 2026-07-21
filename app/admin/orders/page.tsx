@@ -39,13 +39,22 @@ import {
   CheckCircle,
   XCircle,
   Package,
+  AlertTriangle,
 } from "lucide-react"
+import { EscrowStepper } from "@/components/orders/escrow-stepper"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 interface Order {
   id: string
   order_number: string
   status: string
   payment_status: string
+  escrow_status?: string | null
   payment_method?: string
   subtotal: number
   shipping_cost: number
@@ -76,6 +85,7 @@ export default function AdminOrdersPage() {
   const [filterPayment, setFilterPayment] = useState<string>("all")
   const [totalCount, setTotalCount] = useState(0)
   const [page, setPage] = useState(0)
+  const [detailOrder, setDetailOrder] = useState<Order | null>(null)
   const pageSize = 20
 
   useEffect(() => {
@@ -180,6 +190,7 @@ export default function AdminOrdersPage() {
       shipped: { label: "Expédiée", variant: "default" },
       delivered: { label: "Livrée", variant: "outline" },
       cancelled: { label: "Annulée", variant: "destructive" },
+      disputed: { label: "Litige", variant: "destructive" },
     }
     const config = statusConfig[status] || { label: status, variant: "secondary" as const }
     return <Badge variant={config.variant}>{config.label}</Badge>
@@ -237,6 +248,7 @@ export default function AdminOrdersPage() {
                   <SelectItem value="processing">En préparation</SelectItem>
                   <SelectItem value="shipped">Expédiées</SelectItem>
                   <SelectItem value="delivered">Livrées</SelectItem>
+                  <SelectItem value="disputed">Litiges</SelectItem>
                   <SelectItem value="cancelled">Annulées</SelectItem>
                 </SelectContent>
               </Select>
@@ -277,6 +289,7 @@ export default function AdminOrdersPage() {
                       <TableHead>Montant</TableHead>
                       <TableHead>Statut</TableHead>
                       <TableHead>Paiement</TableHead>
+                      <TableHead>Escrow</TableHead>
                       <TableHead>Date</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
@@ -314,6 +327,19 @@ export default function AdminOrdersPage() {
                         </TableCell>
                         <TableCell>{getStatusBadge(order.status)}</TableCell>
                         <TableCell>{getPaymentBadge(order.payment_status)}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              order.escrow_status === "frozen"
+                                ? "destructive"
+                                : order.escrow_status === "held"
+                                  ? "default"
+                                  : "secondary"
+                            }
+                          >
+                            {order.escrow_status || "—"}
+                          </Badge>
+                        </TableCell>
                         <TableCell className="text-sm">{formatDate(order.created_at)}</TableCell>
                         <TableCell className="text-right">
                           <DropdownMenu>
@@ -325,15 +351,9 @@ export default function AdminOrdersPage() {
                             <DropdownMenuContent align="end">
                               <DropdownMenuLabel>Actions</DropdownMenuLabel>
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                onClick={() => {
-                                  alert(
-                                    `Commande ${order.order_number}\nStatut: ${order.status}\nPaiement: ${order.payment_status}\nMontant: ${order.total_amount} FCFA`,
-                                  )
-                                }}
-                              >
+                              <DropdownMenuItem onClick={() => setDetailOrder(order)}>
                                 <Eye className="h-4 w-4 mr-2" />
-                                Voir les détails
+                                Voir escrow / détails
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuLabel className="text-xs text-muted-foreground">
@@ -354,6 +374,10 @@ export default function AdminOrdersPage() {
                               <DropdownMenuItem onClick={() => updateOrderStatus(order.id, "delivered")}>
                                 <CheckCircle className="h-4 w-4 mr-2" />
                                 Livrée
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => updateOrderStatus(order.id, "disputed")}>
+                                <AlertTriangle className="h-4 w-4 mr-2" />
+                                Marquer litige
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem 
@@ -401,6 +425,47 @@ export default function AdminOrdersPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!detailOrder} onOpenChange={(o) => !o && setDetailOrder(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {detailOrder?.order_number || "Commande"}
+            </DialogTitle>
+          </DialogHeader>
+          {detailOrder && (
+            <div className="space-y-4">
+              <div className="text-sm text-muted-foreground space-y-1">
+                <p>
+                  Statut: <strong>{detailOrder.status}</strong> · Paiement:{" "}
+                  <strong>{detailOrder.payment_status}</strong>
+                </p>
+                <p>
+                  Montant:{" "}
+                  <strong>{formatCurrency(detailOrder.total_amount)}</strong>
+                </p>
+                <p>
+                  Acheteur: {detailOrder.buyer?.full_name} · Vendeur:{" "}
+                  {detailOrder.seller?.full_name}
+                </p>
+              </div>
+              <EscrowStepper
+                payment_status={detailOrder.payment_status}
+                escrow_status={
+                  detailOrder.escrow_status as
+                    | "pending"
+                    | "held"
+                    | "released"
+                    | "frozen"
+                    | null
+                    | undefined
+                }
+                status={detailOrder.status}
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

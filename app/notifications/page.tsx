@@ -16,7 +16,7 @@ import {
 } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { fr } from "date-fns/locale"
-import { Button } from "@/components/ui/button"
+import { PushSettingsCard } from "@/components/notifications/push-settings-card"
 
 interface Notification {
   id: string
@@ -153,6 +153,10 @@ export default function NotificationsPage() {
           )}
         </div>
       </header>
+
+      <div className="px-4 pt-4">
+        <PushSettingsCard />
+      </div>
 
       {notifications.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 px-4 text-center">

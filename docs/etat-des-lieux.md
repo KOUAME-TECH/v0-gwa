@@ -1,30 +1,29 @@
-# État des lieux GWA — 21 juil. 2026 (MAJ soir)
+# État des lieux GWA — 21 juil. 2026 (fermeture PARTIEL)
 
-**Branche :** `main`  
-**Prod :** https://v0-gwa-mu.vercel.app — healthy  
-**Tests :** 88 Vitest OK  
+**Branche travail :** `cursor/cloud-agent-1784519810125-lmf8f`  
+**Prod :** https://v0-gwa-mu.vercel.app  
+Voir [ops-gaps-closure.md](./ops-gaps-closure.md) pour les actions humaines.
 
-Voir aussi [ops-gaps-closure.md](./ops-gaps-closure.md) pour les actions humaines restantes.
+## Gaps fermés dans le code (PARTIEL → OK)
 
-## Sprint code du 21 juil. (fermé dans le code)
-
-| Gap | Statut code |
-|-----|-------------|
-| Stepper escrow visible | **OK** — panier, confirmation, dashboard commandes |
-| Confirm / litige branchés UI | **OK** — APIs + boutons dashboard ; litige via admin client |
-| Page `/post/[id]` | **OK** — restaurée avec commentaires vocaux |
-| Coach SCG pédagogique | **OK** — 2 actions + TTS |
-| Offline utile | **OK** — brouillons IndexedDB publier produit/post |
-| Push OneSignal | **OK** — diagnostic + test `GET/POST /api/push/status` |
-| Seed 1er admin | **OK** — `POST /api/admin/bootstrap` si zéro admin |
-| Admin analytics profondeur | **OK** — escrow held + litiges + labels statut alignés |
-| HIBP campagne | **OK** — prolongée au 1 sept. (toggle Dashboard = humain) |
-| `CRON_SECRET` / OTP AT live | **Ops humain** — procédure dans ops-gaps-closure.md |
+| Gap | Statut |
+|-----|--------|
+| Stepper escrow visible | **OK** — panier, confirmation, dashboard + **admin orders** ; étape Confirmé (3) corrigée |
+| Confirm / litige UI | **OK** — gate `held` ; dialog motif+preuve ; reasons CHECK DB ; admin resolve → escrow |
+| Page `/post/[id]` | **OK** — FormData aligné feed (`type`/`id`/`text`) |
+| Coach SCG | **OK** — 3 actions + bandes score ; `/scg` + **dashboard farmer** |
+| Offline utile | **OK** — IndexedDB + hint reconnect si brouillon |
+| Push OneSignal | **OK** — `/notifications` Activer/Tester + `/api/push/status` |
+| Seed 1er admin | **OK** — bootstrap ; GET auth-gate |
+| Orders / disputes / analytics | **OK** — profondeur escrow + période analytics |
+| HIBP campagne | **OK** code — toggle Dashboard = humain |
+| `CRON_SECRET` / OTP AT | **Ops humain** |
 
 ## Bloqueurs encore humains
 
-1. Africa’s Talking SMS live (ou Twilio/Termii)
-2. Feexpay merchant checkout URL
+1. Africa’s Talking / Twilio / Termii live
+2. Feexpay merchant checkout
 3. Poser `CRON_SECRET` sur Vercel
-4. Toggle HIBP dans Supabase Dashboard
-5. Appeler bootstrap admin une fois si besoin
+4. Toggle HIBP Supabase
+5. `POST /api/admin/bootstrap` une fois si besoin
+6. Clés OneSignal + test navigateur HTTPS
