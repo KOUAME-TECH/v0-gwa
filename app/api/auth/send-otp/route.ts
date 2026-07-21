@@ -14,7 +14,7 @@ import {
   canSendOtp,
   clearOtp,
 } from "@/lib/auth/otp-store"
-import { hasSmsProvider, sendSmsOtp } from "@/lib/auth/sms"
+import { hasSmsProvider, hasTwilioProvider, sendSmsOtp } from "@/lib/auth/sms"
 
 /**
  * POST /api/auth/send-otp
@@ -163,9 +163,10 @@ export async function POST(request: Request) {
 
     const linkedEmail = otpEmail
 
-    // Préférer SMS custom (Twilio/AT) quand configuré — évite décalage Path A
-    // Supabase (code différent / SMS jamais reçu) vs verify custom.
-    if (mode === "login" && !hasSmsProvider()) {
+    // Login : Path A Supabase d'abord si Twilio Vercel pas prêt
+    // (Twilio est souvent configuré côté Supabase Auth Phone).
+    // Si TWILIO_* est sur Vercel → Path B custom prioritaire.
+    if (mode === "login" && !hasTwilioProvider()) {
       const { error: smsError } = await supabase.auth.signInWithOtp({
         phone: formatted,
         options: { shouldCreateUser: false },
@@ -188,10 +189,10 @@ export async function POST(request: Request) {
       }
 
       console.warn("[auth/send-otp] supabase phone:", smsError.message)
-      return unknownPhone
+      // continue → Path B AT/Termii si dispo
     }
 
-    if (mode === "login" && !linkedEmail) {
+    if (mode === "login" && !linkedEmail && hasTwilioProvider()) {
       return NextResponse.json(
         {
           error:
@@ -199,6 +200,28 @@ export async function POST(request: Request) {
           code: "PHONE_NO_EMAIL",
         },
         { status: 400 },
+      )
+    }
+
+    if (!hasSmsProvider() && mode !== "login") {
+      return NextResponse.json(
+        {
+          error:
+            "SMS non configuré. Ajoutez TWILIO_* ou AT_API_KEY sur Vercel.",
+          code: "SMS_PROVIDER_MISSING",
+        },
+        { status: 503 },
+      )
+    }
+
+    if (mode === "login" && !hasSmsProvider()) {
+      return NextResponse.json(
+        {
+          error:
+            "Impossible d'envoyer le SMS pour le moment. Réessayez plus tard.",
+          code: "SMS_SEND_FAILED",
+        },
+        { status: 502 },
       )
     }
 
@@ -222,7 +245,7 @@ export async function POST(request: Request) {
     const sms = await sendSmsOtp(formatted, code)
     if (!sms.success) {
       console.error("[auth/send-otp] sms", sms.error)
-      // Fallback Path A (Supabase Phone) pour login si Twilio/AT down
+      // Fallback Path A pour login
       if (mode === "login") {
         const { error: smsError } = await supabase.auth.signInWithOtp({
           phone: formatted,

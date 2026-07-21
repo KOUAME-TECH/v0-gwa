@@ -19,14 +19,18 @@ function env(name: string): string {
   return (process.env[name] || "").replace(/^"|"$/g, "").trim()
 }
 
-export function hasSmsProvider(): boolean {
-  const at = !!(env("AT_API_KEY") || env("AFRICASTALKING_API_KEY"))
-  const twilio =
+export function hasTwilioProvider(): boolean {
+  return (
     !!env("TWILIO_ACCOUNT_SID") &&
     !!env("TWILIO_AUTH_TOKEN") &&
     !!(env("TWILIO_PHONE_NUMBER") || env("TWILIO_MESSAGING_SERVICE_SID"))
+  )
+}
+
+export function hasSmsProvider(): boolean {
+  const at = !!(env("AT_API_KEY") || env("AFRICASTALKING_API_KEY"))
   const termii = !!env("TERMII_API_KEY")
-  return at || twilio || termii
+  return hasTwilioProvider() || at || termii
 }
 
 export async function sendSmsOtp(
