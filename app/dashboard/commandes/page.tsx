@@ -367,7 +367,7 @@ export default function OrdersPage() {
                     key={order.id} 
                     order={order} 
                     onViewDetails={() => handleViewDetails(order)}
-                    .onUpdateStatus={updateOrderStatus}
+                    onUpdateStatus={updateOrderStatus}
                     onConfirmReception={confirmReception}
                     onOpenLitige={openLitige}
                     currentUserId={user?.id}
@@ -404,7 +404,7 @@ export default function OrdersPage() {
                     key={order.id} 
                     order={order} 
                     onViewDetails={() => handleViewDetails(order)}
-                    .onUpdateStatus={updateOrderStatus}
+                    onUpdateStatus={updateOrderStatus}
                     onConfirmReception={confirmReception}
                     onOpenLitige={openLitige}
                     currentUserId={user?.id}
@@ -422,7 +422,7 @@ export default function OrdersPage() {
                     key={order.id} 
                     order={order} 
                     onViewDetails={() => handleViewDetails(order)}
-                    .onUpdateStatus={updateOrderStatus}
+                    onUpdateStatus={updateOrderStatus}
                     onConfirmReception={confirmReception}
                     onOpenLitige={openLitige}
                     currentUserId={user?.id}
