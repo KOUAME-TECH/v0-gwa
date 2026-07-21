@@ -83,6 +83,7 @@ export function BottomNav() {
   if (
     pathname?.startsWith("/auth") || 
     pathname?.startsWith("/admin") ||
+    pathname?.startsWith("/demo") ||
     pathname?.startsWith("/messages/") ||
     pathname?.startsWith("/profil/edit") ||
     pathname?.startsWith("/dashboard/")
