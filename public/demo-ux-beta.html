@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>GWA — Démo UX bêta</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --green: #1F5C2E;
+      --green-soft: #F0F7F2;
+      --gold: #C27D10;
+      --gold-soft: #FFF8E8;
+      --cream: #F7F3EB;
+      --ink: #1C1917;
+      --muted: #6B7280;
+      --line: #E5E7EB;
+      --white: #ffffff;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      font-family: "DM Sans", system-ui, sans-serif;
+      background: var(--cream);
+      color: var(--ink);
+      padding-bottom: 5.5rem;
+    }
+    .serif { font-family: "Fraunces", Georgia, serif; }
+    .shell { max-width: 28rem; margin: 0 auto; }
+    .banner {
+      position: sticky; top: 0; z-index: 40;
+      background: var(--gold-soft);
+      border-bottom: 1px solid color-mix(in srgb, var(--gold) 25%, transparent);
+      padding: 0.5rem 0.75rem;
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 11px; font-weight: 500; color: var(--gold);
+    }
+    .banner a { color: var(--green); }
+    .hero {
+      position: relative;
+      padding: 1.5rem 1.25rem 1rem;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: "";
+      position: absolute; inset: 0;
+      background:
+        radial-gradient(ellipse 80% 50% at 15% 0%, #1F5C2E22, transparent),
+        radial-gradient(ellipse 55% 40% at 95% 15%, #C27D1020, transparent);
+      pointer-events: none;
+    }
+    .brand { display: flex; align-items: center; gap: 0.6rem; position: relative; }
+    .brand img { width: 40px; height: 40px; border-radius: 10px; box-shadow: 0 1px 2px #0001; }
+    .brand span { font-weight: 700; font-size: 1.5rem; color: var(--green); letter-spacing: -0.02em; }
+    h1 {
+      position: relative;
+      margin: 1.25rem 0 0.5rem;
+      font-size: 1.85rem;
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+      color: var(--green);
+      font-weight: 600;
+    }
+    .lead { position: relative; margin: 0; max-width: 22rem; font-size: 15px; line-height: 1.55; color: #4B5563; }
+    .cards { padding: 0 1rem 1.5rem; display: grid; gap: 0.75rem; }
+    .card {
+      display: flex; gap: 0.75rem; width: 100%;
+      text-align: left; cursor: pointer;
+      border: 1px solid color-mix(in srgb, var(--green) 12%, transparent);
+      background: color-mix(in srgb, var(--white) 92%, transparent);
+      border-radius: 1rem; padding: 1rem;
+      box-shadow: 0 1px 2px #00000008;
+      transition: transform .12s ease;
+    }
+    .card:active { transform: scale(0.98); }
+    .icon {
+      width: 2.75rem; height: 2.75rem; border-radius: 0.75rem;
+      background: color-mix(in srgb, var(--green) 10%, transparent);
+      color: var(--green);
+      display: grid; place-items: center; flex-shrink: 0;
+      font-size: 1.15rem;
+    }
+    .card h3 { margin: 0; font-size: 0.95rem; font-weight: 600; }
+    .card p { margin: 0.2rem 0 0; font-size: 0.85rem; color: var(--muted); }
+    .wave-btn {
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      margin-top: 0.5rem; border: 0; cursor: pointer;
+      border-radius: 999px; padding: 0.25rem 0.65rem;
+      font-size: 12px; font-weight: 500;
+      background: color-mix(in srgb, var(--green) 10%, transparent);
+      color: var(--green);
+    }
+    .wave-btn.playing {
+      background: color-mix(in srgb, var(--gold) 15%, transparent);
+      color: var(--gold);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold) 30%, transparent);
+    }
+    .bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; }
+    .bars i {
+      width: 2px; border-radius: 99px; background: currentColor;
+      display: block;
+    }
+    .bars i:nth-child(1) { height: 6px; }
+    .bars i:nth-child(2) { height: 11px; }
+    .bars i:nth-child(3) { height: 6px; }
+    .wave-btn.playing .bars i { animation: wave .75s ease-in-out infinite; }
+    .wave-btn.playing .bars i:nth-child(2) { animation-delay: .12s; }
+    .wave-btn.playing .bars i:nth-child(3) { animation-delay: .24s; }
+    @keyframes wave {
+      0%, 100% { height: 5px; }
+      50% { height: 12px; }
+    }
+    .trust {
+      display: flex; gap: 0.5rem; align-items: flex-start;
+      margin: 0 1rem 1rem; padding: 0.65rem 0.75rem;
+      border-radius: 0.75rem;
+      border: 1px solid color-mix(in srgb, var(--green) 15%, transparent);
+      background: var(--green-soft);
+      font-size: 12px; line-height: 1.45; color: #374151;
+    }
+    .panel { padding: 1rem 1rem 2rem; display: none; }
+    .panel.active { display: block; }
+    .back {
+      border: 0; background: transparent; color: #4B5563;
+      font-size: 14px; padding: 0; margin-bottom: 0.75rem; cursor: pointer;
+    }
+    h2 { margin: 0; font-size: 1.5rem; color: var(--green); font-weight: 600; }
+    .sub { margin: 0.35rem 0 0; font-size: 14px; color: var(--muted); }
+    .photo {
+      margin-top: 1.25rem; width: 100%; aspect-ratio: 4/3;
+      border: 2px dashed color-mix(in srgb, var(--green) 30%, transparent);
+      border-radius: 1rem; background: var(--white);
+      display: grid; place-items: center; color: var(--green); text-align: center;
+      font-size: 14px; font-weight: 500;
+    }
+    .voice-row, .row-input {
+      margin-top: 0.75rem; width: 100%;
+      border: 1px solid color-mix(in srgb, var(--green) 15%, transparent);
+      background: var(--white); border-radius: 1rem; padding: 0.85rem 1rem;
+      display: flex; align-items: center; gap: 0.75rem;
+    }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: 0.75rem; }
+    label { font-size: 12px; font-weight: 500; color: #4B5563; display: block; margin-bottom: 0.25rem; }
+    input {
+      width: 100%; height: 3rem; border-radius: 0.75rem;
+      border: 1px solid var(--line); background: var(--white);
+      padding: 0 0.75rem; font-size: 1rem; font-family: inherit;
+    }
+    .cta {
+      margin-top: 1rem; width: 100%; height: 3rem; border: 0; border-radius: 0.75rem;
+      background: var(--green); color: white; font-weight: 600; font-size: 1rem;
+      cursor: pointer;
+    }
+    .cta:disabled { opacity: 0.4; }
+    .cta.gold { background: var(--gold); }
+    .success {
+      margin-top: 2rem; text-align: center; background: var(--white);
+      border: 1px solid color-mix(in srgb, var(--green) 20%, transparent);
+      border-radius: 1rem; padding: 1.5rem;
+    }
+    .check {
+      width: 3.5rem; height: 3.5rem; margin: 0 auto;
+      border-radius: 999px; background: var(--green); color: white;
+      display: grid; place-items: center; font-size: 1.5rem;
+    }
+    .box {
+      margin-top: 1.25rem; background: var(--white);
+      border: 1px solid var(--line); border-radius: 1rem; padding: 1rem;
+    }
+    .steps {
+      display: flex; justify-content: space-between; gap: 0.25rem; margin-top: 1rem;
+    }
+    .step { flex: 1; text-align: center; }
+    .dot {
+      width: 2rem; height: 2rem; margin: 0 auto 0.35rem;
+      border-radius: 999px; display: grid; place-items: center;
+      font-size: 12px; font-weight: 700;
+      background: var(--line); color: #9CA3AF;
+    }
+    .dot.on { background: var(--green); color: white; }
+    .dot.cur { box-shadow: 0 0 0 2px var(--cream), 0 0 0 4px var(--gold); }
+    .step span { font-size: 10px; font-weight: 500; color: #9CA3AF; }
+    .step.on span { color: var(--green); }
+    .status {
+      margin-top: 1.25rem; padding: 0.65rem 0.75rem;
+      border-radius: 0.75rem; background: var(--green-soft);
+      color: var(--green); font-size: 14px;
+    }
+    .score {
+      margin-top: 1.25rem; background: var(--white);
+      border: 1px solid color-mix(in srgb, var(--green) 15%, transparent);
+      border-radius: 1rem; padding: 1rem;
+    }
+    .score .n { font-size: 2.5rem; color: var(--green); margin: 0.15rem 0; }
+    .tips {
+      margin-top: 0.75rem; background: var(--gold-soft);
+      border-radius: 0.75rem; padding: 0.65rem 0.75rem;
+      font-size: 14px; color: #4B5563;
+    }
+    .tips strong { color: var(--gold); }
+    .list { display: grid; gap: 0.75rem; margin-top: 1.25rem; }
+    .list a, .list button {
+      display: flex; align-items: center; gap: 0.75rem; width: 100%;
+      text-align: left; text-decoration: none; color: inherit;
+      background: var(--white); border: 1px solid var(--line);
+      border-radius: 1rem; padding: 1rem; cursor: pointer; font: inherit;
+    }
+    .list a.wa { background: var(--green); color: white; border-color: transparent; }
+    .nav {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 50;
+      background: color-mix(in srgb, var(--white) 95%, transparent);
+      backdrop-filter: blur(10px);
+      border-top: 1px solid var(--line);
+      padding: 0.35rem 0.5rem max(0.5rem, env(safe-area-inset-bottom));
+    }
+    .nav-inner {
+      max-width: 28rem; margin: 0 auto;
+      display: flex; justify-content: space-around;
+    }
+    .nav button {
+      flex: 1; border: 0; background: transparent; cursor: pointer;
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
+      padding: 0.5rem; font-size: 11px; font-weight: 500; color: var(--muted);
+      font-family: inherit;
+    }
+    .nav button.on { color: var(--green); }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="banner">
+    <span>Démo UX bêta — prototype interactif</span>
+    <a href="/">Quitter</a>
+  </div>
+
+  <div class="shell">
+    <!-- ACCUEIL -->
+    <section id="screen-accueil" class="panel active">
+      <div class="hero">
+        <div class="brand">
+          <img src="/icon-192.png" alt="GWA" />
+          <span>GWA</span>
+        </div>
+        <h1 class="serif">Vendre. Être payé.<br />Avancer sereinement.</h1>
+        <p class="lead">Trois gestes. Pas de jargon. L’argent reste protégé jusqu’à la livraison.</p>
+        <div style="position:relative;margin-top:0.75rem">
+          <button type="button" class="wave-btn" data-speak="Bienvenue sur GWA. Tu peux vendre tes produits et être payé à temps. Tu peux demander une avance sur facture. Tu peux suivre ton score de confiance. Choisis un bloc pour commencer.">
+            <span class="bars" aria-hidden="true"><i></i><i></i><i></i></span>
+            Me l’expliquer
+          </button>
+        </div>
+      </div>
+
+      <div class="cards">
+        <button type="button" class="card" data-go="vendre">
+          <span class="icon">📷</span>
+          <span>
+            <h3>Vendre et être payé à temps</h3>
+            <p>Photo, voix, prix. L’acheteur paie ; tu touches après livraison.</p>
+            <button type="button" class="wave-btn" data-speak="Pour vendre : tu prends une photo, tu parles le prix et la quantité, tu publies. Quand quelqu’un achète, l’argent est gardé en sécurité jusqu’à ce que la livraison soit confirmée.">
+              <span class="bars" aria-hidden="true"><i></i><i></i><i></i></span> Me l’expliquer
+            </button>
+          </span>
+        </button>
+
+        <button type="button" class="card" data-go="avance">
+          <span class="icon">💰</span>
+          <span>
+            <h3>Demander une avance</h3>
+            <p>Sur une vente confirmée, selon ton score SCG.</p>
+            <button type="button" class="wave-btn" data-speak="L’avance sur facture te donne de la trésorerie avant le paiement final. Ton score de confiance GWA doit être suffisant.">
+              <span class="bars" aria-hidden="true"><i></i><i></i><i></i></span> Me l’expliquer
+            </button>
+          </span>
+        </button>
+
+        <button type="button" class="card" data-go="moi">
+          <span class="icon">📈</span>
+          <span>
+            <h3>Suivre mon score</h3>
+            <p>Un coach clair : où tu en es, et 2 actions pour monter.</p>
+            <button type="button" class="wave-btn" data-speak="Le score de confiance GWA montre si tu livres bien et à temps. Ce n’est pas une punition. C’est un coach.">
+              <span class="bars" aria-hidden="true"><i></i><i></i><i></i></span> Me l’expliquer
+            </button>
+          </span>
+        </button>
+      </div>
+
+      <div class="trust">
+        <span>🛡</span>
+        <span>Paiements via <strong>Feexpay CI</strong>. Fonds en séquestre jusqu’à confirmation de livraison. Ton score SCG n’est pas vendu.</span>
+      </div>
+    </section>
+
+    <!-- VENDRE -->
+    <section id="screen-vendre" class="panel">
+      <button type="button" class="back" data-go="accueil">← Retour</button>
+      <h2 class="serif">Publier une offre</h2>
+      <p class="sub">Un seul écran. Photo + voix + prix + quantité.</p>
+      <button type="button" class="wave-btn" data-speak="Prends une photo de ton produit. Enregistre une note vocale. Indique le prix et la quantité. Puis appuie sur Publier.">
+        <span class="bars" aria-hidden="true"><i></i><i></i><i></i></span> Me l’expliquer
+      </button>
+
+      <div id="sell-form">
+        <div class="photo">📷<br />Ajouter une photo<br /><span style="font-size:12px;color:#9CA3AF;font-weight:400">(démo)</span></div>
+        <div class="voice-row">
+          <span class="bars" style="color:var(--green)"><i></i><i></i><i></i></span>
+          <div>
+            <div style="font-size:14px;font-weight:500">Note vocale</div>
+            <div style="font-size:12px;color:var(--muted)">Décris ton offre à voix haute</div>
+          </div>
+        </div>
+        <div class="grid2">
+          <div>
+            <label>Prix (FCFA)</label>
+            <input id="price" inputmode="numeric" value="1500" />
+          </div>
+          <div>
+            <label>Quantité (kg)</label>
+            <input id="qty" inputmode="numeric" value="50" />
+          </div>
+        </div>
+        <button type="button" class="cta" id="btn-publish">Publier l’offre</button>
+      </div>
+
+      <div id="sell-ok" class="success hidden">
+        <div class="check">✓</div>
+        <p style="margin:1rem 0 0.25rem;font-weight:600;color:var(--green)">Ton offre est publiée</p>
+        <p id="sell-summary" style="margin:0;font-size:14px;color:var(--muted)"></p>
+        <div class="bars playing" style="justify-content:center;margin-top:0.75rem;color:var(--green);height:20px">
+          <i style="animation:wave .75s ease-in-out infinite"></i>
+          <i style="animation:wave .75s ease-in-out infinite .12s"></i>
+          <i style="animation:wave .75s ease-in-out infinite .24s"></i>
+        </div>
+        <button type="button" class="cta gold" data-go="payer" style="margin-top:1.5rem">Voir le parcours paiement</button>
+      </div>
+    </section>
+
+    <!-- PAYER -->
+    <section id="screen-payer" class="panel">
+      <button type="button" class="back" data-go="accueil">← Retour</button>
+      <h2 class="serif">Paiement protégé</h2>
+      <p class="sub">Tu paies maintenant. Le vendeur touche l’argent après confirmation de livraison.</p>
+      <button type="button" class="wave-btn" data-speak="Tu paies maintenant. L’argent est mis en séquestre chez Feexpay. Quand tu confirmes la réception, l’argent est libéré pour le vendeur.">
+        <span class="bars" aria-hidden="true"><i></i><i></i><i></i></span> Me l’expliquer
+      </button>
+
+      <div class="box">
+        <div style="font-size:11px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:#9CA3AF">Progression</div>
+        <div class="steps" id="escrow-steps">
+          <div class="step on"><div class="dot on cur">1</div><span>Payer</span></div>
+          <div class="step"><div class="dot">2</div><span>Séquestre</span></div>
+          <div class="step"><div class="dot">3</div><span>Livré</span></div>
+          <div class="step"><div class="dot">4</div><span>Confirmé</span></div>
+          <div class="step"><div class="dot">5</div><span>Libéré</span></div>
+        </div>
+        <div class="status" id="escrow-status">Prêt à payer via Feexpay CI.</div>
+        <button type="button" class="cta" id="btn-escrow">Étape suivante (démo)</button>
+        <button type="button" class="back" id="btn-escrow-reset" style="display:block;width:100%;text-align:center;margin-top:0.5rem">Recommencer</button>
+      </div>
+    </section>
+
+    <!-- AVANCE -->
+    <section id="screen-avance" class="panel">
+      <button type="button" class="back" data-go="accueil">← Retour</button>
+      <h2 class="serif">Demander une avance</h2>
+      <p class="sub">Court. Clair. Pas de jargon bancaire.</p>
+      <button type="button" class="wave-btn" data-speak="L’avance te donne de l’argent maintenant sur une vente déjà confirmée. Tu rembourseras quand le paiement final arrivera. Ton score doit être au moins 500.">
+        <span class="bars" aria-hidden="true"><i></i><i></i><i></i></span> Me l’expliquer
+      </button>
+
+      <div class="score">
+        <div style="font-size:14px;color:var(--muted)">Ton score SCG</div>
+        <div class="n serif">540</div>
+        <div style="font-size:14px;font-weight:500;color:var(--green)">Tu es éligible — dossier suffisant pour une avance.</div>
+        <div class="tips">
+          <strong>Pour monter à 600 :</strong><br />
+          1. Livrer 2 commandes à l’heure<br />
+          2. Recevoir une confirmation acheteur sans litige
+        </div>
+      </div>
+
+      <div style="margin-top:1rem">
+        <label>Montant (FCFA)</label>
+        <input value="75000" inputmode="numeric" />
+      </div>
+      <div class="voice-row" style="margin-top:0.75rem">
+        <span class="bars" style="color:var(--green)"><i></i><i></i><i></i></span>
+        <span style="font-size:14px">Justification vocale (optionnel)</span>
+      </div>
+      <button type="button" class="cta" id="btn-avance">Envoyer la demande</button>
+    </section>
+
+    <!-- MOI -->
+    <section id="screen-moi" class="panel">
+      <h2 class="serif">Mon activité</h2>
+      <p class="sub">Produits, commandes, score, avances.</p>
+      <div class="list">
+        <button type="button" data-go="avance">📈 <span><strong>Score SCG · 540</strong><br /><span style="font-size:12px;color:var(--muted)">Coach : 2 actions pour monter</span></span></button>
+        <button type="button" data-go="payer">🛡 <span><strong>Commandes & séquestre</strong><br /><span style="font-size:12px;color:var(--muted)">Voir le stepper escrow</span></span></button>
+        <a class="wa" href="https://wa.me/2250788326019?text=Bonjour%20GWA%2C%20je%20suis%20producteur%20(d%C3%A9mo%20UX).%20J%E2%80%99ai%20besoin%20d%E2%80%99aide%20sur%20%3A%20" target="_blank" rel="noopener">💬 <span><strong>Parler à quelqu’un</strong><br /><span style="font-size:12px;opacity:.85">WhatsApp — template pré-rempli</span></span></a>
+      </div>
+    </section>
+  </div>
+
+  <nav class="nav" aria-label="Navigation démo">
+    <div class="nav-inner">
+      <button type="button" class="on" data-nav="accueil">🛒<span>Marché</span></button>
+      <button type="button" data-nav="moi">💬<span>Messages</span></button>
+      <button type="button" data-nav="moi">👤<span>Moi</span></button>
+    </div>
+  </nav>
+
+  <script>
+    const screens = ["accueil", "vendre", "payer", "avance", "moi"];
+    const escrowMsgs = [
+      "Prêt à payer via Feexpay CI.",
+      "Fonds bloqués en séquestre — le vendeur ne peut pas encore retirer.",
+      "Marchandise marquée livrée — en attente de ta confirmation.",
+      "Tu as confirmé la réception. Libération en cours…",
+      "Fonds libérés au vendeur. Transaction terminée.",
+    ];
+    let escrow = 0;
+    let speakingBtn = null;
+
+    function speak(text, btn) {
+      if (!window.speechSynthesis) return;
+      if (speakingBtn === btn) {
+        speechSynthesis.cancel();
+        btn.classList.remove("playing");
+        speakingBtn = null;
+        return;
+      }
+      speechSynthesis.cancel();
+      document.querySelectorAll(".wave-btn.playing").forEach((b) => b.classList.remove("playing"));
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = "fr-FR";
+      u.rate = 0.92;
+      btn.classList.add("playing");
+      speakingBtn = btn;
+      u.onend = u.onerror = () => {
+        btn.classList.remove("playing");
+        if (speakingBtn === btn) speakingBtn = null;
+      };
+      speechSynthesis.speak(u);
+    }
+
+    function show(id) {
+      speechSynthesis?.cancel();
+      document.querySelectorAll(".wave-btn.playing").forEach((b) => b.classList.remove("playing"));
+      speakingBtn = null;
+      screens.forEach((s) => {
+        document.getElementById("screen-" + s).classList.toggle("active", s === id);
+      });
+      const market = id === "accueil" || id === "vendre" || id === "payer" || id === "avance";
+      document.querySelectorAll(".nav button").forEach((b, i) => {
+        b.classList.toggle("on", market ? i === 0 : i > 0);
+      });
+      window.scrollTo(0, 0);
+    }
+
+    function renderEscrow() {
+      const steps = document.querySelectorAll("#escrow-steps .step");
+      steps.forEach((step, i) => {
+        const dot = step.querySelector(".dot");
+        step.classList.toggle("on", i <= escrow);
+        dot.classList.toggle("on", i <= escrow);
+        dot.classList.toggle("cur", i === escrow);
+        dot.textContent = i < escrow ? "✓" : String(i + 1);
+      });
+      document.getElementById("escrow-status").textContent = escrowMsgs[escrow];
+      document.getElementById("btn-escrow").disabled = escrow >= 4;
+      document.getElementById("btn-escrow").textContent = escrow >= 4 ? "Terminé" : "Étape suivante (démo)";
+    }
+
+    document.body.addEventListener("click", (e) => {
+      const speakBtn = e.target.closest("[data-speak]");
+      if (speakBtn) {
+        e.stopPropagation();
+        speak(speakBtn.getAttribute("data-speak"), speakBtn);
+        return;
+      }
+      const go = e.target.closest("[data-go]");
+      if (go) {
+        show(go.getAttribute("data-go"));
+        return;
+      }
+      const nav = e.target.closest("[data-nav]");
+      if (nav) show(nav.getAttribute("data-nav"));
+    });
+
+    document.getElementById("btn-publish").onclick = () => {
+      const price = document.getElementById("price").value;
+      const qty = document.getElementById("qty").value;
+      document.getElementById("sell-form").classList.add("hidden");
+      document.getElementById("sell-ok").classList.remove("hidden");
+      document.getElementById("sell-summary").textContent =
+        qty + " kg · " + Number(price).toLocaleString("fr-FR") + " FCFA";
+      speak(
+        "Ton offre est publiée. " + qty + " kilos à " + price + " francs CFA.",
+        document.createElement("button"),
+      );
+    };
+
+    document.getElementById("btn-escrow").onclick = () => {
+      if (escrow < 4) {
+        escrow += 1;
+        renderEscrow();
+      }
+    };
+    document.getElementById("btn-escrow-reset").onclick = () => {
+      escrow = 0;
+      renderEscrow();
+    };
+    document.getElementById("btn-avance").onclick = () => {
+      speak("Ta demande d’avance a été envoyée. L’équipe GWA va l’étudier.", document.createElement("button"));
+      alert("Demande envoyée (démo)");
+    };
+
+    renderEscrow();
+  </script>
+</body>
+</html>
