@@ -40,19 +40,35 @@ export async function runHarmattanDigest(): Promise<DigestRunResult> {
     errors: 0,
   }
 
-  const { data: products, error: productsError } = await admin
-    .from("products")
-    .select(PRODUCT_SELECT)
-    .eq("status", "active")
-    .gte("created_at", since.toISOString())
-    .order("created_at", { ascending: false })
-    .limit(200)
+  // Produits récents — fallback sans filtre date si colonne/created_at KO
+  let recentProducts: DigestProduct[] = []
+  {
+    const { data: products, error: productsError } = await admin
+      .from("products")
+      .select(PRODUCT_SELECT)
+      .eq("status", "active")
+      .gte("created_at", since.toISOString())
+      .order("created_at", { ascending: false })
+      .limit(200)
 
-  if (productsError) {
-    throw new Error(productsError.message)
+    if (productsError) {
+      console.warn("[harmattan-digest] products filter fallback", productsError.message)
+      const { data: fallbackProducts, error: fbErr } = await admin
+        .from("products")
+        .select(PRODUCT_SELECT)
+        .eq("status", "active")
+        .order("created_at", { ascending: false })
+        .limit(50)
+      if (fbErr) {
+        console.error("[harmattan-digest] products unavailable", fbErr.message)
+        return { ...result, errors: result.errors + 1 }
+      }
+      recentProducts = (fallbackProducts ?? []) as DigestProduct[]
+    } else {
+      recentProducts = (products ?? []) as DigestProduct[]
+    }
   }
 
-  const recentProducts = (products ?? []) as DigestProduct[]
   if (recentProducts.length === 0) {
     return result
   }
@@ -71,7 +87,10 @@ export async function runHarmattanDigest(): Promise<DigestRunResult> {
       .select("id, city, country, onesignal_player_id")
       .not("city", "is", null)
 
-    if (fallbackError) throw new Error(fallbackError.message)
+    if (fallbackError) {
+      console.error("[harmattan-digest] profiles unavailable", fallbackError.message)
+      return { ...result, errors: result.errors + 1 }
+    }
 
     for (const raw of fallbackProfiles ?? []) {
       await sendDigestToUser(admin, raw as DigestProfile, recentProducts, since, result, true)

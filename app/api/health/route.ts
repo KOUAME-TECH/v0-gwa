@@ -49,5 +49,11 @@ export async function GET() {
       ONESIGNAL_APP_ID: onesignalApp,
       ONESIGNAL_REST_API_KEY: onesignalRest,
     },
+    resilience: {
+      onesignal_app_id_fallback: true,
+      cron_auth: ['bearer', 'x-vercel-cron'],
+      weather_degraded_fallback: true,
+      sw_cache: 'gwa-v17-resilient',
+    },
   }, { status: healthy ? 200 : 503 })
 }

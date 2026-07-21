@@ -1,12 +1,15 @@
-/* GWA PWA + OneSignal Web Push (même scope /) */
-/* OneSignal DOIT être importé en premier — sinon push inopérant */
+/* GWA PWA + OneSignal — v17 résilient (network-first navigations) */
 importScripts("https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js")
 
-const CACHE = "gwa-v16-onesignal-shell"
-const SHELL = ["/", "/manifest.json", "/icon-192.png", "/icon-512.png", "/icon.svg", "/download"]
+const CACHE = "gwa-v17-resilient"
+const SHELL = ["/", "/manifest.json", "/icon-192.png", "/icon-512.png", "/icon.svg"]
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)))
+  event.waitUntil(
+    caches.open(CACHE).then((cache) =>
+      Promise.allSettled(SHELL.map((u) => cache.add(u).catch(() => undefined))),
+    ),
+  )
   self.skipWaiting()
 })
 
@@ -22,21 +25,55 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return
   const url = new URL(event.request.url)
+
+  // API / OneSignal : réseau pur
   if (url.pathname.startsWith("/api/")) return
-  // Laisser OneSignal / CDN hors cache shell
   if (url.hostname.includes("onesignal.com")) return
 
-  event.respondWith(
-    caches.match(event.request).then(
-      (cached) =>
-        cached ||
-        fetch(event.request).then((response) => {
-          if (response.ok && url.origin === self.location.origin) {
-            const clone = response.clone()
-            caches.open(CACHE).then((cache) => cache.put(event.request, clone))
-          }
-          return response
+  // Navigations HTML : network-first → offline fallback shell
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => response)
+        .catch(async () => {
+          const cached = await caches.match(event.request)
+          return cached || caches.match("/") || Response.error()
         }),
-    ),
+    )
+    return
+  }
+
+  // Assets shell : cache-first
+  const isShellAsset = SHELL.some(
+    (p) => url.pathname === p || url.pathname.endsWith(p.replace(/^\//, "")),
+  )
+  if (isShellAsset || url.pathname.match(/\.(png|svg|ico|webp|woff2?)$/i)) {
+    event.respondWith(
+      caches.match(event.request).then(
+        (cached) =>
+          cached ||
+          fetch(event.request).then((response) => {
+            if (response.ok && url.origin === self.location.origin) {
+              const clone = response.clone()
+              caches.open(CACHE).then((cache) => cache.put(event.request, clone))
+            }
+            return response
+          }),
+      ),
+    )
+    return
+  }
+
+  // Autre (JS/CSS Next) : network-first, cache en secours
+  event.respondWith(
+    fetch(event.request)
+      .then((response) => {
+        if (response.ok && url.origin === self.location.origin) {
+          const clone = response.clone()
+          caches.open(CACHE).then((cache) => cache.put(event.request, clone))
+        }
+        return response
+      })
+      .catch(() => caches.match(event.request).then((c) => c || Response.error())),
   )
 })

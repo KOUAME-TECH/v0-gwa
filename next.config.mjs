@@ -32,14 +32,34 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   images: {
-    unoptimized: true,
+    formats: ["image/avif", "image/webp"],
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "frorfexbcyfbydkiwxqv.supabase.co",
+        pathname: "/storage/v1/object/public/**",
+      },
+    ],
   },
   poweredByHeader: false,
   compress: true,
   experimental: {
     optimizePackageImports: ["lucide-react", "date-fns", "@radix-ui/react-icons"],
   },
-  headers: async () => [{ source: '/(.*)', headers: securityHeaders }],
+  headers: async () => [
+    { source: "/(.*)", headers: securityHeaders },
+    {
+      source: "/sw.js",
+      headers: [
+        { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+        { key: "Service-Worker-Allowed", value: "/" },
+      ],
+    },
+    {
+      source: "/manifest.json",
+      headers: [{ key: "Cache-Control", value: "public, max-age=3600" }],
+    },
+  ],
   /** Alias legacy — une seule source de vérité pour les redirections */
   redirects: async () => [
     // Alias legacy

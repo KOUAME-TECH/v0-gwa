@@ -7,12 +7,14 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
-import { Leaf, MapPin, Search, Heart, SlidersHorizontal, ChevronLeft, X } from "lucide-react"
+import { Leaf, Search, Heart, SlidersHorizontal, ChevronLeft, X } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import {
   FEED_FILTER_CHIPS,
   productMatchesFeedFilter,
 } from "@/lib/catalog/feed-filters"
+import { ListenMicButton } from "@/components/media/clickable-listen-text"
+import { buildProductListenText } from "@/lib/media/product-listen"
 
 interface Product {
   id: string
@@ -20,6 +22,9 @@ interface Product {
   price: number
   unit: string
   images: string[] | null
+  description?: string | null
+  audio_url?: string | null
+  audio_lang?: string | null
   origin_country: string
   origin_region: string | null
   product_type: string | null
@@ -49,7 +54,8 @@ export default function AgriculturePage() {
     const { data, error } = await supabase
       .from("products")
       .select(`
-        id, name, price, unit, images, origin_country, origin_region, product_type,
+        id, name, price, unit, images, description, audio_url, audio_lang,
+        origin_country, origin_region, product_type,
         profiles:seller_id(full_name, is_verified),
         categories:category_id(name, slug)
       `)
@@ -244,7 +250,16 @@ export default function AgriculturePage() {
                     )}
                   </div>
                   <div className="p-3">
-                    <h3 className="font-medium text-sm line-clamp-2 mb-1">{product.name}</h3>
+                    <div className="flex items-start gap-1 mb-1">
+                      <h3 className="font-medium text-sm line-clamp-2 flex-1 min-w-0">{product.name}</h3>
+                      <ListenMicButton
+                        size="xs"
+                        text={buildProductListenText(product)}
+                        audioUrl={product.audio_url}
+                        audioLang={product.audio_lang}
+                        fallbackLabel={product.name}
+                      />
+                    </div>
                     <div className="flex items-center gap-1 text-xs text-muted-foreground mb-2">
                       <span>{getCountryFlag(product.origin_country)}</span>
                       <span className="truncate">{product.origin_region || product.profiles?.full_name}</span>
