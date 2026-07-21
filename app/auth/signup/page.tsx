@@ -631,11 +631,11 @@ function SignupForm() {
                 />
                 <label htmlFor="terms" className="text-sm leading-relaxed text-neutral-600">
                   J&apos;accepte les{" "}
-                  <Link href="/legal/terms" className="font-medium text-neutral-900 underline">
+                  <Link href="/conditions" className="font-medium text-neutral-900 underline">
                     conditions
                   </Link>{" "}
                   et la{" "}
-                  <Link href="/legal/privacy" className="font-medium text-neutral-900 underline">
+                  <Link href="/confidentialite" className="font-medium text-neutral-900 underline">
                     politique de confidentialité
                   </Link>
                 </label>

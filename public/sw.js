@@ -1,5 +1,5 @@
 /* GWA PWA — cache shell minimal pour 3G/offline */
-const CACHE = "gwa-v13-prod-fixes"
+const CACHE = "gwa-v14-links-coop"
 const SHELL = ["/", "/manifest.json", "/icon-192.png", "/icon-512.png", "/icon.svg", "/download"]
 
 self.addEventListener("install", (event) => {

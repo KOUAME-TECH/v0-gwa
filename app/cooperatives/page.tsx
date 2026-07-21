@@ -10,69 +10,76 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { 
-  Search, Users, MapPin, Phone, Mail, Globe, Calendar, 
-  CheckCircle2, ShieldCheck, Sprout, Hammer, Plus, Building2 
+import {
+  Search, Users, MapPin, Calendar,
+  ShieldCheck, Sprout, Hammer, Plus, Building2,
 } from "lucide-react"
+
 interface CooperativeData {
   id: string
   name: string
-  description: string
+  description: string | null
   logo_url: string | null
-  cover_image_url: string | null
-  cooperative_type: string
-  country: string
-  city: string
-  address: string
-  phone: string
-  email: string
+  sector: string | null
+  country: string | null
+  city: string | null
+  address: string | null
+  phone: string | null
+  email: string | null
   website: string | null
-  registration_number: string
+  registration_number: string | null
   is_verified: boolean
-  member_count: number
-  founded_year: number
-  specialties: string[]
+  founded_year: number | null
   created_at: string
 }
 
 export default function CooperativesPage() {
   const [cooperatives, setCooperatives] = useState<CooperativeData[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedType, setSelectedType] = useState("all")
   const [selectedCountry, setSelectedCountry] = useState("all")
-  const [user, setUser] = useState<any>(null)
-  
+  const [user, setUser] = useState<{ id: string } | null>(null)
+
   const supabase = createClient()
 
   useEffect(() => {
     async function loadData() {
-      const { data: { user } } = await supabase.auth.getUser()
-      setUser(user)
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+      setUser(authUser)
 
-      const { data } = await supabase
-        .from('cooperatives')
-        .select('*')
-        .order('member_count', { ascending: false })
+      const { data, error } = await supabase
+        .from("cooperatives")
+        .select(
+          "id, name, description, logo_url, sector, country, city, address, phone, email, website, registration_number, is_verified, founded_year, created_at",
+        )
+        .order("created_at", { ascending: false })
 
-      if (data) {
-        setCooperatives(data)
+      if (error) {
+        console.error("[cooperatives]", error.message)
+        setLoadError(error.message)
+        setCooperatives([])
+      } else {
+        setCooperatives((data as CooperativeData[]) || [])
       }
       setLoading(false)
     }
 
-    loadData()
+    void loadData()
   }, [])
 
-  const filteredCooperatives = cooperatives.filter(coop => {
-    const matchesSearch = coop.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         coop.description.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesType = selectedType === "all" || coop.cooperative_type === selectedType
+  const filteredCooperatives = cooperatives.filter((coop) => {
+    const q = searchQuery.toLowerCase()
+    const matchesSearch =
+      coop.name.toLowerCase().includes(q) ||
+      (coop.description || "").toLowerCase().includes(q)
+    const matchesType = selectedType === "all" || coop.sector === selectedType
     const matchesCountry = selectedCountry === "all" || coop.country === selectedCountry
     return matchesSearch && matchesType && matchesCountry
   })
 
-  const countries = [...new Set(cooperatives.map(c => c.country))].filter(Boolean)
+  const countries = [...new Set(cooperatives.map((c) => c.country).filter(Boolean))] as string[]
 
   if (loading) {
     return (
@@ -80,7 +87,7 @@ export default function CooperativesPage() {
         <Navigation />
         <div className="container mx-auto px-4 py-8">
           <div className="flex items-center justify-center h-64">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
           </div>
         </div>
       </div>
@@ -90,9 +97,8 @@ export default function CooperativesPage() {
   return (
     <div className="min-h-screen bg-background">
       <Navigation />
-      
+
       <main className="container mx-auto px-4 py-8">
-        {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold mb-2">Coopératives</h1>
@@ -104,13 +110,20 @@ export default function CooperativesPage() {
             <Link href="/cooperatives/create">
               <Button className="mt-4 md:mt-0">
                 <Plus className="h-4 w-4 mr-2" />
-Créer une coopérative
+                Créer une coopérative
               </Button>
             </Link>
           )}
         </div>
 
-        {/* Stats */}
+        {loadError && (
+          <Card className="mb-6 border-destructive/40 bg-destructive/5">
+            <CardContent className="p-4 text-sm text-destructive">
+              Impossible de charger les coopératives. Réessayez plus tard.
+            </CardContent>
+          </Card>
+        )}
+
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <Card>
             <CardContent className="p-4 flex items-center gap-3">
@@ -129,10 +142,8 @@ Créer une coopérative
                 <Users className="h-5 w-5 text-green-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold">
-                  {cooperatives.reduce((acc, c) => acc + c.member_count, 0)}
-                </p>
-                <p className="text-xs text-muted-foreground">Membres total</p>
+                <p className="text-2xl font-bold">{cooperatives.filter((c) => c.is_verified).length}</p>
+                <p className="text-xs text-muted-foreground">Vérifiées</p>
               </div>
             </CardContent>
           </Card>
@@ -143,7 +154,7 @@ Créer une coopérative
               </div>
               <div>
                 <p className="text-2xl font-bold">
-                  {cooperatives.filter(c => c.cooperative_type === 'agriculture').length}
+                  {cooperatives.filter((c) => c.sector === "agriculture").length}
                 </p>
                 <p className="text-xs text-muted-foreground">Agricoles</p>
               </div>
@@ -156,15 +167,14 @@ Créer une coopérative
               </div>
               <div>
                 <p className="text-2xl font-bold">
-                  {cooperatives.filter(c => c.cooperative_type === 'mixte').length}
+                  {cooperatives.filter((c) => c.sector && c.sector !== "agriculture").length}
                 </p>
-                <p className="text-xs text-muted-foreground">Mixtes</p>
+                <p className="text-xs text-muted-foreground">Autres secteurs</p>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Search and Filters */}
         <div className="flex flex-col md:flex-row gap-4 mb-6">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -182,7 +192,10 @@ Créer une coopérative
             <SelectContent>
               <SelectItem value="all">Tous les types</SelectItem>
               <SelectItem value="agriculture">Agriculture</SelectItem>
-              <SelectItem value="mixte">Mixte</SelectItem>
+              <SelectItem value="commerce">Commerce</SelectItem>
+              <SelectItem value="elevage">Élevage</SelectItem>
+              <SelectItem value="peche">Pêche</SelectItem>
+              <SelectItem value="transformation">Transformation</SelectItem>
             </SelectContent>
           </Select>
           <Select value={selectedCountry} onValueChange={setSelectedCountry}>
@@ -191,14 +204,13 @@ Créer une coopérative
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Tous les pays</SelectItem>
-              {countries.map(country => (
+              {countries.map((country) => (
                 <SelectItem key={country} value={country}>{country}</SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
 
-        {/* Grille Coopératives */}
         {filteredCooperatives.length === 0 ? (
           <Card className="p-12 text-center">
             <Building2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
@@ -206,38 +218,34 @@ Créer une coopérative
             <p className="text-muted-foreground mb-4">
               Soyez le premier à créer une coopérative dans votre région
             </p>
-            {user && (
+            {user ? (
               <Link href="/cooperatives/create">
                 <Button>Créer une coopérative</Button>
+              </Link>
+            ) : (
+              <Link href="/auth/login?redirect=/cooperatives/create">
+                <Button>Se connecter pour créer</Button>
               </Link>
             )}
           </Card>
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredCooperatives.map(coop => (
+            {filteredCooperatives.map((coop) => (
               <Card key={coop.id} className="overflow-hidden hover:shadow-lg transition-shadow">
                 <div className="relative h-32 bg-gradient-to-r from-primary/20 to-secondary/20">
-                  {coop.cover_image_url && (
-                    <Image
-                      src={coop.cover_image_url || "/placeholder.svg"}
-                      alt={coop.name}
-                      fill
-                      className="object-cover"
-                    />
-                  )}
                   <div className="absolute -bottom-8 left-4">
                     <div className="h-16 w-16 rounded-lg bg-background shadow-lg flex items-center justify-center overflow-hidden">
                       {coop.logo_url ? (
-                        <Image src={coop.logo_url || "/placeholder.svg"} alt={coop.name} width={64} height={64} className="object-cover" />
+                        <Image src={coop.logo_url} alt={coop.name} width={64} height={64} className="object-cover" />
                       ) : (
                         <Building2 className="h-8 w-8 text-muted-foreground" />
                       )}
                     </div>
                   </div>
                 </div>
-                
+
                 <CardHeader className="pt-12 pb-2">
-                  <div className="flex items-start justify-between">
+                  <div className="flex items-start justify-between gap-2">
                     <div>
                       <CardTitle className="text-lg flex items-center gap-2">
                         {coop.name}
@@ -247,44 +255,36 @@ Créer une coopérative
                       </CardTitle>
                       <CardDescription className="flex items-center gap-1 mt-1">
                         <MapPin className="h-3 w-3" />
-                        {coop.city}, {coop.country}
+                        {[coop.city, coop.country].filter(Boolean).join(", ") || "—"}
                       </CardDescription>
                     </div>
-                    <Badge variant={coop.cooperative_type === 'agriculture' ? 'default' : 'secondary'}>
-                      {coop.cooperative_type}
-                    </Badge>
+                    {coop.sector && (
+                      <Badge variant={coop.sector === "agriculture" ? "default" : "secondary"}>
+                        {coop.sector}
+                      </Badge>
+                    )}
                   </div>
                 </CardHeader>
-                
+
                 <CardContent className="pb-2">
                   <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
-                    {coop.description}
+                    {coop.description || "Aucune description"}
                   </p>
-                  
-                  <div className="flex flex-wrap gap-1 mb-3">
-                    {coop.specialties?.slice(0, 3).map((spec, i) => (
-                      <Badge key={i} variant="outline" className="text-xs">
-                        {spec}
-                      </Badge>
-                    ))}
-                  </div>
-                  
+
                   <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <Users className="h-4 w-4" />
-                      {coop.member_count} membres
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Calendar className="h-4 w-4" />
-                      Depuis {coop.founded_year}
-                    </div>
+                    {coop.founded_year ? (
+                      <div className="flex items-center gap-1">
+                        <Calendar className="h-4 w-4" />
+                        Depuis {coop.founded_year}
+                      </div>
+                    ) : null}
                   </div>
                 </CardContent>
-                
+
                 <CardFooter className="pt-2">
                   <Link href={`/cooperatives/${coop.id}`} className="w-full">
                     <Button variant="outline" className="w-full bg-transparent">
-                      Voir les details
+                      Voir les détails
                     </Button>
                   </Link>
                 </CardFooter>

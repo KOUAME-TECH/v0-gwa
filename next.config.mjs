@@ -48,6 +48,11 @@ const nextConfig = {
     { source: '/marketplace/product/:id', destination: '/produit/:id', permanent: true },
     { source: '/auth/sign-up', destination: '/auth/signup', permanent: true },
     { source: '/auth/sign-up/:path*', destination: '/auth/signup', permanent: true },
+    // Liens cassés / alias legacy → pages réelles
+    { source: '/legal/terms', destination: '/conditions', permanent: true },
+    { source: '/legal/privacy', destination: '/confidentialite', permanent: true },
+    { source: '/legal/:path*', destination: '/conditions', permanent: false },
+    { source: '/feed', destination: '/', permanent: false },
     // Hors scope bêta F1–F6 (soft-lock) — pages conservées mais inaccessibles
     { source: '/formations', destination: '/', permanent: false },
     { source: '/formations/:path*', destination: '/', permanent: false },

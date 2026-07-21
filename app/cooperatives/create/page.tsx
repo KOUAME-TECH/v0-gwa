@@ -53,8 +53,18 @@ export default function CreateCooperativePage() {
         }
       }
 
+      const baseSlug = form.name
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "")
+        .slice(0, 48) || "coop"
+      const slug = `${baseSlug}-${Date.now().toString(36)}`
+
       const { data: coop, error } = await supabase.from("cooperatives").insert({
         name: form.name,
+        slug,
         description: form.description || null,
         sector: form.cooperative_type,
         country: form.country,
