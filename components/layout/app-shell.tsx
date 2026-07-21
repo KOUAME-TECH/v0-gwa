@@ -32,7 +32,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <main
           className={cn(
             "flex-1 px-0",
-            showBottomNav && "pb-[calc(4.5rem+env(safe-area-inset-bottom))] safe-bottom",
+            showBottomNav && "pb-[calc(4.75rem+env(safe-area-inset-bottom))] safe-bottom",
           )}
         >
           {children}

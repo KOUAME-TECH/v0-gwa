@@ -14,6 +14,8 @@ describe("shouldShowBottomNav", () => {
     expect(shouldShowBottomNav("/produit/abc")).toBe(true)
     expect(shouldShowBottomNav("/messages")).toBe(true)
     expect(shouldShowBottomNav("/profil")).toBe(true)
+    expect(shouldShowBottomNav("/recherche")).toBe(true)
+    expect(shouldShowBottomNav("/publier")).toBe(true)
   })
 
   it("masque sur les autres pages", () => {
