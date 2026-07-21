@@ -37,6 +37,7 @@ import {
   resolvePostType,
 } from "@/lib/media/compress"
 import { filterBetaCategories } from "@/lib/catalog/categories"
+import { saveOfflineDraft, loadOfflineDraft, clearOfflineDraft } from "@/lib/offline/drafts"
 
 type PublishType = "product" | "post" | null
 
@@ -99,17 +100,44 @@ export default function PublierPage() {
       setUser(currentUser)
       setIsLoading(false)
 
+      if (currentUser) {
+        const [productDraft, postDraft] = await Promise.all([
+          loadOfflineDraft<typeof productForm>(currentUser.id, "product"),
+          loadOfflineDraft<{ content: string }>(currentUser.id, "post"),
+        ])
+        if (productDraft?.payload) setProductForm((prev) => ({ ...prev, ...productDraft.payload }))
+        if (postDraft?.payload?.content) setPostContent(postDraft.payload.content)
+        if (productDraft || postDraft) {
+          toast.message("Brouillon offline restauré")
+        }
+      }
+
       const { data } = await supabase
         .from("categories")
         .select("id, name, slug, category_type")
         .eq("category_type", "agriculture")
         .is("parent_id", null)
         .order("name")
-      // Défense en profondeur : exclut tout type hors périmètre beta (ex. artisanat)
       setCategories(filterBetaCategories(data || []))
     }
     init()
   }, [supabase])
+
+  useEffect(() => {
+    if (!user) return
+    const t = setTimeout(() => {
+      void saveOfflineDraft(user.id, "product", productForm)
+    }, 600)
+    return () => clearTimeout(t)
+  }, [productForm, user])
+
+  useEffect(() => {
+    if (!user) return
+    const t = setTimeout(() => {
+      void saveOfflineDraft(user.id, "post", { content: postContent })
+    }, 600)
+    return () => clearTimeout(t)
+  }, [postContent, user])
 
   // Cleanup des previews au unmount
   useEffect(() => {
@@ -312,6 +340,7 @@ export default function PublierPage() {
       if (!res.ok) throw new Error(payload.error || "Erreur publication")
 
       toast.success("Produit publié avec succès !")
+      if (user) await clearOfflineDraft(user.id, "product")
       router.push("/profil")
     } catch (error: any) {
       console.error("Error:", error)
@@ -358,6 +387,7 @@ export default function PublierPage() {
       if (error) throw error
 
       toast.success("Publication créée !")
+      if (user) await clearOfflineDraft(user.id, "post")
       router.push("/")
     } catch (error: any) {
       console.error("Error:", error)

@@ -1,5 +1,5 @@
 /* GWA PWA — cache shell minimal pour 3G/offline */
-const CACHE = "gwa-v10-harmattan-digest"
+const CACHE = "gwa-v11-escrow-offline"
 const SHELL = ["/", "/manifest.json", "/icon-192.png", "/icon-512.png", "/icon.svg", "/download"]
 
 self.addEventListener("install", (event) => {

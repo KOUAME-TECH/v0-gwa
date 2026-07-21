@@ -41,6 +41,9 @@ interface AnalyticsData {
   // RFQs
   totalRfqs: number
   openRfqs: number
+  // Escrow / litiges
+  escrowHeld: number
+  openDisputes: number
 }
 
 export default function AdminAnalyticsPage() {
@@ -176,6 +179,16 @@ export default function AdminAnalyticsPage() {
     
     const revenueLastMonth = revenueLastMonthData?.reduce((sum, o) => sum + (o.total_amount || 0), 0) || 0
 
+    const { count: escrowHeld } = await supabase
+      .from("orders")
+      .select("*", { count: "exact", head: true })
+      .eq("escrow_status", "held")
+
+    const { count: openDisputes } = await supabase
+      .from("disputes")
+      .select("*", { count: "exact", head: true })
+      .in("status", ["open", "under_review"])
+
     // Cooperatives
     const { count: totalCooperatives } = await supabase
       .from('cooperatives')
@@ -214,7 +227,9 @@ export default function AdminAnalyticsPage() {
       totalCooperatives: totalCooperatives || 0,
       verifiedCooperatives: verifiedCooperatives || 0,
       totalRfqs: totalRfqs || 0,
-      openRfqs: openRfqs || 0
+      openRfqs: openRfqs || 0,
+      escrowHeld: escrowHeld || 0,
+      openDisputes: openDisputes || 0,
     })
 
     setLoading(false)
@@ -246,12 +261,15 @@ export default function AdminAnalyticsPage() {
 
   const getStatusLabel = (status: string) => {
     const labels: Record<string, string> = {
-      'pending': 'En attente',
-      'confirmed': 'Confirmées',
-      'preparing': 'En préparation',
-      'shipping': 'En livraison',
-      'delivered': 'Livrées',
-      'cancelled': 'Annulées'
+      pending: "En attente",
+      confirmed: "Confirmées",
+      processing: "En préparation",
+      preparing: "En préparation",
+      shipped: "En livraison",
+      shipping: "En livraison",
+      delivered: "Livrées",
+      cancelled: "Annulées",
+      disputed: "Litiges",
     }
     return labels[status] || status
   }
@@ -407,6 +425,27 @@ export default function AdminAnalyticsPage() {
               </span>
               <span className="text-muted-foreground ml-1">vs mois dernier</span>
             </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Escrow held</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{data.escrowHeld.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground mt-1">Commandes fonds en séquestre</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Litiges ouverts</CardTitle>
+            <BarChart3 className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{data.openDisputes.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground mt-1">À traiter dans /admin/disputes</p>
           </CardContent>
         </Card>
       </div>

@@ -12,6 +12,7 @@ import {
   Package, Clock, X, CheckCircle2
 } from "lucide-react"
 import Link from "next/link"
+import { EscrowStepper } from "@/components/orders/escrow-stepper"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
@@ -422,6 +423,7 @@ export default function CartPage() {
       {/* Step 3: Payment */}
       {step === 3 && (
         <div className="p-4 space-y-3">
+          <EscrowStepper payment_status="pending" escrow_status="pending" status="pending" />
           <RadioGroup value={paymentMethod} onValueChange={setPaymentMethod}>
             {paymentMethods.map(method => (
               <div 

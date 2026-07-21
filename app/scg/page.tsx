@@ -10,6 +10,8 @@ import { Spinner } from "@/components/ui/spinner"
 import { ArrowLeft, RefreshCw, TrendingUp, Landmark, Info } from "lucide-react"
 import Link from "next/link"
 import type { SCGResult } from "@/lib/scg/engine"
+import { getCoachActions } from "@/lib/scg/coach"
+import { ScgCoachPanel } from "@/components/scg/scg-coach"
 
 type ScgSnapshot = {
   score_total: number
@@ -210,6 +212,8 @@ export default function ScgPage() {
                 <p className="text-sm text-[#6B7280] text-pretty">{result.recommandation}</p>
               </div>
             </Card>
+
+            <ScgCoachPanel score={result.score_total} actions={getCoachActions(result.dimensions)} />
 
             {/* Dimensions */}
             <Card className="p-5">

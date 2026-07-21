@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { CheckCircle2, Package, Truck, MapPin, Clock, ArrowRight, Loader2, Home } from 'lucide-react'
 import Link from "next/link"
+import { EscrowStepper } from "@/components/orders/escrow-stepper"
 
 interface Order {
   id: string
@@ -20,6 +21,7 @@ interface Order {
   shipping_country: string
   payment_method: string
   payment_status: string
+  escrow_status?: string | null
   created_at: string
   estimated_delivery: string | null
   order_items: {
@@ -81,10 +83,10 @@ function ConfirmationContent() {
   }
 
   const orderStatuses = [
-    { status: "pending", label: "Commande confirmée", icon: CheckCircle2, completed: true },
-    { status: "confirmed", label: "En préparation", icon: Package, completed: order?.status !== 'pending' },
-    { status: "shipped", label: "En cours de livraison", icon: Truck, completed: order?.status === 'shipped' || order?.status === 'delivered' },
-    { status: "delivered", label: "Livrée", icon: MapPin, completed: order?.status === 'delivered' }
+    { status: "pending", label: "Commande reçue", icon: CheckCircle2, completed: true },
+    { status: "confirmed", label: "Confirmée", icon: Package, completed: ["confirmed", "processing", "shipped", "delivered"].includes(order?.status || "") },
+    { status: "shipped", label: "En livraison", icon: Truck, completed: order?.status === "shipped" || order?.status === "delivered" },
+    { status: "delivered", label: "Livrée", icon: MapPin, completed: order?.status === "delivered" },
   ]
 
   if (loading) {
@@ -145,8 +147,16 @@ function ConfirmationContent() {
             </div>
             <h1 className="text-3xl font-bold mb-2">Commande Confirmée !</h1>
             <p className="text-muted-foreground">
-              Merci pour votre commande. Vous recevrez un SMS de confirmation sous peu.
+              Merci. Ton paiement est protégé : le vendeur touche l’argent après confirmation de livraison.
             </p>
+          </div>
+
+          <div className="mb-6">
+            <EscrowStepper
+              payment_status={order.payment_status}
+              escrow_status={order.escrow_status as never}
+              status={order.status}
+            />
           </div>
 
           {/* Order Details Card */}

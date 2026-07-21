@@ -20,6 +20,12 @@ import {
 import Link from "next/link"
 import { formatDistanceToNow } from "date-fns"
 import { fr } from "date-fns/locale"
+import { toast } from "sonner"
+import { EscrowStepper } from "@/components/orders/escrow-stepper"
+import {
+  normalizeOrderStatus,
+  ORDER_STATUS_LABELS,
+} from "@/lib/orders/escrow-flow"
 
 interface Order {
   id: string
@@ -29,10 +35,12 @@ interface Order {
   shipping_address: string
   payment_method: string
   payment_status: string
+  escrow_status?: string | null
   notes: string | null
   created_at: string
   updated_at: string
   seller_id: string
+  buyer_id?: string
   seller?: {
     full_name: string
     company_name: string | null
@@ -53,7 +61,7 @@ interface AuditLog {
   action: string
   old_value: string | null
   new_value: string | null
-  performed_by: uuid | null
+  performed_by: string | null
   notes: string | null
   ip_address: string | null
   created_at: string
@@ -62,14 +70,15 @@ interface AuditLog {
   }
 }
 
-const orderStatuses = {
-  draft: { label: "Brouillon", color: "bg-gray-500", icon: FileText },
-  pending: { label: "En attente", color: "bg-yellow-500", icon: Clock },
-  confirmed: { label: "Confirmée", color: "bg-blue-500", icon: CheckCircle2 },
-  preparing: { label: "En préparation", color: "bg-purple-500", icon: Package },
-  shipping: { label: "En livraison", color: "bg-orange-500", icon: Truck },
-  delivered: { label: "Livrée", color: "bg-green-500", icon: CheckCircle2 },
-  cancelled: { label: "Annulée", color: "bg-red-500", icon: XCircle },
+const orderStatuses: Record<string, { label: string; color: string; icon: typeof Clock }> = {
+  draft: { label: ORDER_STATUS_LABELS.draft, color: "bg-gray-500", icon: FileText },
+  pending: { label: ORDER_STATUS_LABELS.pending, color: "bg-yellow-500", icon: Clock },
+  confirmed: { label: ORDER_STATUS_LABELS.confirmed, color: "bg-blue-500", icon: CheckCircle2 },
+  processing: { label: ORDER_STATUS_LABELS.processing, color: "bg-purple-500", icon: Package },
+  shipped: { label: ORDER_STATUS_LABELS.shipped, color: "bg-orange-500", icon: Truck },
+  delivered: { label: ORDER_STATUS_LABELS.delivered, color: "bg-green-500", icon: CheckCircle2 },
+  cancelled: { label: ORDER_STATUS_LABELS.cancelled, color: "bg-red-500", icon: XCircle },
+  disputed: { label: ORDER_STATUS_LABELS.disputed, color: "bg-red-600", icon: AlertTriangle },
 }
 
 export default function OrdersPage() {
@@ -156,34 +165,51 @@ export default function OrdersPage() {
     setLoadingAudit(false)
   }
 
-  async function updateOrderStatus(orderId: string, newStatus: string, reason?: string) {
-    const order = orders.find(o => o.id === orderId)
+  async function updateOrderStatus(orderId: string, newStatus: string, _reason?: string) {
+    const order = orders.find((o) => o.id === orderId)
     if (!order || !user) return
 
-    // Update order
-    const { error } = await supabase
-      .from('orders')
-      .update({ status: newStatus })
-      .eq('id', orderId)
-
-    if (!error) {
-      // Add audit log
-      await supabase
-        .from('order_audit_log')
-        .insert({
-          order_id: orderId,
-          old_status: order.status,
-          new_status: newStatus,
-          changed_by: user.id,
-          change_reason: reason
-        })
-
-      // Refresh orders
-      loadOrders()
-      if (selectedOrder?.id === orderId) {
-        loadAuditLog(orderId)
-      }
+    const res = await fetch(`/api/orders/${orderId}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: newStatus }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      toast.error(data.error || "Mise à jour impossible")
+      return
     }
+    toast.success("Statut mis à jour")
+    loadOrders()
+    if (selectedOrder?.id === orderId) loadAuditLog(orderId)
+  }
+
+  async function confirmReception(orderId: string) {
+    const res = await fetch(`/api/orders/${orderId}/confirm`, { method: "POST" })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      toast.error(data.error || "Confirmation impossible")
+      return
+    }
+    toast.success("Réception confirmée — fonds libérés")
+    loadOrders()
+  }
+
+  async function openLitige(orderId: string) {
+    const description = window.prompt("Décris le problème (litige) :")
+    if (!description?.trim()) return
+    const res = await fetch(`/api/orders/${orderId}/litige`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ description: description.trim() }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      toast.error(data.error || "Litige impossible")
+      return
+    }
+    toast.success("Litige ouvert — fonds gelés")
+    loadOrders()
   }
 
   const filteredOrders = orders.filter(order => 
@@ -194,7 +220,8 @@ export default function OrdersPage() {
   )
 
   const getStatusInfo = (status: string) => {
-    return orderStatuses[status as keyof typeof orderStatuses] || orderStatuses.pending
+    const n = normalizeOrderStatus(status || "pending")
+    return orderStatuses[n] || orderStatuses.pending
   }
 
   const handleViewDetails = async (order: Order) => {
@@ -294,7 +321,7 @@ export default function OrdersPage() {
                 <Clock className="h-5 w-5 text-yellow-500" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{orders.filter(o => ["pending", "confirmed", "preparing"].includes(o.status)).length}</p>
+                <p className="text-2xl font-bold">{orders.filter(o => ["pending", "confirmed", "processing", "shipped", "preparing", "shipping"].includes(normalizeOrderStatus(o.status))).length}</p>
                 <p className="text-sm text-muted-foreground">En cours</p>
               </div>
             </CardContent>
@@ -325,7 +352,7 @@ export default function OrdersPage() {
         <Tabs defaultValue="all">
           <TabsList>
             <TabsTrigger value="all">Toutes ({orders.length})</TabsTrigger>
-            <TabsTrigger value="active">En cours ({orders.filter(o => ["pending", "confirmed", "preparing", "shipping"].includes(o.status)).length})</TabsTrigger>
+            <TabsTrigger value="active">En cours ({orders.filter(o => ["pending", "confirmed", "processing", "shipped", "preparing", "shipping"].includes(normalizeOrderStatus(o.status))).length})</TabsTrigger>
             <TabsTrigger value="delivered">Livrées ({orders.filter(o => o.status === "delivered").length})</TabsTrigger>
             <TabsTrigger value="cancelled">Annulées ({orders.filter(o => o.status === "cancelled").length})</TabsTrigger>
           </TabsList>
@@ -349,7 +376,9 @@ export default function OrdersPage() {
                     key={order.id} 
                     order={order} 
                     onViewDetails={() => handleViewDetails(order)}
-                    onUpdateStatus={updateOrderStatus}
+                    .onUpdateStatus={updateOrderStatus}
+                    onConfirmReception={confirmReception}
+                    onOpenLitige={openLitige}
                     currentUserId={user?.id}
                   />
                 ))}
@@ -360,13 +389,15 @@ export default function OrdersPage() {
           <TabsContent value="active" className="mt-6">
             <div className="space-y-4">
               {filteredOrders
-                .filter(o => ["pending", "confirmed", "preparing", "shipping"].includes(o.status))
+                .filter(o => ["pending", "confirmed", "processing", "shipped", "preparing", "shipping"].includes(normalizeOrderStatus(o.status)))
                 .map((order) => (
                   <OrderCard 
                     key={order.id} 
                     order={order} 
                     onViewDetails={() => handleViewDetails(order)}
                     onUpdateStatus={updateOrderStatus}
+                    onConfirmReception={confirmReception}
+                    onOpenLitige={openLitige}
                     currentUserId={user?.id}
                   />
                 ))}
@@ -382,7 +413,9 @@ export default function OrdersPage() {
                     key={order.id} 
                     order={order} 
                     onViewDetails={() => handleViewDetails(order)}
-                    onUpdateStatus={updateOrderStatus}
+                    .onUpdateStatus={updateOrderStatus}
+                    onConfirmReception={confirmReception}
+                    onOpenLitige={openLitige}
                     currentUserId={user?.id}
                   />
                 ))}
@@ -398,7 +431,9 @@ export default function OrdersPage() {
                     key={order.id} 
                     order={order} 
                     onViewDetails={() => handleViewDetails(order)}
-                    onUpdateStatus={updateOrderStatus}
+                    .onUpdateStatus={updateOrderStatus}
+                    onConfirmReception={confirmReception}
+                    onOpenLitige={openLitige}
                     currentUserId={user?.id}
                   />
                 ))}
@@ -506,37 +541,54 @@ export default function OrdersPage() {
   )
 }
 
-function OrderCard({ order, onViewDetails, onUpdateStatus, currentUserId }: { 
+function OrderCard({
+  order,
+  onViewDetails,
+  onUpdateStatus,
+  onConfirmReception,
+  onOpenLitige,
+  currentUserId,
+}: {
   order: Order
   onViewDetails: () => void
   onUpdateStatus: (orderId: string, status: string, reason?: string) => void
+  onConfirmReception: (orderId: string) => void
+  onOpenLitige: (orderId: string) => void
   currentUserId?: string
 }) {
-  const statusInfo = orderStatuses[order.status as keyof typeof orderStatuses] || orderStatuses.pending
+  const status = normalizeOrderStatus(order.status)
+  const statusInfo = orderStatuses[status] || orderStatuses.pending
   const StatusIcon = statusInfo.icon
   const isSeller = order.seller_id === currentUserId
+  const canConfirmBuyer =
+    !isSeller &&
+    order.payment_status === "paid" &&
+    ["shipped", "processing", "confirmed"].includes(status) &&
+    order.escrow_status !== "released" &&
+    order.escrow_status !== "frozen"
+  const canLitige =
+    status !== "disputed" &&
+    status !== "cancelled" &&
+    status !== "delivered" &&
+    order.payment_status === "paid"
 
   return (
     <Card className="hover:shadow-lg transition-shadow">
       <CardContent className="p-6">
         <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-          {/* Order Info */}
           <div className="flex-1">
-            <div className="flex items-center gap-3 mb-2">
+            <div className="flex items-center gap-3 mb-2 flex-wrap">
               <span className="font-bold">{order.order_number}</span>
               <Badge className={`${statusInfo.color} text-white`}>
                 <StatusIcon className="h-3 w-3 mr-1" />
                 {statusInfo.label}
               </Badge>
-              {isSeller && (
-                <Badge variant="outline">Vendeur</Badge>
-              )}
+              {isSeller && <Badge variant="outline">Vendeur</Badge>}
             </div>
-            
             <div className="flex flex-wrap gap-4 text-sm text-muted-foreground mb-3">
               <span className="flex items-center gap-1">
                 <Calendar className="h-4 w-4" />
-                {new Date(order.created_at).toLocaleDateString('fr-FR')}
+                {new Date(order.created_at).toLocaleDateString("fr-FR")}
               </span>
               <span className="flex items-center gap-1">
                 <Package className="h-4 w-4" />
@@ -547,106 +599,74 @@ function OrderCard({ order, onViewDetails, onUpdateStatus, currentUserId }: {
                 {order.shipping_address}
               </span>
             </div>
-
             <div className="flex flex-wrap gap-2">
               {order.order_items?.slice(0, 3).map((item) => (
                 <Badge key={item.id} variant="outline">
                   {item.product?.name} x{item.quantity}
                 </Badge>
               ))}
-              {(order.order_items?.length || 0) > 3 && (
-                <Badge variant="outline">+{(order.order_items?.length || 0) - 3} autres</Badge>
-              )}
             </div>
           </div>
-
-          {/* Price and Actions */}
           <div className="flex flex-col items-end gap-3">
             <div className="text-right">
               <p className="text-2xl font-bold">{order.total_amount.toLocaleString()} FCFA</p>
               <p className="text-sm text-muted-foreground">
-                {order.payment_method} - {order.payment_status}
+                {order.payment_method} — {order.payment_status}
+                {order.escrow_status ? ` · ${order.escrow_status}` : ""}
               </p>
             </div>
-            
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2 justify-end">
               <Button variant="outline" size="sm" onClick={onViewDetails}>
                 <Eye className="h-4 w-4 mr-1" />
-                Details
+                Détails
               </Button>
-              
-              {/* Seller actions */}
-              {isSeller && order.status === "pending" && (
+              {isSeller && status === "pending" && (
                 <>
                   <Button size="sm" onClick={() => onUpdateStatus(order.id, "confirmed")}>
                     <CheckCircle2 className="h-4 w-4 mr-1" />
                     Confirmer
                   </Button>
-                  <Button variant="destructive" size="sm" onClick={() => onUpdateStatus(order.id, "cancelled", "Refuse par le vendeur")}>
+                  <Button variant="destructive" size="sm" onClick={() => onUpdateStatus(order.id, "cancelled")}>
                     <XCircle className="h-4 w-4 mr-1" />
                     Refuser
                   </Button>
                 </>
               )}
-              {isSeller && order.status === "confirmed" && (
-                <Button size="sm" onClick={() => onUpdateStatus(order.id, "preparing")}>
+              {isSeller && status === "confirmed" && (
+                <Button size="sm" onClick={() => onUpdateStatus(order.id, "processing")}>
                   <Package className="h-4 w-4 mr-1" />
-                  En preparation
+                  En préparation
                 </Button>
               )}
-              {isSeller && order.status === "preparing" && (
-                <Button size="sm" onClick={() => onUpdateStatus(order.id, "shipping")}>
+              {isSeller && status === "processing" && (
+                <Button size="sm" onClick={() => onUpdateStatus(order.id, "shipped")}>
                   <Truck className="h-4 w-4 mr-1" />
-                  Expedier
+                  Expédier
                 </Button>
               )}
-              
-              {/* Buyer actions */}
-              {!isSeller && order.status === "shipping" && (
-                <Button size="sm" onClick={() => onUpdateStatus(order.id, "delivered")}>
+              {canConfirmBuyer && (
+                <Button size="sm" className="bg-[#1F5C2E] hover:bg-[#174a24]" onClick={() => onConfirmReception(order.id)}>
                   <CheckCircle2 className="h-4 w-4 mr-1" />
-                  Recu
+                  Confirmer réception
                 </Button>
               )}
-              
-              <Button variant="outline" size="sm">
-                <MessageCircle className="h-4 w-4 mr-1" />
-                Contact
-              </Button>
+              {canLitige && (
+                <Button variant="outline" size="sm" className="text-red-600 border-red-200" onClick={() => onOpenLitige(order.id)}>
+                  <AlertTriangle className="h-4 w-4 mr-1" />
+                  Litige
+                </Button>
+              )}
             </div>
           </div>
         </div>
-
-        {/* Status Timeline for Active Orders */}
-        {["confirmed", "preparing", "shipping"].includes(order.status) && (
-          <div className="mt-6 pt-6 border-t">
-            <div className="flex items-center justify-between">
-              {Object.entries(orderStatuses).slice(2, 6).map(([key, status], i) => {
-                const StatusIcon = status.icon
-                const statusOrder = ["confirmed", "preparing", "shipping", "delivered"]
-                const currentIndex = statusOrder.indexOf(order.status)
-                const isCompleted = statusOrder.indexOf(key) <= currentIndex
-                const isCurrent = order.status === key
-                
-                return (
-                  <div key={key} className="flex items-center flex-1">
-                    <div className="flex flex-col items-center">
-                      <div className={`h-8 w-8 rounded-full flex items-center justify-center ${
-                        isCompleted ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-                      } ${isCurrent ? "ring-2 ring-primary ring-offset-2" : ""}`}>
-                        <StatusIcon className="h-4 w-4" />
-                      </div>
-                      <span className={`text-xs mt-1 ${isCompleted ? "text-foreground" : "text-muted-foreground"}`}>
-                        {status.label}
-                      </span>
-                    </div>
-                    {i < 3 && (
-                      <div className={`flex-1 h-0.5 mx-2 ${isCompleted && statusOrder.indexOf(key) < currentIndex ? "bg-primary" : "bg-muted"}`} />
-                    )}
-                  </div>
-                )
-              })}
-            </div>
+        {(order.payment_status === "paid" || !!order.escrow_status) && (
+          <div className="mt-5 pt-5 border-t">
+            <EscrowStepper
+              payment_status={order.payment_status}
+              escrow_status={order.escrow_status as "pending" | "held" | "released" | "frozen" | null | undefined}
+              status={status}
+              compact
+            />
           </div>
         )}
       </CardContent>
