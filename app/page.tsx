@@ -178,13 +178,13 @@ export default function HomePage() {
       
       if (currentUser) {
         const [likesRes, favsRes, profileRes, followsRes, notifRes] = await Promise.all([
-          supabase.from("post_likes").select("post_id").eq("user_id", currentUser.id),
-          supabase.from("favorites").select("product_id").eq("user_id", currentUser.id),
-          supabase.from("profiles").select("user_type").eq("id", currentUser.id).single(),
-          supabase.from("followers").select("following_id").eq("follower_id", currentUser.id),
+          supabase.from("post_likes").select("post_id").eq("user_id", currentUser.id).limit(200),
+          supabase.from("favorites").select("product_id").eq("user_id", currentUser.id).limit(200),
+          supabase.from("profiles").select("user_type").eq("id", currentUser.id).maybeSingle(),
+          supabase.from("followers").select("following_id").eq("follower_id", currentUser.id).limit(200),
           supabase
             .from("notifications")
-            .select("*", { count: "exact", head: true })
+            .select("id", { count: "exact", head: true })
             .eq("user_id", currentUser.id)
             .eq("is_read", false),
         ])

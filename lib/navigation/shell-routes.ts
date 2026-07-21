@@ -1,6 +1,6 @@
 /**
- * Bottom nav = shell principal uniquement.
- * Masquée sur toutes les « autres » pages (légal, coop, wallet, auth, admin…).
+ * Bottom nav = shell principal (onglets natifs).
+ * Masquée hors parcours principaux.
  */
 
 const EXACT = new Set([
@@ -25,11 +25,9 @@ const PREFIXES = [
   "/profil/",
 ] as const
 
-/** True uniquement sur les écrans du shell mobile (onglets + détail produit/post). */
 export function shouldShowBottomNav(pathname: string | null | undefined): boolean {
   if (!pathname) return false
 
-  // Jamais sur auth / admin / dashboard / édition / fil de chat
   if (
     pathname.startsWith("/auth") ||
     pathname.startsWith("/admin") ||

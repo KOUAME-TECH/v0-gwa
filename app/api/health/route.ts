@@ -51,7 +51,9 @@ export async function GET() {
     },
     resilience: {
       onesignal_app_id_fallback: true,
-      cron_auth: ['bearer', 'x-vercel-cron'],
+      cron_auth: ['bearer', 'x-vercel-cron', 'digest_internal_key'],
+      digest_scheduler: 'supabase_pg_cron',
+      digest_job: 'gwa-harmattan-digest-daily',
       weather_degraded_fallback: true,
       sw_cache: 'gwa-v17-resilient',
     },

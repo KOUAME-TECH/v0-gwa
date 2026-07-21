@@ -7,17 +7,26 @@ export const maxDuration = 120
 export const runtime = "nodejs"
 
 /**
- * GET|POST /api/cron/harmattan-digest
- * Vercel Cron — digest vocal quotidien (06:00 UTC).
- * Auth: Bearer CRON_SECRET OU header x-vercel-cron (secours).
+ * POST|GET /api/cron/harmattan-digest
+ *
+ * Déclencheur **manuel / secours** (OneSignal push enrichi).
+ * Le planning principal est **Supabase pg_cron** :
+ *   job `gwa-harmattan-digest-daily` → `SELECT public.run_harmattan_digest();`
+ *   (migration 041 — notifications in-app, sans CRON_SECRET Vercel)
+ *
+ * Auth secours : Bearer CRON_SECRET | x-vercel-cron | DIGEST_INTERNAL_KEY
  */
 async function handle(request: Request) {
   const auth = authorizeCronRequest(request)
-  if (!auth.ok) {
+  const internal = (process.env.DIGEST_INTERNAL_KEY || "").trim()
+  const headerKey = request.headers.get("x-gwa-digest-key") || ""
+  const okInternal = !!(internal && headerKey && headerKey === internal)
+
+  if (!auth.ok && !okInternal) {
     return NextResponse.json(
       {
         error: "Non autorisé",
-        hint: "Authorization: Bearer $CRON_SECRET (ou job Vercel Cron)",
+        hint: "Planning principal = Supabase pg_cron. Manuel: Bearer CRON_SECRET ou x-gwa-digest-key.",
       },
       { status: 401 },
     )
@@ -27,16 +36,16 @@ async function handle(request: Request) {
     const result = await runHarmattanDigest()
     return NextResponse.json({
       ok: true,
-      auth_via: auth.via,
+      auth_via: okInternal ? "digest_internal_key" : auth.via,
+      note: "Push OneSignal (secours). In-app digest planifié via Supabase pg_cron.",
       ...result,
     })
   } catch (err) {
     console.error("[cron/harmattan-digest]", err)
-    // Ne jamais faire planter le scheduler : réponse structurée
     return NextResponse.json(
       {
         ok: false,
-        auth_via: auth.via,
+        auth_via: okInternal ? "digest_internal_key" : auth.via,
         error: err instanceof Error ? err.message : "Erreur digest",
         usersProcessed: 0,
         pushesSent: 0,

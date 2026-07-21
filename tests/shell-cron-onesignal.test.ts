@@ -13,6 +13,7 @@ describe("shouldShowBottomNav", () => {
     expect(shouldShowBottomNav("/agriculture")).toBe(true)
     expect(shouldShowBottomNav("/produit/abc")).toBe(true)
     expect(shouldShowBottomNav("/messages")).toBe(true)
+    expect(shouldShowBottomNav("/profil")).toBe(true)
   })
 
   it("masque sur les autres pages", () => {

@@ -105,7 +105,7 @@ export default function AgriculturePage() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-background pb-24">
       {/* Header */}
       <header className="sticky top-0 z-40 bg-[#1a472a]">
         <div className="px-4 pt-12 pb-6">
@@ -113,7 +113,7 @@ export default function AgriculturePage() {
             <Link href="/" className="text-white/80">
               <ChevronLeft className="h-6 w-6" />
             </Link>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
               <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
                 <Leaf className="h-4 w-4 text-white" />
               </div>
@@ -178,7 +178,7 @@ export default function AgriculturePage() {
       </header>
 
       {/* Products */}
-      <main className="p-4">
+      <main className="p-4 sm:p-5">
         {isLoading ? (
           <div className="grid grid-cols-2 gap-3">
             {[...Array(6)].map((_, i) => (
@@ -214,12 +214,12 @@ export default function AgriculturePage() {
             <p className="text-sm text-muted-foreground mb-3">
               {filteredProducts.length} produit{filteredProducts.length > 1 ? "s" : ""} agricole{filteredProducts.length > 1 ? "s" : ""}
             </p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 sm:gap-4">
               {filteredProducts.map(product => (
                 <Link 
                   key={product.id} 
                   href={`/produit/${product.id}`}
-                  className="bg-card rounded-2xl overflow-hidden shadow-sm active:scale-[0.98] transition-transform"
+                  className="bg-card rounded-2xl overflow-hidden shadow-sm ring-1 ring-black/[0.03] active:scale-[0.98] transition-transform"
                 >
                   <div className="relative aspect-square bg-muted">
                     {product.images?.[0] ? (

@@ -27,6 +27,8 @@ interface OneSignalSDK {
       optedIn?: boolean
       addEventListener: (event: string, listener: () => void) => void
     }
+    addTag?: (key: string, value: string) => void
+    addTags?: (tags: Record<string, string>) => void
   }
   Notifications: {
     requestPermission(): Promise<boolean | void>
@@ -89,7 +91,7 @@ export function OneSignalProvider({ children }: { children: React.ReactNode }) {
       await sync()
       OneSignal.User.PushSubscription.addEventListener("change", sync)
 
-      // Lier l'utilisateur Supabase (external_id) si connecté
+      // Lier l'utilisateur Supabase (external_id) + tags rôle
       try {
         const supabase = createClient()
         const {
@@ -97,9 +99,23 @@ export function OneSignalProvider({ children }: { children: React.ReactNode }) {
         } = await supabase.auth.getUser()
         if (user?.id && OneSignal.login) {
           await OneSignal.login(user.id)
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("user_type")
+            .eq("id", user.id)
+            .maybeSingle()
+          const role = (profile?.user_type || "acheteur").toString()
+          if (OneSignal.User.addTags) {
+            OneSignal.User.addTags({
+              role,
+              platform: "web_pwa",
+            })
+          } else if (OneSignal.User.addTag) {
+            OneSignal.User.addTag("role", role)
+          }
         }
-      } catch {
-        // ignore
+      } catch (err) {
+        console.warn("[OneSignal] login/tags", err)
       }
 
       if (!OneSignal.User.PushSubscription.optedIn) {

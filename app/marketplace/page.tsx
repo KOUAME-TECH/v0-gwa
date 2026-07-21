@@ -67,7 +67,7 @@ function MarketplaceContent() {
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
   const [showFilters, setShowFilters] = useState(false)
-  const [viewMode, setViewMode] = useState<ViewMode>("compact")
+  const [viewMode, setViewMode] = useState<ViewMode>("grid")
   const [userId, setUserId] = useState<string | null>(null)
   const [userCity, setUserCity] = useState<string | null>(null)
   const { enabled: listenMode } = useListenMode()
@@ -96,9 +96,9 @@ function MarketplaceContent() {
         `)
         .eq("status", "active")
         .order("created_at", { ascending: false })
-        .limit(60),
+        .limit(36),
       supabase.from("categories").select("id, name, slug, category_type").eq("category_type", "agriculture").is("parent_id", null).order("name"),
-      user ? supabase.from("favorites").select("product_id").eq("user_id", user.id) : Promise.resolve({ data: [] as { product_id: string }[] }),
+      user ? supabase.from("favorites").select("product_id").eq("user_id", user.id).limit(200) : Promise.resolve({ data: [] as { product_id: string }[] }),
       profilePromise,
     ])
 
@@ -214,32 +214,31 @@ function MarketplaceContent() {
     )
   }
 
-  // ---- COMPACT CARD (3 cols) ----
+  // ---- COMPACT CARD (3 cols) — un peu plus aéré ----
   function CompactCard({ p }: { p: Product }) {
     return (
-      <Link href={`/produit/${p.id}`} className="bg-white rounded-xl overflow-hidden shadow-sm active:scale-[0.97] transition-transform">
-        <div className="relative" style={{ aspectRatio: "1/1", maxHeight: 90 }}>
+      <Link href={`/produit/${p.id}`} className="bg-white rounded-2xl overflow-hidden shadow-sm active:scale-[0.97] transition-transform ring-1 ring-black/[0.03]">
+        <div className="relative aspect-square max-h-[110px]">
           {p.images?.[0] ? (
-            <Image src={p.images[0]} alt={p.name} fill className="object-cover" sizes="120px" loading="lazy" />
+            <Image src={p.images[0]} alt={p.name} fill className="object-cover" sizes="140px" loading="lazy" />
           ) : (
             <div className="w-full h-full bg-muted flex items-center justify-center text-2xl">{"📦"}</div>
           )}
           <button onClick={(e) => toggleFavorite(p.id, e)}
-            className="absolute top-1 right-1 w-6 h-6 bg-white/80 backdrop-blur-sm rounded-full flex items-center justify-center">
-            <Heart className={`h-3 w-3 ${favorites.has(p.id) ? "fill-red-500 text-red-500" : "text-gray-500"}`} />
+            className="absolute top-2 right-2 w-7 h-7 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center">
+            <Heart className={`h-3.5 w-3.5 ${favorites.has(p.id) ? "fill-red-500 text-red-500" : "text-gray-500"}`} />
           </button>
         </div>
-        <div className="p-1.5">
-          <div className="flex items-center gap-0.5">
-            <p className="text-[11px] font-medium leading-tight line-clamp-1 flex-1 min-w-0">{p.name}</p>
+        <div className="p-2.5">
+          <div className="flex items-center gap-1">
+            <p className="text-xs font-medium leading-snug line-clamp-2 flex-1 min-w-0">{p.name}</p>
             <ProductListenBtn p={p} />
-            <AudioLangBadge lang={p.audio_lang} />
           </div>
-          <div className="flex items-center justify-between mt-1">
-            <span className="text-[11px] font-bold text-red-600">{fmt(p.price)} F</span>
+          <div className="flex items-center justify-between mt-2 gap-1">
+            <span className="text-xs font-bold text-[#1F5C2E]">{fmt(p.price)} F</span>
             <button onClick={(e) => addToCart(p.id, e)}
-              className="w-[22px] h-[22px] rounded-full bg-[#2F7D32] text-white flex items-center justify-center shrink-0">
-              <Plus className="h-3 w-3" />
+              className="w-7 h-7 rounded-full bg-[#2F7D32] text-white flex items-center justify-center shrink-0">
+              <Plus className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>
@@ -428,7 +427,7 @@ function MarketplaceContent() {
       </header>
 
       {/* Content */}
-      <main className="p-3">
+      <main className="p-4 sm:p-5">
         {isDigest && digestProducts.length > 0 && (
           <DigestBanner
             count={digestProducts.length}
@@ -473,19 +472,19 @@ function MarketplaceContent() {
             </div>
 
             {viewMode === "compact" && (
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-3 gap-2.5">
                 {filteredProducts.map(p => <CompactCard key={p.id} p={p} />)}
               </div>
             )}
 
             {viewMode === "list" && (
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-3">
                 {filteredProducts.map(p => <ListCard key={p.id} p={p} />)}
               </div>
             )}
 
             {viewMode === "grid" && (
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-2 gap-3">
                 {filteredProducts.map(p => <GridCard key={p.id} p={p} />)}
               </div>
             )}
