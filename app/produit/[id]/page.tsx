@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { ListenMicButton } from "@/components/media/clickable-listen-text"
 import { buildProductListenText } from "@/lib/media/product-listen"
+import { shouldShowVerifiedBadge } from "@/lib/verification/badge"
 
 type Product = {
   id: string

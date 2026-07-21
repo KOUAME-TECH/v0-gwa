@@ -212,7 +212,15 @@ export function BottomNav() {
                 return (
                   <Link 
                     key={item.label} 
-                    href={user ? item.href : "/auth/login"} 
+                    href={
+                      item.isCenter && !isSeller
+                        ? item.href
+                        : user
+                          ? item.href
+                          : item.isCenter
+                            ? "/auth/login?redirect=/publier"
+                            : "/auth/login"
+                    } 
                     className="relative -mt-4"
                     aria-label={item.label}
                   >

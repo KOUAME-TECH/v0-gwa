@@ -18,9 +18,9 @@ interface Product {
   images: string[] | null
   origin_country: string
   origin_region: string | null
-  is_verified: boolean
-  profiles: { full_name: string } | null
-  categories: { name: string } | null
+  product_type: string | null
+  profiles: { full_name: string; is_verified: boolean } | null
+  categories: { name: string; slug?: string } | null
 }
 
 const categories = [
@@ -47,19 +47,24 @@ export default function AgriculturePage() {
   }, [])
 
   async function fetchProducts() {
-    const { data } = await supabase
+    // Aligné marketplace : is_verified est sur profiles (vendeur), pas products
+    const { data, error } = await supabase
       .from("products")
       .select(`
-        id, name, price, unit, images, origin_country, origin_region, is_verified,
-        profiles:seller_id(full_name),
-        categories:category_id(name)
+        id, name, price, unit, images, origin_country, origin_region, product_type,
+        profiles:seller_id(full_name, is_verified),
+        categories:category_id(name, slug)
       `)
       .eq("status", "active")
-      .eq("product_type", "agriculture")
       .order("created_at", { ascending: false })
       .limit(50)
 
-    if (data) setProducts(data as Product[])
+    if (error) {
+      console.error("[agriculture] products", error.message)
+      setProducts([])
+    } else if (data) {
+      setProducts(data as Product[])
+    }
     setIsLoading(false)
   }
 
@@ -72,9 +77,23 @@ export default function AgriculturePage() {
     })
   }
 
-  const filteredProducts = products.filter(p => 
-    p.name.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const filteredProducts = products.filter((p) => {
+    const q = searchQuery.toLowerCase()
+    const matchesSearch =
+      !q ||
+      p.name.toLowerCase().includes(q) ||
+      (p.categories?.name || "").toLowerCase().includes(q)
+    if (!matchesSearch) return false
+    if (selectedCategory === "all") return true
+    const slug = (p.categories?.slug || p.categories?.name || p.product_type || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/\p{M}/gu, "")
+    return (
+      slug.includes(selectedCategory) ||
+      (p.name || "").toLowerCase().includes(selectedCategory)
+    )
+  })
 
   const formatPrice = (price: number) => new Intl.NumberFormat("fr-FR").format(price)
 
@@ -224,7 +243,7 @@ export default function AgriculturePage() {
                     >
                       <Heart className={`h-4 w-4 ${favorites.has(product.id) ? "fill-red-500 text-red-500" : "text-gray-600"}`} />
                     </button>
-                    {product.is_verified && (
+                    {product.profiles?.is_verified && (
                       <Badge className="absolute top-2 left-2 bg-primary text-[10px] px-1.5 py-0.5">
                         Verifie
                       </Badge>

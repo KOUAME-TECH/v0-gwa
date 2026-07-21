@@ -14,10 +14,10 @@ const MALICIOUS_UA = ['sqlmap', 'nikto', 'nmap', 'masscan', 'zgrab', 'dirbuster'
 // Security: Rate limiting (in-memory)
 const RL_MAP = new Map<string, { count: number; ts: number }>()
 const RL_LIMITS: Record<string, number> = {
-  auth: 10,
-  admin: 20,
-  api: 60,
-  default: 120,
+  auth: 30,
+  admin: 40,
+  api: 120,
+  default: 240,
 }
 
 function getClientIP(req: NextRequest): string {
