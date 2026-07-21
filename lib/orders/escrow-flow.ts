@@ -34,7 +34,44 @@ export const ESCROW_STEP_LABELS = [
   { id: "libere", label: "Libéré" },
 ] as const
 
-/** Index 0–4 du stepper escrow selon paiement + escrow + statut commande. */
+/** Raisons litige alignées CHECK DB (004_admin_system.sql). */
+export const DISPUTE_REASONS = [
+  { id: "product_not_received", label: "Produit non reçu" },
+  { id: "product_damaged", label: "Produit abîmé" },
+  { id: "wrong_product", label: "Mauvais produit" },
+  { id: "quality_issue", label: "Problème de qualité" },
+  { id: "other", label: "Autre" },
+] as const
+
+export type DisputeReasonId = (typeof DISPUTE_REASONS)[number]["id"]
+
+const DISPUTE_REASON_SET = new Set<string>(DISPUTE_REASONS.map((r) => r.id))
+
+export function normalizeDisputeReason(reason?: string | null): DisputeReasonId {
+  if (reason && DISPUTE_REASON_SET.has(reason)) return reason as DisputeReasonId
+  return "other"
+}
+
+export function mapLitigeDescriptionToReason(description: string): DisputeReasonId {
+  if (/pas reçu|non reçu|pas livré|jamais arriv/i.test(description)) {
+    return "product_not_received"
+  }
+  if (/abîmé|cassé|endommag|pourri|avari/i.test(description)) {
+    return "product_damaged"
+  }
+  if (/mauvais produit|pas le bon|erreur produit|wrong/i.test(description)) {
+    return "wrong_product"
+  }
+  if (/qualité|quantité|manquant|moisi|sale/i.test(description)) {
+    return "quality_issue"
+  }
+  return "other"
+}
+
+/**
+ * Index 0–4 du stepper escrow selon paiement + escrow + statut commande.
+ * 0 Payer → 1 Séquestre → 2 Livré → 3 Confirmé → 4 Libéré
+ */
 export function resolveEscrowStep(input: {
   payment_status?: string | null
   escrow_status?: EscrowStatus
@@ -44,11 +81,16 @@ export function resolveEscrowStep(input: {
   const esc = input.escrow_status || "pending"
   const st = normalizeOrderStatus(input.status || "pending")
 
-  if (esc === "released" || st === "delivered") return 4
+  if (esc === "released") return 4
   if (esc === "frozen" || st === "disputed") return 2
+
+  // Livré côté commande mais fonds encore en séquestre → étape Confirmé
+  if (st === "delivered" && esc === "held") return 3
+  if (st === "delivered") return 4
+
   if (st === "shipped") return 2
+
   if (pay === "paid" && (esc === "held" || esc === "pending")) {
-    if (st === "confirmed" || st === "processing") return 1
     return 1
   }
   if (pay === "processing") return 0
@@ -87,4 +129,29 @@ export function escrowStatusMessage(step: number, escrow?: EscrowStatus): string
     default:
       return ""
   }
+}
+
+/** Acheteur peut confirmer réception seulement si fonds réellement en séquestre. */
+export function canBuyerConfirmReception(input: {
+  isSeller: boolean
+  payment_status?: string | null
+  escrow_status?: EscrowStatus
+  status?: string | null
+}): boolean {
+  if (input.isSeller) return false
+  if (input.payment_status !== "paid") return false
+  if (input.escrow_status !== "held") return false
+  const st = normalizeOrderStatus(input.status || "pending")
+  return ["shipped", "processing", "confirmed", "delivered"].includes(st)
+}
+
+export function canOpenLitige(input: {
+  payment_status?: string | null
+  escrow_status?: EscrowStatus
+  status?: string | null
+}): boolean {
+  const st = normalizeOrderStatus(input.status || "pending")
+  if (st === "disputed" || st === "cancelled" || st === "delivered") return false
+  if (input.escrow_status === "frozen" || input.escrow_status === "released") return false
+  return input.payment_status === "paid"
 }

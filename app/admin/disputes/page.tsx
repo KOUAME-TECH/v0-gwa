@@ -64,6 +64,7 @@ export default function AdminDisputesPage() {
   const [resolution, setResolution] = useState("")
   const [refundAmount, setRefundAmount] = useState("")
   const [newStatus, setNewStatus] = useState<string>("")
+  const [escrowOutcome, setEscrowOutcome] = useState<string>("release_seller")
   
   const supabase = createClient()
 
@@ -102,6 +103,10 @@ export default function AdminDisputesPage() {
           status: newStatus,
           resolution: resolution || null,
           refund_amount: refundAmount || null,
+          escrow_outcome:
+            newStatus === "resolved" || newStatus === "closed"
+              ? escrowOutcome
+              : null,
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -115,6 +120,7 @@ export default function AdminDisputesPage() {
       setResolution("")
       setRefundAmount("")
       setNewStatus("")
+      setEscrowOutcome("release_seller")
       await loadDisputes()
     } catch {
       alert("Erreur réseau")
@@ -494,6 +500,29 @@ export default function AdminDisputesPage() {
                           />
                           <p className="text-xs text-muted-foreground">
                             Maximum: {selectedDispute.orders?.total_amount?.toLocaleString()} FCFA
+                          </p>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Issue escrow</Label>
+                          <Select value={escrowOutcome} onValueChange={setEscrowOutcome}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="release_seller">
+                                Libérer au vendeur
+                              </SelectItem>
+                              <SelectItem value="refund_buyer">
+                                Rembourser l&apos;acheteur
+                              </SelectItem>
+                              <SelectItem value="keep_frozen">
+                                Garder gelé (manuel)
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground">
+                            Met à jour la commande + escrow_transactions.
                           </p>
                         </div>
                       </>

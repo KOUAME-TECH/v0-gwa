@@ -17,6 +17,9 @@ import { DashboardNav } from "@/components/dashboard-nav"
 import { WeatherWidget } from "@/components/weather-widget"
 import { isFactoringEligible } from "@/lib/factoring/eligibility"
 import { Banknote } from "lucide-react"
+import { getCoachActions } from "@/lib/scg/coach"
+import { ScgCoachPanel } from "@/components/scg/scg-coach"
+import type { SCGDimensions } from "@/lib/scg/engine"
 
 interface Product {
   id: string
@@ -49,6 +52,8 @@ export default function FarmerDashboard() {
     totalOrders: 0,
     pendingOrders: 0
   })
+  const [coachDims, setCoachDims] = useState<SCGDimensions | null>(null)
+  const [coachScore, setCoachScore] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
@@ -117,6 +122,27 @@ export default function FarmerDashboard() {
         pendingOrders
       })
 
+      const { data: scg } = await supabase
+        .from("scg_scores")
+        .select(
+          "score_total, dim_fiabilite, dim_qualite, dim_engagement, dim_volumes, dim_stabilite",
+        )
+        .eq("user_id", authUser.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (scg) {
+        setCoachScore(scg.score_total || 0)
+        setCoachDims({
+          fiabilite: scg.dim_fiabilite || 0,
+          qualite: scg.dim_qualite || 0,
+          engagement: scg.dim_engagement || 0,
+          volumes: scg.dim_volumes || 0,
+          stabilite: scg.dim_stabilite || 0,
+        })
+      }
+
       setIsLoading(false)
     }
     fetchData()
@@ -169,6 +195,15 @@ export default function FarmerDashboard() {
         <div className="mb-4">
           <WeatherWidget />
         </div>
+
+        {coachDims && (
+          <div className="mb-6">
+            <ScgCoachPanel
+              score={coachScore || profile?.scg_score || 0}
+              actions={getCoachActions(coachDims)}
+            />
+          </div>
+        )}
 
         {/* Stats Cards */}
         <div className="grid grid-cols-2 gap-3 mb-6">

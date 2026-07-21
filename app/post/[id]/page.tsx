@@ -117,10 +117,17 @@ export default function PostDetailPage() {
     }
     setSubmitting(true)
     try {
+      const hasText = !!commentText.trim()
+      const hasVoice = !!voice?.file?.size
+      if (!hasText && !hasVoice) {
+        toast.error("Écris un message ou envoie un vocal")
+        return
+      }
       const form = new FormData()
-      form.append("post_id", postId)
-      form.append("content", commentText)
-      if (voice?.file) form.append("audio", voice.file)
+      form.append("type", "post")
+      form.append("id", postId)
+      if (hasText) form.append("text", commentText.trim())
+      if (hasVoice && voice) form.append("audio", voice.file)
       const res = await fetch("/api/comments", { method: "POST", body: form })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))

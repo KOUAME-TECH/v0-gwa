@@ -68,6 +68,19 @@ export async function POST() {
       }
     }
 
+    // Audit best-effort (table peut différer selon migrations)
+    try {
+      await admin.from("admin_audit_log").insert({
+        admin_id: user.id,
+        action: "bootstrap_first_admin",
+        target_type: "admin_roles",
+        target_id: user.id,
+        details: { role: "super_admin" },
+      })
+    } catch {
+      // non bloquant
+    }
+
     return NextResponse.json({
       ok: true,
       seeded: true,
@@ -86,15 +99,31 @@ export async function POST() {
 
 export async function GET() {
   try {
+    const supabase = await createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
+    }
+
     const admin = createAdminClient()
     const { count } = await admin
       .from("admin_roles")
       .select("user_id", { count: "exact", head: true })
       .eq("is_active", true)
 
+    const { data: me } = await admin
+      .from("admin_roles")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("is_active", true)
+      .maybeSingle()
+
     return NextResponse.json({
       adminCount: count ?? 0,
       needsBootstrap: (count ?? 0) === 0,
+      alreadyAdmin: !!me,
     })
   } catch (err) {
     return NextResponse.json(

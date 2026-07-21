@@ -64,6 +64,12 @@ export default function AdminAnalyticsPage() {
     const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
     const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
     const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0)
+    const periodStart =
+      period === "week"
+        ? new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+        : period === "year"
+          ? new Date(now.getFullYear(), 0, 1)
+          : thisMonthStart
 
     // Users
     const { count: totalUsers } = await supabase
@@ -138,14 +144,18 @@ export default function AdminAnalyticsPage() {
       .sort((a, b) => b.count - a.count)
       .slice(0, 10)
 
-    // Orders
-    const { count: totalOrders } = await supabase
-      .from('orders')
-      .select('*', { count: 'exact', head: true })
+    // Orders (filtrées par période sélectionnée pour volume / CA période)
+    let ordersQuery = supabase.from('orders').select('*', { count: 'exact', head: true })
+    if (period !== "all") {
+      ordersQuery = ordersQuery.gte('created_at', periodStart.toISOString())
+    }
+    const { count: totalOrders } = await ordersQuery
 
-    const { data: ordersByStatusData } = await supabase
-      .from('orders')
-      .select('status')
+    let ordersStatusQuery = supabase.from('orders').select('status')
+    if (period !== "all") {
+      ordersStatusQuery = ordersStatusQuery.gte('created_at', periodStart.toISOString())
+    }
+    const { data: ordersByStatusData } = await ordersStatusQuery
     
     const ordersByStatus = Object.entries(
       (ordersByStatusData || []).reduce((acc: Record<string, number>, o) => {
@@ -154,10 +164,14 @@ export default function AdminAnalyticsPage() {
       }, {})
     ).map(([status, count]) => ({ status, count }))
 
-    const { data: revenueData } = await supabase
+    let revenueQuery = supabase
       .from('orders')
       .select('total_amount')
       .eq('payment_status', 'paid')
+    if (period !== "all") {
+      revenueQuery = revenueQuery.gte('created_at', periodStart.toISOString())
+    }
+    const { data: revenueData } = await revenueQuery
     
     const totalRevenue = revenueData?.reduce((sum, o) => sum + (o.total_amount || 0), 0) || 0
     const averageOrderValue = totalOrders ? totalRevenue / (totalOrders || 1) : 0
@@ -346,7 +360,18 @@ export default function AdminAnalyticsPage() {
           <h1 className="text-2xl md:text-3xl font-bold">Analytics</h1>
           <p className="text-muted-foreground">Statistiques détaillées de la plateforme</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          <Select value={period} onValueChange={setPeriod}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="Période" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="week">7 jours</SelectItem>
+              <SelectItem value="month">Ce mois</SelectItem>
+              <SelectItem value="year">Cette année</SelectItem>
+              <SelectItem value="all">Tout</SelectItem>
+            </SelectContent>
+          </Select>
           <Button variant="outline" onClick={loadAnalytics}>
             <RefreshCw className="h-4 w-4 mr-2" />
             Actualiser

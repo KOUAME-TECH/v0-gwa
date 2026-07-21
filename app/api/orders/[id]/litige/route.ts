@@ -2,22 +2,12 @@ import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { sendPushToUser } from "@/lib/notifications/push"
+import {
+  mapLitigeDescriptionToReason,
+  normalizeDisputeReason,
+} from "@/lib/orders/escrow-flow"
 
 type Ctx = { params: Promise<{ id: string }> }
-
-const REASON_MAP = [
-  { match: /pas reçu|non reçu|pas livré/i, reason: "product_not_received" },
-  { match: /qualité|abîmé|mauvais/i, reason: "product_quality" },
-  { match: /quantité|manquant/i, reason: "wrong_quantity" },
-  { match: /retard/i, reason: "late_delivery" },
-] as const
-
-function mapReason(description: string): string {
-  for (const r of REASON_MAP) {
-    if (r.match.test(description)) return r.reason
-  }
-  return "other"
-}
 
 /**
  * POST /api/orders/[id]/litige
@@ -59,7 +49,9 @@ export async function POST(request: NextRequest, context: Ctx) {
     const admin = createAdminClient()
     const now = new Date().toISOString()
     const photos = Array.isArray(body?.photos) ? body.photos : null
-    const reason = mapReason(description)
+    const reason = body?.reason
+      ? normalizeDisputeReason(String(body.reason))
+      : mapLitigeDescriptionToReason(description)
 
     await admin
       .from("orders")

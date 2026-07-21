@@ -4,7 +4,7 @@ import Link from "next/link"
 import { ChevronRight, Square } from "lucide-react"
 import { useState } from "react"
 import { AudioWaveIcon } from "@/components/media/audio-wave-icon"
-import { buildCoachSpeech, type CoachAction } from "@/lib/scg/coach"
+import { buildCoachSpeech, coachIntro, type CoachAction } from "@/lib/scg/coach"
 import { cn } from "@/lib/utils"
 
 export function ScgCoachPanel({
@@ -42,7 +42,7 @@ export function ScgCoachPanel({
         <div>
           <p className="font-semibold text-[#1F5C2E] text-sm">Coach SCG</p>
           <p className="text-xs text-[#4B5563] mt-0.5">
-            Ton score est {score} — déjà un bon début. Deux actions simples :
+            {coachIntro(score)}
           </p>
         </div>
         <button
