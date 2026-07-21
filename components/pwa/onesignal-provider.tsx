@@ -71,8 +71,9 @@ export function OneSignalProvider({ children }: { children: React.ReactNode }) {
         await OneSignal.init({
           appId,
           allowLocalhostAsSecureOrigin: true,
-          serviceWorkerPath: "/OneSignalSDKWorker.js",
-          serviceWorkerUpdaterPath: "/OneSignalSDKUpdaterWorker.js",
+          // Même SW que GWA (importScripts OneSignal) — évite le conflit de scope /
+          serviceWorkerPath: "/sw.js",
+          serviceWorkerParam: { scope: "/" },
           notifyButton: { enable: false },
         })
       } catch (err) {

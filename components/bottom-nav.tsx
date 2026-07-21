@@ -159,12 +159,12 @@ export function BottomNav() {
     <>
       {/* Floating action pills */}
       {user && (
-        <div className="fixed bottom-[76px] right-3 flex flex-col gap-2 z-40 animate-fadeIn">
+        <div className="pointer-events-none fixed bottom-[76px] left-1/2 z-40 flex w-full max-w-[480px] -translate-x-1/2 flex-col items-end gap-2 px-3 animate-fadeIn">
           {/* Panier flottant si sur page produit */}
           {(pathname?.startsWith("/produit/") || pathname?.startsWith("/marketplace/product/")) && cartCount > 0 && (
             <Link 
               href="/panier"
-              className="flex items-center gap-2 bg-[#2F7D32] text-white rounded-full pl-3 pr-4 py-2.5 shadow-lg shadow-[#2F7D32]/25 active:scale-95 transition-transform"
+              className="pointer-events-auto flex items-center gap-2 bg-[#2F7D32] text-white rounded-full pl-3 pr-4 py-2.5 shadow-lg shadow-[#2F7D32]/25 active:scale-95 transition-transform"
             >
               <ShoppingBag className="h-4 w-4" />
               <span className="text-sm font-semibold">{cartCount}</span>
@@ -174,7 +174,7 @@ export function BottomNav() {
           {unreadNotifications > 0 && pathname !== "/notifications" && (
             <Link 
               href="/notifications"
-              className="flex items-center gap-2 bg-white border border-[#E5E7EB] rounded-full pl-3 pr-4 py-2.5 shadow-md active:scale-95 transition-transform"
+              className="pointer-events-auto flex items-center gap-2 bg-white border border-[#E5E7EB] rounded-full pl-3 pr-4 py-2.5 shadow-md active:scale-95 transition-transform"
             >
               <Bell className="h-4 w-4 text-[#F39A1F]" />
               <span className="text-xs font-semibold text-[#111827]">{unreadNotifications}</span>
@@ -183,7 +183,7 @@ export function BottomNav() {
         </div>
       )}
 
-      <nav className="fixed bottom-0 left-0 right-0 z-50" role="navigation" aria-label="Navigation principale">
+      <nav className="fixed bottom-0 left-1/2 z-50 w-full max-w-[480px] -translate-x-1/2" role="navigation" aria-label="Navigation principale">
         {/* World indicator bar */}
         <div className="h-[2px] bg-[#E5E7EB] relative">
           {activeWorld && (

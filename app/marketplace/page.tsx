@@ -467,7 +467,6 @@ function MarketplaceContent() {
                   index={tourIndex}
                   total={tourTotal}
                   onClick={toggleTour}
-                  className="sm:hidden"
                 />
                 <Badge variant="outline" className="text-[10px] text-[#2F7D32] border-[#2F7D32]/30 capitalize">{viewMode}</Badge>
               </div>

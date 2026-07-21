@@ -28,6 +28,10 @@ describe("resolveListenMode (tap pour écouter)", () => {
     expect(resolveListenMode("Bonjour", null)).toBe("tts")
   })
 
+  it("fallbackLabel sans texte → tts", () => {
+    expect(resolveListenMode("", null, "Produit")).toBe("tts")
+  })
+
   it("rien → none", () => {
     expect(resolveListenMode("", null)).toBe("none")
   })

@@ -49,14 +49,16 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </head>
-      <body className="font-sans antialiased min-h-dvh">
+      <body className="font-sans antialiased min-h-dvh bg-[#E8EFE6] md:bg-[radial-gradient(ellipse_at_top,#F3F7F0_0%,#D5E3D2_45%,#C5D4C2_100%)]">
         <OneSignalProvider>
           <ServiceWorkerRegister />
-          <OfflineBanner />
-          <IncompleteRouteBanner />
-          <main className="pb-[76px] safe-bottom">{children}</main>
-          <BottomNav />
-          <Toaster position="top-center" />
+          <div className="relative mx-auto flex min-h-dvh w-full max-w-[480px] flex-col bg-background shadow-[0_0_48px_rgba(31,92,46,0.12)] md:min-h-[100dvh] md:ring-1 md:ring-black/5">
+            <OfflineBanner />
+            <IncompleteRouteBanner />
+            <main className="flex-1 pb-[76px] safe-bottom">{children}</main>
+            <BottomNav />
+            <Toaster position="top-center" />
+          </div>
           <Analytics />
         </OneSignalProvider>
       </body>

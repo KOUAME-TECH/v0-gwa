@@ -14,9 +14,13 @@ import { useAutoListenOnView } from "@/hooks/use-contextual-listen"
 
 type ListenMode = "audio" | "tts" | "none"
 
-function resolveListenMode(text?: string | null, audioUrl?: string | null): ListenMode {
+export function resolveListenMode(
+  text?: string | null,
+  audioUrl?: string | null,
+  fallbackLabel?: string | null,
+): ListenMode {
   if (audioUrl) return "audio"
-  if (text && text.trim()) return "tts"
+  if ((text && text.trim()) || (fallbackLabel && fallbackLabel.trim())) return "tts"
   return "none"
 }
 
@@ -36,11 +40,11 @@ function useListenPlayback({
   audioLang,
 }: ListenPlaybackProps) {
   const utterLang = lang ?? resolveUtterLang(audioLang)
-  const mode = resolveListenMode(text, audioUrl)
+  const mode = resolveListenMode(text, audioUrl, fallbackLabel)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const [playing, setPlaying] = useState(false)
 
-  const speechText = text?.trim() || fallbackLabel || ""
+  const speechText = text?.trim() || fallbackLabel?.trim() || ""
   const canListen = mode !== "none" && (mode === "audio" ? !!audioUrl : !!speechText)
 
   const stopAll = useCallback(() => {
@@ -66,7 +70,20 @@ function useListenPlayback({
       if (!audioRef.current) {
         audioRef.current = new Audio(audioUrl)
         audioRef.current.onended = () => setPlaying(false)
-        audioRef.current.onerror = () => setPlaying(false)
+        audioRef.current.onerror = () => {
+          // Fichier audio KO → bascule TTS si texte dispo
+          setPlaying(false)
+          if (speechText && typeof window !== "undefined" && window.speechSynthesis) {
+            window.speechSynthesis.cancel()
+            const utter = new SpeechSynthesisUtterance(speechText)
+            utter.lang = utterLang
+            utter.rate = 0.95
+            utter.onend = () => setPlaying(false)
+            utter.onerror = () => setPlaying(false)
+            setPlaying(true)
+            window.speechSynthesis.speak(utter)
+          }
+        }
       } else {
         audioRef.current.src = audioUrl
       }
@@ -75,14 +92,25 @@ function useListenPlayback({
       try {
         await audioRef.current.play()
       } catch {
-        setPlaying(false)
+        // Autoplay / lecture bloquée → TTS
+        if (speechText && typeof window !== "undefined" && window.speechSynthesis) {
+          window.speechSynthesis.cancel()
+          const utter = new SpeechSynthesisUtterance(speechText)
+          utter.lang = utterLang
+          utter.rate = 0.95
+          utter.onend = () => setPlaying(false)
+          utter.onerror = () => setPlaying(false)
+          window.speechSynthesis.speak(utter)
+        } else {
+          setPlaying(false)
+        }
       }
       return
     }
 
-    if (mode === "tts" && typeof window !== "undefined" && window.speechSynthesis && text?.trim()) {
+    if (mode === "tts" && typeof window !== "undefined" && window.speechSynthesis && speechText) {
       window.speechSynthesis.cancel()
-      const utter = new SpeechSynthesisUtterance(text.trim())
+      const utter = new SpeechSynthesisUtterance(speechText)
       utter.lang = utterLang
       utter.rate = 0.95
       utter.onend = () => setPlaying(false)
@@ -91,7 +119,7 @@ function useListenPlayback({
       recordListenActivity()
       window.speechSynthesis.speak(utter)
     }
-  }, [audioUrl, canListen, utterLang, mode, playing, stopAll, text])
+  }, [audioUrl, canListen, utterLang, mode, playing, speechText, stopAll])
 
   useEffect(() => () => stopAll(), [stopAll])
 
@@ -294,4 +322,4 @@ export function ClickableListenText({
   )
 }
 
-export { resolveListenMode, useListenPlayback }
+export { useListenPlayback }

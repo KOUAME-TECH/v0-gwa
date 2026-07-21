@@ -163,9 +163,9 @@ export async function POST(request: Request) {
 
     const linkedEmail = otpEmail
 
-    // Login : Path A Supabase d'abord si Twilio Vercel pas prêt
-    // (Twilio est souvent configuré côté Supabase Auth Phone).
-    // Si TWILIO_* est sur Vercel → Path B custom prioritaire.
+    // Login : Path A Supabase Phone d'abord (Twilio souvent branché côté Supabase),
+    // sauf si TWILIO_* est déjà sur Vercel → Path B custom prioritaire.
+    let supabasePhoneError: string | null = null
     if (mode === "login" && !hasTwilioProvider()) {
       const { error: smsError } = await supabase.auth.signInWithOtp({
         phone: formatted,
@@ -188,6 +188,7 @@ export async function POST(request: Request) {
         })
       }
 
+      supabasePhoneError = smsError.message
       console.warn("[auth/send-otp] supabase phone:", smsError.message)
       // continue → Path B AT/Termii si dispo
     }
@@ -220,6 +221,15 @@ export async function POST(request: Request) {
           error:
             "Impossible d'envoyer le SMS pour le moment. Réessayez plus tard.",
           code: "SMS_SEND_FAILED",
+          hint: [
+            supabasePhoneError
+              ? `supabase:${supabasePhoneError.slice(0, 80)}`
+              : null,
+            "sms_provider:missing",
+            "twilio_vercel:missing",
+          ]
+            .filter(Boolean)
+            .join(" | "),
         },
         { status: 502 },
       )
@@ -245,7 +255,7 @@ export async function POST(request: Request) {
     const sms = await sendSmsOtp(formatted, code)
     if (!sms.success) {
       console.error("[auth/send-otp] sms", sms.error)
-      // Fallback Path A pour login
+      // Fallback Path A pour login (si pas déjà tenté, ou re-essai)
       if (mode === "login") {
         const { error: smsError } = await supabase.auth.signInWithOtp({
           phone: formatted,
@@ -267,13 +277,22 @@ export async function POST(request: Request) {
             otp_mode: "supabase_fallback",
           })
         }
+        supabasePhoneError = smsError.message
         console.warn("[auth/send-otp] supabase fallback:", smsError.message)
       }
+      const hintParts = [
+        sms.provider ? `${sms.provider}:${(sms.error || "fail").slice(0, 80)}` : null,
+        supabasePhoneError
+          ? `supabase:${supabasePhoneError.slice(0, 80)}`
+          : null,
+        !hasTwilioProvider() ? "twilio_vercel:missing" : null,
+      ].filter(Boolean)
       return NextResponse.json(
         {
           error:
             "Impossible d'envoyer le SMS pour le moment. Réessayez plus tard.",
           code: "SMS_SEND_FAILED",
+          hint: hintParts.join(" | ") || undefined,
         },
         { status: 502 },
       )

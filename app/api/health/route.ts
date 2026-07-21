@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { hasSmsProvider } from '@/lib/auth/sms'
+import {
+  getOneSignalAppId,
+  getOneSignalRestApiKey,
+} from '@/lib/notifications/onesignal-config'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,6 +25,8 @@ export async function GET() {
   const smsConfigured = hasSmsProvider()
   const otpPepper = envSet('OTP_PEPPER')
   const cronSecret = envSet('CRON_SECRET')
+  const onesignalApp = !!getOneSignalAppId()
+  const onesignalRest = !!getOneSignalRestApiKey()
   return NextResponse.json({
     status: healthy ? 'healthy' : 'degraded',
     app: 'GWA Platform',
@@ -40,6 +46,8 @@ export async function GET() {
         envSet('TWILIO_AUTH_TOKEN') &&
         (envSet('TWILIO_PHONE_NUMBER') || envSet('TWILIO_MESSAGING_SERVICE_SID')),
       SMS_TERMII: envSet('TERMII_API_KEY'),
+      ONESIGNAL_APP_ID: onesignalApp,
+      ONESIGNAL_REST_API_KEY: onesignalRest,
     },
   }, { status: healthy ? 200 : 503 })
 }
