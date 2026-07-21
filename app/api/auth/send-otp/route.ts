@@ -12,6 +12,7 @@ import {
   generateOtpCode,
   storeOtp,
   canSendOtp,
+  clearOtp,
 } from "@/lib/auth/otp-store"
 import { hasSmsProvider, sendSmsOtp } from "@/lib/auth/sms"
 
@@ -221,6 +222,30 @@ export async function POST(request: Request) {
     const sms = await sendSmsOtp(formatted, code)
     if (!sms.success) {
       console.error("[auth/send-otp] sms", sms.error)
+      // Fallback Path A (Supabase Phone) pour login si Twilio/AT down
+      if (mode === "login") {
+        const { error: smsError } = await supabase.auth.signInWithOtp({
+          phone: formatted,
+          options: { shouldCreateUser: false },
+        })
+        if (!smsError) {
+          await clearOtp(formatted).catch(() => {})
+          return NextResponse.json({
+            success: true,
+            phone: formatted,
+            masked_phone: maskPhone(formatted),
+            channel: "sms",
+            message: "Code SMS envoyé",
+            expires_in: 600,
+            resend_after: 60,
+            linked_email_masked: linkedEmail
+              ? maskEmail(linkedEmail)
+              : undefined,
+            otp_mode: "supabase_fallback",
+          })
+        }
+        console.warn("[auth/send-otp] supabase fallback:", smsError.message)
+      }
       return NextResponse.json(
         {
           error:
