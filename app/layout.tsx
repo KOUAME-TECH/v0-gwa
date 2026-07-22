@@ -49,7 +49,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://frorfexbcyfbydkiwxqv.supabase.co" />
         <link rel="dns-prefetch" href="https://cdn.onesignal.com" />
       </head>
-      <body className="font-sans antialiased min-h-dvh bg-[#E8EFE6] md:bg-[radial-gradient(ellipse_at_top,#F3F7F0_0%,#D5E3D2_45%,#C5D4C2_100%)]">
+      <body className="font-sans antialiased min-h-dvh bg-background">
         <OneSignalProvider>
           <ServiceWorkerRegister />
           <AppShell>{children}</AppShell>

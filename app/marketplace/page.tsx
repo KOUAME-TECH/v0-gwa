@@ -214,11 +214,11 @@ function MarketplaceContent() {
     )
   }
 
-  // ---- COMPACT CARD (3 cols) — un peu plus aéré ----
+  // ---- COMPACT CARD (3 cols) — image arrondie plein espace ----
   function CompactCard({ p }: { p: Product }) {
     return (
-      <Link href={`/produit/${p.id}`} className="bg-white rounded-2xl overflow-hidden shadow-sm active:scale-[0.97] transition-transform ring-1 ring-black/[0.03]">
-        <div className="relative aspect-square max-h-[110px]">
+      <Link href={`/produit/${p.id}`} className="block active:scale-[0.97] transition-transform">
+        <div className="relative aspect-square w-full overflow-hidden rounded-2xl bg-muted ring-1 ring-black/[0.04]">
           {p.images?.[0] ? (
             <Image src={p.images[0]} alt={p.name} fill className="object-cover" sizes="140px" loading="lazy" />
           ) : (
@@ -229,12 +229,12 @@ function MarketplaceContent() {
             <Heart className={`h-3.5 w-3.5 ${favorites.has(p.id) ? "fill-red-500 text-red-500" : "text-gray-500"}`} />
           </button>
         </div>
-        <div className="p-2.5">
+        <div className="pt-2 px-0.5">
           <div className="flex items-center gap-1">
             <p className="text-xs font-medium leading-snug line-clamp-2 flex-1 min-w-0">{p.name}</p>
             <ProductListenBtn p={p} />
           </div>
-          <div className="flex items-center justify-between mt-2 gap-1">
+          <div className="flex items-center justify-between mt-1.5 gap-1">
             <span className="text-xs font-bold text-[#1F5C2E]">{fmt(p.price)} F</span>
             <button onClick={(e) => addToCart(p.id, e)}
               className="w-7 h-7 rounded-full bg-[#2F7D32] text-white flex items-center justify-center shrink-0">
@@ -250,7 +250,7 @@ function MarketplaceContent() {
   function ListCard({ p }: { p: Product }) {
     return (
       <Link href={`/produit/${p.id}`} className="flex items-center gap-3 bg-white rounded-xl p-2 shadow-sm active:scale-[0.99] transition-transform" style={{ maxHeight: 74 }}>
-        <div className="relative w-[58px] h-[58px] rounded-lg overflow-hidden shrink-0">
+        <div className="relative w-[58px] h-[58px] rounded-2xl overflow-hidden shrink-0 bg-muted">
           {p.images?.[0] ? (
             <Image src={p.images[0]} alt={p.name} fill className="object-cover" sizes="58px" loading="lazy" />
           ) : (
@@ -270,7 +270,7 @@ function MarketplaceContent() {
               </span>
             )}
           </div>
-          <p className="text-[13px] font-bold text-red-600 mt-0.5">{fmt(p.price)} FCFA/{p.unit}</p>
+          <p className="text-[13px] font-bold text-[#1F5C2E] mt-0.5">{fmt(p.price)} FCFA/{p.unit}</p>
         </div>
         <div className="flex flex-col gap-1.5 shrink-0">
           <button onClick={(e) => addToCart(p.id, e)}
@@ -286,11 +286,11 @@ function MarketplaceContent() {
     )
   }
 
-  // ---- GRID CARD (2 cols) ----
+  // ---- GRID CARD (2 cols) — image arrondie qui remplit l’espace ----
   function GridCard({ p }: { p: Product }) {
     return (
-      <Link href={`/produit/${p.id}`} className="bg-white rounded-2xl overflow-hidden shadow-sm active:scale-[0.98] transition-transform">
-        <div className="relative" style={{ aspectRatio: "4/3" }}>
+      <Link href={`/produit/${p.id}`} className="block active:scale-[0.98] transition-transform">
+        <div className="relative w-full overflow-hidden rounded-2xl bg-muted ring-1 ring-black/[0.04]" style={{ aspectRatio: "4/3" }}>
           {p.images?.[0] ? (
             <Image src={p.images[0]} alt={p.name} fill className="object-cover" sizes="50vw" loading="lazy" />
           ) : (
@@ -301,10 +301,10 @@ function MarketplaceContent() {
             <Heart className={`h-4 w-4 ${favorites.has(p.id) ? "fill-red-500 text-red-500" : "text-gray-500"}`} />
           </button>
           {p.is_organic && (
-            <Badge className="absolute top-2 left-2 bg-green-600 text-white text-[10px] px-1.5 py-0.5">Bio</Badge>
+            <Badge className="absolute top-2 left-2 bg-[#2F7D32] text-white text-[10px] px-1.5 py-0.5">Bio</Badge>
           )}
         </div>
-        <div className="p-2.5">
+        <div className="pt-2.5 px-0.5">
           <div className="flex items-start gap-1">
             <p className="text-sm font-medium leading-tight line-clamp-2 flex-1 min-w-0">{p.name}</p>
             <ProductListenBtn p={p} size="sm" />
@@ -312,11 +312,11 @@ function MarketplaceContent() {
           {p.profiles && (
             <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
               {p.profiles.full_name}
-              {p.profiles.is_verified && <span className="text-blue-500">{"✓"}</span>}
+              {p.profiles.is_verified && <span className="text-[#2F7D32]">{"✓"}</span>}
             </p>
           )}
           <div className="flex items-center justify-between mt-1.5">
-            <span className="text-sm font-bold text-[#2F7D32]">{fmt(p.price)} <span className="text-[10px] font-normal text-gray-500">FCFA/{p.unit}</span></span>
+            <span className="text-sm font-bold text-[#1F5C2E]">{fmt(p.price)} <span className="text-[10px] font-normal text-gray-500">FCFA/{p.unit}</span></span>
             <button onClick={(e) => addToCart(p.id, e)}
               className="w-8 h-8 rounded-full bg-[#2F7D32] text-white flex items-center justify-center">
               <Plus className="h-4 w-4" />
@@ -441,9 +441,9 @@ function MarketplaceContent() {
         {isLoading ? (
           <div className={`grid gap-2 ${viewMode === "compact" ? "grid-cols-3" : viewMode === "list" ? "grid-cols-1" : "grid-cols-2"}`}>
             {[...Array(viewMode === "compact" ? 9 : 6)].map((_, i) => (
-              <div key={i} className="bg-white rounded-xl overflow-hidden">
-                <div className={`bg-muted gwa-skeleton ${viewMode === "list" ? "h-14 w-14" : viewMode === "compact" ? "aspect-square max-h-[90px]" : "aspect-[4/3]"}`} />
-                {viewMode !== "list" && <div className="p-2 space-y-1"><div className="h-3 bg-muted rounded gwa-skeleton" /><div className="h-3 bg-muted rounded w-2/3 gwa-skeleton" /></div>}
+              <div key={i} className="overflow-hidden">
+                <div className={`bg-muted gwa-skeleton rounded-2xl ${viewMode === "list" ? "h-14 w-14" : viewMode === "compact" ? "aspect-square" : "aspect-[4/3]"}`} />
+                {viewMode !== "list" && <div className="pt-2 space-y-1"><div className="h-3 bg-muted rounded gwa-skeleton" /><div className="h-3 bg-muted rounded w-2/3 gwa-skeleton" /></div>}
               </div>
             ))}
           </div>

@@ -26,6 +26,8 @@ describe("shouldShowBottomNav", () => {
     expect(shouldShowBottomNav("/wallet")).toBe(false)
     expect(shouldShowBottomNav("/messages/xyz")).toBe(false)
     expect(shouldShowBottomNav("/download")).toBe(false)
+    expect(shouldShowBottomNav("/profil/lier")).toBe(false)
+    expect(shouldShowBottomNav("/profil/verification")).toBe(false)
   })
 })
 

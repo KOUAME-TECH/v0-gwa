@@ -375,7 +375,9 @@ function SignupForm() {
             <>
               <div className="mb-4">
                 <h1 className="text-3xl font-bold tracking-tight mb-2">Créer un compte</h1>
-                <p className="text-neutral-500">Rejoignez GWA — mobile ou email</p>
+                <p className="text-neutral-500 text-sm">
+                  Même numéro déjà utilisé ? On vous connecte — vous pourrez lier email et vérifier votre identité ensuite.
+                </p>
               </div>
 
               <Tabs

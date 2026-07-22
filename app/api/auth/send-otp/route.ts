@@ -18,8 +18,13 @@ import { hasSmsProvider, hasTwilioProvider, sendSmsOtp } from "@/lib/auth/sms"
 
 /**
  * POST /api/auth/send-otp
- * SMS via Twilio/AT/Termii (custom OTP). Login = numéro vérifié ;
- * signup = intent signup ; bind = session authentifiée.
+ *
+ * Parcours indépendant du statut de liaison :
+ * - login / signup : toujours envoyer un OTP si le numéro est valide
+ *   (compte existant → login ; inconnu → register ; déjà « lié » → login)
+ * - bind : session authentifiée qui attache le numéro à SON compte
+ *
+ * La fusion email/téléphone et la KYC (pièce + selfie) se font après, à part.
  */
 export async function POST(request: Request) {
   try {
@@ -72,36 +77,6 @@ export async function POST(request: Request) {
       )
     }
 
-    // Messages actionnables (sans takeover) :
-    // - numéro vérifié ailleurs → connexion
-    // - numéro présent non vérifié → email puis bind
-    // - inconnu → inscription / email
-    const alreadyUsed = NextResponse.json(
-      {
-        error:
-          "Ce numéro est déjà associé à un compte. Connectez-vous avec ce numéro ou par email.",
-        code: "PHONE_ALREADY_USED",
-      },
-      { status: 400 },
-    )
-    const needEmailVerify = NextResponse.json(
-      {
-        error:
-          "Ce numéro est enregistré mais pas encore vérifié. Connectez-vous par email, puis validez-le dans Profil.",
-        code: "PHONE_UNVERIFIED",
-      },
-      { status: 400 },
-    )
-    const unknownPhone = NextResponse.json(
-      {
-        error:
-          "Aucun compte vérifié avec ce numéro. Inscrivez-vous ou connectez-vous par email.",
-        code: "OTP_LOOKUP",
-      },
-      { status: 400 },
-    )
-
-    // Détermine le flow : bind | login | register
     const supabase = await createClient()
     const {
       data: { user: sessionUser },
@@ -109,7 +84,6 @@ export async function POST(request: Request) {
 
     const admin = createAdminClient()
 
-    // Match E.164 exact uniquement (pas de fuzzy last-9 — risque de takeover)
     const { data: profileByPhone } = await admin
       .from("profiles")
       .select("id, email, linked_email, phone, phone_verified, full_name")
@@ -119,15 +93,24 @@ export async function POST(request: Request) {
     let otpUserId: string
     let otpEmail: string
     let mode: "login" | "bind" | "register"
+    let accountHint: "existing" | "new" | "bind" = "new"
 
-    if (sessionUser) {
-      // BIND — l'utilisateur connecté lie ce numéro à son propre compte.
+    if (sessionUser && intent === "bind") {
+      // BIND — uniquement si l'utilisateur le demande explicitement (intent bind)
       if (
         profileByPhone &&
         profileByPhone.id !== sessionUser.id &&
         profileByPhone.phone_verified === true
       ) {
-        return alreadyUsed
+        return NextResponse.json(
+          {
+            error:
+              "Ce numéro est déjà vérifié sur un autre compte. Connectez-vous avec ce numéro, puis liez vos comptes depuis Profil.",
+            code: "PHONE_ON_OTHER_ACCOUNT",
+            can_login: true,
+          },
+          { status: 409 },
+        )
       }
       const { data: ownProfile } = await admin
         .from("profiles")
@@ -144,27 +127,31 @@ export async function POST(request: Request) {
         .trim()
         .toLowerCase()
       mode = "bind"
-    } else if (profileByPhone?.phone_verified === true) {
+      accountHint = "bind"
+    } else if (profileByPhone) {
+      // Compte existant (vérifié OU non) → toujours login, jamais bloqué
       otpUserId = profileByPhone.id
       otpEmail = (profileByPhone.linked_email || profileByPhone.email || "")
         .trim()
         .toLowerCase()
       mode = "login"
-    } else if (profileByPhone && profileByPhone.phone_verified !== true) {
-      return needEmailVerify
-    } else if (intent === "signup") {
-      // REGISTER — nouveau numéro (inscription téléphone uniquement)
+      accountHint = "existing"
+    } else {
+      // Numéro inconnu → inscription (login ou signup aboutissent au même OTP)
       otpUserId = "pending"
       otpEmail = ""
       mode = "register"
-    } else {
-      return unknownPhone
+      accountHint = "new"
+    }
+
+    // Session connectée sans intent bind : ne pas forcer bind ;
+    // l'utilisateur peut se reconnecter avec un autre numéro (logout implicite côté client).
+    if (sessionUser && intent !== "bind" && mode === "login") {
+      // OK — login vers le compte du téléphone
     }
 
     const linkedEmail = otpEmail
 
-    // Login : Path A Supabase Phone d'abord (Twilio souvent branché côté Supabase),
-    // sauf si TWILIO_* est déjà sur Vercel → Path B custom prioritaire.
     let supabasePhoneError: string | null = null
     if (mode === "login" && !hasTwilioProvider()) {
       const { error: smsError } = await supabase.auth.signInWithOtp({
@@ -185,24 +172,17 @@ export async function POST(request: Request) {
             ? maskEmail(linkedEmail)
             : undefined,
           otp_mode: "supabase",
+          account_hint: accountHint,
+          phone_verified: profileByPhone?.phone_verified === true,
         })
       }
 
       supabasePhoneError = smsError.message
       console.warn("[auth/send-otp] supabase phone:", smsError.message)
-      // continue → Path B AT/Termii si dispo
     }
 
-    if (mode === "login" && !linkedEmail && hasTwilioProvider()) {
-      return NextResponse.json(
-        {
-          error:
-            "Compte téléphone incomplet. Contactez le support ou utilisez l'email.",
-          code: "PHONE_NO_EMAIL",
-        },
-        { status: 400 },
-      )
-    }
+    // Login custom OTP : email synthétique OK si pas d'email réel
+    // (évite de bloquer les comptes téléphone-only)
 
     if (!hasSmsProvider() && mode !== "login") {
       return NextResponse.json(
@@ -235,7 +215,6 @@ export async function POST(request: Request) {
       )
     }
 
-    // OTP custom + Twilio / AT / Termii
     if (!(await canSendOtp(formatted, 55))) {
       return NextResponse.json(
         { error: "Patientez 1 minute avant de renvoyer un code." },
@@ -244,10 +223,13 @@ export async function POST(request: Request) {
     }
 
     const code = generateOtpCode()
+    const storeEmail =
+      linkedEmail || `${formatted.replace(/\D/g, "")}@users.gwa.local`
+
     await storeOtp(formatted, {
       code,
       userId: otpUserId,
-      email: linkedEmail || `${formatted.replace(/\D/g, "")}@users.gwa.local`,
+      email: storeEmail,
       phone: formatted,
       mode,
     })
@@ -255,7 +237,6 @@ export async function POST(request: Request) {
     const sms = await sendSmsOtp(formatted, code)
     if (!sms.success) {
       console.error("[auth/send-otp] sms", sms.error)
-      // Fallback Path A pour login (si pas déjà tenté, ou re-essai)
       if (mode === "login") {
         const { error: smsError } = await supabase.auth.signInWithOtp({
           phone: formatted,
@@ -275,13 +256,16 @@ export async function POST(request: Request) {
               ? maskEmail(linkedEmail)
               : undefined,
             otp_mode: "supabase_fallback",
+            account_hint: accountHint,
           })
         }
         supabasePhoneError = smsError.message
         console.warn("[auth/send-otp] supabase fallback:", smsError.message)
       }
       const hintParts = [
-        sms.provider ? `${sms.provider}:${(sms.error || "fail").slice(0, 80)}` : null,
+        sms.provider
+          ? `${sms.provider}:${(sms.error || "fail").slice(0, 80)}`
+          : null,
         supabasePhoneError
           ? `supabase:${supabasePhoneError.slice(0, 80)}`
           : null,
@@ -307,10 +291,10 @@ export async function POST(request: Request) {
       message: "Code SMS envoyé",
       expires_in: 600,
       resend_after: 60,
-      linked_email_masked: linkedEmail
-        ? maskEmail(linkedEmail)
-        : undefined,
+      linked_email_masked: linkedEmail ? maskEmail(linkedEmail) : undefined,
       otp_mode: mode,
+      account_hint: accountHint,
+      phone_verified: profileByPhone?.phone_verified === true,
     })
   } catch (err) {
     console.error("[auth/send-otp]", err)

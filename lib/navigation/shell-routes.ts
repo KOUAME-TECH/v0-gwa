@@ -34,6 +34,8 @@ export function shouldShowBottomNav(pathname: string | null | undefined): boolea
     pathname.startsWith("/dashboard") ||
     pathname.startsWith("/messages/") ||
     pathname.startsWith("/profil/edit") ||
+    pathname.startsWith("/profil/lier") ||
+    pathname.startsWith("/profil/verification") ||
     pathname.startsWith("/cooperatives") ||
     pathname.startsWith("/conditions") ||
     pathname.startsWith("/confidentialite") ||

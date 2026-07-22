@@ -183,13 +183,88 @@ export async function POST(request: Request) {
             const taken =
               msg.includes("already") ||
               msg.includes("registered") ||
-              msg.includes("exists")
+              msg.includes("exists") ||
+              msg.includes("duplicate")
+
+            // Compte déjà là (course / phone auth) → reprendre en login
+            if (taken) {
+              const { data: existingByPhone } = await admin
+                .from("profiles")
+                .select("id, email, linked_email")
+                .eq("phone", formatted)
+                .maybeSingle()
+
+              if (existingByPhone?.id) {
+                userId = existingByPhone.id
+                const resumeEmail = (
+                  existingByPhone.linked_email ||
+                  existingByPhone.email ||
+                  syntheticEmail
+                )
+                  .trim()
+                  .toLowerCase()
+
+                await clearOtp(formatted)
+
+                const { data: linkData, error: linkError } =
+                  await admin.auth.admin.generateLink({
+                    type: "magiclink",
+                    email: resumeEmail,
+                  })
+
+                if (linkError || !linkData?.properties?.hashed_token) {
+                  return NextResponse.json(
+                    {
+                      error:
+                        "Compte trouvé — impossible d'ouvrir la session. Réessayez.",
+                      code: "LOGIN_RESUME_FAILED",
+                    },
+                    { status: 500 },
+                  )
+                }
+
+                const { data: sessionData, error: sessionErr } =
+                  await supabase.auth.verifyOtp({
+                    type: "email",
+                    token_hash: linkData.properties.hashed_token,
+                  })
+
+                if (sessionErr || !sessionData.user) {
+                  return NextResponse.json(
+                    { error: "Session expirée. Demandez un nouveau code." },
+                    { status: 400 },
+                  )
+                }
+
+                await admin
+                  .from("profiles")
+                  .update({
+                    phone: formatted,
+                    phone_verified: true,
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq("id", sessionData.user.id)
+
+                const { path, isNewUser } = await resolvePostAuthRedirect(
+                  supabase,
+                  sessionData.user.id,
+                )
+                await runScg(sessionData.user.id)
+
+                return NextResponse.json({
+                  success: true,
+                  is_new_user: isNewUser,
+                  redirect_to: path,
+                  resumed_login: true,
+                  user: { id: sessionData.user.id, phone: formatted },
+                })
+              }
+            }
+
             return NextResponse.json(
               {
-                error: taken
-                  ? "Ce numéro est déjà associé à un compte. Connectez-vous."
-                  : "Impossible de créer le compte. Réessayez.",
-                code: taken ? "PHONE_ALREADY_USED" : "REGISTER_FAILED",
+                error: "Impossible de créer le compte. Réessayez.",
+                code: "REGISTER_FAILED",
               },
               { status: 400 },
             )

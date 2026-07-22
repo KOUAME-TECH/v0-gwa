@@ -25,6 +25,7 @@ import {
   TrendingUp,
   FileText,
   ShieldCheck,
+  Link2,
 } from "lucide-react"
 import { shouldShowVerifiedBadge } from "@/lib/verification/badge"
 import { WhatsAppHelpFab } from "@/components/support/whatsapp-help-fab"
@@ -282,6 +283,12 @@ export default function ProfilPage() {
     {
       items: [
         { icon: Settings, label: "Paramètres", href: "/profil/edit" },
+        { icon: Link2, label: "Lier email / téléphone", href: "/profil/lier" },
+        {
+          icon: BadgeCheck,
+          label: "Vérification d'identité",
+          href: "/profil/verification",
+        },
         { icon: Download, label: "Installer l'app", href: "/download" },
         { icon: HelpCircle, label: "Aide & Contact", href: "/contact" },
       ],
@@ -348,6 +355,38 @@ export default function ProfilPage() {
             {profile.bio}
           </p>
         )}
+
+        {!profile.is_verified && (
+          <Link
+            href="/profil/verification"
+            className="mt-4 flex items-center justify-between rounded-2xl bg-[#FFF6E5] px-4 py-3 active:opacity-80"
+          >
+            <div>
+              <p className="text-sm font-medium text-[#1F5C2E]">
+                Vérifier mon identité
+              </p>
+              <p className="text-xs text-neutral-600 mt-0.5">
+                Pièce + selfie pour le badge vérifié
+              </p>
+            </div>
+            <ChevronRight className="h-4 w-4 text-[#F5A623]" />
+          </Link>
+        )}
+
+        <Link
+          href="/profil/lier"
+          className="mt-3 flex items-center justify-between rounded-2xl bg-[#E8F5E9] px-4 py-3 active:opacity-80"
+        >
+          <div>
+            <p className="text-sm font-medium text-[#1F5C2E]">
+              Lier email / téléphone
+            </p>
+            <p className="text-xs text-neutral-600 mt-0.5">
+              Accès flexible, sans bloquer la connexion
+            </p>
+          </div>
+          <ChevronRight className="h-4 w-4 text-[#2F7D32]" />
+        </Link>
 
         <Link href="/profil/edit" className="block mt-4">
           <Button
