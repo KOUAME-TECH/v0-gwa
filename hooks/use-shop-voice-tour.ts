@@ -121,6 +121,28 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
       /* ignore */
     }
 
+    // iOS / Chrome : réveiller AudioContext dans le geste
+    try {
+      const AC =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext })
+          .webkitAudioContext
+      if (AC) {
+        const ctx = new AC()
+        void ctx.resume()
+        // bip très court pour « ouvrir » le canal audio (puis mute)
+        const osc = ctx.createOscillator()
+        const gain = ctx.createGain()
+        gain.gain.value = 0.0001
+        osc.connect(gain)
+        gain.connect(ctx.destination)
+        osc.start()
+        osc.stop(ctx.currentTime + 0.02)
+      }
+    } catch {
+      /* ignore */
+    }
+
     // Déblocage audio via blob: (CSP media-src autorise blob, pas data:)
     if (!audioRef.current) audioRef.current = new Audio()
     const unlock = audioRef.current
@@ -143,6 +165,13 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
       }
     } catch {
       if (silentUrl) URL.revokeObjectURL(silentUrl)
+    }
+
+    // Précharger les voix TTS si besoin
+    try {
+      window.speechSynthesis?.getVoices()
+    } catch {
+      /* ignore */
     }
 
     // Lancer le 1er produit tout de suite (même tick que le clic)
