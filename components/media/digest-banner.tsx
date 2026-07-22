@@ -15,7 +15,7 @@ export type DigestBannerProps = {
   className?: string
 }
 
-/** Bannière Harmattan Digest — clic partout = écoute immédiate. */
+/** Bannière Harmattan Digest — clic = écoute immédiate (pas de button imbriqué). */
 export function DigestBanner({
   count,
   city,
@@ -30,11 +30,18 @@ export function DigestBanner({
   const place = city?.trim() || "votre région"
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onStartTour}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault()
+          onStartTour()
+        }
+      }}
       className={cn(
-        "mb-3 flex w-full items-center gap-3 rounded-2xl border border-[#1F5C2E]/15 bg-gradient-to-r from-[#1F5C2E]/8 to-[#FFF6E5] px-3 py-2.5 text-left active:scale-[0.99] transition-transform",
+        "mb-3 flex w-full cursor-pointer items-center gap-3 rounded-2xl border border-[#1F5C2E]/15 bg-gradient-to-r from-[#1F5C2E]/8 to-[#FFF6E5] px-3 py-2.5 text-left active:scale-[0.99] transition-transform",
         className,
       )}
       aria-label={tourActive ? "Arrêter le digest audio" : "Écouter le Harmattan Digest"}
@@ -53,11 +60,11 @@ export function DigestBanner({
         index={tourIndex}
         total={tourTotal}
         onClick={(e) => {
-          e.stopPropagation()
+          e?.stopPropagation()
           onStartTour()
         }}
         className="shrink-0"
       />
-    </button>
+    </div>
   )
 }

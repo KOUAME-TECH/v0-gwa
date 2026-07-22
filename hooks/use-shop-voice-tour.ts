@@ -10,8 +10,19 @@ export type ShopTourProduct = ProductListenInput & {
   audio_lang?: string | null
 }
 
-const SILENT_WAV =
-  "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="
+const SILENT_WAV_B64 =
+  "UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="
+
+function makeSilentBlobUrl(): string | null {
+  try {
+    const bin = atob(SILENT_WAV_B64)
+    const bytes = new Uint8Array(bin.length)
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+    return URL.createObjectURL(new Blob([bytes], { type: "audio/wav" }))
+  } catch {
+    return null
+  }
+}
 
 /**
  * Parcours vocal séquentiel.
@@ -93,7 +104,8 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
   )
 
   const startTour = useCallback(() => {
-    if (!productsRef.current.length || typeof window === "undefined") return
+    const list = productsRef.current
+    if (!list.length || typeof window === "undefined") return
     if (active) {
       stop()
       return
@@ -103,42 +115,38 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
     setActive(true)
     setIndex(0)
 
-    // Mode écoute pour le reste de l’UI
     try {
       localStorage.setItem("gwa-listen-mode", "1")
     } catch {
       /* ignore */
     }
 
-    // Déblocage audio SYNCHRONE dans le geste clic (puis enchaîner)
+    // Déblocage audio via blob: (CSP media-src autorise blob, pas data:)
     if (!audioRef.current) audioRef.current = new Audio()
     const unlock = audioRef.current
-    unlock.src = SILENT_WAV
-    unlock.volume = 0.01
-
-    const begin = () => {
-      if (stoppedRef.current) return
-      unlock.volume = 1
-      // Premier produit tout de suite
-      playAt(0)
-    }
-
+    const silentUrl = makeSilentBlobUrl()
     try {
-      const p = unlock.play()
-      if (p && typeof p.then === "function") {
-        void p
-          .then(() => {
+      if (silentUrl) {
+        unlock.src = silentUrl
+        unlock.volume = 0.01
+        void unlock.play().then(
+          () => {
             unlock.pause()
             unlock.currentTime = 0
-            begin()
-          })
-          .catch(() => begin())
-      } else {
-        begin()
+            unlock.volume = 1
+            URL.revokeObjectURL(silentUrl)
+          },
+          () => {
+            URL.revokeObjectURL(silentUrl)
+          },
+        )
       }
     } catch {
-      begin()
+      if (silentUrl) URL.revokeObjectURL(silentUrl)
     }
+
+    // Lancer le 1er produit tout de suite (même tick que le clic)
+    playAt(0)
   }, [active, playAt, stop])
 
   const toggle = useCallback(() => {
