@@ -15,7 +15,7 @@ export type DigestBannerProps = {
   className?: string
 }
 
-/** Bannière Harmattan Digest — lance le parcours vocal des nouveaux produits. */
+/** Bannière Harmattan Digest — clic partout = écoute immédiate. */
 export function DigestBanner({
   count,
   city,
@@ -30,11 +30,14 @@ export function DigestBanner({
   const place = city?.trim() || "votre région"
 
   return (
-    <div
+    <button
+      type="button"
+      onClick={onStartTour}
       className={cn(
-        "mb-3 flex items-center gap-3 rounded-2xl border border-[#1F5C2E]/15 bg-gradient-to-r from-[#1F5C2E]/8 to-[#FFF6E5] px-3 py-2.5",
+        "mb-3 flex w-full items-center gap-3 rounded-2xl border border-[#1F5C2E]/15 bg-gradient-to-r from-[#1F5C2E]/8 to-[#FFF6E5] px-3 py-2.5 text-left active:scale-[0.99] transition-transform",
         className,
       )}
+      aria-label={tourActive ? "Arrêter le digest audio" : "Écouter le Harmattan Digest"}
     >
       <AudioWaveIcon playing={tourActive} size="md" variant="recorded" className="shrink-0" />
       <div className="flex-1 min-w-0">
@@ -42,16 +45,19 @@ export function DigestBanner({
         <p className="text-xs text-[#4B5563] truncate">
           {tourActive
             ? `Écoute ${tourIndex + 1}/${tourTotal} — ${place}`
-            : `${count} nouveau${count > 1 ? "x" : ""} produit${count > 1 ? "s" : ""} — appuie sur Parcours pour écouter`}
+            : `${count} nouveau${count > 1 ? "x" : ""} produit${count > 1 ? "s" : ""} — tapez pour écouter`}
         </p>
       </div>
       <ShopVoiceTourButton
         active={tourActive}
         index={tourIndex}
         total={tourTotal}
-        onClick={onStartTour}
+        onClick={(e) => {
+          e.stopPropagation()
+          onStartTour()
+        }}
         className="shrink-0"
       />
-    </div>
+    </button>
   )
 }

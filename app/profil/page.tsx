@@ -27,7 +27,7 @@ import {
   ShieldCheck,
   Link2,
 } from "lucide-react"
-import { shouldShowVerifiedBadge } from "@/lib/verification/badge"
+import { shouldShowVerifiedBadge, shouldPromptIdentityVerification, type KycStatus } from "@/lib/verification/badge"
 import { WhatsAppHelpFab } from "@/components/support/whatsapp-help-fab"
 
 type Profile = {
@@ -65,6 +65,7 @@ export default function ProfilPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [kycStatus, setKycStatus] = useState<KycStatus>(null)
   const supabase = createClient()
 
   useEffect(() => {
@@ -92,7 +93,7 @@ export default function ProfilPage() {
         setProfile({ ...profileData, email: user.email || profileData.email || "" })
       }
 
-      const [productsRes, ordersRes, favoritesRes, adminRes, notifRes, msgRes] =
+      const [productsRes, ordersRes, favoritesRes, adminRes, notifRes, msgRes, kycRes] =
         await Promise.all([
           supabase
             .from("products")
@@ -122,11 +123,20 @@ export default function ProfilPage() {
             .select("id", { count: "exact", head: true })
             .eq("is_read", false)
             .neq("sender_id", user.id),
+          supabase
+            .from("verification_requests")
+            .select("status")
+            .eq("user_id", user.id)
+            .eq("request_type", "user")
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle(),
         ])
 
       if (!mounted) return
 
       setIsAdmin(!!adminRes.data)
+      setKycStatus((kycRes.data?.status as KycStatus) || null)
       setUnreadNotifs(notifRes.count || 0)
       setUnreadMsgs(msgRes.count || 0)
       setStats({
@@ -248,6 +258,11 @@ export default function ProfilPage() {
     ]
   }
 
+  const showKycPrompt = shouldPromptIdentityVerification({
+    is_verified: profile.is_verified,
+    kyc_status: kycStatus,
+  })
+
   const menuSections: { items: MenuItem[] }[] = [
     ...(isAdmin
       ? [{ items: [{ icon: Shield, label: "Administration", href: "/admin", highlight: true }] }]
@@ -287,11 +302,15 @@ export default function ProfilPage() {
       items: [
         { icon: Settings, label: "Paramètres", href: "/profil/edit" },
         { icon: Link2, label: "Lier email ou téléphone", href: "/profil/lier" },
-        {
-          icon: BadgeCheck,
-          label: "Vérification d'identité",
-          href: "/profil/verification",
-        },
+        ...(showKycPrompt
+          ? [
+              {
+                icon: BadgeCheck,
+                label: "Vérification d'identité",
+                href: "/profil/verification",
+              } satisfies MenuItem,
+            ]
+          : []),
         { icon: Download, label: "Installer l'app", href: "/download" },
         { icon: HelpCircle, label: "Aide & Contact", href: "/contact" },
       ],
@@ -359,7 +378,7 @@ export default function ProfilPage() {
           </p>
         )}
 
-        {!profile.is_verified && (
+        {showKycPrompt && (
           <Link
             href="/profil/verification"
             className="mt-4 flex items-center justify-between rounded-2xl bg-[#FFF6E5] px-4 py-3 active:opacity-80"
@@ -369,7 +388,7 @@ export default function ProfilPage() {
                 Vérifier mon identité
               </p>
               <p className="text-xs text-neutral-600 mt-0.5">
-                Pièce + selfie pour le badge vérifié
+                Optionnel — utile pour le badge et le SCG
               </p>
             </div>
             <ChevronRight className="h-4 w-4 text-[#F5A623]" />

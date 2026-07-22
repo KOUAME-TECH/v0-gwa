@@ -5,6 +5,7 @@ import React from "react"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
+import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -22,6 +23,10 @@ import { ArrowLeft, Camera, Loader2, Check } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import { toast } from "sonner"
 import { AUDIO_LANGS } from "@/lib/media/audio-langs"
+import {
+  shouldPromptIdentityVerification,
+  type KycStatus,
+} from "@/lib/verification/badge"
 
 type Profile = {
   id: string
@@ -35,6 +40,7 @@ type Profile = {
   country: string | null
   address: string | null
   digest_enabled?: boolean | null
+  is_verified?: boolean | null
 }
 
 const userTypes = [
@@ -69,6 +75,7 @@ export default function EditProfilPage() {
     digest_enabled: true,
   })
   const [emailLinkMsg, setEmailLinkMsg] = useState<string | null>(null)
+  const [kycStatus, setKycStatus] = useState<KycStatus>(null)
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -79,11 +86,17 @@ export default function EditProfilPage() {
         return
       }
 
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .single()
+      const [{ data: profileData }, { data: kyc }] = await Promise.all([
+        supabase.from("profiles").select("*").eq("id", user.id).single(),
+        supabase
+          .from("verification_requests")
+          .select("status")
+          .eq("user_id", user.id)
+          .eq("request_type", "user")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ])
 
       if (profileData) {
         setProfile({ ...profileData, email: user.email || "" })
@@ -99,6 +112,7 @@ export default function EditProfilPage() {
           digest_enabled: profileData.digest_enabled !== false,
         })
       }
+      setKycStatus((kyc?.status as KycStatus) || null)
 
       setIsLoading(false)
     }
@@ -227,6 +241,11 @@ export default function EditProfilPage() {
   if (!profile) {
     return null
   }
+
+  const showKycInSettings = shouldPromptIdentityVerification({
+    is_verified: profile.is_verified,
+    kyc_status: kycStatus,
+  })
 
   return (
     <div className="min-h-screen bg-[#FFF6E5] pb-8">
@@ -382,6 +401,35 @@ export default function EditProfilPage() {
             />
           </div>
         </div>
+
+        {showKycInSettings && (
+          <div className="bg-white rounded-2xl p-4 space-y-3">
+            <h2 className="font-semibold text-[#111827]">Vérification d&apos;identité</h2>
+            <p className="text-xs text-[#6B7280]">
+              Pièce + selfie pour le badge vérifié. Optionnel, utile pour le SCG
+              (Score de Confiance GWA).
+            </p>
+            <Link href="/profil/verification">
+              <Button
+                type="button"
+                className="w-full h-11 rounded-xl bg-[#2F7D32] hover:bg-[#256025]"
+              >
+                Vérifier mon identité
+              </Button>
+            </Link>
+          </div>
+        )}
+
+        {!showKycInSettings && (kycStatus === "pending" || profile?.is_verified) && (
+          <div className="bg-white rounded-2xl p-4 space-y-2">
+            <h2 className="font-semibold text-[#111827]">Vérification d&apos;identité</h2>
+            <p className="text-sm text-[#1F5C2E]">
+              {profile?.is_verified || kycStatus === "approved"
+                ? "Identité vérifiée — badge actif."
+                : "Demande en cours d'examen."}
+            </p>
+          </div>
+        )}
 
         <div className="bg-white rounded-2xl p-4 space-y-4">
           <h2 className="font-semibold text-[#111827]">Localisation</h2>

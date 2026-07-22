@@ -10,7 +10,7 @@ export type ShopVoiceTourButtonProps = {
   active: boolean
   index: number
   total: number
-  onClick: () => void
+  onClick: (e?: React.MouseEvent<HTMLButtonElement>) => void
   disabled?: boolean
   className?: string
 }

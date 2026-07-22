@@ -191,12 +191,8 @@ function MarketplaceContent() {
       toast.error("Aucun produit à parcourir pour le moment")
       return
     }
+    // Démarrage audio immédiat (geste utilisateur) — pas de toast avant play
     toggleTour()
-    if (!tourActive) {
-      toast.message("Parcours audio", {
-        description: `${tourTotal} produit${tourTotal > 1 ? "s" : ""} — écoutez les descriptions`,
-      })
-    }
   }
 
   useEffect(() => {

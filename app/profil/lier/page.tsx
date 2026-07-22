@@ -31,6 +31,7 @@ export default function LierComptePage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [emailBusy, setEmailBusy] = useState(false)
+  const [showKyc, setShowKyc] = useState(false)
 
   useEffect(() => {
     const supabase = createClient()
@@ -44,13 +45,27 @@ export default function LierComptePage() {
       }
       const { data: profile } = await supabase
         .from("profiles")
-        .select("email, linked_email, phone, phone_verified")
+        .select("email, linked_email, phone, phone_verified, is_verified")
         .eq("id", user.id)
+        .maybeSingle()
+      const { data: kyc } = await supabase
+        .from("verification_requests")
+        .select("status")
+        .eq("user_id", user.id)
+        .eq("request_type", "user")
+        .order("created_at", { ascending: false })
+        .limit(1)
         .maybeSingle()
       setEmail(user.email || profile?.email || "")
       setLinkedEmail(profile?.linked_email || profile?.email || user.email || "")
       setPhone(profile?.phone || user.phone || "")
       setPhoneVerified(profile?.phone_verified === true)
+      const status = (kyc?.status as "pending" | "approved" | "rejected" | null) || null
+      setShowKyc(
+        profile?.is_verified !== true &&
+          status !== "pending" &&
+          status !== "approved",
+      )
       setLoading(false)
     })()
   }, [router])
@@ -255,20 +270,22 @@ export default function LierComptePage() {
           </Button>
         </section>
 
-        <section className="rounded-2xl bg-[#FFF6E5] p-4 space-y-2">
-          <div className="flex items-center gap-2 font-medium text-[#1F5C2E]">
-            <Link2 className="h-4 w-4" />
-            Vérification d&apos;identité
-          </div>
-          <p className="text-sm text-neutral-600">
-            Optionnel : pièce d&apos;identité + selfie pour le badge vérifié.
-          </p>
-          <Link href="/profil/verification">
-            <Button className="mt-2 w-full h-11 rounded-xl bg-[#F5A623] hover:bg-[#e09510] text-white">
-              Demander la vérification
-            </Button>
-          </Link>
-        </section>
+        {showKyc && (
+          <section className="rounded-2xl bg-[#FFF6E5] p-4 space-y-2">
+            <div className="flex items-center gap-2 font-medium text-[#1F5C2E]">
+              <Link2 className="h-4 w-4" />
+              Vérification d&apos;identité
+            </div>
+            <p className="text-sm text-neutral-600">
+              Optionnel mais utile pour le badge et le SCG — pièce + selfie.
+            </p>
+            <Link href="/profil/verification">
+              <Button className="mt-2 w-full h-11 rounded-xl bg-[#F5A623] hover:bg-[#e09510] text-white">
+                Demander la vérification
+              </Button>
+            </Link>
+          </section>
+        )}
       </div>
     </div>
   )

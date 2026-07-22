@@ -10,17 +10,27 @@ export type ShopTourProduct = ProductListenInput & {
   audio_lang?: string | null
 }
 
-/** Parcours vocal séquentiel — lit les produits filtrés (inclusion + rétention). */
+const SILENT_WAV =
+  "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="
+
+/**
+ * Parcours vocal séquentiel.
+ * Important : démarrer le son dans le même geste utilisateur (autoplay policies).
+ */
 export function useShopVoiceTour(products: ShopTourProduct[]) {
   const [active, setActive] = useState(false)
   const [index, setIndex] = useState(0)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const stoppedRef = useRef(false)
+  const productsRef = useRef(products)
+  productsRef.current = products
 
   const stop = useCallback(() => {
     stoppedRef.current = true
     if (audioRef.current) {
       audioRef.current.pause()
+      audioRef.current.onended = null
+      audioRef.current.onerror = null
       audioRef.current.currentTime = 0
     }
     if (typeof window !== "undefined" && window.speechSynthesis) {
@@ -30,15 +40,34 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
     setIndex(0)
   }, [])
 
+  const speakProduct = useCallback(
+    (product: ShopTourProduct, onDone: () => void) => {
+      if (typeof window === "undefined" || !window.speechSynthesis) {
+        onDone()
+        return
+      }
+      // Ne pas cancel juste avant speak (bug Chrome : speak ignoré)
+      const utter = new SpeechSynthesisUtterance(buildProductListenText(product))
+      utter.lang = resolveUtterLang(product.audio_lang)
+      utter.rate = 0.92
+      utter.volume = 1
+      utter.onend = onDone
+      utter.onerror = () => onDone()
+      window.speechSynthesis.speak(utter)
+    },
+    [],
+  )
+
   const playAt = useCallback(
     (i: number) => {
-      if (stoppedRef.current || i >= products.length) {
+      const list = productsRef.current
+      if (stoppedRef.current || i >= list.length) {
         stop()
         return
       }
 
       setIndex(i)
-      const product = products[i]
+      const product = list[i]
 
       const continueNext = () => {
         if (stoppedRef.current) return
@@ -47,81 +76,75 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
 
       if (product.audio_url) {
         if (!audioRef.current) audioRef.current = new Audio()
-        audioRef.current.src = product.audio_url
-        audioRef.current.onended = continueNext
-        audioRef.current.onerror = continueNext
-        void audioRef.current.play().then(undefined, () => {
-          // Autoplay bloqué — bascule TTS (nécessite souvent un geste)
-          if (typeof window === "undefined" || !window.speechSynthesis) {
-            stop()
-            return
-          }
-          window.speechSynthesis.cancel()
-          const utter = new SpeechSynthesisUtterance(buildProductListenText(product))
-          utter.lang = resolveUtterLang(product.audio_lang)
-          utter.rate = 0.92
-          utter.onend = continueNext
-          utter.onerror = () => continueNext()
-          window.speechSynthesis.speak(utter)
+        const el = audioRef.current
+        el.pause()
+        el.src = product.audio_url
+        el.onended = continueNext
+        el.onerror = () => speakProduct(product, continueNext)
+        void el.play().then(undefined, () => {
+          speakProduct(product, continueNext)
         })
         return
       }
 
-      if (typeof window === "undefined" || !window.speechSynthesis) {
-        continueNext()
-        return
-      }
-
-      window.speechSynthesis.cancel()
-      const utter = new SpeechSynthesisUtterance(buildProductListenText(product))
-      utter.lang = resolveUtterLang(product.audio_lang)
-      utter.rate = 0.92
-      utter.onend = continueNext
-      utter.onerror = () => {
-        // Continuer le parcours plutôt que d’arrêter tout (voix absente / interrupt)
-        continueNext()
-      }
-      window.speechSynthesis.speak(utter)
+      speakProduct(product, continueNext)
     },
-    [products, stop],
+    [speakProduct, stop],
   )
 
   const startTour = useCallback(() => {
-    if (!products.length || typeof window === "undefined") return
+    if (!productsRef.current.length || typeof window === "undefined") return
     if (active) {
       stop()
       return
     }
+
     stoppedRef.current = false
     setActive(true)
-    // Débloque l'audio sur geste utilisateur (autoplay policies)
+    setIndex(0)
+
+    // Mode écoute pour le reste de l’UI
     try {
-      const unlock = new Audio()
-      unlock.src =
-        "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="
-      void unlock.play().then(() => unlock.pause()).catch(() => {})
+      localStorage.setItem("gwa-listen-mode", "1")
     } catch {
       /* ignore */
     }
-    // Warm-up speechSynthesis (certains navigateurs mobiles)
+
+    // Déblocage audio SYNCHRONE dans le geste clic (puis enchaîner)
+    if (!audioRef.current) audioRef.current = new Audio()
+    const unlock = audioRef.current
+    unlock.src = SILENT_WAV
+    unlock.volume = 0.01
+
+    const begin = () => {
+      if (stoppedRef.current) return
+      unlock.volume = 1
+      // Premier produit tout de suite
+      playAt(0)
+    }
+
     try {
-      if (window.speechSynthesis) {
-        window.speechSynthesis.cancel()
-        const warm = new SpeechSynthesisUtterance(" ")
-        warm.volume = 0
-        window.speechSynthesis.speak(warm)
-        window.speechSynthesis.cancel()
+      const p = unlock.play()
+      if (p && typeof p.then === "function") {
+        void p
+          .then(() => {
+            unlock.pause()
+            unlock.currentTime = 0
+            begin()
+          })
+          .catch(() => begin())
+      } else {
+        begin()
       }
     } catch {
-      /* ignore */
+      begin()
     }
-    playAt(0)
-  }, [active, playAt, products.length, stop])
+  }, [active, playAt, stop])
 
   const toggle = useCallback(() => {
-    if (!products.length || typeof window === "undefined") return
+    if (!productsRef.current.length || typeof window === "undefined") return
     startTour()
-  }, [products.length, startTour])
+  }, [startTour])
 
   useEffect(() => () => stop(), [stop])
 
