@@ -1,5 +1,5 @@
 /** Délai avant de pouvoir modifier un email/téléphone déjà lié. */
-export const LINK_CHANGE_COOLDOWN_DAYS = 30
+export const LINK_CHANGE_COOLDOWN_DAYS = 90
 
 export type LinkCooldownResult = {
   allowed: boolean

@@ -75,11 +75,18 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   const [offerAmount, setOfferAmount] = useState("")
   const [offerNote, setOfferNote] = useState("")
   const [offerBusy, setOfferBusy] = useState(false)
+  const [offerProducts, setOfferProducts] = useState<
+    { id: string; name: string; price: number }[]
+  >([])
+  const [offerProductId, setOfferProductId] = useState<string>("")
+  const [muted, setMuted] = useState(false)
+  const [pinned, setPinned] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const imgRef = useRef<HTMLInputElement>(null)
+  const camRef = useRef<HTMLInputElement>(null)
   const recInterval = useRef<ReturnType<typeof setInterval> | null>(null)
   const mediaRecorder = useRef<MediaRecorder | null>(null)
   const audioChunks = useRef<Blob[]>([])
@@ -89,6 +96,49 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   const other = conversation.other_user
   const otherName = other?.full_name || "Utilisateur"
   const otherInitial = otherName.charAt(0).toUpperCase()
+  const prefsKey = `gwa-chat-prefs:${userId}:${conversation.id}`
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(prefsKey)
+      if (!raw) return
+      const p = JSON.parse(raw) as { muted?: boolean; pinned?: boolean }
+      setMuted(!!p.muted)
+      setPinned(!!p.pinned)
+    } catch {
+      /* ignore */
+    }
+  }, [prefsKey])
+
+  function savePrefs(next: { muted?: boolean; pinned?: boolean }) {
+    const value = {
+      muted: next.muted ?? muted,
+      pinned: next.pinned ?? pinned,
+    }
+    setMuted(value.muted)
+    setPinned(value.pinned)
+    try {
+      localStorage.setItem(prefsKey, JSON.stringify(value))
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function openCameraCapture() {
+    if (camRef.current) {
+      camRef.current.click()
+      return
+    }
+    const camInput = document.createElement("input")
+    camInput.type = "file"
+    camInput.accept = "image/*"
+    camInput.setAttribute("capture", "environment")
+    camInput.onchange = () => {
+      const f = camInput.files?.[0]
+      if (f) void handleFileUpload(f, "image")
+    }
+    camInput.click()
+  }
 
   const scroll = useCallback(() => {
     requestAnimationFrame(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }))
@@ -129,8 +179,8 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       .channel(`chat-${conversation.id}`)
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversation.id}` },
-        (payload) => {
-          const msg = payload.new as Message
+        (payload: { new: Message }) => {
+          const msg = payload.new
           setMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg])
           scroll()
           if (msg.sender_id !== userId && document.visibilityState === "visible") {
@@ -140,8 +190,8 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       )
       .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversation.id}` },
-        (payload) => {
-          const msg = payload.new as Message
+        (payload: { new: Message }) => {
+          const msg = payload.new
           setMessages(prev => prev.map(m => m.id === msg.id ? msg : m))
         }
       )
@@ -222,29 +272,102 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     inputRef.current?.focus()
   }
 
-  // File upload
   async function handleFileUpload(file: File, type: "image" | "file") {
     setShowAttach(false)
     const toastId = toast.loading(type === "image" ? "Envoi de l'image..." : "Envoi du fichier...")
 
-    const ext = file.name.split('.').pop()
+    const ext = file.name.split(".").pop()
     const path = `chat/${conversation.id}/${Date.now()}.${ext}`
     const { error: upErr } = await supabase.storage.from("chat-media").upload(path, file)
 
-    let mediaUrl: string | undefined
-    if (!upErr) {
-      const { data: { publicUrl } } = supabase.storage.from("chat-media").getPublicUrl(path)
-      mediaUrl = publicUrl
+    if (upErr) {
+      toast.dismiss(toastId)
+      toast.error("Envoi média échoué — réessayez")
+      return
     }
 
-    const content = type === "image" ? (mediaUrl ? file.name : `[Photo: ${file.name}]`) : `[${file.name}]`
-    await supabase.from("messages").insert({
-      conversation_id: conversation.id, sender_id: userId,
-      content, message_type: type, media_url: mediaUrl || null,
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from("chat-media").getPublicUrl(path)
+
+    const content = type === "image" ? file.name : `[${file.name}]`
+    const { error: msgErr } = await supabase.from("messages").insert({
+      conversation_id: conversation.id,
+      sender_id: userId,
+      content,
+      message_type: type,
+      media_url: publicUrl,
     })
-    await supabase.from("conversations").update({ last_message_at: new Date().toISOString() }).eq("id", conversation.id)
+    await supabase
+      .from("conversations")
+      .update({ last_message_at: new Date().toISOString() })
+      .eq("id", conversation.id)
     toast.dismiss(toastId)
-    toast.success(type === "image" ? "Photo envoyée" : "Fichier envoyé")
+    if (msgErr) toast.error(msgErr.message)
+    else toast.success(type === "image" ? "Photo envoyée" : "Fichier envoyé")
+  }
+
+  async function shareLocation() {
+    setShowAttach(false)
+    if (!navigator.geolocation) {
+      toast.error("Géolocalisation non supportée")
+      return
+    }
+    const toastId = toast.loading("Position…")
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords
+        const maps = `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=16/${latitude}/${longitude}`
+        const content = `📍 Ma position : ${latitude.toFixed(5)}, ${longitude.toFixed(5)}\n${maps}`
+        const { error } = await supabase.from("messages").insert({
+          conversation_id: conversation.id,
+          sender_id: userId,
+          content,
+          message_type: "text",
+        })
+        await supabase
+          .from("conversations")
+          .update({ last_message_at: new Date().toISOString() })
+          .eq("id", conversation.id)
+        toast.dismiss(toastId)
+        if (error) toast.error("Envoi impossible")
+        else toast.success("Position envoyée")
+      },
+      () => {
+        toast.dismiss(toastId)
+        toast.error("Autorisez la localisation")
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 },
+    )
+  }
+
+  async function openOfferSheet() {
+    setShowAttach(false)
+    setShowOfferSheet(true)
+    // Produits actifs des deux participants (acheteur négocie sur produit vendeur)
+    const sellerIds = [other?.id, userId].filter(Boolean) as string[]
+    const { data } = await supabase
+      .from("products")
+      .select("id, name, price, seller_id")
+      .in("seller_id", sellerIds)
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .limit(30)
+    const list = (data || []) as {
+      id: string
+      name: string
+      price: number
+      seller_id?: string
+    }[]
+    // Préférer les produits de l'interlocuteur (cas acheteur → vendeur)
+    const preferred = list.filter((p) => p.seller_id === other?.id)
+    const rest = list.filter((p) => p.seller_id !== other?.id)
+    const ordered = preferred.length > 0 ? [...preferred, ...rest] : list
+    setOfferProducts(ordered)
+    if (ordered[0]) {
+      setOfferProductId(ordered[0].id)
+      if (!offerAmount) setOfferAmount(String(Math.round(ordered[0].price)))
+    }
   }
 
   // Voice -- real MediaRecorder
@@ -312,24 +435,30 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     const ext = audioPreview.blob.type.includes('webm') ? 'webm' : 'mp4'
     const path = `chat/${conversation.id}/${Date.now()}.${ext}`
     const { error: upErr } = await supabase.storage.from("chat-media").upload(path, audioPreview.blob)
-
-    let mediaUrl: string | undefined
-    if (!upErr) {
-      const { data: { publicUrl } } = supabase.storage.from("chat-media").getPublicUrl(path)
-      mediaUrl = publicUrl
+    if (upErr) {
+      toast.error("Envoi vocal échoué — réessayez")
+      return
     }
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from("chat-media").getPublicUrl(path)
 
-    await supabase.from("messages").insert({
-      conversation_id: conversation.id, sender_id: authUser.id,
+    const { error: msgErr } = await supabase.from("messages").insert({
+      conversation_id: conversation.id,
+      sender_id: authUser.id,
       content: `Message vocal (${audioPreview.duration})`,
       message_type: "voice",
-      media_url: mediaUrl || null,
+      media_url: publicUrl,
     })
-    await supabase.from("conversations").update({ last_message_at: new Date().toISOString() }).eq("id", conversation.id)
+    await supabase
+      .from("conversations")
+      .update({ last_message_at: new Date().toISOString() })
+      .eq("id", conversation.id)
 
     URL.revokeObjectURL(audioPreview.url)
     setAudioPreview(null)
-    toast.success("Message vocal envoye")
+    if (msgErr) toast.error(msgErr.message)
+    else toast.success("Message vocal envoyé")
   }
 
   function cancelRecording() {
@@ -343,14 +472,82 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     setRecordSec(0)
   }
 
-  // Menu actions
-  function menuAction(a: string) {
+  // Menu actions — comportement réel (prefs locales + actions)
+  async function menuAction(a: string) {
     setShowMenu(false)
-    if (a === "profile") window.location.href = `/profil/${other?.id}`
-    else if (a === "mute") toast.info("Conversation en sourdine")
-    else if (a === "pin") toast.info("Conversation épinglée")
-    else if (a === "clear") toast.info("Historique effacé")
-    else if (a === "report") toast.info("Signalement envoyé")
+    if (a === "profile") {
+      if (other?.id) window.location.href = `/profil/${other.id}`
+      return
+    }
+    if (a === "mute") {
+      savePrefs({ muted: !muted })
+      toast.success(muted ? "Notifications réactivées" : "Conversation en sourdine")
+      return
+    }
+    if (a === "pin") {
+      savePrefs({ pinned: !pinned })
+      // Persister côté DB si colonnes présentes
+      const col =
+        conversation.participant_1 === userId ? "is_pinned_1" : "is_pinned_2"
+      await supabase
+        .from("conversations")
+        .update({ [col]: !pinned })
+        .eq("id", conversation.id)
+      toast.success(pinned ? "Conversation désépinglée" : "Conversation épinglée")
+      return
+    }
+    if (a === "clear") {
+      const ok = window.confirm("Effacer tous les messages de cette conversation ?")
+      if (!ok) return
+      const { error } = await supabase
+        .from("messages")
+        .delete()
+        .eq("conversation_id", conversation.id)
+      if (error) toast.error("Impossible d'effacer")
+      else {
+        setMessages([])
+        toast.success("Historique effacé")
+      }
+      return
+    }
+    if (a === "report") {
+      await supabase.from("messages").insert({
+        conversation_id: conversation.id,
+        sender_id: userId,
+        content: "⚠️ Signalement : comportement inapproprié signalé à GWA.",
+        message_type: "text",
+      })
+      toast.success("Signalement enregistré")
+    }
+  }
+
+  async function callOther(kind: "audio" | "video") {
+    // WhatsApp-like : tenter tel: si numéro accessible, sinon message d'appel
+    try {
+      const { data: p } = await supabase
+        .from("profiles")
+        .select("phone")
+        .eq("id", other?.id || "")
+        .maybeSingle()
+      if (kind === "audio" && p?.phone) {
+        window.location.href = `tel:${p.phone}`
+        return
+      }
+    } catch {
+      /* PII peut être restreint */
+    }
+    const label = kind === "audio" ? "Appel audio" : "Appel vidéo"
+    await supabase.from("messages").insert({
+      conversation_id: conversation.id,
+      sender_id: userId,
+      content: `📞 ${label} demandé — rappelez via téléphone ou continuez ici.`,
+      message_type: "text",
+    })
+    toast.info(
+      kind === "audio"
+        ? "Numéro masqué — message d'appel envoyé"
+        : "Appel vidéo WebRTC bientôt — message envoyé",
+    )
   }
 
   async function msgAction(a: string, msg: Message) {
@@ -372,9 +569,12 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     }
     setOfferBusy(true)
     try {
+      const selected = offerProducts.find((p) => p.id === offerProductId)
       const content = buildOfferContent({
         amount,
         note: offerNote.trim() || undefined,
+        productId: offerProductId || undefined,
+        productName: selected?.name,
       })
       const { data: refreshed } = await supabase.auth.refreshSession()
       const authUser =
@@ -404,7 +604,9 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             conversation_id: conversation.id,
-            preview: `Offre : ${formatOfferAmount(amount)} FCFA`,
+            preview: muted
+              ? "Nouvelle offre"
+              : `Offre : ${formatOfferAmount(amount)} FCFA`,
           }),
         })
         await supabase
@@ -451,7 +653,34 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       message_type: "text",
       reply_to_id: msg.id,
     })
-    toast.success(status === "accepted" ? "Offre acceptée" : "Offre refusée")
+
+    if (status === "accepted") {
+      const toastId = toast.loading("Création de la commande au prix négocié…")
+      try {
+        const res = await fetch("/api/orders/from-offer", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message_id: msg.id, quantity: 1 }),
+        })
+        const data = await res.json().catch(() => ({}))
+        toast.dismiss(toastId)
+        if (!res.ok) {
+          toast.error(data.error || "Commande non créée — offre acceptée")
+        } else {
+          toast.success("Commande créée au prix négocié")
+          if (data.redirect_to) {
+            window.setTimeout(() => {
+              window.location.href = data.redirect_to
+            }, 600)
+          }
+        }
+      } catch {
+        toast.dismiss(toastId)
+        toast.error("Erreur réseau commande")
+      }
+    } else {
+      toast.success("Offre refusée")
+    }
   }
 
   const fmtTime = (d: string) => new Date(d).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
@@ -584,10 +813,20 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
           </div>
         </button>
 
-        <button onClick={() => toast.info("Appel audio bientôt disponible")} className="p-2.5 rounded-full active:bg-white/20" aria-label="Appel audio">
+        <button
+          type="button"
+          onClick={() => void callOther("audio")}
+          className="p-2.5 rounded-full active:bg-white/20"
+          aria-label="Appel audio"
+        >
           <Phone className="h-5 w-5" />
         </button>
-        <button onClick={() => toast.info("Appel vidéo bientôt disponible")} className="p-2.5 rounded-full active:bg-white/20" aria-label="Appel vidéo">
+        <button
+          type="button"
+          onClick={() => void callOther("video")}
+          className="p-2.5 rounded-full active:bg-white/20"
+          aria-label="Appel vidéo"
+        >
           <Video className="h-5 w-5" />
         </button>
 
@@ -601,10 +840,18 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
               <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-2xl shadow-2xl z-[120] py-2 text-[#111]">
                 {[
                   { key: "profile", icon: UserCircle, label: "Voir le profil" },
-                  { key: "pin", icon: Pin, label: "Épingler la conversation" },
-                  { key: "mute", icon: BellOff, label: "Mettre en sourdine" },
+                  {
+                    key: "pin",
+                    icon: Pin,
+                    label: pinned ? "Désépingler" : "Épingler la conversation",
+                  },
+                  {
+                    key: "mute",
+                    icon: BellOff,
+                    label: muted ? "Réactiver les notifs" : "Mettre en sourdine",
+                  },
                   { key: "clear", icon: Trash2, label: "Effacer les messages" },
-                ].map(item => (
+                ].map((item) => (
                   <button key={item.key} onClick={() => menuAction(item.key)}
                     className="w-full flex items-center gap-3 px-4 py-3 active:bg-gray-100 text-sm">
                     <item.icon className="h-4 w-4 text-[#6B7280]" />{item.label}
@@ -780,23 +1027,46 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
             <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-6" />
             <div className="grid grid-cols-3 gap-6">
               {[
-                { icon: ImageIcon, color: "bg-violet-500", label: "Galerie", action: () => { imgRef.current?.click(); setShowAttach(false) } },
-                { icon: Camera, color: "bg-pink-500", label: "Caméra", action: () => {
-                const camInput = document.createElement('input')
-                camInput.type = 'file'
-                camInput.accept = 'image/*'
-                camInput.capture = 'environment'
-                camInput.onchange = (ev) => {
-                  const f = (ev.target as HTMLInputElement).files?.[0]
-                  if (f) handleFileUpload(f, "image")
-                }
-                camInput.click()
-                setShowAttach(false)
-              } },
-                { icon: FileText, color: "bg-blue-500", label: "Document", action: () => { fileRef.current?.click(); setShowAttach(false) } },
-                { icon: HandCoins, color: "bg-[#C27D10]", label: "Négocier", action: () => { setShowAttach(false); setShowOfferSheet(true) } },
-                { icon: MapPin, color: "bg-green-500", label: "Position", action: () => { toast.info("Partage de position bientôt disponible"); setShowAttach(false) } },
-              ].map(item => (
+                {
+                  icon: ImageIcon,
+                  color: "bg-violet-500",
+                  label: "Galerie",
+                  action: () => {
+                    imgRef.current?.click()
+                    setShowAttach(false)
+                  },
+                },
+                {
+                  icon: Camera,
+                  color: "bg-pink-500",
+                  label: "Caméra",
+                  action: () => {
+                    openCameraCapture()
+                    setShowAttach(false)
+                  },
+                },
+                {
+                  icon: FileText,
+                  color: "bg-blue-500",
+                  label: "Document",
+                  action: () => {
+                    fileRef.current?.click()
+                    setShowAttach(false)
+                  },
+                },
+                {
+                  icon: HandCoins,
+                  color: "bg-[#C27D10]",
+                  label: "Négocier",
+                  action: () => void openOfferSheet(),
+                },
+                {
+                  icon: MapPin,
+                  color: "bg-green-500",
+                  label: "Position",
+                  action: () => void shareLocation(),
+                },
+              ].map((item) => (
                 <button key={item.label} onClick={item.action} className="flex flex-col items-center gap-2">
                   <div className={`w-14 h-14 ${item.color} rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform`}>
                     <item.icon className="h-6 w-6 text-white" />
@@ -820,8 +1090,30 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
               <h3 className="text-lg font-semibold text-[#111]">Proposer un prix</h3>
             </div>
             <p className="text-sm text-[#667781] mb-4">
-              Négociez avant ou pendant une commande — le vendeur pourra accepter ou refuser.
+              Négociez — à l&apos;acceptation, une commande est créée au prix convenu.
             </p>
+            {offerProducts.length > 0 && (
+              <>
+                <label className="text-sm font-medium text-[#111] mb-1.5 block">
+                  Produit
+                </label>
+                <select
+                  value={offerProductId}
+                  onChange={(e) => {
+                    setOfferProductId(e.target.value)
+                    const p = offerProducts.find((x) => x.id === e.target.value)
+                    if (p) setOfferAmount(String(Math.round(p.price)))
+                  }}
+                  className="w-full h-11 rounded-xl border border-[#E5E7EB] px-3 text-sm mb-3 bg-white"
+                >
+                  {offerProducts.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} — {formatOfferAmount(p.price)} FCFA
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
             <label className="text-sm font-medium text-[#111] mb-1.5 block">Montant (FCFA)</label>
             <input
               type="number"
@@ -878,8 +1170,8 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
               </button>
 
               {!newMessage.trim() && (
-                <button type="button" onClick={() => imgRef.current?.click()}
-                  className="p-2 text-[#54656f] active:text-[#1F5C2E] shrink-0" aria-label="Photo rapide">
+                <button type="button" onClick={openCameraCapture}
+                  className="p-2 text-[#54656f] active:text-[#1F5C2E] shrink-0" aria-label="Caméra">
                   <Camera className="h-6 w-6" />
                 </button>
               )}
@@ -900,10 +1192,12 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
             )}
           </form>
 
+          <input ref={camRef} type="file" className="hidden" accept="image/*" capture="environment"
+            onChange={e => { const f = e.target.files?.[0]; if (f) void handleFileUpload(f, "image"); e.target.value = "" }} />
           <input ref={fileRef} type="file" className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar"
-            onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f, "file"); e.target.value = "" }} />
+            onChange={e => { const f = e.target.files?.[0]; if (f) void handleFileUpload(f, "file"); e.target.value = "" }} />
           <input ref={imgRef} type="file" className="hidden" accept="image/*,video/*"
-            onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f, "image"); e.target.value = "" }} />
+            onChange={e => { const f = e.target.files?.[0]; if (f) void handleFileUpload(f, "image"); e.target.value = "" }} />
 
           {/* EMOJI PICKER */}
           {showEmojis && (

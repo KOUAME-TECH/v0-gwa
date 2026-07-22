@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { ArrowLeft, Camera, Loader2, Check, MapPin, Link2, BadgeCheck, ShieldCheck } from "lucide-react"
+import { ArrowLeft, Camera, Loader2, Check, MapPin, BadgeCheck, ShieldCheck } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import { toast } from "sonner"
 import { AUDIO_LANGS } from "@/lib/media/audio-langs"
@@ -540,23 +540,6 @@ export default function EditProfilPage() {
               aria-label="Activer Harmattan Digest"
             />
           </div>
-        </div>
-
-        <div className="bg-white rounded-2xl p-4 space-y-3">
-          <h2 className="font-semibold text-[#111827]">Lier email ou téléphone</h2>
-          <p className="text-xs text-[#6B7280] leading-relaxed">
-            Connectez-vous avec téléphone ou email. Liez les deux pour un accès plus simple.
-          </p>
-          <Link href="/profil/lier">
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full h-11 rounded-xl border-[#2F7D32] text-[#2F7D32]"
-            >
-              <Link2 className="h-4 w-4 mr-2" />
-              Lier email ou téléphone
-            </Button>
-          </Link>
         </div>
 
         {showKycInSettings && (
