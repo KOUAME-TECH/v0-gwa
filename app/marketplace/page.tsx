@@ -94,6 +94,22 @@ function MarketplaceContent() {
     if (geoCountry) setUserCountry(geoCountry)
   }, [geoCity, geoCountry])
 
+  // Persister la position sur le profil (Digest cron / push)
+  useEffect(() => {
+    if (!userId || (!geoCity && !geoCountry)) return
+    void supabase
+      .from("profiles")
+      .update({
+        ...(geoCity ? { city: geoCity } : {}),
+        ...(geoCountry ? { country: geoCountry } : {}),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", userId)
+      .then(({ error }) => {
+        if (error) console.warn("[marketplace] geo profile update", error.message)
+      })
+  }, [userId, geoCity, geoCountry, supabase])
+
   async function fetchData() {
     setIsLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
