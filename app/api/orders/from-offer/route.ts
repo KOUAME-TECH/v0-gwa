@@ -203,9 +203,29 @@ export async function POST(request: Request) {
       pourcentage: 100,
       status: "pending",
       due_event: "livraison",
+      due_days: 7,
     })
 
-    // Notifier l'autre partie
+    await admin.from("order_audit_log").insert({
+      order_id: order.id,
+      performed_by: user.id,
+      action: "order_created",
+      new_value: "pending",
+      notes: `Créée via négociation chat (offre ${messageId})`,
+    })
+
+    await admin.from("notifications").insert({
+      user_id: sellerId,
+      type: "order",
+      title: "Commande au prix négocié",
+      message: `Commande ${orderNumber} — ${unitPrice.toLocaleString("fr-FR")} FCFA × ${quantity}`,
+      body: `Prix négocié accepté`,
+      link: `/dashboard/commandes`,
+      is_read: false,
+      read: false,
+    })
+
+    // Notifier l'autre partie (push)
     const notifyUser = user.id === buyerId ? sellerId : buyerId
     void sendPushToUser(admin as never, notifyUser, {
       title: "Commande au prix négocié",
