@@ -128,14 +128,56 @@ export async function POST(request: Request) {
 
         await clearOtp(formatted)
 
-        await admin
+        // Cooldown si un autre numéro vérifié est déjà lié
+        const { data: bindProfile } = await admin
           .from("profiles")
-          .update({
-            phone: formatted,
-            phone_verified: true,
-            updated_at: new Date().toISOString(),
-          })
+          .select("phone, phone_verified, phone_linked_at")
           .eq("id", sessionUser.id)
+          .maybeSingle()
+
+        if (
+          bindProfile?.phone_verified &&
+          bindProfile.phone &&
+          bindProfile.phone !== formatted
+        ) {
+          const { getLinkCooldown, linkCooldownMessage } = await import(
+            "@/lib/auth/link-cooldown"
+          )
+          const cooldown = getLinkCooldown(bindProfile.phone_linked_at)
+          if (!cooldown.allowed) {
+            return NextResponse.json(
+              {
+                error: linkCooldownMessage("téléphone", cooldown),
+                code: "LINK_COOLDOWN",
+                daysRemaining: cooldown.daysRemaining,
+                nextChangeAt: cooldown.nextChangeAt,
+              },
+              { status: 403 },
+            )
+          }
+        }
+
+        const bindUpdate: Record<string, unknown> = {
+          phone: formatted,
+          phone_verified: true,
+          phone_linked_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }
+        const { error: bindErr } = await admin
+          .from("profiles")
+          .update(bindUpdate)
+          .eq("id", sessionUser.id)
+
+        if (bindErr && /phone_linked_at|column/i.test(bindErr.message)) {
+          await admin
+            .from("profiles")
+            .update({
+              phone: formatted,
+              phone_verified: true,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", sessionUser.id)
+        }
 
         await admin.auth.admin.updateUserById(sessionUser.id, {
           phone: formatted,

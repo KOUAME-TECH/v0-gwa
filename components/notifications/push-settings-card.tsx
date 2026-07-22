@@ -57,8 +57,27 @@ export function PushSettingsCard() {
       } else if (typeof Notification !== "undefined") {
         await Notification.requestPermission()
       }
+      if (os?.User?.PushSubscription?.optIn) {
+        await os.User.PushSubscription.optIn()
+      }
+      const playerId = os?.User?.PushSubscription?.id
+      if (playerId) {
+        await fetch("/api/onesignal/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ onesignal_player_id: playerId }),
+        })
+      }
       await refresh()
-      toast.success("Permission demandée — accepte dans le navigateur")
+      if (window.__GWA_ONESIGNAL_STATUS && !window.__GWA_ONESIGNAL_STATUS.ok) {
+        toast.error(
+          /not configured for web push/i.test(window.__GWA_ONESIGNAL_STATUS.error || "")
+            ? "Domaine non autorisé dans OneSignal Dashboard"
+            : window.__GWA_ONESIGNAL_STATUS.error || "Init OneSignal échouée",
+        )
+      } else {
+        toast.success("Permission demandée — accepte dans le navigateur")
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Permission refusée")
     } finally {
@@ -103,6 +122,18 @@ export function PushSettingsCard() {
                   : "Permission OK — enregistrement en cours."
                 : "Active les alertes commandes, litiges et messages."}
           </p>
+          {typeof window !== "undefined" &&
+            window.__GWA_ONESIGNAL_STATUS &&
+            !window.__GWA_ONESIGNAL_STATUS.ok && (
+              <p className="text-[11px] text-amber-700 mt-1.5 leading-relaxed">
+                Push indisponible sur {window.__GWA_ONESIGNAL_STATUS.origin}.{" "}
+                {/not configured for web push/i.test(
+                  window.__GWA_ONESIGNAL_STATUS.error || "",
+                )
+                  ? "Ajoutez cette URL dans OneSignal → Settings → Platforms → Web (Site URL + Allowed origins)."
+                  : window.__GWA_ONESIGNAL_STATUS.error}
+              </p>
+            )}
         </div>
       </div>
       <div className="flex flex-wrap gap-2">

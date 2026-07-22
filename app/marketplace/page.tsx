@@ -96,7 +96,37 @@ function MarketplaceContent() {
 
   // Persister la position sur le profil (Digest cron / push)
   useEffect(() => {
-    if (!userId || (!geoCity && !geoCountry)) return
+    if (!userId) return
+    if (!geoCity && !geoCountry && !geoLabel) return
+    // Prefer structured save when we have coords from hook storage
+    try {
+      const raw = localStorage.getItem("gwa-realtime-location")
+      const cached = raw
+        ? (JSON.parse(raw) as {
+            lat?: number
+            lon?: number
+            city?: string | null
+            country?: string | null
+            region?: string | null
+          })
+        : null
+      if (cached?.lat != null && cached?.lon != null) {
+        void fetch("/api/location/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            lat: cached.lat,
+            lon: cached.lon,
+            city: cached.city ?? geoCity,
+            country: cached.country ?? geoCountry,
+            region: cached.region,
+          }),
+        })
+        return
+      }
+    } catch {
+      /* ignore */
+    }
     void supabase
       .from("profiles")
       .update({
@@ -108,7 +138,7 @@ function MarketplaceContent() {
       .then(({ error }) => {
         if (error) console.warn("[marketplace] geo profile update", error.message)
       })
-  }, [userId, geoCity, geoCountry, supabase])
+  }, [userId, geoCity, geoCountry, geoLabel, supabase])
 
   async function fetchData() {
     setIsLoading(true)

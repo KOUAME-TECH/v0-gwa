@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { ArrowLeft, Camera, Loader2, Check, MapPin, Link2, BadgeCheck } from "lucide-react"
+import { ArrowLeft, Camera, Loader2, Check, MapPin, Link2, BadgeCheck, ShieldCheck } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import { toast } from "sonner"
 import { AUDIO_LANGS } from "@/lib/media/audio-langs"
@@ -28,6 +28,12 @@ import {
   type KycStatus,
 } from "@/lib/verification/badge"
 import { useRealtimeLocation } from "@/hooks/use-realtime-location"
+import { PlacesManager } from "@/components/location/places-manager"
+import {
+  getLinkCooldown,
+  LINK_CHANGE_COOLDOWN_DAYS,
+  linkCooldownMessage,
+} from "@/lib/auth/link-cooldown"
 
 type Profile = {
   id: string
@@ -44,6 +50,10 @@ type Profile = {
   is_verified?: boolean | null
   phone_verified?: boolean | null
   linked_email?: string | null
+  email_linked_at?: string | null
+  phone_linked_at?: string | null
+  latitude?: number | null
+  longitude?: number | null
 }
 
 const userTypes = [
@@ -80,8 +90,36 @@ export default function EditProfilPage() {
   const [emailLinkMsg, setEmailLinkMsg] = useState<string | null>(null)
   const [kycStatus, setKycStatus] = useState<KycStatus>(null)
   const [locating, setLocating] = useState(false)
-  const { request: requestLocation, status: geoStatus, error: geoError } =
-    useRealtimeLocation({ auto: false, maximumAge: 0 })
+  const [linkingBusy, setLinkingBusy] = useState(false)
+  const {
+    location,
+    status: geoStatus,
+    error: geoError,
+    request: requestLocation,
+  } = useRealtimeLocation({ auto: true, maximumAge: 0 })
+
+  // Auto-enregistrer la position dès qu'elle est captée
+  useEffect(() => {
+    if (!location || !profile?.id) return
+    void fetch("/api/location/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        lat: location.lat,
+        lon: location.lon,
+        city: location.city,
+        country: location.country,
+        region: location.region,
+      }),
+    }).then(async (res) => {
+      if (!res.ok) return
+      setFormData((prev) => ({
+        ...prev,
+        city: location.city || prev.city,
+        country: location.country || prev.country,
+      }))
+    })
+  }, [location, profile?.id])
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -177,7 +215,63 @@ export default function EditProfilPage() {
       city: loc.city || prev.city,
       country: loc.country || prev.country,
     }))
-    toast.success(loc.label ? `Position : ${loc.label}` : "Position mise à jour")
+    const res = await fetch("/api/location/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        lat: loc.lat,
+        lon: loc.lon,
+        city: loc.city,
+        country: loc.country,
+        region: loc.region,
+      }),
+    })
+    if (res.ok) toast.success(loc.label ? `Position enregistrée : ${loc.label}` : "Position enregistrée")
+    else toast.success(loc.label ? `Position : ${loc.label}` : "Position mise à jour")
+  }
+
+  const handleSecureLinkEmail = async () => {
+    if (!formData.email?.trim()) {
+      toast.error("Saisissez un email dans Informations personnelles")
+      return
+    }
+    setLinkingBusy(true)
+    setEmailLinkMsg(null)
+    try {
+      const res = await fetch("/api/auth/link-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: formData.email.trim(),
+          phone: formData.phone.trim() || undefined,
+          countryCode: "ci",
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || "Liaison impossible")
+        setEmailLinkMsg(data.error || null)
+        return
+      }
+      setEmailLinkMsg(
+        data.needs_email_confirmation
+          ? "Email lié de façon sécurisée. Vérifiez votre boîte mail si demandé."
+          : "Email lié de façon sécurisée à votre compte.",
+      )
+      toast.success("Email lié")
+      setProfile((p) =>
+        p
+          ? {
+              ...p,
+              linked_email: formData.email.trim(),
+              email: formData.email.trim(),
+              email_linked_at: new Date().toISOString(),
+            }
+          : p,
+      )
+    } finally {
+      setLinkingBusy(false)
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -188,8 +282,8 @@ export default function EditProfilPage() {
     setEmailLinkMsg(null)
 
     try {
-      // Téléphone obligatoire : l'email y est rattaché
-      if (!formData.phone?.trim()) {
+      // Téléphone déjà lié / affiché — pas d'écriture silencieuse ici
+      if (!formData.phone?.trim() && !profile.phone) {
         toast.error("Le numéro de téléphone est obligatoire")
         setIsSaving(false)
         return
@@ -199,12 +293,12 @@ export default function EditProfilPage() {
         full_name: formData.full_name,
         bio: formData.bio || null,
         user_type: formData.user_type || null,
-        phone: formData.phone || null,
         city: formData.city || null,
         country: formData.country || null,
         address: formData.address || null,
         updated_at: new Date().toISOString(),
       }
+      // phone : jamais écrit ici sans OTP (trigger 028 + flow sécurisé)
       const { error } = await supabase
         .from("profiles")
         .update(updateData)
@@ -218,31 +312,7 @@ export default function EditProfilPage() {
         body: JSON.stringify({ digest_enabled: formData.digest_enabled }),
       }).catch(() => null)
 
-      // Lier l'email au numéro déjà enregistré
-      if (formData.email?.trim()) {
-        const res = await fetch("/api/auth/link-email", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: formData.email.trim(),
-            phone: formData.phone.trim(),
-            countryCode: "ci",
-          }),
-        })
-        const data = await res.json()
-        if (!res.ok) {
-          toast.error(data.error || "Impossible de lier l'email")
-          setIsSaving(false)
-          return
-        }
-        setEmailLinkMsg(
-          data.needs_email_confirmation
-            ? "Email lié au téléphone. Vérifiez votre boîte mail si demandé."
-            : "Email lié à votre numéro de téléphone.",
-        )
-      }
-
-      toast.success("Profil mis à jour — email lié au téléphone")
+      toast.success("Profil mis à jour")
       router.push("/profil")
     } catch (error) {
       console.error("Erreur mise à jour profil:", error)
@@ -268,6 +338,14 @@ export default function EditProfilPage() {
     is_verified: profile.is_verified,
     kyc_status: kycStatus,
   })
+
+  const emailCooldown = getLinkCooldown(profile.email_linked_at)
+  const phoneCooldown = getLinkCooldown(profile.phone_linked_at)
+  const hasRealEmail =
+    !!(profile.linked_email || formData.email) &&
+    !String(profile.linked_email || formData.email || "").includes("@users.gwa.local")
+  const phoneLocked = profile.phone_verified === true && !phoneCooldown.allowed
+  const emailLocked = hasRealEmail && profile.email_linked_at && !emailCooldown.allowed
 
   return (
     <div className="min-h-screen bg-[#FFF6E5] pb-8">
@@ -352,10 +430,28 @@ export default function EditProfilPage() {
               className="h-12 rounded-xl border-[#E5E7EB] bg-[#FFF6E5]/50"
               placeholder="07 XX XX XX XX"
               required
+              readOnly={!!phoneLocked}
+              disabled={!!phoneLocked}
             />
             <p className="text-xs text-[#6B7280]">
-              Votre numéro est la clé du compte. L&apos;email ci-dessous y sera rattaché.
+              {phoneLocked
+                ? linkCooldownMessage("téléphone", phoneCooldown)
+                : profile.phone_verified
+                  ? `Numéro vérifié. Modification via OTP (délai de fiabilité ${LINK_CHANGE_COOLDOWN_DAYS} j).`
+                  : "Liez ce numéro par SMS OTP pour sécuriser le compte."}
             </p>
+            {!profile.phone_verified || phoneCooldown.allowed ? (
+              <Link href="/profil/lier">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full h-10 rounded-xl border-[#2F7D32] text-[#2F7D32]"
+                >
+                  <ShieldCheck className="h-4 w-4 mr-2" />
+                  {profile.phone_verified ? "Modifier le téléphone (OTP)" : "Lier le téléphone (OTP)"}
+                </Button>
+              </Link>
+            ) : null}
           </div>
 
           <div className="space-y-2">
@@ -369,12 +465,34 @@ export default function EditProfilPage() {
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               className="h-12 rounded-xl border-[#E5E7EB] bg-[#FFF6E5]/50"
               placeholder="votre@email.com"
+              readOnly={!!emailLocked}
+              disabled={!!emailLocked}
             />
             <p className="text-xs text-[#6B7280]">
-              Cet email est connecté au numéro enregistré — même compte GWA.
+              {emailLocked
+                ? linkCooldownMessage("email", emailCooldown)
+                : "Liaison sécurisée via confirmation email Supabase — pas d'écriture libre."}
             </p>
             {emailLinkMsg && (
               <p className="text-xs text-[#2F7D32] font-medium">{emailLinkMsg}</p>
+            )}
+            {!emailLocked && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={linkingBusy || !formData.email.trim()}
+                onClick={() => void handleSecureLinkEmail()}
+                className="w-full h-10 rounded-xl border-[#2F7D32] text-[#2F7D32]"
+              >
+                {linkingBusy ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    <ShieldCheck className="h-4 w-4 mr-2" />
+                    {hasRealEmail ? "Modifier l'email (sécurisé)" : "Lier cet email"}
+                  </>
+                )}
+              </Button>
             )}
           </div>
 
@@ -477,7 +595,9 @@ export default function EditProfilPage() {
             <div>
               <h2 className="font-semibold text-[#111827]">Localisation</h2>
               <p className="text-xs text-[#6B7280] mt-1 leading-relaxed">
-                Position temps réel (avec votre autorisation) pour le Digest près de chez vous.
+                Position captée automatiquement (avec autorisation) et enregistrée sur votre compte.
+                {location?.label ? ` Actuelle : ${location.label}.` : ""}
+                {geoStatus === "denied" ? " Autorisation refusée — réessayez." : ""}
               </p>
             </div>
             <Button
@@ -493,7 +613,7 @@ export default function EditProfilPage() {
               ) : (
                 <>
                   <MapPin className="h-4 w-4 mr-1.5" />
-                  Ma position
+                  Actualiser
                 </>
               )}
             </Button>
@@ -540,6 +660,17 @@ export default function EditProfilPage() {
             />
           </div>
         </div>
+
+        <PlacesManager
+          location={location}
+          locating={locating || geoStatus === "locating" || geoStatus === "prompting"}
+          onRequestLocation={async () => {
+            setLocating(true)
+            const loc = await requestLocation()
+            setLocating(false)
+            return loc
+          }}
+        />
 
         <Button 
           type="submit" 
