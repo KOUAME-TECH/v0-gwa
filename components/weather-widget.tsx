@@ -58,7 +58,7 @@ export function WeatherWidget() {
               if (res.ok) setWeather(await res.json())
               setLoading(false)
             },
-            { timeout: 3000 }
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
           )
         } else {
           const res = await fetch("/api/weather")

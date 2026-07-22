@@ -15,9 +15,13 @@ export type ShopVoiceTourButtonProps = {
   className?: string
   /** Décoratif dans un parent déjà cliquable (évite nested interactive). */
   decorative?: boolean
+  /** Libellé au repos — "Parcours" (catalogue) ou "Digest" (nouveautés). */
+  idleLabel?: string
+  ariaLabelStart?: string
+  ariaLabelStop?: string
 }
 
-/** Lance le parcours vocal marketplace — lit les produits un par un. */
+/** Lance un parcours vocal marketplace — lit les produits un par un. */
 export function ShopVoiceTourButton({
   active,
   index,
@@ -26,6 +30,9 @@ export function ShopVoiceTourButton({
   disabled,
   className,
   decorative,
+  idleLabel = "Parcours",
+  ariaLabelStart,
+  ariaLabelStop,
 }: ShopVoiceTourButtonProps) {
   return (
     <button
@@ -44,7 +51,13 @@ export function ShopVoiceTourButton({
         decorative && "pointer-events-none",
         className,
       )}
-      aria-label={decorative ? undefined : active ? AUDIO_LABELS.shopTourStop : AUDIO_LABELS.shopTour}
+      aria-label={
+        decorative
+          ? undefined
+          : active
+            ? ariaLabelStop || AUDIO_LABELS.shopTourStop
+            : ariaLabelStart || AUDIO_LABELS.shopTour
+      }
       aria-pressed={decorative ? undefined : active}
       aria-disabled={total === 0}
     >
@@ -54,7 +67,7 @@ export function ShopVoiceTourButton({
         <AudioWaveIcon playing={false} size="sm" variant="synth" />
       )}
       <span className="text-xs font-medium whitespace-nowrap">
-        {active && total > 0 ? `${index + 1}/${total}` : "Parcours"}
+        {active && total > 0 ? `${index + 1}/${total}` : idleLabel}
       </span>
       {active && <AudioWaveIcon playing size="xs" variant="recorded" className="opacity-90" />}
     </button>

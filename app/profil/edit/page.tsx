@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { ArrowLeft, Camera, Loader2, Check } from "lucide-react"
+import { ArrowLeft, Camera, Loader2, Check, MapPin, Link2, BadgeCheck } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import { toast } from "sonner"
 import { AUDIO_LANGS } from "@/lib/media/audio-langs"
@@ -27,6 +27,7 @@ import {
   shouldPromptIdentityVerification,
   type KycStatus,
 } from "@/lib/verification/badge"
+import { useRealtimeLocation } from "@/hooks/use-realtime-location"
 
 type Profile = {
   id: string
@@ -41,6 +42,8 @@ type Profile = {
   address: string | null
   digest_enabled?: boolean | null
   is_verified?: boolean | null
+  phone_verified?: boolean | null
+  linked_email?: string | null
 }
 
 const userTypes = [
@@ -76,6 +79,9 @@ export default function EditProfilPage() {
   })
   const [emailLinkMsg, setEmailLinkMsg] = useState<string | null>(null)
   const [kycStatus, setKycStatus] = useState<KycStatus>(null)
+  const [locating, setLocating] = useState(false)
+  const { request: requestLocation, status: geoStatus, error: geoError } =
+    useRealtimeLocation({ auto: false, maximumAge: 0 })
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -156,6 +162,22 @@ export default function EditProfilPage() {
     } finally {
       setIsUploading(false)
     }
+  }
+
+  const handleUseLocation = async () => {
+    setLocating(true)
+    const loc = await requestLocation()
+    setLocating(false)
+    if (!loc) {
+      toast.error(geoError || "Autorisez la localisation dans le navigateur")
+      return
+    }
+    setFormData((prev) => ({
+      ...prev,
+      city: loc.city || prev.city,
+      country: loc.country || prev.country,
+    }))
+    toast.success(loc.label ? `Position : ${loc.label}` : "Position mise à jour")
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -390,7 +412,7 @@ export default function EditProfilPage() {
         <div className="bg-white rounded-2xl p-4 space-y-3">
           <h2 className="font-semibold text-[#111827]">Harmattan Digest</h2>
           <p className="text-xs text-[#6B7280]">
-            Résumé vocal quotidien des nouveaux produits près de chez vous (push + parcours audio).
+            Résumé vocal quotidien des nouveaux produits près de chez vous (push + écoute Digest).
           </p>
           <div className="flex items-center justify-between gap-3 rounded-xl border border-[#E5E7EB] px-3 py-2.5">
             <span className="text-sm text-[#374151]">Recevoir le digest</span>
@@ -400,6 +422,23 @@ export default function EditProfilPage() {
               aria-label="Activer Harmattan Digest"
             />
           </div>
+        </div>
+
+        <div className="bg-white rounded-2xl p-4 space-y-3">
+          <h2 className="font-semibold text-[#111827]">Lier email ou téléphone</h2>
+          <p className="text-xs text-[#6B7280] leading-relaxed">
+            Connectez-vous avec téléphone ou email. Liez les deux pour un accès plus simple.
+          </p>
+          <Link href="/profil/lier">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full h-11 rounded-xl border-[#2F7D32] text-[#2F7D32]"
+            >
+              <Link2 className="h-4 w-4 mr-2" />
+              Lier email ou téléphone
+            </Button>
+          </Link>
         </div>
 
         {showKycInSettings && (
@@ -415,6 +454,7 @@ export default function EditProfilPage() {
                 type="button"
                 className="w-full h-11 rounded-xl bg-[#2F7D32] hover:bg-[#256025]"
               >
+                <BadgeCheck className="h-4 w-4 mr-2" />
                 Vérifier mon identité
               </Button>
             </Link>
@@ -433,7 +473,31 @@ export default function EditProfilPage() {
         )}
 
         <div className="bg-white rounded-2xl p-4 space-y-4">
-          <h2 className="font-semibold text-[#111827]">Localisation</h2>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="font-semibold text-[#111827]">Localisation</h2>
+              <p className="text-xs text-[#6B7280] mt-1 leading-relaxed">
+                Position temps réel (avec votre autorisation) pour le Digest près de chez vous.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0 rounded-xl h-9 border-[#2F7D32] text-[#2F7D32]"
+              disabled={locating}
+              onClick={() => void handleUseLocation()}
+            >
+              {locating || geoStatus === "prompting" || geoStatus === "locating" ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <>
+                  <MapPin className="h-4 w-4 mr-1.5" />
+                  Ma position
+                </>
+              )}
+            </Button>
+          </div>
 
           <div className="space-y-2">
             <Label htmlFor="country" className="text-sm text-[#4B5563]">Pays</Label>

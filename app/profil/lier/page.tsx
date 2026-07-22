@@ -178,7 +178,7 @@ export default function LierComptePage() {
   return (
     <div className="min-h-screen bg-white pb-10">
       <header className="sticky top-0 z-10 bg-white border-b border-[#E5E7EB] px-4 py-3 flex items-center gap-3">
-        <Link href="/profil" className="p-2 -ml-2 active:opacity-60" aria-label="Retour">
+        <Link href="/profil/edit" className="p-2 -ml-2 active:opacity-60" aria-label="Retour paramètres">
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <h1 className="text-lg font-semibold">Lier mon compte</h1>

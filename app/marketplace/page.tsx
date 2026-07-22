@@ -19,6 +19,11 @@ import { DigestBanner } from "@/components/media/digest-banner"
 import { AudioLangBadge } from "@/components/media/audio-lang-badge"
 import { useListenMode } from "@/hooks/use-listen-mode"
 import { useShopVoiceTour } from "@/hooks/use-shop-voice-tour"
+import { useRealtimeLocation } from "@/hooks/use-realtime-location"
+import {
+  digestSinceHours,
+  filterDigestProducts,
+} from "@/lib/products/digest"
 
 type Product = {
   id: string
@@ -70,10 +75,24 @@ function MarketplaceContent() {
   const [viewMode, setViewMode] = useState<ViewMode>("grid")
   const [userId, setUserId] = useState<string | null>(null)
   const [userCity, setUserCity] = useState<string | null>(null)
+  const [userCountry, setUserCountry] = useState<string | null>(null)
   const { enabled: listenMode } = useListenMode()
+  const {
+    city: geoCity,
+    country: geoCountry,
+    label: geoLabel,
+    status: geoStatus,
+    request: requestLocation,
+  } = useRealtimeLocation({ auto: true, maximumAge: 0 })
   const supabase = createClient()
 
   useEffect(() => { fetchData() }, [])
+
+  // GPS temps réel prioritaire pour Digest (avec permission)
+  useEffect(() => {
+    if (geoCity) setUserCity(geoCity)
+    if (geoCountry) setUserCountry(geoCountry)
+  }, [geoCity, geoCountry])
 
   async function fetchData() {
     setIsLoading(true)
@@ -81,8 +100,8 @@ function MarketplaceContent() {
     setUserId(user?.id || null)
 
     const profilePromise = user
-      ? supabase.from("profiles").select("city, digest_enabled").eq("id", user.id).maybeSingle()
-      : Promise.resolve({ data: null as { city?: string | null } | null })
+      ? supabase.from("profiles").select("city, country, digest_enabled").eq("id", user.id).maybeSingle()
+      : Promise.resolve({ data: null as { city?: string | null; country?: string | null } | null })
 
     const [productsRes, categoriesRes, favsRes, profileRes] = await Promise.all([
       supabase
@@ -105,7 +124,9 @@ function MarketplaceContent() {
     if (productsRes.data) setProducts(productsRes.data as Product[])
     if (categoriesRes.data) setCategories(categoriesRes.data)
     if (favsRes.data) setFavorites(new Set((favsRes.data as { product_id: string }[]).map(f => f.product_id)))
-    if (profileRes.data?.city) setUserCity(profileRes.data.city)
+    // Profil = fallback si GPS pas encore autorisé
+    if (!geoCity && profileRes.data?.city) setUserCity(profileRes.data.city)
+    if (!geoCountry && profileRes.data?.country) setUserCountry(profileRes.data.country)
     setIsLoading(false)
   }
 
@@ -144,30 +165,48 @@ function MarketplaceContent() {
   const activeFiltersCount = (selectedType !== "all" ? 1 : 0) + (selectedCategory !== "all" ? 1 : 0)
 
   const digestProducts = useMemo(() => {
-    if (!isDigest) return [] as Product[]
-    let list = filteredProducts
-    if (sinceParam) {
-      const sinceMs = new Date(sinceParam).getTime()
-      if (!Number.isNaN(sinceMs)) {
-        list = list.filter((p) => {
-          if (!p.created_at) return true
-          const createdMs = new Date(p.created_at).getTime()
-          return Number.isNaN(createdMs) || createdMs >= sinceMs
-        })
+    const since = digestSinceHours(24)
+
+    // Deep-link push Digest (?digest=1&ids=…)
+    if (isDigest) {
+      let list = products
+      if (sinceParam) {
+        const sinceMs = new Date(sinceParam).getTime()
+        if (!Number.isNaN(sinceMs)) {
+          list = list.filter((p) => {
+            if (!p.created_at) return true
+            const createdMs = new Date(p.created_at).getTime()
+            return Number.isNaN(createdMs) || createdMs >= sinceMs
+          })
+        }
       }
+      if (idsParam) {
+        const ids = new Set(idsParam.split(",").filter(Boolean))
+        if (ids.size > 0) list = list.filter((p) => ids.has(p.id))
+      }
+      return list
     }
-    if (idsParam) {
-      const ids = new Set(idsParam.split(",").filter(Boolean))
-      if (ids.size > 0) list = list.filter((p) => ids.has(p.id))
-    }
-    return list
-  }, [filteredProducts, idsParam, isDigest, sinceParam])
 
-  const tourSource = isDigest && digestProducts.length > 0 ? digestProducts : filteredProducts
+    // Digest ≠ Parcours : nouveautés 24h, idéalement près de la position
+    const regional = filterDigestProducts(
+      products,
+      { id: userId || "anon", city: userCity, country: userCountry },
+      since,
+    )
+    if (regional.length > 0) return regional
 
-  const tourProducts = useMemo(
+    // Fallback UI : nouveautés 24h (toujours distinct du catalogue Parcours)
+    const sinceMs = since.getTime()
+    return products.filter((p) => {
+      if (!p.created_at) return false
+      const t = new Date(p.created_at).getTime()
+      return !Number.isNaN(t) && t >= sinceMs
+    })
+  }, [products, idsParam, isDigest, sinceParam, userCity, userCountry, userId])
+
+  const parcoursProducts = useMemo(
     () =>
-      tourSource.map((p) => ({
+      filteredProducts.map((p) => ({
         id: p.id,
         name: p.name,
         price: p.price,
@@ -180,24 +219,50 @@ function MarketplaceContent() {
         audio_url: p.audio_url,
         audio_lang: p.audio_lang,
       })),
-    [tourSource],
+    [filteredProducts],
   )
 
-  const { active: tourActive, index: tourIndex, total: tourTotal, start: toggleTour } =
-    useShopVoiceTour(tourProducts)
+  const digestTourProducts = useMemo(
+    () =>
+      digestProducts.map((p) => ({
+        id: p.id,
+        name: p.name,
+        price: p.price,
+        unit: p.unit,
+        description: p.description,
+        origin_region: p.origin_region,
+        origin_country: p.origin_country,
+        product_type: p.product_type,
+        is_organic: p.is_organic,
+        audio_url: p.audio_url,
+        audio_lang: p.audio_lang,
+      })),
+    [digestProducts],
+  )
 
-  const handleTourClick = () => {
-    if (tourTotal === 0) {
+  const parcours = useShopVoiceTour(parcoursProducts)
+  const digest = useShopVoiceTour(digestTourProducts)
+
+  const handleParcoursClick = () => {
+    if (parcours.total === 0) {
       toast.error("Aucun produit à parcourir pour le moment")
       return
     }
-    // Démarrage audio immédiat (geste utilisateur) — pas de toast avant play
-    toggleTour()
+    if (digest.active) digest.stop()
+    parcours.start()
+  }
+
+  const handleDigestClick = () => {
+    if (digest.total === 0) {
+      toast.error("Aucun nouveau produit dans le digest")
+      return
+    }
+    if (parcours.active) parcours.stop()
+    digest.start()
   }
 
   useEffect(() => {
-    // Ne PAS auto-démarrer le TTS : les navigateurs bloquent sans geste utilisateur.
-    // On active seulement le mode écoute ; l'utilisateur tape « Parcours ».
+    // Deep-link digest : activer le mode écoute (pas d'autoplay sans geste)
     if (!isDigest || digestProducts.length === 0 || digestStartedRef.current || isLoading) return
     digestStartedRef.current = true
     try {
@@ -213,7 +278,7 @@ function MarketplaceContent() {
       audioUrl: p.audio_url,
       audioLang: p.audio_lang,
       fallbackLabel: p.name,
-      highlight: listenMode || isDigest,
+      highlight: listenMode || digest.active || isDigest,
     }
   }
 
@@ -345,10 +410,11 @@ function MarketplaceContent() {
           <h1 className="text-lg font-semibold flex-1 text-[#111827]">Marketplace</h1>
           <ListenModeToggle compact className="shrink-0" />
           <ShopVoiceTourButton
-            active={tourActive}
-            index={tourIndex}
-            total={tourTotal}
-            onClick={handleTourClick}
+            active={parcours.active}
+            index={parcours.index}
+            total={parcours.total}
+            onClick={handleParcoursClick}
+            idleLabel="Parcours"
             className="shrink-0"
           />
           <Link href="/panier">
@@ -437,14 +503,26 @@ function MarketplaceContent() {
 
       {/* Content */}
       <main className="p-4 sm:p-5">
-        {isDigest && digestProducts.length > 0 && (
+        {(geoStatus === "denied" || geoStatus === "unavailable") && (
+          <button
+            type="button"
+            onClick={() => void requestLocation()}
+            className="mb-3 flex w-full items-center gap-2 rounded-2xl border border-[#E5E7EB] bg-white px-3 py-2.5 text-left text-sm text-[#374151] active:scale-[0.99]"
+          >
+            <MapPin className="h-4 w-4 text-[#2F7D32] shrink-0" />
+            <span className="flex-1">
+              Autorisez la localisation pour un Digest près de chez vous
+            </span>
+          </button>
+        )}
+        {digestProducts.length > 0 && (
           <DigestBanner
             count={digestProducts.length}
-            city={userCity}
-            tourActive={tourActive}
-            tourIndex={tourIndex}
-            tourTotal={tourTotal}
-            onStartTour={handleTourClick}
+            city={geoLabel || userCity}
+            tourActive={digest.active}
+            tourIndex={digest.index}
+            tourTotal={digest.total}
+            onStartTour={handleDigestClick}
           />
         )}
         {isLoading ? (
@@ -471,10 +549,11 @@ function MarketplaceContent() {
               <p className="text-xs text-muted-foreground">{filteredProducts.length} produit{filteredProducts.length > 1 ? "s" : ""}</p>
               <div className="flex items-center gap-2">
                 <ShopVoiceTourButton
-                  active={tourActive}
-                  index={tourIndex}
-                  total={tourTotal}
-                  onClick={handleTourClick}
+                  active={parcours.active}
+                  index={parcours.index}
+                  total={parcours.total}
+                  onClick={handleParcoursClick}
+                  idleLabel="Parcours"
                 />
                 <Badge variant="outline" className="text-[10px] text-[#2F7D32] border-[#2F7D32]/30 capitalize">{viewMode}</Badge>
               </div>

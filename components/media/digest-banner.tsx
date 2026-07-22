@@ -61,6 +61,9 @@ export function DigestBanner({
         total={tourTotal}
         onClick={onStartTour}
         decorative
+        idleLabel="Digest"
+        ariaLabelStart="Écouter le Harmattan Digest"
+        ariaLabelStop="Arrêter le Harmattan Digest"
         className="shrink-0"
       />
     </div>
