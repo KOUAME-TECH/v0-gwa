@@ -203,7 +203,7 @@ function MarketplaceContent() {
       return list
     }
 
-    // Digest ≠ Parcours : nouveautés 24h, idéalement près de la position
+    // Digest ≠ Parcours : nouveautés locales (région + 24h)
     const regional = filterDigestProducts(
       products,
       { id: userId || "anon", city: userCity, country: userCountry },
@@ -211,13 +211,8 @@ function MarketplaceContent() {
     )
     if (regional.length > 0) return regional
 
-    // Fallback UI : nouveautés 24h (toujours distinct du catalogue Parcours)
-    const sinceMs = since.getTime()
-    return products.filter((p) => {
-      if (!p.created_at) return false
-      const t = new Date(p.created_at).getTime()
-      return !Number.isNaN(t) && t >= sinceMs
-    })
+    // Fallback UI : les 5 plus récents (catalogue déjà trié) — pas le Parcours complet
+    return products.slice(0, 5)
   }, [products, idsParam, isDigest, sinceParam, userCity, userCountry, userId])
 
   const parcoursProducts = useMemo(
