@@ -978,6 +978,7 @@ function FeedCard({
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   
   const [isVideoPlaying, setIsVideoPlaying] = useState(false)
+  const [lightboxOpen, setLightboxOpen] = useState(false)
   
   const isProduct = item.type === "product"
   const data = item.data
@@ -1141,25 +1142,36 @@ function FeedCard({
       {/* Images (seulement si pas de video) */}
       {!hasVideo && medias && medias.length > 0 && (
         <div className="relative">
-          <div className="relative aspect-square bg-[#F3F4F6] overflow-hidden">
+          <button
+            type="button"
+            className="relative aspect-square bg-[#F3F4F6] overflow-hidden w-full block active:opacity-95"
+            onClick={() => setLightboxOpen(true)}
+            aria-label="Agrandir l'image"
+          >
             <Image
               src={medias[currentImageIndex]?.url || "/placeholder.svg"}
               alt={isProduct ? (data as Product).name : "Publication"}
               fill
               className="object-cover"
             />
-          </div>
+          </button>
 
           {hasMultipleImages && (
             <>
               <button
-                onClick={() => setCurrentImageIndex(prev => prev > 0 ? prev - 1 : medias.length - 1)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setCurrentImageIndex(prev => prev > 0 ? prev - 1 : medias.length - 1)
+                }}
                 className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/50 flex items-center justify-center text-white"
               >
                 <ChevronLeft className="h-5 w-5" />
               </button>
               <button
-                onClick={() => setCurrentImageIndex(prev => prev < medias.length - 1 ? prev + 1 : 0)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setCurrentImageIndex(prev => prev < medias.length - 1 ? prev + 1 : 0)
+                }}
                 className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/50 flex items-center justify-center text-white"
               >
                 <ChevronRight className="h-5 w-5" />
@@ -1191,6 +1203,67 @@ function FeedCard({
                 highlight={listenModeHighlight}
                 className="!bg-white/20 !text-white hover:!bg-white/30 ring-0"
               />
+            </div>
+          )}
+        </div>
+      )}
+
+      {lightboxOpen && medias?.[currentImageIndex]?.url && (
+        <div
+          className="fixed inset-0 z-[200] bg-black/95 flex flex-col"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Image en plein écran"
+        >
+          <button
+            type="button"
+            className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-white/15 text-white flex items-center justify-center"
+            onClick={() => setLightboxOpen(false)}
+            aria-label="Fermer"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          <button
+            type="button"
+            className="flex-1 relative w-full"
+            onClick={() => setLightboxOpen(false)}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={medias[currentImageIndex].url}
+              alt={isProduct ? (data as Product).name : "Publication"}
+              className="absolute inset-0 m-auto max-h-full max-w-full object-contain p-4"
+            />
+          </button>
+          {hasMultipleImages && (
+            <div className="flex items-center justify-center gap-6 pb-8 safe-bottom">
+              <button
+                type="button"
+                className="w-11 h-11 rounded-full bg-white/15 text-white flex items-center justify-center"
+                onClick={() =>
+                  setCurrentImageIndex((prev) =>
+                    prev > 0 ? prev - 1 : medias.length - 1,
+                  )
+                }
+                aria-label="Précédente"
+              >
+                <ChevronLeft className="h-6 w-6" />
+              </button>
+              <span className="text-white/80 text-sm tabular-nums">
+                {currentImageIndex + 1} / {medias.length}
+              </span>
+              <button
+                type="button"
+                className="w-11 h-11 rounded-full bg-white/15 text-white flex items-center justify-center"
+                onClick={() =>
+                  setCurrentImageIndex((prev) =>
+                    prev < medias.length - 1 ? prev + 1 : 0,
+                  )
+                }
+                aria-label="Suivante"
+              >
+                <ChevronRight className="h-6 w-6" />
+              </button>
             </div>
           )}
         </div>

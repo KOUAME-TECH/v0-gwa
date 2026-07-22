@@ -61,7 +61,7 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
           utter.lang = resolveUtterLang(product.audio_lang)
           utter.rate = 0.92
           utter.onend = continueNext
-          utter.onerror = () => stop()
+          utter.onerror = () => continueNext()
           window.speechSynthesis.speak(utter)
         })
         return
@@ -78,8 +78,8 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
       utter.rate = 0.92
       utter.onend = continueNext
       utter.onerror = () => {
-        // Ne pas enchaîner silencieusement si le navigateur bloque la synthèse
-        stop()
+        // Continuer le parcours plutôt que d’arrêter tout (voix absente / interrupt)
+        continueNext()
       }
       window.speechSynthesis.speak(utter)
     },
@@ -87,7 +87,11 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
   )
 
   const startTour = useCallback(() => {
-    if (!products.length || typeof window === "undefined" || active) return
+    if (!products.length || typeof window === "undefined") return
+    if (active) {
+      stop()
+      return
+    }
     stoppedRef.current = false
     setActive(true)
     // Débloque l'audio sur geste utilisateur (autoplay policies)
@@ -99,17 +103,25 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
     } catch {
       /* ignore */
     }
+    // Warm-up speechSynthesis (certains navigateurs mobiles)
+    try {
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel()
+        const warm = new SpeechSynthesisUtterance(" ")
+        warm.volume = 0
+        window.speechSynthesis.speak(warm)
+        window.speechSynthesis.cancel()
+      }
+    } catch {
+      /* ignore */
+    }
     playAt(0)
-  }, [active, playAt, products.length])
+  }, [active, playAt, products.length, stop])
 
   const toggle = useCallback(() => {
     if (!products.length || typeof window === "undefined") return
-    if (active) {
-      stop()
-      return
-    }
     startTour()
-  }, [active, products.length, startTour, stop])
+  }, [products.length, startTour])
 
   useEffect(() => () => stop(), [stop])
 

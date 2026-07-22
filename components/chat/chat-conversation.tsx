@@ -5,11 +5,17 @@ import { createClient } from "@/lib/supabase/client"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { toast } from "sonner"
 import { GwaMark } from "@/components/brand/gwa-mark"
-import { CHAT_THEME } from "@/lib/chat/theme"
+import { CHAT_THEME, CHAT_AFRICA_BG } from "@/lib/chat/theme"
+import {
+  buildOfferContent,
+  parseOfferContent,
+  formatOfferAmount,
+  type PriceOfferPayload,
+} from "@/lib/chat/offer"
 import {
   ArrowLeft, Send, Mic, Smile, Phone, Video, MoreVertical,
   Check, CheckCheck, ImageIcon, FileText, X, Trash2, Copy, Reply,
-  Pin, BellOff, UserCircle, Flag, Paperclip, Camera, MapPin
+  Pin, BellOff, UserCircle, Flag, Paperclip, Camera, MapPin, HandCoins
 } from "lucide-react"
 
 interface Message {
@@ -65,6 +71,10 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   const [audioPreview, setAudioPreview] = useState<{ blob: Blob; url: string; duration: string } | null>(null)
   const [isPlayingPreview, setIsPlayingPreview] = useState(false)
   const [loadingMsgs, setLoadingMsgs] = useState(true)
+  const [showOfferSheet, setShowOfferSheet] = useState(false)
+  const [offerAmount, setOfferAmount] = useState("")
+  const [offerNote, setOfferNote] = useState("")
+  const [offerBusy, setOfferBusy] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -354,6 +364,96 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     }
   }
 
+  async function sendPriceOffer() {
+    const amount = Number.parseInt(offerAmount.replace(/\D/g, ""), 10)
+    if (!Number.isFinite(amount) || amount < 1) {
+      toast.error("Indiquez un montant valide")
+      return
+    }
+    setOfferBusy(true)
+    try {
+      const content = buildOfferContent({
+        amount,
+        note: offerNote.trim() || undefined,
+      })
+      const { data: refreshed } = await supabase.auth.refreshSession()
+      const authUser =
+        refreshed.session?.user ?? (await supabase.auth.getUser()).data.user
+      if (!authUser) {
+        toast.error("Session expirée")
+        setOfferBusy(false)
+        return
+      }
+      const { data, error } = await supabase
+        .from("messages")
+        .insert({
+          conversation_id: conversation.id,
+          sender_id: authUser.id,
+          content,
+          message_type: "offer",
+        })
+        .select()
+        .single()
+      if (error) {
+        toast.error(error.message || "Envoi impossible")
+      } else if (data) {
+        setMessages((prev) => [...prev, data])
+        scroll()
+        void fetch("/api/messages/notify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            conversation_id: conversation.id,
+            preview: `Offre : ${formatOfferAmount(amount)} FCFA`,
+          }),
+        })
+        await supabase
+          .from("conversations")
+          .update({ last_message_at: new Date().toISOString() })
+          .eq("id", conversation.id)
+        setShowOfferSheet(false)
+        setOfferAmount("")
+        setOfferNote("")
+        toast.success("Offre envoyée")
+      }
+    } catch {
+      toast.error("Erreur réseau")
+    }
+    setOfferBusy(false)
+  }
+
+  async function respondToOffer(
+    msg: Message,
+    offer: PriceOfferPayload,
+    status: "accepted" | "declined",
+  ) {
+    const next = { ...offer, status }
+    const content = JSON.stringify(next)
+    const { error } = await supabase
+      .from("messages")
+      .update({ content, is_edited: true })
+      .eq("id", msg.id)
+    if (error) {
+      toast.error("Mise à jour impossible")
+      return
+    }
+    setMessages((prev) =>
+      prev.map((m) => (m.id === msg.id ? { ...m, content, is_edited: true } : m)),
+    )
+    const replyText =
+      status === "accepted"
+        ? `J'accepte l'offre de ${formatOfferAmount(offer.amount)} FCFA`
+        : `Je refuse l'offre de ${formatOfferAmount(offer.amount)} FCFA`
+    await supabase.from("messages").insert({
+      conversation_id: conversation.id,
+      sender_id: userId,
+      content: replyText,
+      message_type: "text",
+      reply_to_id: msg.id,
+    })
+    toast.success(status === "accepted" ? "Offre acceptée" : "Offre refusée")
+  }
+
   const fmtTime = (d: string) => new Date(d).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
 
   function playVoiceMsg(msg: Message) {
@@ -364,6 +464,64 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   }
 
   function renderContent(msg: Message) {
+    if (msg.message_type === "offer") {
+      const offer = parseOfferContent(msg.content)
+      if (!offer) {
+        return <p className="text-[15px] whitespace-pre-wrap break-words leading-relaxed">{msg.content}</p>
+      }
+      const own = msg.sender_id === userId
+      const statusLabel: Record<string, string> = {
+        pending: "En attente",
+        accepted: "Acceptée",
+        declined: "Refusée",
+        countered: "Contre-offre",
+      }
+      return (
+        <div className="min-w-[200px] max-w-[260px] space-y-2 py-0.5">
+          <div className="flex items-center gap-1.5 text-[#C27D10]">
+            <HandCoins className="h-4 w-4 shrink-0" />
+            <span className="text-[11px] font-semibold uppercase tracking-wide">
+              Offre de prix
+            </span>
+          </div>
+          {offer.productName && (
+            <p className="text-[12px] text-[#667781] truncate">{offer.productName}</p>
+          )}
+          <p className="text-xl font-bold text-[#1F5C2E] tabular-nums">
+            {formatOfferAmount(offer.amount)}{" "}
+            <span className="text-xs font-medium text-[#667781]">FCFA</span>
+          </p>
+          {offer.note && (
+            <p className="text-[13px] text-[#111b21] leading-snug">{offer.note}</p>
+          )}
+          <p className="text-[11px] text-[#667781]">{statusLabel[offer.status] || offer.status}</p>
+          {!own && offer.status === "pending" && (
+            <div className="flex gap-1.5 pt-1">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void respondToOffer(msg, offer, "accepted")
+                }}
+                className="flex-1 h-8 rounded-full bg-[#1F5C2E] text-white text-[12px] font-semibold active:scale-95"
+              >
+                Accepter
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void respondToOffer(msg, offer, "declined")
+                }}
+                className="flex-1 h-8 rounded-full border border-[#E5E7EB] text-[12px] font-medium text-[#54656f] active:scale-95"
+              >
+                Refuser
+              </button>
+            </div>
+          )}
+        </div>
+      )
+    }
     if (msg.message_type === "voice") {
       return (
         <button type="button" onClick={(e) => { e.stopPropagation(); playVoiceMsg(msg) }}
@@ -406,7 +564,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col bg-[#efeae2]">
+    <div className="fixed inset-0 z-[100] flex flex-col" style={{ backgroundColor: CHAT_AFRICA_BG.color }}>
       {/* HEADER */}
       <header className="text-white flex items-center gap-1 px-1 py-1.5 shrink-0 safe-top" style={{ backgroundColor: CHAT_THEME.primary }}>
         <button onClick={onBack} className="p-2 rounded-full active:bg-white/20 transition-colors" aria-label="Retour">
@@ -462,10 +620,14 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
         </div>
       </header>
 
-      {/* MESSAGES AREA */}
-      <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-3" style={{
-        backgroundImage: `url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23c8b68a' fillOpacity='0.06'%3E%3Cpath d='M20 20.5V18H0v-2h20v-2l4 3-4 3z'/%3E%3C/g%3E%3C/svg%3E")`
-      }}>
+      {/* MESSAGES AREA — fond terre / motif wax Afrique */}
+      <div
+        className="flex-1 overflow-y-auto overscroll-contain px-3 py-3"
+        style={{
+          backgroundColor: CHAT_AFRICA_BG.color,
+          backgroundImage: CHAT_AFRICA_BG.image,
+        }}
+      >
         {loadingMsgs ? (
           <div className="flex items-center justify-center h-full">
             <div className="w-8 h-8 border-3 border-[#1F5C2E] border-t-transparent rounded-full animate-spin" />
@@ -632,6 +794,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
                 setShowAttach(false)
               } },
                 { icon: FileText, color: "bg-blue-500", label: "Document", action: () => { fileRef.current?.click(); setShowAttach(false) } },
+                { icon: HandCoins, color: "bg-[#C27D10]", label: "Négocier", action: () => { setShowAttach(false); setShowOfferSheet(true) } },
                 { icon: MapPin, color: "bg-green-500", label: "Position", action: () => { toast.info("Partage de position bientôt disponible"); setShowAttach(false) } },
               ].map(item => (
                 <button key={item.label} onClick={item.action} className="flex flex-col items-center gap-2">
@@ -642,6 +805,49 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
                 </button>
               ))}
             </div>
+          </div>
+        </>
+      )}
+
+      {/* OFFRE DE PRIX — négociation commande */}
+      {showOfferSheet && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-[108]" onClick={() => setShowOfferSheet(false)} />
+          <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl z-[109] p-5 pb-8 safe-bottom animate-slideUp">
+            <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-4" />
+            <div className="flex items-center gap-2 mb-1">
+              <HandCoins className="h-5 w-5 text-[#C27D10]" />
+              <h3 className="text-lg font-semibold text-[#111]">Proposer un prix</h3>
+            </div>
+            <p className="text-sm text-[#667781] mb-4">
+              Négociez avant ou pendant une commande — le vendeur pourra accepter ou refuser.
+            </p>
+            <label className="text-sm font-medium text-[#111] mb-1.5 block">Montant (FCFA)</label>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              value={offerAmount}
+              onChange={(e) => setOfferAmount(e.target.value)}
+              placeholder="Ex. 15000"
+              className="w-full h-12 rounded-xl border border-[#E5E7EB] px-4 text-lg font-semibold tabular-nums mb-3 focus:outline-none focus:ring-2 focus:ring-[#1F5C2E]/30"
+            />
+            <label className="text-sm font-medium text-[#111] mb-1.5 block">Note (optionnel)</label>
+            <input
+              type="text"
+              value={offerNote}
+              onChange={(e) => setOfferNote(e.target.value)}
+              placeholder="Ex. pour 2 sacs, livraison demain"
+              className="w-full h-11 rounded-xl border border-[#E5E7EB] px-4 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-[#1F5C2E]/30"
+            />
+            <button
+              type="button"
+              disabled={offerBusy}
+              onClick={() => void sendPriceOffer()}
+              className="w-full h-12 rounded-xl bg-[#1F5C2E] text-white font-semibold active:scale-[0.98] disabled:opacity-50"
+            >
+              {offerBusy ? "Envoi…" : "Envoyer l'offre"}
+            </button>
           </div>
         </>
       )}

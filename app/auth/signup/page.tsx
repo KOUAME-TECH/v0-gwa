@@ -66,6 +66,7 @@ function SignupForm() {
   const [otp, setOtp] = useState("")
   const [otpExpiresAt, setOtpExpiresAt] = useState(0)
   const [phoneVerified, setPhoneVerified] = useState(false)
+  const [existingAccountHint, setExistingAccountHint] = useState(false)
 
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -120,6 +121,13 @@ function SignupForm() {
       setOtpExpiresAt(Date.now() + (data.expires_in || 600) * 1000)
       setPhoneOtpStep("otp")
       setOtp("")
+      if (data.account_hint === "existing") {
+        setError(null)
+        // Soft info: compte existant → OTP = connexion
+        setExistingAccountHint(true)
+      } else {
+        setExistingAccountHint(false)
+      }
     } catch {
       setError("Connexion impossible.")
     }
@@ -147,6 +155,11 @@ function SignupForm() {
       }
       setPhoneVerified(true)
       setPhoneOtpStep("verified")
+      if (data.resumed_login || data.is_new_user === false) {
+        router.refresh()
+        router.push(data.redirect_to || "/profil")
+        return
+      }
       setStep(2)
       router.refresh()
     } catch {
@@ -419,6 +432,11 @@ function SignupForm() {
 
                   {phoneOtpStep === "otp" && (
                     <>
+                      {existingAccountHint && (
+                        <div className="rounded-xl bg-[#E8F5E9] px-3 py-2.5 text-sm text-[#1F5C2E]">
+                          Ce numéro a déjà un compte — entrez le code SMS pour vous connecter.
+                        </div>
+                      )}
                       <p className="text-sm text-center text-neutral-500">
                         Code envoyé au{" "}
                         <span className="font-medium text-neutral-900">{maskedPhone}</span>

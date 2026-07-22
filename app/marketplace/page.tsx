@@ -183,8 +183,21 @@ function MarketplaceContent() {
     [tourSource],
   )
 
-  const { active: tourActive, index: tourIndex, total: tourTotal, start: toggleTour, startTour } =
+  const { active: tourActive, index: tourIndex, total: tourTotal, start: toggleTour } =
     useShopVoiceTour(tourProducts)
+
+  const handleTourClick = () => {
+    if (tourTotal === 0) {
+      toast.error("Aucun produit à parcourir pour le moment")
+      return
+    }
+    toggleTour()
+    if (!tourActive) {
+      toast.message("Parcours audio", {
+        description: `${tourTotal} produit${tourTotal > 1 ? "s" : ""} — écoutez les descriptions`,
+      })
+    }
+  }
 
   useEffect(() => {
     // Ne PAS auto-démarrer le TTS : les navigateurs bloquent sans geste utilisateur.
@@ -235,7 +248,7 @@ function MarketplaceContent() {
             <ProductListenBtn p={p} />
           </div>
           <div className="flex items-center justify-between mt-1.5 gap-1">
-            <span className="text-xs font-bold text-[#1F5C2E]">{fmt(p.price)} F</span>
+            <span className="text-xs font-bold text-red-600">{fmt(p.price)} F</span>
             <button onClick={(e) => addToCart(p.id, e)}
               className="w-7 h-7 rounded-full bg-[#2F7D32] text-white flex items-center justify-center shrink-0">
               <Plus className="h-3.5 w-3.5" />
@@ -270,7 +283,7 @@ function MarketplaceContent() {
               </span>
             )}
           </div>
-          <p className="text-[13px] font-bold text-[#1F5C2E] mt-0.5">{fmt(p.price)} FCFA/{p.unit}</p>
+          <p className="text-[13px] font-bold text-red-600 mt-0.5">{fmt(p.price)} FCFA/{p.unit}</p>
         </div>
         <div className="flex flex-col gap-1.5 shrink-0">
           <button onClick={(e) => addToCart(p.id, e)}
@@ -316,7 +329,7 @@ function MarketplaceContent() {
             </p>
           )}
           <div className="flex items-center justify-between mt-1.5">
-            <span className="text-sm font-bold text-[#1F5C2E]">{fmt(p.price)} <span className="text-[10px] font-normal text-gray-500">FCFA/{p.unit}</span></span>
+            <span className="text-sm font-bold text-red-600">{fmt(p.price)} <span className="text-[10px] font-normal text-gray-500">FCFA/{p.unit}</span></span>
             <button onClick={(e) => addToCart(p.id, e)}
               className="w-8 h-8 rounded-full bg-[#2F7D32] text-white flex items-center justify-center">
               <Plus className="h-4 w-4" />
@@ -339,8 +352,8 @@ function MarketplaceContent() {
             active={tourActive}
             index={tourIndex}
             total={tourTotal}
-            onClick={toggleTour}
-            className="shrink-0 hidden sm:inline-flex"
+            onClick={handleTourClick}
+            className="shrink-0"
           />
           <Link href="/panier">
             <Button variant="ghost" size="icon" className="rounded-full h-9 w-9">
@@ -435,7 +448,7 @@ function MarketplaceContent() {
             tourActive={tourActive}
             tourIndex={tourIndex}
             tourTotal={tourTotal}
-            onStartTour={toggleTour}
+            onStartTour={handleTourClick}
           />
         )}
         {isLoading ? (
@@ -465,7 +478,7 @@ function MarketplaceContent() {
                   active={tourActive}
                   index={tourIndex}
                   total={tourTotal}
-                  onClick={toggleTour}
+                  onClick={handleTourClick}
                 />
                 <Badge variant="outline" className="text-[10px] text-[#2F7D32] border-[#2F7D32]/30 capitalize">{viewMode}</Badge>
               </div>

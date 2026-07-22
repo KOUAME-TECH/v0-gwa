@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils"
 import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { shouldShowBottomNav } from "@/lib/navigation/shell-routes"
+import { useHideOnScroll } from "@/hooks/use-hide-on-scroll"
 
 interface NavItem {
   href: string
@@ -20,6 +21,7 @@ interface NavItem {
 export function BottomNav() {
   const pathname = usePathname()
   const visible = shouldShowBottomNav(pathname)
+  const scrollHidden = useHideOnScroll(visible)
   const [user, setUser] = useState<{ id: string } | null>(null)
   const [userType, setUserType] = useState<string | null>(null)
   const [unreadMessages, setUnreadMessages] = useState(0)
@@ -188,7 +190,12 @@ export function BottomNav() {
   return (
     <>
       {user && (
-        <div className="pointer-events-none fixed bottom-[76px] left-1/2 z-40 flex w-full max-w-[560px] -translate-x-1/2 flex-col items-end gap-2 px-3 animate-fadeIn">
+        <div
+          className={cn(
+            "pointer-events-none fixed bottom-[76px] right-3 z-40 flex flex-col items-end gap-2 animate-fadeIn transition-transform duration-300 ease-out",
+            scrollHidden && "translate-y-[120%] pointer-events-none opacity-0",
+          )}
+        >
           {(pathname?.startsWith("/produit/") ||
             pathname?.startsWith("/marketplace/product/")) &&
             cartCount > 0 && (
@@ -213,9 +220,13 @@ export function BottomNav() {
       )}
 
       <nav
-        className="fixed bottom-0 left-1/2 z-50 w-full max-w-[560px] -translate-x-1/2"
+        className={cn(
+          "fixed bottom-0 left-0 right-0 z-50 transition-transform duration-300 ease-out",
+          scrollHidden && "translate-y-full",
+        )}
         role="navigation"
         aria-label="Navigation principale"
+        aria-hidden={scrollHidden}
       >
         <div className="h-[2px] bg-[#E5E7EB] relative">
           {activeWorld && (
@@ -260,6 +271,7 @@ export function BottomNav() {
                     }
                     className="relative -mt-4"
                     aria-label={item.label}
+                    tabIndex={scrollHidden ? -1 : undefined}
                   >
                     <div
                       className={cn(
@@ -293,6 +305,7 @@ export function BottomNav() {
                   )}
                   aria-label={item.label}
                   aria-current={isActive ? "page" : undefined}
+                  tabIndex={scrollHidden ? -1 : undefined}
                 >
                   <div className="relative">
                     <Icon

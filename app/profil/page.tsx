@@ -41,6 +41,9 @@ type Profile = {
   country: string | null
   is_verified: boolean
   rating: number | null
+  phone?: string | null
+  phone_verified?: boolean | null
+  linked_email?: string | null
 }
 
 type MenuItem = {
@@ -283,7 +286,7 @@ export default function ProfilPage() {
     {
       items: [
         { icon: Settings, label: "Paramètres", href: "/profil/edit" },
-        { icon: Link2, label: "Lier email / téléphone", href: "/profil/lier" },
+        { icon: Link2, label: "Lier email ou téléphone", href: "/profil/lier" },
         {
           icon: BadgeCheck,
           label: "Vérification d'identité",
@@ -373,20 +376,26 @@ export default function ProfilPage() {
           </Link>
         )}
 
-        <Link
-          href="/profil/lier"
-          className="mt-3 flex items-center justify-between rounded-2xl bg-[#E8F5E9] px-4 py-3 active:opacity-80"
-        >
-          <div>
-            <p className="text-sm font-medium text-[#1F5C2E]">
-              Lier email / téléphone
-            </p>
-            <p className="text-xs text-neutral-600 mt-0.5">
-              Accès flexible, sans bloquer la connexion
-            </p>
-          </div>
-          <ChevronRight className="h-4 w-4 text-[#2F7D32]" />
-        </Link>
+        {(!profile.phone_verified ||
+          !(profile.linked_email || profile.email) ||
+          String(profile.email || "").includes("@users.gwa.local")) && (
+          <Link
+            href="/profil/lier"
+            className="mt-3 flex items-center justify-between rounded-2xl bg-[#E8F5E9] px-4 py-3 active:opacity-80"
+          >
+            <div>
+              <p className="text-sm font-medium text-[#1F5C2E]">
+                Lier email ou téléphone
+              </p>
+              <p className="text-xs text-neutral-600 mt-0.5">
+                {!profile.phone_verified
+                  ? "Ajoutez un numéro pour vous connecter par SMS"
+                  : "Ajoutez un email pour un accès alternatif"}
+              </p>
+            </div>
+            <ChevronRight className="h-4 w-4 text-[#2F7D32]" />
+          </Link>
+        )}
 
         <Link href="/profil/edit" className="block mt-4">
           <Button

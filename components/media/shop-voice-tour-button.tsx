@@ -28,17 +28,19 @@ export function ShopVoiceTourButton({
     <button
       type="button"
       onClick={onClick}
-      disabled={disabled || total === 0}
+      disabled={disabled}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full transition-all active:scale-95 disabled:opacity-40",
         "h-9 px-3",
         active
           ? "bg-[#C27D10]/15 text-[#C27D10] ring-1 ring-[#C27D10]/30"
           : "bg-[#1F5C2E]/8 text-[#1F5C2E] hover:bg-[#1F5C2E]/14",
+        total === 0 && !disabled && "opacity-60",
         className,
       )}
       aria-label={active ? AUDIO_LABELS.shopTourStop : AUDIO_LABELS.shopTour}
       aria-pressed={active}
+      aria-disabled={total === 0}
     >
       {active ? (
         <Square className="h-3.5 w-3.5 fill-current shrink-0" />
