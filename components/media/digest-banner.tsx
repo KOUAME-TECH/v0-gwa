@@ -59,10 +59,8 @@ export function DigestBanner({
         active={tourActive}
         index={tourIndex}
         total={tourTotal}
-        onClick={(e) => {
-          e?.stopPropagation()
-          onStartTour()
-        }}
+        onClick={onStartTour}
+        decorative
         className="shrink-0"
       />
     </div>

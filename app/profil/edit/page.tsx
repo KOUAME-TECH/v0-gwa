@@ -405,9 +405,10 @@ export default function EditProfilPage() {
         {showKycInSettings && (
           <div className="bg-white rounded-2xl p-4 space-y-3">
             <h2 className="font-semibold text-[#111827]">Vérification d&apos;identité</h2>
-            <p className="text-xs text-[#6B7280]">
-              Pièce + selfie pour le badge vérifié. Optionnel, utile pour le SCG
-              (Score de Confiance GWA).
+            <p className="text-xs text-[#6B7280] leading-relaxed">
+              Pour le badge vérifié : une pièce d&apos;identité lisible et un selfie
+              clair. Vous pouvez utiliser GWA sans ça — c&apos;est optionnel mais
+              utile pour le SCG (Score de Confiance GWA).
             </p>
             <Link href="/profil/verification">
               <Button

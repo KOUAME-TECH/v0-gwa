@@ -13,6 +13,8 @@ export type ShopVoiceTourButtonProps = {
   onClick: (e?: React.MouseEvent<HTMLButtonElement>) => void
   disabled?: boolean
   className?: string
+  /** Décoratif dans un parent déjà cliquable (évite nested interactive). */
+  decorative?: boolean
 }
 
 /** Lance le parcours vocal marketplace — lit les produits un par un. */
@@ -23,12 +25,15 @@ export function ShopVoiceTourButton({
   onClick,
   disabled,
   className,
+  decorative,
 }: ShopVoiceTourButtonProps) {
   return (
     <button
       type="button"
       onClick={onClick}
-      disabled={disabled}
+      disabled={disabled || decorative}
+      tabIndex={decorative ? -1 : undefined}
+      aria-hidden={decorative || undefined}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full transition-all active:scale-95 disabled:opacity-40",
         "h-9 px-3",
@@ -36,10 +41,11 @@ export function ShopVoiceTourButton({
           ? "bg-[#C27D10]/15 text-[#C27D10] ring-1 ring-[#C27D10]/30"
           : "bg-[#1F5C2E]/8 text-[#1F5C2E] hover:bg-[#1F5C2E]/14",
         total === 0 && !disabled && "opacity-60",
+        decorative && "pointer-events-none",
         className,
       )}
-      aria-label={active ? AUDIO_LABELS.shopTourStop : AUDIO_LABELS.shopTour}
-      aria-pressed={active}
+      aria-label={decorative ? undefined : active ? AUDIO_LABELS.shopTourStop : AUDIO_LABELS.shopTour}
+      aria-pressed={decorative ? undefined : active}
       aria-disabled={total === 0}
     >
       {active ? (

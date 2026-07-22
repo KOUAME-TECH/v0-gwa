@@ -57,14 +57,67 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
         onDone()
         return
       }
+      const text = buildProductListenText(product)
+      if (!text.trim()) {
+        onDone()
+        return
+      }
+
       // Ne pas cancel juste avant speak (bug Chrome : speak ignoré)
-      const utter = new SpeechSynthesisUtterance(buildProductListenText(product))
+      const utter = new SpeechSynthesisUtterance(text)
       utter.lang = resolveUtterLang(product.audio_lang)
       utter.rate = 0.92
       utter.volume = 1
-      utter.onend = onDone
-      utter.onerror = () => onDone()
+
+      const voices = window.speechSynthesis.getVoices()
+      if (voices.length) {
+        const lang = utter.lang.slice(0, 2).toLowerCase()
+        const match =
+          voices.find((v) => v.lang?.toLowerCase().startsWith(lang)) ||
+          voices.find((v) => v.default) ||
+          voices[0]
+        if (match) utter.voice = match
+      }
+
+      let settled = false
+      const finish = () => {
+        if (settled) return
+        settled = true
+        onDone()
+      }
+      utter.onend = finish
+      utter.onerror = () => finish()
+
+      // File d'attente TTS dans le geste utilisateur
       window.speechSynthesis.speak(utter)
+
+      // Si les voix arrivent tard (iOS/Chrome), relancer une fois
+      if (!voices.length) {
+        const retry = () => {
+          window.speechSynthesis.removeEventListener("voiceschanged", retry)
+          if (settled || stoppedRef.current) return
+          if (window.speechSynthesis.speaking || window.speechSynthesis.pending) return
+          const late = window.speechSynthesis.getVoices()
+          if (!late.length) return
+          const again = new SpeechSynthesisUtterance(text)
+          again.lang = utter.lang
+          again.rate = utter.rate
+          again.volume = 1
+          const lang = again.lang.slice(0, 2).toLowerCase()
+          const match =
+            late.find((v) => v.lang?.toLowerCase().startsWith(lang)) ||
+            late.find((v) => v.default) ||
+            late[0]
+          if (match) again.voice = match
+          again.onend = finish
+          again.onerror = () => finish()
+          window.speechSynthesis.speak(again)
+        }
+        window.speechSynthesis.addEventListener("voiceschanged", retry)
+        window.setTimeout(() => {
+          window.speechSynthesis.removeEventListener("voiceschanged", retry)
+        }, 1500)
+      }
     },
     [],
   )
@@ -130,7 +183,6 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
       if (AC) {
         const ctx = new AC()
         void ctx.resume()
-        // bip très court pour « ouvrir » le canal audio (puis mute)
         const osc = ctx.createOscillator()
         const gain = ctx.createGain()
         gain.gain.value = 0.0001
@@ -143,28 +195,23 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
       /* ignore */
     }
 
-    // Déblocage audio via blob: (CSP media-src autorise blob, pas data:)
-    if (!audioRef.current) audioRef.current = new Audio()
-    const unlock = audioRef.current
+    // Déblocage sur un Audio SÉPARÉ — ne jamais pause() le player du tour
+    // (sinon audio_url démarré juste après est coupé par le .then du silent unlock)
     const silentUrl = makeSilentBlobUrl()
-    try {
-      if (silentUrl) {
-        unlock.src = silentUrl
+    if (silentUrl) {
+      try {
+        const unlock = new Audio(silentUrl)
         unlock.volume = 0.01
         void unlock.play().then(
           () => {
             unlock.pause()
-            unlock.currentTime = 0
-            unlock.volume = 1
             URL.revokeObjectURL(silentUrl)
           },
-          () => {
-            URL.revokeObjectURL(silentUrl)
-          },
+          () => URL.revokeObjectURL(silentUrl),
         )
+      } catch {
+        URL.revokeObjectURL(silentUrl)
       }
-    } catch {
-      if (silentUrl) URL.revokeObjectURL(silentUrl)
     }
 
     // Précharger les voix TTS si besoin

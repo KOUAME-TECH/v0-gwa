@@ -387,8 +387,8 @@ export default function ProfilPage() {
               <p className="text-sm font-medium text-[#1F5C2E]">
                 Vérifier mon identité
               </p>
-              <p className="text-xs text-neutral-600 mt-0.5">
-                Optionnel — utile pour le badge et le SCG
+              <p className="text-xs text-neutral-600 mt-0.5 leading-relaxed">
+                Pièce lisible + selfie clair. Optionnel — utile pour le SCG.
               </p>
             </div>
             <ChevronRight className="h-4 w-4 text-[#F5A623]" />
