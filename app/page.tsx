@@ -1152,6 +1152,8 @@ function FeedCard({
               src={medias[currentImageIndex]?.url || "/placeholder.svg"}
               alt={isProduct ? (data as Product).name : "Publication"}
               fill
+              loading="lazy"
+              sizes="(max-width: 768px) 100vw, 480px"
               className="object-cover"
             />
           </button>

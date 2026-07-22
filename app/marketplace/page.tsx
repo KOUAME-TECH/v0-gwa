@@ -199,14 +199,22 @@ function MarketplaceContent() {
     else toast.success("Ajoute au panier")
   }
 
-  const filteredProducts = products.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesType = selectedType === "all" || p.product_type === selectedType
-    const matchesCategory = selectedCategory === "all" || p.category_id === selectedCategory
-    return matchesSearch && matchesType && matchesCategory
-  })
+  const filteredProducts = useMemo(
+    () =>
+      products.filter((p) => {
+        const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase())
+        const matchesType = selectedType === "all" || p.product_type === selectedType
+        const matchesCategory =
+          selectedCategory === "all" || p.category_id === selectedCategory
+        return matchesSearch && matchesType && matchesCategory
+      }),
+    [products, searchTerm, selectedType, selectedCategory],
+  )
 
-  const filteredCategories = categories.filter(c => selectedType === "all" || c.category_type === selectedType)
+  const filteredCategories = useMemo(
+    () => categories.filter((c) => selectedType === "all" || c.category_type === selectedType),
+    [categories, selectedType],
+  )
   const fmt = (n: number) => new Intl.NumberFormat("fr-FR").format(n)
   const activeFiltersCount = (selectedType !== "all" ? 1 : 0) + (selectedCategory !== "all" ? 1 : 0)
 

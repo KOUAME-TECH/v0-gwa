@@ -110,7 +110,7 @@ export default function VerificationPage() {
       streamRef.current = stream
       setCameraOpen(true)
     } catch {
-      toast.error("Caméra inaccessible — autorisez l'accès dans le navigateur")
+      toast.error("Caméra inaccessible. Autorisez l'accès dans le navigateur.")
       // Fallback file input capture
       const input = document.createElement("input")
       input.type = "file"
@@ -152,7 +152,7 @@ export default function VerificationPage() {
           return
         }
         if (blob.size > 2 * 1024 * 1024) {
-          toast.error("Image trop lourde — rapprochez-vous un peu")
+          toast.error("Image trop lourde. Rapprochez-vous un peu.")
           return
         }
         const file = new File([blob], `selfie-${Date.now()}.jpg`, {
@@ -211,7 +211,7 @@ export default function VerificationPage() {
       if (!res.ok) throw new Error(data.error || "Échec")
 
       setStatus("pending")
-      toast.success("Demande envoyée — revue sous 24–72 h")
+      toast.success("Demande envoyée. Réponse sous 24 à 72 h.")
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Envoi impossible")
     }
@@ -242,9 +242,8 @@ export default function VerificationPage() {
 
       <div className="px-5 pt-6 space-y-6 max-w-lg mx-auto">
         <p className="text-sm text-neutral-600 leading-relaxed">
-          Pour le badge vérifié : une pièce d&apos;identité lisible et un selfie
-          clair. Vous pouvez utiliser GWA sans ça — c&apos;est optionnel mais
-          utile pour le SCG (Score de Confiance GWA).
+          Une pièce d&apos;identité et un selfie pour le badge vérifié. Vous
+          pouvez utiliser GWA sans ça.
         </p>
 
         {status === "pending" && (
@@ -256,7 +255,7 @@ export default function VerificationPage() {
         {(status === "approved" || isVerified) && (
           <div className="rounded-2xl bg-[#E8F5E9] px-4 py-3 text-sm text-[#1F5C2E] flex gap-2 items-start">
             <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
-            Identité vérifiée — badge actif. Rien d&apos;autre à faire ici.
+            Identité vérifiée. Badge actif.
           </div>
         )}
         {status === "rejected" && (

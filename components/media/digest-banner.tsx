@@ -51,8 +51,8 @@ export function DigestBanner({
         <p className="text-sm font-semibold text-[#1F5C2E]">Harmattan Digest</p>
         <p className="text-xs text-[#4B5563] truncate">
           {tourActive
-            ? `Écoute ${tourIndex + 1}/${tourTotal} — ${place}`
-            : `${count} nouveau${count > 1 ? "x" : ""} produit${count > 1 ? "s" : ""} — tapez pour écouter`}
+            ? `${tourIndex + 1}/${tourTotal} · ${place}`
+            : `${count} nouveau${count > 1 ? "x" : ""} près de ${place}. Écouter`}
         </p>
       </div>
       <ShopVoiceTourButton

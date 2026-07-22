@@ -62,13 +62,6 @@ const userTypes = [
   { value: "cooperative", label: "Coopérative" },
 ]
 
-const countries = [
-  "Côte d'Ivoire", "Sénégal", "Mali", "Burkina Faso", "Ghana", 
-  "Togo", "Bénin", "Niger", "Guinée", "Cameroun", "Nigeria",
-  "Kenya", "Tanzanie", "Ouganda", "Rwanda", "Éthiopie", "Maroc",
-  "Tunisie", "Algérie", "Afrique du Sud", "Autre"
-]
-
 export default function EditProfilPage() {
   const router = useRouter()
   const supabase = createClient()
@@ -98,7 +91,7 @@ export default function EditProfilPage() {
     request: requestLocation,
   } = useRealtimeLocation({ auto: true, maximumAge: 0 })
 
-  // Auto-enregistrer la position dès qu'elle est captée
+  // Auto-enregistrer la position dès qu'elle est captée (pas de saisie manuelle)
   useEffect(() => {
     if (!location || !profile?.id) return
     void fetch("/api/location/save", {
@@ -110,6 +103,7 @@ export default function EditProfilPage() {
         city: location.city,
         country: location.country,
         region: location.region,
+        address: location.address,
       }),
     }).then(async (res) => {
       if (!res.ok) return
@@ -117,6 +111,7 @@ export default function EditProfilPage() {
         ...prev,
         city: location.city || prev.city,
         country: location.country || prev.country,
+        address: location.address || prev.address,
       }))
     })
   }, [location, profile?.id])
@@ -214,6 +209,7 @@ export default function EditProfilPage() {
       ...prev,
       city: loc.city || prev.city,
       country: loc.country || prev.country,
+      address: loc.address || prev.address,
     }))
     const res = await fetch("/api/location/save", {
       method: "POST",
@@ -224,10 +220,11 @@ export default function EditProfilPage() {
         city: loc.city,
         country: loc.country,
         region: loc.region,
+        address: loc.address,
       }),
     })
-    if (res.ok) toast.success(loc.label ? `Position enregistrée : ${loc.label}` : "Position enregistrée")
-    else toast.success(loc.label ? `Position : ${loc.label}` : "Position mise à jour")
+    if (res.ok) toast.success("Position enregistrée")
+    else toast.success("Position mise à jour")
   }
 
   const handleSecureLinkEmail = async () => {
@@ -437,8 +434,8 @@ export default function EditProfilPage() {
               {phoneLocked
                 ? linkCooldownMessage("téléphone", phoneCooldown)
                 : profile.phone_verified
-                  ? `Numéro vérifié. Modification via OTP (délai de fiabilité ${LINK_CHANGE_COOLDOWN_DAYS} j).`
-                  : "Liez ce numéro par SMS OTP pour sécuriser le compte."}
+                  ? `Numéro vérifié. Changement possible après ${LINK_CHANGE_COOLDOWN_DAYS} jours.`
+                  : "Confirmez ce numéro par SMS pour sécuriser le compte."}
             </p>
             {!profile.phone_verified || phoneCooldown.allowed ? (
               <Link href="/profil/lier">
@@ -471,7 +468,7 @@ export default function EditProfilPage() {
             <p className="text-xs text-[#6B7280]">
               {emailLocked
                 ? linkCooldownMessage("email", emailCooldown)
-                : "Liaison sécurisée via confirmation email Supabase — pas d'écriture libre."}
+                : "On vous envoie un lien de confirmation pour lier cet email."}
             </p>
             {emailLinkMsg && (
               <p className="text-xs text-[#2F7D32] font-medium">{emailLinkMsg}</p>
@@ -530,7 +527,7 @@ export default function EditProfilPage() {
         <div className="bg-white rounded-2xl p-4 space-y-3">
           <h2 className="font-semibold text-[#111827]">Harmattan Digest</h2>
           <p className="text-xs text-[#6B7280]">
-            Résumé vocal quotidien des nouveaux produits près de chez vous (push + écoute Digest).
+            Chaque jour, un résumé vocal des nouveaux produits près de chez vous.
           </p>
           <div className="flex items-center justify-between gap-3 rounded-xl border border-[#E5E7EB] px-3 py-2.5">
             <span className="text-sm text-[#374151]">Recevoir le digest</span>
@@ -546,9 +543,8 @@ export default function EditProfilPage() {
           <div className="bg-white rounded-2xl p-4 space-y-3">
             <h2 className="font-semibold text-[#111827]">Vérification d&apos;identité</h2>
             <p className="text-xs text-[#6B7280] leading-relaxed">
-              Pour le badge vérifié : une pièce d&apos;identité lisible et un selfie
-              clair. Vous pouvez utiliser GWA sans ça — c&apos;est optionnel mais
-              utile pour le SCG (Score de Confiance GWA).
+              Une pièce d&apos;identité et un selfie pour le badge vérifié. Vous
+              pouvez utiliser GWA sans ça.
             </p>
             <Link href="/profil/verification">
               <Button
@@ -567,7 +563,7 @@ export default function EditProfilPage() {
             <h2 className="font-semibold text-[#111827]">Vérification d&apos;identité</h2>
             <p className="text-sm text-[#1F5C2E]">
               {profile?.is_verified || kycStatus === "approved"
-                ? "Identité vérifiée — badge actif."
+                ? "Identité vérifiée. Badge actif."
                 : "Demande en cours d'examen."}
             </p>
           </div>
@@ -575,12 +571,13 @@ export default function EditProfilPage() {
 
         <div className="bg-white rounded-2xl p-4 space-y-4">
           <div className="flex items-start justify-between gap-3">
-            <div>
+            <div className="min-w-0">
               <h2 className="font-semibold text-[#111827]">Localisation</h2>
               <p className="text-xs text-[#6B7280] mt-1 leading-relaxed">
-                Position captée automatiquement (avec autorisation) et enregistrée sur votre compte.
-                {location?.label ? ` Actuelle : ${location.label}.` : ""}
-                {geoStatus === "denied" ? " Autorisation refusée — réessayez." : ""}
+                Détectée automatiquement. Pas besoin de saisir.
+                {geoStatus === "denied"
+                  ? " Autorisez la localisation pour continuer."
+                  : ""}
               </p>
             </div>
             <Button
@@ -602,46 +599,40 @@ export default function EditProfilPage() {
             </Button>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="country" className="text-sm text-[#4B5563]">Pays</Label>
-            <Select
-              value={formData.country}
-              onValueChange={(value) => setFormData({ ...formData, country: value })}
-            >
-              <SelectTrigger className="h-12 rounded-xl border-[#E5E7EB] bg-[#FFF6E5]/50">
-                <SelectValue placeholder="Sélectionnez votre pays" />
-              </SelectTrigger>
-              <SelectContent>
-                {countries.map((country) => (
-                  <SelectItem key={country} value={country}>
-                    {country}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {location ? (
+            <div className="rounded-xl bg-[#FFF6E5]/80 border border-[#E5E7EB] px-3 py-3 space-y-1.5">
+              <p className="text-sm font-medium text-[#111827] leading-snug">
+                {location.address || location.label || formData.address || "Position GPS"}
+              </p>
+              {(location.city || formData.city) && (
+                <p className="text-xs text-[#4B5563]">
+                  {[location.city || formData.city, location.country || formData.country]
+                    .filter(Boolean)
+                    .join(", ")}
+                </p>
+              )}
+              <p className="text-[11px] font-mono text-[#6B7280] tabular-nums break-all">
+                {location.lat.toFixed(6)}, {location.lon.toFixed(6)}
+                {location.accuracy != null
+                  ? ` · ±${Math.round(location.accuracy)} m`
+                  : ""}
+                {location.altitude != null
+                  ? ` · alt. ${Math.round(location.altitude)} m`
+                  : ""}
+              </p>
+            </div>
+          ) : (
+            <p className="text-sm text-[#6B7280]">
+              {geoStatus === "denied"
+                ? "Localisation refusée. Touchez Actualiser."
+                : "Recherche de votre position…"}
+            </p>
+          )}
 
-          <div className="space-y-2">
-            <Label htmlFor="city" className="text-sm text-[#4B5563]">Ville</Label>
-            <Input
-              id="city"
-              value={formData.city}
-              onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-              className="h-12 rounded-xl border-[#E5E7EB] bg-[#FFF6E5]/50"
-              placeholder="Votre ville"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="address" className="text-sm text-[#4B5563]">Adresse</Label>
-            <Textarea
-              id="address"
-              value={formData.address}
-              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-              className="min-h-[80px] rounded-xl border-[#E5E7EB] bg-[#FFF6E5]/50 resize-none"
-              placeholder="Adresse complète (optionnel)"
-            />
-          </div>
+          {/* Champs cachés synchronisés pour la sauvegarde profil */}
+          <input type="hidden" name="country" value={formData.country} readOnly />
+          <input type="hidden" name="city" value={formData.city} readOnly />
+          <input type="hidden" name="address" value={formData.address} readOnly />
         </div>
 
         <PlacesManager

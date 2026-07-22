@@ -81,12 +81,16 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   const [offerProductId, setOfferProductId] = useState<string>("")
   const [muted, setMuted] = useState(false)
   const [pinned, setPinned] = useState(false)
+  const [liveCameraOpen, setLiveCameraOpen] = useState(false)
+  const [cameraBusy, setCameraBusy] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const imgRef = useRef<HTMLInputElement>(null)
   const camRef = useRef<HTMLInputElement>(null)
+  const liveVideoRef = useRef<HTMLVideoElement>(null)
+  const liveStreamRef = useRef<MediaStream | null>(null)
   const recInterval = useRef<ReturnType<typeof setInterval> | null>(null)
   const mediaRecorder = useRef<MediaRecorder | null>(null)
   const audioChunks = useRef<Blob[]>([])
@@ -124,21 +128,114 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     }
   }
 
-  function openCameraCapture() {
-    if (camRef.current) {
-      camRef.current.click()
+  function stopLiveCamera() {
+    liveStreamRef.current?.getTracks().forEach((t) => t.stop())
+    liveStreamRef.current = null
+    if (liveVideoRef.current) liveVideoRef.current.srcObject = null
+    setLiveCameraOpen(false)
+  }
+
+  function fallbackNativeCameraInput() {
+    // Délai: laisse l'overlay se fermer avant d'ouvrir le picker (iOS)
+    window.setTimeout(() => {
+      if (camRef.current) {
+        camRef.current.click()
+        return
+      }
+      const camInput = document.createElement("input")
+      camInput.type = "file"
+      camInput.accept = "image/*"
+      camInput.setAttribute("capture", "environment")
+      camInput.onchange = () => {
+        const f = camInput.files?.[0]
+        if (f) void handleFileUpload(f, "image")
+      }
+      camInput.click()
+    }, 120)
+  }
+
+  async function openCameraCapture() {
+    setShowAttach(false)
+    if (!navigator.mediaDevices?.getUserMedia) {
+      fallbackNativeCameraInput()
       return
     }
-    const camInput = document.createElement("input")
-    camInput.type = "file"
-    camInput.accept = "image/*"
-    camInput.setAttribute("capture", "environment")
-    camInput.onchange = () => {
-      const f = camInput.files?.[0]
-      if (f) void handleFileUpload(f, "image")
+    setCameraBusy(true)
+    try {
+      liveStreamRef.current?.getTracks().forEach((t) => t.stop())
+      liveStreamRef.current = null
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        },
+      })
+      liveStreamRef.current = stream
+      setLiveCameraOpen(true)
+      // Attacher le flux après le rendu du <video>
+      requestAnimationFrame(() => {
+        const video = liveVideoRef.current
+        if (!video) return
+        video.srcObject = stream
+        void video.play().catch(() => {
+          /* autoplay peut échouer un tick */
+        })
+      })
+    } catch {
+      setLiveCameraOpen(false)
+      fallbackNativeCameraInput()
+    } finally {
+      setCameraBusy(false)
     }
-    camInput.click()
   }
+
+  function captureLivePhoto() {
+    const video = liveVideoRef.current
+    if (!video || !video.videoWidth) {
+      toast.error("Caméra pas prête")
+      return
+    }
+    const canvas = document.createElement("canvas")
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
+    ctx.drawImage(video, 0, 0)
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          toast.error("Photo impossible")
+          return
+        }
+        const file = new File([blob], `chat-${Date.now()}.jpg`, {
+          type: "image/jpeg",
+        })
+        stopLiveCamera()
+        void handleFileUpload(file, "image")
+      },
+      "image/jpeg",
+      0.92,
+    )
+  }
+
+  useEffect(() => {
+    return () => {
+      liveStreamRef.current?.getTracks().forEach((t) => t.stop())
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!liveCameraOpen) return
+    const video = liveVideoRef.current
+    const stream = liveStreamRef.current
+    if (!video || !stream) return
+    video.srcObject = stream
+    void video.play().catch(() => {
+      /* ignore */
+    })
+  }, [liveCameraOpen])
 
   const scroll = useCallback(() => {
     requestAnimationFrame(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }))
@@ -282,7 +379,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
 
     if (upErr) {
       toast.dismiss(toastId)
-      toast.error("Envoi média échoué — réessayez")
+      toast.error("Envoi échoué, réessayez")
       return
     }
 
@@ -310,15 +407,40 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   async function shareLocation() {
     setShowAttach(false)
     if (!navigator.geolocation) {
-      toast.error("Géolocalisation non supportée")
+      toast.error("Localisation indisponible")
       return
     }
-    const toastId = toast.loading("Position…")
+    const toastId = toast.loading("Position en cours…")
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
-        const { latitude, longitude } = pos.coords
-        const maps = `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=16/${latitude}/${longitude}`
-        const content = `📍 Ma position : ${latitude.toFixed(5)}, ${longitude.toFixed(5)}\n${maps}`
+        const { latitude, longitude, accuracy, altitude } = pos.coords
+        let addressLine = ""
+        try {
+          const res = await fetch(
+            `/api/geocode/reverse?lat=${latitude}&lon=${longitude}`,
+          )
+          const data = await res.json().catch(() => ({}))
+          if (data.address || data.label) {
+            addressLine = String(data.address || data.label)
+          }
+        } catch {
+          /* coords suffisent */
+        }
+        const acc =
+          Number.isFinite(accuracy) ? ` ±${Math.round(accuracy)} m` : ""
+        const alt =
+          altitude != null && Number.isFinite(altitude)
+            ? ` · alt. ${Math.round(altitude)} m`
+            : ""
+        const maps = `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=18/${latitude}/${longitude}`
+        const content = [
+          "📍 Ma position",
+          addressLine || null,
+          `${latitude.toFixed(6)}, ${longitude.toFixed(6)}${acc}${alt}`,
+          maps,
+        ]
+          .filter(Boolean)
+          .join("\n")
         const { error } = await supabase.from("messages").insert({
           conversation_id: conversation.id,
           sender_id: userId,
@@ -337,7 +459,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
         toast.dismiss(toastId)
         toast.error("Autorisez la localisation")
       },
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 },
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
     )
   }
 
@@ -436,7 +558,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     const path = `chat/${conversation.id}/${Date.now()}.${ext}`
     const { error: upErr } = await supabase.storage.from("chat-media").upload(path, audioPreview.blob)
     if (upErr) {
-      toast.error("Envoi vocal échoué — réessayez")
+      toast.error("Envoi vocal échoué, réessayez")
       return
     }
     const {
@@ -540,13 +662,13 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     await supabase.from("messages").insert({
       conversation_id: conversation.id,
       sender_id: userId,
-      content: `📞 ${label} demandé — rappelez via téléphone ou continuez ici.`,
+      content: `📞 ${label} demandé. Rappelez via téléphone ou continuez ici.`,
       message_type: "text",
     })
     toast.info(
       kind === "audio"
-        ? "Numéro masqué — message d'appel envoyé"
-        : "Appel vidéo WebRTC bientôt — message envoyé",
+        ? "Message d'appel envoyé"
+        : "Appel vidéo bientôt disponible. Message envoyé.",
     )
   }
 
@@ -665,7 +787,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
         const data = await res.json().catch(() => ({}))
         toast.dismiss(toastId)
         if (!res.ok) {
-          toast.error(data.error || "Commande non créée — offre acceptée")
+          toast.error(data.error || "Offre acceptée, commande à finaliser")
         } else {
           toast.success("Commande créée au prix négocié")
           if (data.redirect_to) {
@@ -1041,8 +1163,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
                   color: "bg-pink-500",
                   label: "Caméra",
                   action: () => {
-                    openCameraCapture()
-                    setShowAttach(false)
+                    void openCameraCapture()
                   },
                 },
                 {
@@ -1090,7 +1211,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
               <h3 className="text-lg font-semibold text-[#111]">Proposer un prix</h3>
             </div>
             <p className="text-sm text-[#667781] mb-4">
-              Négociez — à l&apos;acceptation, une commande est créée au prix convenu.
+              Proposez un prix. S&apos;il accepte, la commande part toute seule.
             </p>
             {offerProducts.length > 0 && (
               <>
@@ -1108,7 +1229,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
                 >
                   {offerProducts.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.name} — {formatOfferAmount(p.price)} FCFA
+                      {p.name} · {formatOfferAmount(p.price)} FCFA
                     </option>
                   ))}
                 </select>
@@ -1121,15 +1242,15 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
               min={1}
               value={offerAmount}
               onChange={(e) => setOfferAmount(e.target.value)}
-              placeholder="Ex. 15000"
+              placeholder="15000"
               className="w-full h-12 rounded-xl border border-[#E5E7EB] px-4 text-lg font-semibold tabular-nums mb-3 focus:outline-none focus:ring-2 focus:ring-[#1F5C2E]/30"
             />
-            <label className="text-sm font-medium text-[#111] mb-1.5 block">Note (optionnel)</label>
+            <label className="text-sm font-medium text-[#111] mb-1.5 block">Message</label>
             <input
               type="text"
               value={offerNote}
               onChange={(e) => setOfferNote(e.target.value)}
-              placeholder="Ex. pour 2 sacs, livraison demain"
+              placeholder="2 sacs, livraison demain"
               className="w-full h-11 rounded-xl border border-[#E5E7EB] px-4 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-[#1F5C2E]/30"
             />
             <button
@@ -1170,8 +1291,13 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
               </button>
 
               {!newMessage.trim() && (
-                <button type="button" onClick={openCameraCapture}
-                  className="p-2 text-[#54656f] active:text-[#1F5C2E] shrink-0" aria-label="Caméra">
+                <button
+                  type="button"
+                  onClick={() => void openCameraCapture()}
+                  disabled={cameraBusy}
+                  className="p-2 text-[#54656f] active:text-[#1F5C2E] shrink-0 disabled:opacity-50"
+                  aria-label="Caméra"
+                >
                   <Camera className="h-6 w-6" />
                 </button>
               )}
@@ -1212,6 +1338,51 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* CAMÉRA LIVE — getUserMedia (comme WhatsApp) */}
+      {liveCameraOpen && (
+        <div className="fixed inset-0 z-[130] bg-black flex flex-col">
+          <div className="flex items-center justify-between px-3 py-3 safe-top text-white">
+            <button
+              type="button"
+              onClick={stopLiveCamera}
+              className="p-2 rounded-full active:bg-white/15"
+              aria-label="Fermer"
+            >
+              <X className="h-6 w-6" />
+            </button>
+            <span className="text-sm font-medium">Photo</span>
+            <span className="w-10" />
+          </div>
+          <div className="flex-1 relative min-h-0">
+            <video
+              ref={liveVideoRef}
+              autoPlay
+              playsInline
+              muted
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+          </div>
+          <div className="safe-bottom py-6 flex items-center justify-center gap-10 bg-black/80">
+            <button
+              type="button"
+              onClick={fallbackNativeCameraInput}
+              className="text-white text-xs opacity-80"
+            >
+              Autre
+            </button>
+            <button
+              type="button"
+              onClick={captureLivePhoto}
+              className="w-[72px] h-[72px] rounded-full border-4 border-white flex items-center justify-center active:scale-95 transition-transform"
+              aria-label="Prendre la photo"
+            >
+              <span className="w-14 h-14 rounded-full bg-white" />
+            </button>
+            <span className="w-10" />
+          </div>
         </div>
       )}
     </div>

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
 import { PLACE_TYPES, placeTypeLabel, type PlaceType, type UserPlace } from "@/lib/location/places"
-import type { RealtimeLocation } from "@/hooks/use-realtime-location"
+import { formatCoords, type RealtimeLocation } from "@/hooks/use-realtime-location"
 
 type Props = {
   location: RealtimeLocation | null
@@ -21,7 +21,6 @@ export function PlacesManager({ location, onRequestLocation, locating }: Props) 
   const [places, setPlaces] = useState<UserPlace[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [migrationRequired, setMigrationRequired] = useState(false)
   const [placeType, setPlaceType] = useState<PlaceType>("champ")
   const [label, setLabel] = useState("")
 
@@ -29,7 +28,6 @@ export function PlacesManager({ location, onRequestLocation, locating }: Props) 
     try {
       const res = await fetch("/api/places")
       const data = await res.json().catch(() => ({}))
-      if (data.migrationRequired) setMigrationRequired(true)
       setPlaces(Array.isArray(data.places) ? data.places : [])
     } catch {
       /* ignore */
@@ -71,11 +69,10 @@ export function PlacesManager({ location, onRequestLocation, locating }: Props) 
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         toast.error(data.error || "Impossible d'enregistrer le lieu")
-        if (data.code === "MIGRATION_REQUIRED") setMigrationRequired(true)
         return
       }
       setLabel("")
-      toast.success("Lieu fixé")
+      toast.success("Lieu enregistré")
       await refresh()
     } finally {
       setSaving(false)
@@ -110,17 +107,16 @@ export function PlacesManager({ location, onRequestLocation, locating }: Props) 
   return (
     <div className="bg-white rounded-2xl p-4 space-y-4">
       <div>
-        <h2 className="font-semibold text-[#111827]">Lieux fixés</h2>
+        <h2 className="font-semibold text-[#111827]">Mes lieux</h2>
         <p className="text-xs text-[#6B7280] mt-1 leading-relaxed">
-          Capturez votre position puis enregistrez un champ, entrepôt, marché ou domicile.
+          Enregistrez un champ, un entrepôt, un marché ou votre domicile à votre position actuelle.
         </p>
+        {location && (
+          <p className="text-[11px] font-mono text-[#9CA3AF] mt-1.5 tabular-nums">
+            {formatCoords(location.lat, location.lon, location.accuracy)}
+          </p>
+        )}
       </div>
-
-      {migrationRequired && (
-        <p className="text-xs text-amber-700 bg-amber-50 rounded-xl px-3 py-2">
-          Migration 042 requise côté base pour stocker les lieux (ops).
-        </p>
-      )}
 
       <div className="flex flex-wrap gap-1.5">
         {PLACE_TYPES.map((t) => (
@@ -142,7 +138,7 @@ export function PlacesManager({ location, onRequestLocation, locating }: Props) 
       <Input
         value={label}
         onChange={(e) => setLabel(e.target.value)}
-        placeholder="Nom du lieu (ex. Champ nord, Entrepôt Koumassi)"
+        placeholder="Nom (Champ nord, Entrepôt Koumassi…)"
         className="h-11 rounded-xl border-[#E5E7EB] bg-[#FFF6E5]/50"
       />
 
@@ -158,7 +154,7 @@ export function PlacesManager({ location, onRequestLocation, locating }: Props) 
           ) : (
             <>
               <Plus className="h-4 w-4 mr-1.5" />
-              Fixer la position actuelle
+              Enregistrer ici
             </>
           )}
         </Button>
@@ -169,7 +165,7 @@ export function PlacesManager({ location, onRequestLocation, locating }: Props) 
           <Loader2 className="h-4 w-4 animate-spin mr-2" /> Chargement…
         </div>
       ) : places.length === 0 ? (
-        <p className="text-xs text-[#9CA3AF]">Aucun lieu enregistré pour l&apos;instant.</p>
+        <p className="text-xs text-[#9CA3AF]">Aucun lieu pour l&apos;instant.</p>
       ) : (
         <ul className="space-y-2">
           {places.map((p) => (
@@ -192,6 +188,11 @@ export function PlacesManager({ location, onRequestLocation, locating }: Props) 
                   {p.city ? ` · ${p.city}` : ""}
                   {p.country ? `, ${p.country}` : ""}
                 </p>
+                {p.latitude != null && p.longitude != null && (
+                  <p className="text-[10px] font-mono text-[#9CA3AF] tabular-nums mt-0.5">
+                    {Number(p.latitude).toFixed(5)}, {Number(p.longitude).toFixed(5)}
+                  </p>
+                )}
               </div>
               {!p.is_primary && (
                 <button

@@ -7,13 +7,18 @@ type ReverseResult = {
   city: string | null
   country: string | null
   region: string | null
+  address: string | null
+  road: string | null
+  suburb: string | null
+  postcode: string | null
   lat: number
   lon: number
   label: string | null
+  display_name: string | null
 }
 
 /**
- * Reverse geocode — Nominatim côté serveur (CSP client n'autorise pas OSM).
+ * Reverse geocode précis (Nominatim, zoom bâtiment/rue).
  */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -31,9 +36,11 @@ export async function GET(request: Request) {
     const url = new URL("https://nominatim.openstreetmap.org/reverse")
     url.searchParams.set("lat", String(lat))
     url.searchParams.set("lon", String(lon))
-    url.searchParams.set("format", "json")
+    url.searchParams.set("format", "jsonv2")
     url.searchParams.set("accept-language", "fr")
-    url.searchParams.set("zoom", "10")
+    // 18 = niveau adresse/bâtiment (plus précis que ville)
+    url.searchParams.set("zoom", "18")
+    url.searchParams.set("addressdetails", "1")
 
     const res = await fetch(url.toString(), {
       headers: {
@@ -46,9 +53,7 @@ export async function GET(request: Request) {
 
     if (!res.ok) {
       return NextResponse.json(
-        { error: "Géocodage indisponible", lat, lon } satisfies Partial<ReverseResult> & {
-          error: string
-        },
+        { error: "Géocodage indisponible", lat, lon },
         { status: 502 },
       )
     }
@@ -56,6 +61,13 @@ export async function GET(request: Request) {
     const data = (await res.json()) as {
       display_name?: string
       address?: {
+        house_number?: string
+        road?: string
+        pedestrian?: string
+        path?: string
+        neighbourhood?: string
+        suburb?: string
+        quarter?: string
         city?: string
         town?: string
         village?: string
@@ -63,6 +75,7 @@ export async function GET(request: Request) {
         county?: string
         state?: string
         region?: string
+        postcode?: string
         country?: string
       }
     }
@@ -72,14 +85,31 @@ export async function GET(request: Request) {
       a.city || a.town || a.village || a.municipality || a.county || a.state || null
     const country = a.country || null
     const region = a.state || a.region || a.county || null
+    const road = a.road || a.pedestrian || a.path || null
+    const suburb = a.suburb || a.neighbourhood || a.quarter || null
+    const postcode = a.postcode || null
+
+    const streetLine = [a.house_number, road].filter(Boolean).join(" ")
+    const addressParts = [streetLine || null, suburb, city, postcode, country].filter(
+      Boolean,
+    ) as string[]
+    const address =
+      addressParts.length > 0
+        ? addressParts.join(", ")
+        : data.display_name || null
 
     const payload: ReverseResult = {
       city,
       country,
       region,
+      address,
+      road: road || null,
+      suburb: suburb || null,
+      postcode,
       lat,
       lon,
-      label: [city, country].filter(Boolean).join(", ") || data.display_name || null,
+      label: address || [city, country].filter(Boolean).join(", ") || null,
+      display_name: data.display_name || null,
     }
 
     return NextResponse.json(payload)

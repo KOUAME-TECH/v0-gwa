@@ -41,5 +41,5 @@ export function getLinkCooldown(
 
 export function linkCooldownMessage(kind: "email" | "téléphone", result: LinkCooldownResult): string {
   if (result.allowed) return ""
-  return `Ce ${kind} est déjà lié. Modification possible dans ${result.daysRemaining} jour${result.daysRemaining > 1 ? "s" : ""} (délai de fiabilité ${LINK_CHANGE_COOLDOWN_DAYS} j).`
+  return `Ce ${kind} est déjà lié. Vous pourrez le changer dans ${result.daysRemaining} jour${result.daysRemaining > 1 ? "s" : ""}.`
 }
