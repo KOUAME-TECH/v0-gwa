@@ -135,7 +135,7 @@ export function PlacesManager({ location, onRequestLocation, locating }: Props) 
       <Input
         value={label}
         onChange={(e) => setLabel(e.target.value)}
-        placeholder="Nom (Champ nord, Entrepôt Koumassi…)"
+        placeholder="Nom du lieu"
         className="h-11 rounded-xl border-[#E5E7EB] bg-[#FFF6E5]/50"
       />
 
