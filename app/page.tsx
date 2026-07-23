@@ -32,6 +32,7 @@ import { GwaMark } from "@/components/brand/gwa-mark"
 import { WeatherWidget } from "@/components/weather-widget"
 import { ClickableListenText, ListenMicButton } from "@/components/media/clickable-listen-text"
 import { ListenModeToggle } from "@/components/media/listen-mode-toggle"
+import { isLowQualityPostContent } from "@/lib/feed/content-quality"
 import { ListenRitualBadge } from "@/components/media/listen-ritual-badge"
 import { useListenMode } from "@/hooks/use-listen-mode"
 import { useListenRitual } from "@/hooks/use-listen-ritual"
@@ -567,6 +568,11 @@ export default function HomePage() {
     // Filtre par onglet
     if (activeTab === "produits" && item.type !== "product") return false
     if (activeTab === "publications" && item.type !== "post") return false
+
+    // Masquer posts marketing / démo peu utiles
+    if (item.type === "post" && isLowQualityPostContent((item.data as Post).content)) {
+      return false
+    }
     
     // Filtre par catégorie (slug réel, pas product_type)
     if (activeCategory !== "all" && item.type === "product") {
@@ -661,10 +667,10 @@ export default function HomePage() {
       </header>
 
       {/* Feed */}
-      <div className="divide-y divide-[#E5E7EB]">
+      <div className="px-3 pt-3 pb-2 space-y-3">
         {isLoading ? (
           Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="bg-white p-4">
+            <div key={i} className="bg-white p-4 rounded-2xl shadow-sm">
               <div className="flex items-center gap-3 mb-4">
                 <Skeleton className="h-11 w-11 rounded-full" />
                 <div className="space-y-2">
@@ -672,16 +678,15 @@ export default function HomePage() {
                   <Skeleton className="h-3 w-24" />
                 </div>
               </div>
-              <Skeleton className="aspect-square w-full rounded-xl mb-4" />
+              <Skeleton className="aspect-[4/5] w-full rounded-xl mb-4" />
               <div className="flex gap-4">
-                <Skeleton className="h-8 w-20" />
                 <Skeleton className="h-8 w-20" />
                 <Skeleton className="h-8 w-20" />
               </div>
             </div>
           ))
         ) : filteredFeed.length === 0 ? (
-          <div className="bg-white p-8 text-center">
+          <div className="bg-white p-8 text-center rounded-2xl shadow-sm">
             <div className="w-20 h-20 rounded-full bg-[#2F7D32]/10 flex items-center justify-center mx-auto mb-4">
               <ShoppingBag className="h-10 w-10 text-[#2F7D32]" />
             </div>
@@ -1000,14 +1005,14 @@ function FeedCard({
   const hasMultipleImages = medias && medias.length > 1
 
   return (
-    <article className="bg-white">
-      {/* Header auteur */}
-      <div className="flex items-center justify-between px-4 py-3">
+    <article className="bg-white rounded-2xl overflow-hidden shadow-sm ring-1 ring-black/[0.04]">
+      {/* Header auteur — actions secondaires dans le menu */}
+      <div className="flex items-center justify-between px-3.5 py-3">
         <Link 
           href={isProduct ? `/profil/${(data as Product).seller_id}` : `/profil/${(data as Post).author_id}`} 
-          className="flex items-center gap-3"
+          className="flex items-center gap-2.5 min-w-0"
         >
-          <Avatar className="h-11 w-11 border-2 border-[#E5E7EB]">
+          <Avatar className="h-10 w-10 ring-2 ring-[#FFF6E5]">
             <AvatarImage src={profile?.avatar_url || ""} />
             <AvatarFallback className={cn(
               "text-white text-sm",
@@ -1016,93 +1021,88 @@ function FeedCard({
               {profile?.full_name?.[0] || "?"}
             </AvatarFallback>
           </Avatar>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-1">
-              <span className="font-semibold text-[#111827] text-sm">
+              <span className="font-semibold text-[#111827] text-sm truncate">
                 {profile?.full_name || "Utilisateur"}
               </span>
               {profile?.is_verified && (
-                <BadgeCheck className="h-4 w-4 text-[#2F7D32]" />
+                <BadgeCheck className="h-4 w-4 text-[#2F7D32] shrink-0" />
               )}
             </div>
-            <p className="text-xs text-[#4B5563] flex items-center gap-1">
+            <p className="text-[11px] text-[#6B7280] flex items-center gap-1 truncate">
               {isProduct ? (
                 <>
-                  <MapPin className="h-3 w-3" />
+                  <MapPin className="h-3 w-3 shrink-0" />
                   {(data as Product).origin_region || (data as Product).origin_country || profile?.city || "Afrique"}
                 </>
               ) : (
-                <>
-                  {(profile as any)?.user_type || "Membre"} · {formatTimeAgo(data.created_at)}
-                </>
+                <>{formatTimeAgo(data.created_at)}</>
               )}
             </p>
           </div>
         </Link>
         
-        <div className="flex items-center gap-2">
-          {shouldShowFollowButton(currentUserId, authorUserId) && (
-            <Button
-              variant={isFollowing ? "default" : "outline"}
-              size="sm"
-              onClick={onFollow}
-              disabled={followPending}
-              className={cn(
-                "rounded-full h-8 px-3 text-xs font-semibold transition-all",
-                isFollowing
-                  ? "bg-[#1F5C2E] hover:bg-[#174A24] text-white border-transparent"
-                  : "bg-transparent border-[#1F5C2E] text-[#1F5C2E] hover:bg-[#1F5C2E]/10",
-              )}
-            >
-              {isFollowing ? (
-                <UserCheck className="h-3.5 w-3.5 mr-1" />
-              ) : (
-                <UserPlus className="h-3.5 w-3.5 mr-1" />
-              )}
-              {followButtonLabel(isFollowing)}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="rounded-full h-9 w-9 shrink-0">
+              <MoreHorizontal className="h-5 w-5 text-[#4B5563]" />
             </Button>
-          )}
-<DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="rounded-full h-9 w-9">
-                    <MoreHorizontal className="h-5 w-5 text-[#4B5563]" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
-                  <DropdownMenuItem onClick={() => {
-                    const url = `${window.location.origin}/${isProduct ? "produit" : "post"}/${data.id}`
-                    navigator.clipboard.writeText(url)
-                    toast.success("Lien copié !")
-                  }}>
-                    <LinkIcon className="h-4 w-4 mr-2" />
-                    Copier le lien
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => toast.success("Publication masquée")}>
-                    <EyeOff className="h-4 w-4 mr-2" />
-                    Masquer
-                  </DropdownMenuItem>
-                  {isOwnPost && onDelete ? (
-                    <DropdownMenuItem
-                      onClick={onDelete}
-                      className="text-destructive focus:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Supprimer
-                    </DropdownMenuItem>
-                  ) : (
-                    <DropdownMenuItem onClick={() => toast.success("Signalement envoyé")} className="text-destructive">
-                      <Flag className="h-4 w-4 mr-2" />
-                      Signaler
-                    </DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-        </div>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            {shouldShowFollowButton(currentUserId, authorUserId) && (
+              <DropdownMenuItem onClick={onFollow} disabled={followPending}>
+                {isFollowing ? (
+                  <UserCheck className="h-4 w-4 mr-2" />
+                ) : (
+                  <UserPlus className="h-4 w-4 mr-2" />
+                )}
+                {followButtonLabel(isFollowing)}
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem onClick={onShare}>
+              <Share2 className="h-4 w-4 mr-2" />
+              Partager
+            </DropdownMenuItem>
+            {isProduct && (
+              <DropdownMenuItem onClick={onSave}>
+                <Bookmark className="h-4 w-4 mr-2" />
+                {item.isSaved ? "Retirer des favoris" : "Enregistrer"}
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem onClick={() => {
+              const url = `${window.location.origin}/${isProduct ? "produit" : "post"}/${data.id}`
+              navigator.clipboard.writeText(url)
+              toast.success("Lien copié")
+            }}>
+              <LinkIcon className="h-4 w-4 mr-2" />
+              Copier le lien
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => toast.success("Publication masquée")}>
+              <EyeOff className="h-4 w-4 mr-2" />
+              Masquer
+            </DropdownMenuItem>
+            {isOwnPost && onDelete ? (
+              <DropdownMenuItem
+                onClick={onDelete}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Supprimer
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem onClick={() => toast.success("Signalement envoyé")} className="text-destructive">
+                <Flag className="h-4 w-4 mr-2" />
+                Signaler
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
-      {/* Texte / voix — tap pour écouter (TTS ou audio_url) */}
+      {/* Texte post */}
       {!isProduct && ((data as Post).content || postAudioUrl) && (
-        <div className="px-4 pb-3">
+        <div className="px-3.5 pb-2.5">
           <ClickableListenText
             text={(data as Post).content}
             audioUrl={postAudioUrl}
@@ -1115,8 +1115,8 @@ function FeedCard({
 
       {/* Videos */}
       {hasVideo && (
-        <div className="relative">
-          <div className="relative aspect-video bg-black overflow-hidden">
+        <div className="relative mx-2 mb-1 rounded-xl overflow-hidden bg-black">
+          <div className="relative aspect-video">
             <video
               src={videos[0].url}
               controls
@@ -1128,21 +1128,15 @@ function FeedCard({
               onPause={() => setIsVideoPlaying(false)}
             />
           </div>
-          {!isProduct && (
-            <div className="absolute top-3 left-3 bg-red-500 text-white px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1">
-              <svg viewBox="0 0 24 24" className="h-3 w-3 fill-current"><polygon points="5,3 19,12 5,21"/></svg>
-              Video
-            </div>
-          )}
         </div>
       )}
 
-      {/* Images (seulement si pas de video) */}
+      {/* Images — format agréable 4:5, coins arrondis */}
       {!hasVideo && medias && medias.length > 0 && (
-        <div className="relative">
+        <div className="relative mx-2 mb-1">
           <button
             type="button"
-            className="relative aspect-square bg-[#F3F4F6] overflow-hidden w-full block active:opacity-95"
+            className="relative aspect-[4/5] max-h-[70vh] bg-gradient-to-b from-[#F3F4F6] to-[#E8E4DC] overflow-hidden w-full block rounded-xl active:opacity-95"
             onClick={() => setLightboxOpen(true)}
             aria-label="Agrandir l'image"
           >
@@ -1159,31 +1153,35 @@ function FeedCard({
           {hasMultipleImages && (
             <>
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation()
                   setCurrentImageIndex(prev => prev > 0 ? prev - 1 : medias.length - 1)
                 }}
-                className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/50 flex items-center justify-center text-white"
+                className="absolute left-2 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-black/35 backdrop-blur-sm flex items-center justify-center text-white"
+                aria-label="Image précédente"
               >
                 <ChevronLeft className="h-5 w-5" />
               </button>
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation()
                   setCurrentImageIndex(prev => prev < medias.length - 1 ? prev + 1 : 0)
                 }}
-                className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/50 flex items-center justify-center text-white"
+                className="absolute right-2 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-black/35 backdrop-blur-sm flex items-center justify-center text-white"
+                aria-label="Image suivante"
               >
                 <ChevronRight className="h-5 w-5" />
               </button>
               
-              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 px-2 py-1 rounded-full bg-black/25 backdrop-blur-sm">
                 {medias.map((_, idx) => (
                   <div
                     key={idx}
                     className={cn(
-                      "h-1.5 w-1.5 rounded-full transition-colors",
-                      idx === currentImageIndex ? "bg-white" : "bg-white/50"
+                      "h-1.5 rounded-full transition-all",
+                      idx === currentImageIndex ? "bg-white w-4" : "bg-white/50 w-1.5"
                     )}
                   />
                 ))}
@@ -1192,7 +1190,7 @@ function FeedCard({
           )}
 
           {isProduct && (
-            <div className="absolute top-3 left-3 bg-[#2F7D32]/95 backdrop-blur-sm text-white pl-2.5 pr-1.5 py-1 rounded-full text-xs font-medium flex items-center gap-1 shadow-sm">
+            <div className="absolute top-3 left-3 bg-[#2F7D32]/95 backdrop-blur-sm text-white pl-2.5 pr-1.5 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 shadow-sm">
               <ShoppingBag className="h-3 w-3 shrink-0" />
               <span>Produit</span>
               <ListenMicButton
@@ -1271,73 +1269,68 @@ function FeedCard({
 
       {/* Info produit */}
       {isProduct && (
-        <div className="px-4 py-3 border-b border-[#E5E7EB]/50">
-          <Link href={`/produit/${data.id}`}>
-            <h3 className="font-semibold text-[#111827] mb-1">{(data as Product).name}</h3>
-            <p className="text-lg font-bold text-[#2F7D32]">
-              {formatPrice((data as Product).price)} FCFA
-              <span className="text-sm font-normal text-[#4B5563]">/{(data as Product).unit}</span>
-            </p>
-            {(data as Product).description?.trim() && (
-              <p className="text-sm text-[#6B7280] mt-1.5 line-clamp-2 leading-snug">
-                {(data as Product).description}
+        <div className="px-3.5 pt-3">
+          <Link href={`/produit/${data.id}`} className="block">
+            <div className="flex items-start justify-between gap-3">
+              <h3 className="font-semibold text-[#111827] text-[15px] leading-snug line-clamp-2">
+                {(data as Product).name}
+              </h3>
+              <p className="text-base font-bold text-red-600 tabular-nums shrink-0">
+                {formatPrice((data as Product).price)}
+                <span className="text-[10px] font-medium text-[#6B7280] ml-0.5">
+                  /{(data as Product).unit}
+                </span>
               </p>
-            )}
+            </div>
           </Link>
         </div>
       )}
 
-      {/* Actions */}
-      <div className="flex items-center justify-between px-4 py-3">
-        <div className="flex items-center gap-5">
-          {/* J'aime */}
-          <button onClick={onLike} className="flex items-center gap-1.5 active:scale-90 transition-transform">
-            <Heart className={cn(
-              "h-6 w-6 transition-colors",
-              item.isLiked ? "fill-[#F39A1F] text-[#F39A1F]" : "text-[#4B5563]"
-            )} />
+      {/* Actions prioritaires : like + comment (+ acheter pour produit) */}
+      <div className="flex items-center gap-1 px-2.5 py-2.5">
+        <button
+          type="button"
+          onClick={onLike}
+          className="flex items-center gap-1.5 px-2.5 py-2 rounded-full active:bg-[#FFF6E5] transition-colors"
+          aria-label="J'aime"
+        >
+          <Heart className={cn(
+            "h-6 w-6 transition-colors",
+            item.isLiked ? "fill-[#F39A1F] text-[#F39A1F]" : "text-[#4B5563]"
+          )} />
+          {(data.likes_count || 0) > 0 && (
             <span className={cn(
-              "text-sm font-medium",
+              "text-sm font-medium tabular-nums",
               item.isLiked ? "text-[#F39A1F]" : "text-[#4B5563]"
             )}>
-              {data.likes_count || 0}
+              {data.likes_count}
             </span>
-          </button>
+          )}
+        </button>
 
-          {/* Commenter */}
-          <button onClick={onComment} className="flex items-center gap-1.5 text-[#4B5563] active:scale-90 transition-transform">
-            <MessageCircle className="h-6 w-6" />
-            <span className="text-sm font-medium">{data.comments_count || 0}</span>
-          </button>
+        <button
+          type="button"
+          onClick={onComment}
+          className="flex items-center gap-1.5 px-2.5 py-2 rounded-full text-[#4B5563] active:bg-[#FFF6E5] transition-colors"
+          aria-label="Commenter"
+        >
+          <MessageCircle className="h-6 w-6" />
+          {(data.comments_count || 0) > 0 && (
+            <span className="text-sm font-medium tabular-nums">{data.comments_count}</span>
+          )}
+        </button>
 
-          {/* Partager */}
-          <button onClick={onShare} className="flex items-center gap-1.5 text-[#4B5563] active:scale-90 transition-transform">
-            <Share2 className="h-6 w-6" />
-            <span className="text-sm font-medium">{data.shares_count || 0}</span>
-          </button>
-        </div>
-
-        {/* Sauvegarder (produits uniquement) */}
         {isProduct && (
-          <button onClick={onSave} className="active:scale-90 transition-transform">
-            <Bookmark className={cn(
-              "h-6 w-6 transition-colors",
-              item.isSaved ? "fill-[#2F7D32] text-[#2F7D32]" : "text-[#4B5563]"
-            )} />
-          </button>
-        )}
-      </div>
-
-      {/* CTA Acheter (produits uniquement) */}
-      {isProduct && (
-        <div className="px-4 pb-4">
-          <Link href={`/produit/${data.id}`}>
-            <Button className="w-full rounded-full bg-[#2F7D32] hover:bg-[#256427] text-white font-semibold">
-              Acheter maintenant
+          <Link href={`/produit/${data.id}`} className="ml-auto pr-1">
+            <Button
+              size="sm"
+              className="rounded-full h-9 px-5 bg-[#2F7D32] hover:bg-[#256427] text-white font-semibold shadow-sm"
+            >
+              Acheter
             </Button>
           </Link>
-        </div>
-      )}
+        )}
+      </div>
     </article>
   )
 }

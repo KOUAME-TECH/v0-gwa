@@ -6,18 +6,15 @@ import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Search, SlidersHorizontal, MapPin, Heart, X, ChevronLeft, Grid3X3, LayoutList, LayoutGrid, ShoppingCart, Plus } from "lucide-react"
+import { Search, SlidersHorizontal, MapPin, Heart, X, ChevronLeft, ShoppingCart, Plus } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { toast } from "sonner"
 import { ListenMicButton } from "@/components/media/clickable-listen-text"
 import { buildProductListenText } from "@/lib/media/product-listen"
-import { ListenModeToggle } from "@/components/media/listen-mode-toggle"
 import { ShopVoiceTourButton } from "@/components/media/shop-voice-tour-button"
 import { DigestBanner } from "@/components/media/digest-banner"
-import { AudioLangBadge } from "@/components/media/audio-lang-badge"
-import { useListenMode } from "@/hooks/use-listen-mode"
 import { useShopVoiceTour } from "@/hooks/use-shop-voice-tour"
 import { useRealtimeLocation } from "@/hooks/use-realtime-location"
 import {
@@ -47,7 +44,6 @@ type Product = {
 }
 
 type Category = { id: string; name: string; slug: string; category_type: string }
-type ViewMode = "compact" | "list" | "grid"
 
 export default function MarketplacePage() {
   return (
@@ -72,11 +68,9 @@ function MarketplaceContent() {
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
   const [showFilters, setShowFilters] = useState(false)
-  const [viewMode, setViewMode] = useState<ViewMode>("grid")
   const [userId, setUserId] = useState<string | null>(null)
   const [userCity, setUserCity] = useState<string | null>(null)
   const [userCountry, setUserCountry] = useState<string | null>(null)
-  const { enabled: listenMode } = useListenMode()
   const {
     city: geoCity,
     country: geoCountry,
@@ -375,7 +369,7 @@ function MarketplaceContent() {
       audioUrl: p.audio_url,
       audioLang: p.audio_lang,
       fallbackLabel: p.name,
-      highlight: listenMode || digest.active || isDigest,
+      highlight: digest.active || isDigest,
     }
   }
 
@@ -393,102 +387,16 @@ function MarketplaceContent() {
         ? digest.currentProductId
         : null
 
-  function CompactCard({ p }: { p: Product }) {
-    const listening = listeningId === p.id
-    return (
-      <Link
-        href={`/produit/${p.id}`}
-        className={`block active:scale-[0.97] transition-transform ${listening ? "opacity-100" : ""}`}
-      >
-        <div
-          className={`relative aspect-square w-full overflow-hidden rounded-2xl bg-muted ring-1 ${
-            listening ? "ring-2 ring-[#C27D10] shadow-md" : "ring-black/[0.04]"
-          }`}
-        >
-          {p.images?.[0] ? (
-            <Image src={p.images[0]} alt={p.name} fill className="object-cover" sizes="140px" loading="lazy" />
-          ) : (
-            <div className="w-full h-full bg-muted flex items-center justify-center text-2xl">{"📦"}</div>
-          )}
-          <button onClick={(e) => toggleFavorite(p.id, e)}
-            className="absolute top-2 right-2 w-7 h-7 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center">
-            <Heart className={`h-3.5 w-3.5 ${favorites.has(p.id) ? "fill-red-500 text-red-500" : "text-gray-500"}`} />
-          </button>
-        </div>
-        <div className="pt-2 px-0.5">
-          <div className="flex items-center gap-1">
-            <p className="text-xs font-medium leading-snug line-clamp-2 flex-1 min-w-0">{p.name}</p>
-            <ProductListenBtn p={p} />
-          </div>
-          <div className="flex items-center justify-between mt-1.5 gap-1">
-            <span className="text-xs font-bold text-red-600">{fmt(p.price)} F</span>
-            <button onClick={(e) => addToCart(p.id, e)}
-              className="w-7 h-7 rounded-full bg-[#2F7D32] text-white flex items-center justify-center shrink-0">
-              <Plus className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        </div>
-      </Link>
-    )
-  }
-
-  // ---- LIST CARD (1 per row) ----
-  function ListCard({ p }: { p: Product }) {
-    const listening = listeningId === p.id
-    return (
-      <Link
-        href={`/produit/${p.id}`}
-        className={`flex items-center gap-3 bg-white rounded-xl p-2 shadow-sm active:scale-[0.99] transition-transform ${
-          listening ? "ring-2 ring-[#C27D10]" : ""
-        }`}
-        style={{ maxHeight: 74 }}
-      >
-        <div className="relative w-[58px] h-[58px] rounded-2xl overflow-hidden shrink-0 bg-muted">
-          {p.images?.[0] ? (
-            <Image src={p.images[0]} alt={p.name} fill className="object-cover" sizes="58px" loading="lazy" />
-          ) : (
-            <div className="w-full h-full bg-muted flex items-center justify-center text-xl">{"📦"}</div>
-          )}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1">
-            <p className="text-[13px] font-medium leading-tight line-clamp-1 flex-1 min-w-0">{p.name}</p>
-            <ProductListenBtn p={p} size="xs" />
-          </div>
-          <div className="flex items-center gap-1.5 mt-0.5">
-            {p.categories && <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded-full text-muted-foreground">{p.categories.name}</span>}
-            {p.origin_region && (
-              <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                <MapPin className="h-2.5 w-2.5" />{p.origin_region}
-              </span>
-            )}
-          </div>
-          <p className="text-[13px] font-bold text-red-600 mt-0.5">{fmt(p.price)} FCFA/{p.unit}</p>
-        </div>
-        <div className="flex flex-col gap-1.5 shrink-0">
-          <button onClick={(e) => addToCart(p.id, e)}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-[#2F7D32] text-white text-[10px] font-medium min-h-[28px]">
-            <Plus className="h-3 w-3" />Ajouter
-          </button>
-          <button onClick={(e) => toggleFavorite(p.id, e)}
-            className="flex items-center justify-center px-3 py-1.5 rounded-full border border-gray-200 min-h-[28px]">
-            <Heart className={`h-3 w-3 ${favorites.has(p.id) ? "fill-red-500 text-red-500" : "text-gray-400"}`} />
-          </button>
-        </div>
-      </Link>
-    )
-  }
-
-  // ---- GRID CARD (2 cols) — image arrondie qui remplit l’espace ----
+  // ---- GRID CARD (2 cols) — micro produit conservé ----
   function GridCard({ p }: { p: Product }) {
     const listening = listeningId === p.id
     return (
       <Link href={`/produit/${p.id}`} className="block active:scale-[0.98] transition-transform">
         <div
-          className={`relative w-full overflow-hidden rounded-2xl bg-muted ring-1 ${
+          className={`relative w-full overflow-hidden rounded-2xl bg-gradient-to-b from-[#F3F4F6] to-[#E8E4DC] ring-1 ${
             listening ? "ring-2 ring-[#C27D10] shadow-md" : "ring-black/[0.04]"
           }`}
-          style={{ aspectRatio: "4/3" }}
+          style={{ aspectRatio: "4/5" }}
         >
           {p.images?.[0] ? (
             <Image src={p.images[0]} alt={p.name} fill className="object-cover" sizes="50vw" loading="lazy" />
@@ -532,8 +440,7 @@ function MarketplaceContent() {
       <header className="sticky top-0 z-40 bg-white border-b border-[#E5E7EB]">
         <div className="flex items-center gap-3 p-3">
           <Link href="/" className="lg:hidden"><ChevronLeft className="h-6 w-6" /></Link>
-          <h1 className="text-lg font-semibold flex-1 text-[#111827]">Marketplace</h1>
-          <ListenModeToggle compact className="shrink-0" />
+          <h1 className="text-lg font-semibold flex-1 text-[#111827]">Boutique</h1>
           <ShopVoiceTourButton
             active={parcours.active}
             index={parcours.index}
@@ -602,27 +509,25 @@ function MarketplaceContent() {
           </Sheet>
         </div>
 
-        {/* Quick filters + view toggle */}
-        <div className="flex items-center gap-2 px-3 pb-2">
-          <div className="flex gap-1.5 overflow-x-auto gwa-no-scroll flex-1">
-            {[{ value: "all", label: "Tout" }, { value: "agriculture", label: "Agriculture" }].map(t => (
-              <button key={t.value} onClick={() => { setSelectedType(t.value); setSelectedCategory("all") }}
-                className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${selectedType === t.value ? "bg-[#2F7D32] text-white" : "bg-white text-[#4B5563] border border-[#E5E7EB]"}`}>{t.label}</button>
-            ))}
-          </div>
-          {/* View mode toggles */}
-          <div className="flex bg-muted rounded-lg p-0.5 shrink-0">
-            {([
-              { mode: "compact" as ViewMode, icon: Grid3X3 },
-              { mode: "list" as ViewMode, icon: LayoutList },
-              { mode: "grid" as ViewMode, icon: LayoutGrid },
-            ]).map(({ mode, icon: Icon }) => (
-              <button key={mode} onClick={() => setViewMode(mode)}
-                className={`p-1.5 rounded-md ${viewMode === mode ? "bg-white shadow-sm" : ""}`} aria-label={mode}>
-                <Icon className={`h-4 w-4 ${viewMode === mode ? "text-[#2F7D32]" : "text-muted-foreground"}`} />
-              </button>
-            ))}
-          </div>
+        {/* Quick filters */}
+        <div className="flex gap-1.5 overflow-x-auto gwa-no-scroll px-3 pb-2">
+          {[{ value: "all", label: "Tout" }, { value: "agriculture", label: "Agriculture" }].map((t) => (
+            <button
+              key={t.value}
+              type="button"
+              onClick={() => {
+                setSelectedType(t.value)
+                setSelectedCategory("all")
+              }}
+              className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
+                selectedType === t.value
+                  ? "bg-[#2F7D32] text-white"
+                  : "bg-white text-[#4B5563] border border-[#E5E7EB]"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
       </header>
 
@@ -663,11 +568,14 @@ function MarketplaceContent() {
           </div>
         )}
         {isLoading ? (
-          <div className={`grid gap-2 ${viewMode === "compact" ? "grid-cols-3" : viewMode === "list" ? "grid-cols-1" : "grid-cols-2"}`}>
-            {[...Array(viewMode === "compact" ? 9 : 6)].map((_, i) => (
+          <div className="grid grid-cols-2 gap-3">
+            {[...Array(6)].map((_, i) => (
               <div key={i} className="overflow-hidden">
-                <div className={`bg-muted gwa-skeleton rounded-2xl ${viewMode === "list" ? "h-14 w-14" : viewMode === "compact" ? "aspect-square" : "aspect-[4/3]"}`} />
-                {viewMode !== "list" && <div className="pt-2 space-y-1"><div className="h-3 bg-muted rounded gwa-skeleton" /><div className="h-3 bg-muted rounded w-2/3 gwa-skeleton" /></div>}
+                <div className="bg-muted gwa-skeleton rounded-2xl aspect-[4/3]" />
+                <div className="pt-2 space-y-1">
+                  <div className="h-3 bg-muted rounded gwa-skeleton" />
+                  <div className="h-3 bg-muted rounded w-2/3 gwa-skeleton" />
+                </div>
               </div>
             ))}
           </div>
@@ -682,37 +590,14 @@ function MarketplaceContent() {
           </div>
         ) : (
           <>
-            <div className="flex items-center justify-between mb-2 gap-2">
-              <p className="text-xs text-muted-foreground">{filteredProducts.length} produit{filteredProducts.length > 1 ? "s" : ""}</p>
-              <div className="flex items-center gap-2">
-                <ShopVoiceTourButton
-                  active={parcours.active}
-                  index={parcours.index}
-                  total={parcours.total}
-                  onClick={handleParcoursClick}
-                  idleLabel="Parcours"
-                />
-                <Badge variant="outline" className="text-[10px] text-[#2F7D32] border-[#2F7D32]/30 capitalize">{viewMode}</Badge>
-              </div>
+            <p className="text-xs text-muted-foreground mb-2">
+              {filteredProducts.length} produit{filteredProducts.length > 1 ? "s" : ""}
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              {filteredProducts.map((p) => (
+                <GridCard key={p.id} p={p} />
+              ))}
             </div>
-
-            {viewMode === "compact" && (
-              <div className="grid grid-cols-3 gap-2.5">
-                {filteredProducts.map(p => <CompactCard key={p.id} p={p} />)}
-              </div>
-            )}
-
-            {viewMode === "list" && (
-              <div className="flex flex-col gap-3">
-                {filteredProducts.map(p => <ListCard key={p.id} p={p} />)}
-              </div>
-            )}
-
-            {viewMode === "grid" && (
-              <div className="grid grid-cols-2 gap-3">
-                {filteredProducts.map(p => <GridCard key={p.id} p={p} />)}
-              </div>
-            )}
           </>
         )}
       </main>

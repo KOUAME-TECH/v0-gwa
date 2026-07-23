@@ -22,6 +22,7 @@ import {
 import { ArrowLeft, Camera, Loader2, Check, MapPin, BadgeCheck, ShieldCheck } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import { toast } from "sonner"
+import { useListenMode } from "@/hooks/use-listen-mode"
 import { AUDIO_LANGS } from "@/lib/media/audio-langs"
 import {
   shouldPromptIdentityVerification,
@@ -90,6 +91,8 @@ export default function EditProfilPage() {
     error: geoError,
     request: requestLocation,
   } = useRealtimeLocation({ auto: true, maximumAge: 0 })
+  const { enabled: listenMode, toggle: toggleListenMode, hydrated: listenHydrated } =
+    useListenMode()
 
   // Auto-enregistrer la position dès qu'elle est captée (pas de saisie manuelle)
   useEffect(() => {
@@ -525,12 +528,23 @@ export default function EditProfilPage() {
         </div>
 
         <div className="bg-white rounded-2xl p-4 space-y-3">
-          <h2 className="font-semibold text-[#111827]">Harmattan Digest</h2>
-          <p className="text-xs text-[#6B7280]">
-            Chaque jour, un résumé vocal des nouveaux produits près de chez vous.
-          </p>
+          <h2 className="font-semibold text-[#111827]">Écoute & Digest</h2>
           <div className="flex items-center justify-between gap-3 rounded-xl border border-[#E5E7EB] px-3 py-2.5">
-            <span className="text-sm text-[#374151]">Recevoir le digest</span>
+            <div className="min-w-0">
+              <p className="text-sm text-[#374151]">Mode écoute (feed)</p>
+              <p className="text-[11px] text-[#9CA3AF]">Lit les posts en scrollant</p>
+            </div>
+            <Switch
+              checked={listenHydrated ? listenMode : false}
+              onCheckedChange={() => toggleListenMode()}
+              aria-label="Mode écoute"
+            />
+          </div>
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-[#E5E7EB] px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="text-sm text-[#374151]">Digest quotidien</p>
+              <p className="text-[11px] text-[#9CA3AF]">Nouveautés près de chez vous</p>
+            </div>
             <Switch
               checked={formData.digest_enabled}
               onCheckedChange={(checked) => setFormData({ ...formData, digest_enabled: checked })}
