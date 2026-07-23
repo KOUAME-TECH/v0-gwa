@@ -7,7 +7,6 @@ import { AudioWaveIcon } from "@/components/media/audio-wave-icon"
 import { VoiceMessageChip } from "@/components/media/voice-message-chip"
 import { AudioLangBadge } from "@/components/media/audio-lang-badge"
 import { AUDIO_LABELS } from "@/lib/accessibility/audio-labels"
-import { buildCognitiveSummary } from "@/lib/accessibility/cognitive-summary"
 import { resolveUtterLang } from "@/lib/media/audio-langs"
 import { recordListenActivity } from "@/hooks/use-listen-ritual"
 import { useAutoListenOnView } from "@/hooks/use-contextual-listen"
@@ -221,7 +220,7 @@ export type ClickableListenTextProps = ListenPlaybackProps & {
   showText?: boolean
   textClassName?: string
   highlight?: boolean
-  /** Résumé cognitif 1 phrase (contraste cognitif) */
+  /** @deprecated plus affiché — évite les lignes « … » redondantes */
   showSummary?: boolean
   /** Écoute auto au scroll (mode écoute feed) */
   autoListen?: boolean
@@ -238,7 +237,6 @@ export function ClickableListenText({
   showText = true,
   textClassName,
   highlight,
-  showSummary,
   autoListen,
 }: ClickableListenTextProps) {
   const { mode, playing, canListen, toggleListen, speechText } = useListenPlayback({
@@ -250,7 +248,6 @@ export function ClickableListenText({
   })
 
   const autoRef = useAutoListenOnView(!!autoListen, canListen, toggleListen, playing)
-  const summary = showSummary ? buildCognitiveSummary(speechText) : null
 
   if (!canListen && !speechText) return null
 
@@ -313,11 +310,6 @@ export function ClickableListenText({
         </span>
         <AudioLangBadge lang={audioLang} />
       </p>
-      {summary && (
-        <p className="pl-8 text-xs text-[#6B7280] leading-snug" aria-hidden>
-          {summary}
-        </p>
-      )}
     </div>
   )
 }

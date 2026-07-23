@@ -31,8 +31,7 @@ import {
 } from "@/lib/auth/post-auth"
 import { cn } from "@/lib/utils"
 import { HibpPasswordBanner } from "@/components/auth/hibp-password-banner"
-import { useRealtimeLocation } from "@/hooks/use-realtime-location"
-import { LocationMapCard } from "@/components/location/location-map-card"
+import { useRealtimeLocation, formatCoords } from "@/hooks/use-realtime-location"
 
 const userTypes = [
   { value: "farmer", label: "Producteur", icon: Sprout },
@@ -699,20 +698,32 @@ function SignupForm() {
               </button>
 
               {(formData.lat != null || gpsLocation) && (
-                <LocationMapCard
-                  lat={formData.lat ?? gpsLocation!.lat}
-                  lon={formData.lon ?? gpsLocation!.lon}
-                  accuracy={gpsLocation?.accuracy}
-                  altitude={gpsLocation?.altitude}
-                  address={formData.address || gpsLocation?.address}
-                  city={formData.city || gpsLocation?.city}
-                  country={
-                    countries.find((c) => c.value === formData.country)?.label ||
-                    gpsLocation?.country
-                  }
-                  label={gpsLocation?.label}
-                  height={200}
-                />
+                <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 space-y-1">
+                  <p className="text-sm font-medium text-neutral-900 leading-snug">
+                    {formData.address ||
+                      gpsLocation?.address ||
+                      gpsLocation?.label ||
+                      "Position détectée"}
+                  </p>
+                  {(formData.city || gpsLocation?.city) && (
+                    <p className="text-xs text-neutral-600">
+                      {[
+                        formData.city || gpsLocation?.city,
+                        countries.find((c) => c.value === formData.country)?.label ||
+                          gpsLocation?.country,
+                      ]
+                        .filter(Boolean)
+                        .join(", ")}
+                    </p>
+                  )}
+                  <p className="text-[11px] font-mono text-neutral-500 tabular-nums">
+                    {formatCoords(
+                      formData.lat ?? gpsLocation!.lat,
+                      formData.lon ?? gpsLocation!.lon,
+                      gpsLocation?.accuracy,
+                    )}
+                  </p>
+                </div>
               )}
 
               {/* Fallback discret si GPS refusé */}

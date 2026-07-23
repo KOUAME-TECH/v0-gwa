@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { CheckCircle2, Package, Truck, MapPin, Clock, ArrowRight, Loader2, Home } from 'lucide-react'
 import Link from "next/link"
 import { EscrowStepper } from "@/components/orders/escrow-stepper"
+import { LocationMapCard } from "@/components/location/location-map-card"
 
 interface Order {
   id: string
@@ -44,6 +45,13 @@ function ConfirmationContent() {
   
   const [order, setOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(true)
+  const [deliveryMap, setDeliveryMap] = useState<{
+    lat: number
+    lon: number
+    address?: string | null
+    city?: string | null
+    country?: string | null
+  } | null>(null)
   
   const supabase = createClient()
 
@@ -54,6 +62,42 @@ function ConfirmationContent() {
       setLoading(false)
     }
   }, [orderId])
+
+  useEffect(() => {
+    if (!order) {
+      setDeliveryMap(null)
+      return
+    }
+    const q = [
+      order.shipping_address,
+      order.shipping_city,
+      order.shipping_country,
+    ]
+      .filter(Boolean)
+      .join(", ")
+      .trim()
+    if (!q) return
+
+    let cancelled = false
+    void fetch(`/api/geocode/forward?q=${encodeURIComponent(q)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled || !data?.lat || !data?.lon) return
+        setDeliveryMap({
+          lat: Number(data.lat),
+          lon: Number(data.lon),
+          address: data.address || q,
+          city: data.city || order.shipping_city,
+          country: data.country || order.shipping_country,
+        })
+      })
+      .catch(() => {
+        /* carte optionnelle */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [order])
 
   async function loadOrder(id: string) {
     const { data } = await supabase
@@ -218,25 +262,36 @@ function ConfirmationContent() {
                 <span className="text-xl font-bold text-primary">{order.total_amount.toLocaleString()} FCFA</span>
               </div>
 
-              {/* Delivery Info */}
+              {/* Delivery Info + carte (uniquement après commande validée) */}
               <div className="space-y-3">
-                <h3 className="font-medium">Informations de livraison</h3>
-                <div className="grid gap-2 text-sm">
-                  <div className="flex items-center gap-2">
-                    <MapPin className="h-4 w-4 text-muted-foreground" />
-                    <span>
-                      {order.shipping_address}
-                      {order.shipping_city && `, ${order.shipping_city}`}
-                      {order.shipping_country && `, ${order.shipping_country}`}
-                    </span>
-                  </div>
-                  {order.estimated_delivery && (
+                <h3 className="font-medium">Livraison</h3>
+                {deliveryMap ? (
+                  <LocationMapCard
+                    lat={deliveryMap.lat}
+                    lon={deliveryMap.lon}
+                    address={deliveryMap.address}
+                    city={deliveryMap.city}
+                    country={deliveryMap.country}
+                    height={200}
+                  />
+                ) : (
+                  <div className="grid gap-2 text-sm">
                     <div className="flex items-center gap-2">
-                      <Clock className="h-4 w-4 text-muted-foreground" />
-                      <span>Livraison estimée : {order.estimated_delivery}</span>
+                      <MapPin className="h-4 w-4 text-muted-foreground" />
+                      <span>
+                        {order.shipping_address}
+                        {order.shipping_city && `, ${order.shipping_city}`}
+                        {order.shipping_country && `, ${order.shipping_country}`}
+                      </span>
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
+                {order.estimated_delivery && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <span>Livraison estimée : {order.estimated_delivery}</span>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

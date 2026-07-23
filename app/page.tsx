@@ -834,7 +834,6 @@ export default function HomePage() {
                           fallbackLabel={VOICE_COMMENT_PLACEHOLDER}
                           textClassName="text-sm"
                           highlight={listenMode}
-                          showSummary={listenMode}
                         />
                       </div>
                       <p className="text-xs text-[#9CA3AF] mt-1 ml-2">
@@ -1109,7 +1108,6 @@ function FeedCard({
             audioUrl={postAudioUrl}
             fallbackLabel={VOICE_COMMENT_PLACEHOLDER}
             highlight={listenModeHighlight}
-            showSummary={listenModeHighlight}
             autoListen={listenModeHighlight}
           />
         </div>

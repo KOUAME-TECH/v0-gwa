@@ -16,7 +16,6 @@ import { buildProductListenText } from "@/lib/media/product-listen"
 import { ListenModeToggle } from "@/components/media/listen-mode-toggle"
 import { ShopVoiceTourButton } from "@/components/media/shop-voice-tour-button"
 import { DigestBanner } from "@/components/media/digest-banner"
-import { LocationMapCard } from "@/components/location/location-map-card"
 import { AudioLangBadge } from "@/components/media/audio-lang-badge"
 import { useListenMode } from "@/hooks/use-listen-mode"
 import { useShopVoiceTour } from "@/hooks/use-shop-voice-tour"
@@ -79,12 +78,9 @@ function MarketplaceContent() {
   const [userCountry, setUserCountry] = useState<string | null>(null)
   const { enabled: listenMode } = useListenMode()
   const {
-    location: geoLocation,
     city: geoCity,
     country: geoCountry,
     label: geoLabel,
-    status: geoStatus,
-    request: requestLocation,
   } = useRealtimeLocation({ auto: true, maximumAge: 0 })
   const supabase = createClient()
 
@@ -632,34 +628,8 @@ function MarketplaceContent() {
 
       {/* Content */}
       <main className="p-4 sm:p-5">
-        {(geoStatus === "denied" || geoStatus === "unavailable") && (
-          <button
-            type="button"
-            onClick={() => void requestLocation()}
-            className="mb-3 flex w-full items-center gap-2 rounded-2xl border border-[#E5E7EB] bg-white px-3 py-2.5 text-left text-sm text-[#374151] active:scale-[0.99]"
-          >
-            <MapPin className="h-4 w-4 text-[#2F7D32] shrink-0" />
-            <span className="flex-1">
-              Autorisez la localisation pour un Digest près de chez vous
-            </span>
-          </button>
-        )}
-        {geoLocation && geoStatus === "ready" && (
-          <div className="mb-3">
-            <LocationMapCard
-              lat={geoLocation.lat}
-              lon={geoLocation.lon}
-              accuracy={geoLocation.accuracy}
-              altitude={geoLocation.altitude}
-              address={geoLocation.address}
-              city={geoLocation.city}
-              country={geoLocation.country}
-              label={geoLocation.label}
-              height={140}
-            />
-          </div>
-        )}
-        {digestProducts.length > 0 && (
+        {/* Digest visible seulement via notification (?digest=1) — pas en permanence dans le shop */}
+        {isDigest && digestProducts.length > 0 && (
           <DigestBanner
             count={digestProducts.length}
             city={userCity || geoCity || geoLabel}
