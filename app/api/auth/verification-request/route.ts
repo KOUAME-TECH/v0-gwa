@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     const documents = body?.documents
     if (!Array.isArray(documents) || documents.length < 2) {
       return NextResponse.json(
-        { error: "Pièce d'identité et selfie requis" },
+        { error: "Ajoutez votre pièce d'identité et un selfie." },
         { status: 400 },
       )
     }
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
     )
     if (!hasId || !hasSelfie) {
       return NextResponse.json(
-        { error: "Documents incomplets (id_document + selfie)" },
+        { error: "Il manque la pièce d'identité ou le selfie." },
         { status: 400 },
       )
     }
@@ -52,7 +52,10 @@ export async function POST(request: Request) {
 
     if (pending) {
       return NextResponse.json(
-        { error: "Une demande est déjà en cours", code: "ALREADY_PENDING" },
+        {
+          error: "Votre demande est déjà en cours d'examen. On vous prévient dès qu'elle est traitée.",
+          code: "ALREADY_PENDING",
+        },
         { status: 409 },
       )
     }
@@ -72,10 +75,24 @@ export async function POST(request: Request) {
     if (error) {
       console.error("[verification-request]", error.message)
       return NextResponse.json(
-        { error: "Impossible d'enregistrer la demande" },
+        { error: "Impossible d'enregistrer votre demande. Réessayez." },
         { status: 500 },
       )
     }
+
+    // Accusé de réception GWA
+    await admin.from("notifications").insert({
+      user_id: user.id,
+      type: "verification",
+      title: "Demande bien reçue",
+      message:
+        "GWA a bien reçu vos documents. On vous prévient dès que votre identité est vérifiée.",
+      body: "GWA a bien reçu vos documents. On vous prévient dès que votre identité est vérifiée.",
+      link: "/profil/verification",
+      is_read: false,
+      read: false,
+      data: { type: "verification", status: "pending", request_id: data.id },
+    })
 
     return NextResponse.json({ success: true, request: data })
   } catch (err) {

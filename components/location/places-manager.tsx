@@ -69,7 +69,7 @@ export function PlacesManager({ location, onRequestLocation, locating }: Props) 
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        toast.error(data.error || "Impossible d'enregistrer le lieu")
+        toast.error(data.error || "Impossible d'enregistrer ce lieu.")
         return
       }
       setLabel("")
@@ -88,7 +88,7 @@ export function PlacesManager({ location, onRequestLocation, locating }: Props) 
     })
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
-      toast.error(data.error || "Erreur")
+      toast.error(data.error || "Impossible de définir le lieu principal.")
       return
     }
     toast.success("Lieu principal mis à jour")
@@ -98,7 +98,7 @@ export function PlacesManager({ location, onRequestLocation, locating }: Props) 
   const remove = async (id: string) => {
     const res = await fetch(`/api/places/${id}`, { method: "DELETE" })
     if (!res.ok) {
-      toast.error("Suppression impossible")
+      toast.error("Impossible de supprimer ce lieu.")
       return
     }
     toast.success("Lieu supprimé")

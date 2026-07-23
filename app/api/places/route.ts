@@ -30,10 +30,13 @@ export async function GET() {
         return NextResponse.json({
           places: [],
           migrationRequired: true,
-          hint: "Appliquez scripts/schema/042_user_places_link_cooldown.sql",
+          hint: "La gestion des lieux sera bientôt disponible.",
         })
       }
-      return NextResponse.json({ error: error.message }, { status: 400 })
+      return NextResponse.json(
+        { error: "Impossible de charger vos lieux. Réessayez." },
+        { status: 400 },
+      )
     }
 
     return NextResponse.json({ places: data || [] })

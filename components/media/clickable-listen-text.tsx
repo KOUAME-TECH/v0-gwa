@@ -10,6 +10,7 @@ import { AUDIO_LABELS } from "@/lib/accessibility/audio-labels"
 import { resolveUtterLang } from "@/lib/media/audio-langs"
 import { recordListenActivity } from "@/hooks/use-listen-ritual"
 import { useAutoListenOnView } from "@/hooks/use-contextual-listen"
+import { isShopTourActive } from "@/lib/media/shop-tour-lock"
 
 type ListenMode = "audio" | "tts" | "none"
 
@@ -46,12 +47,18 @@ function useListenPlayback({
   const speechText = text?.trim() || fallbackLabel?.trim() || ""
   const canListen = mode !== "none" && (mode === "audio" ? !!audioUrl : !!speechText)
 
-  const stopAll = useCallback(() => {
+  const stopAll = useCallback((opts?: { forceCancelSpeech?: boolean }) => {
     if (audioRef.current) {
       audioRef.current.pause()
       audioRef.current.currentTime = 0
     }
-    if (typeof window !== "undefined" && window.speechSynthesis) {
+    // Ne jamais cancel le TTS d'un Parcours/Digest en cours (sinon les produits suivants sont sautés)
+    if (
+      opts?.forceCancelSpeech !== false &&
+      typeof window !== "undefined" &&
+      window.speechSynthesis &&
+      !isShopTourActive()
+    ) {
       window.speechSynthesis.cancel()
     }
     setPlaying(false)
@@ -120,7 +127,13 @@ function useListenPlayback({
     }
   }, [audioUrl, canListen, utterLang, mode, playing, speechText, stopAll])
 
-  useEffect(() => () => stopAll(), [stopAll])
+  useEffect(
+    () => () => {
+      // Unmount (ex. remount GridCard au setIndex) : pause audio local, PAS cancel du parcours
+      stopAll({ forceCancelSpeech: false })
+    },
+    [stopAll],
+  )
 
   return { mode, playing, canListen, toggleListen, speechText }
 }

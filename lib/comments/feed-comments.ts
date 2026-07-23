@@ -10,6 +10,10 @@ export type FeedCommentRow = {
   audio_url: string | null
   comment_type: string
   created_at: string
+  parent_comment_id?: string | null
+  likes_count?: number
+  liked_by_me?: boolean
+  replies?: FeedCommentRow[]
   author: {
     id: string
     full_name: string
@@ -44,33 +48,64 @@ function tableMeta(target: FeedCommentTarget) {
   }
 }
 
-/** Charge les commentaires / avis avec repli si colonnes vocales absentes. */
+function nestComments(rows: FeedCommentRow[]): FeedCommentRow[] {
+  const byId = new Map<string, FeedCommentRow>()
+  const roots: FeedCommentRow[] = []
+  for (const row of rows) {
+    byId.set(row.id, { ...row, replies: [] })
+  }
+  for (const row of rows) {
+    const node = byId.get(row.id)!
+    const parentId = row.parent_comment_id
+    if (parentId && byId.has(parentId)) {
+      byId.get(parentId)!.replies!.push(node)
+    } else {
+      roots.push(node)
+    }
+  }
+  return roots
+}
+
+/** Charge les commentaires / avis (avec likes + réponses pour les posts). */
 export async function loadFeedComments(
   supabase: SupabaseClient,
   target: FeedCommentTarget,
+  currentUserId?: string | null,
 ): Promise<FeedCommentRow[]> {
   const { table, idField, authorField } = tableMeta(target)
 
   const voiceSelect =
     table === "post_comments"
-      ? "id, content, comment_type, audio_url, created_at, author_id"
+      ? "id, content, comment_type, audio_url, created_at, author_id, parent_comment_id, likes_count"
       : "id, comment, review_type, audio_url, created_at, reviewer_id"
   const basicSelect =
     table === "post_comments"
-      ? "id, content, created_at, author_id"
+      ? "id, content, created_at, author_id, parent_comment_id, likes_count"
       : "id, comment, created_at, reviewer_id"
 
-  let res = await supabase
-    .from(table)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let res: any = await (supabase.from(table) as any)
     .select(voiceSelect)
     .eq(idField, target.id)
-    .order("created_at", { ascending: false })
-    .limit(50)
+    .order("created_at", { ascending: true })
+    .limit(100)
 
   if (res.error && isVoiceSchemaError(res.error.message)) {
-    res = await supabase
-      .from(table)
+    res = await (supabase.from(table) as any)
       .select(basicSelect)
+      .eq(idField, target.id)
+      .order("created_at", { ascending: true })
+      .limit(100)
+  }
+
+  // Fallback si parent/likes absents
+  if (res.error && /parent_comment_id|likes_count/i.test(res.error.message)) {
+    res = await (supabase.from(table) as any)
+      .select(
+        table === "post_comments"
+          ? "id, content, comment_type, audio_url, created_at, author_id"
+          : "id, comment, review_type, audio_url, created_at, reviewer_id",
+      )
       .eq(idField, target.id)
       .order("created_at", { ascending: false })
       .limit(50)
@@ -88,14 +123,34 @@ export async function loadFeedComments(
 
   const profileMap = new Map(profiles?.map((p) => [p.id, p]) || [])
 
-  return rawData.map((c) => ({
+  let likedIds = new Set<string>()
+  if (target.type === "post" && currentUserId) {
+    const commentIds = rawData.map((c) => c.id as string)
+    const { data: likes } = await (supabase.from("comment_likes") as any)
+      .select("comment_id")
+      .eq("user_id", currentUserId)
+      .in("comment_id", commentIds)
+    likedIds = new Set(
+      ((likes || []) as { comment_id: string }[]).map((l) => l.comment_id),
+    )
+  }
+
+  const flat: FeedCommentRow[] = rawData.map((c) => ({
     id: c.id as string,
     content: (c.content ?? c.comment ?? null) as string | null,
     audio_url: (c.audio_url ?? null) as string | null,
     comment_type: (c.comment_type ?? c.review_type ?? "text") as string,
     created_at: c.created_at as string,
+    parent_comment_id: (c.parent_comment_id as string | null | undefined) ?? null,
+    likes_count: Number(c.likes_count ?? 0),
+    liked_by_me: likedIds.has(c.id as string),
     author: profileMap.get(c[authorField] as string) || null,
   }))
+
+  if (target.type === "post") {
+    return nestComments(flat).reverse() // plus récents en haut
+  }
+  return flat.reverse()
 }
 
 export type SubmitFeedCommentInput = {
@@ -103,6 +158,7 @@ export type SubmitFeedCommentInput = {
   userId: string
   text?: string
   audioFile?: File | null
+  parentCommentId?: string | null
 }
 
 export type SubmitFeedCommentResult = {
@@ -120,17 +176,17 @@ export class CommentSubmitError extends Error {
   }
 }
 
-/** Envoie un commentaire texte et/ou vocal avec repli schéma + messages FR clairs. */
+/** Envoie un commentaire texte et/ou vocal (réponse optionnelle). */
 export async function submitFeedComment(
   supabase: SupabaseClient,
   input: SubmitFeedCommentInput,
 ): Promise<SubmitFeedCommentResult> {
-  const { target, userId, text = "", audioFile } = input
+  const { target, userId, text = "", audioFile, parentCommentId } = input
   const hasText = !!text.trim()
   const hasVoice = !!audioFile && audioFile.size > 0
 
   if (!hasText && !hasVoice) {
-    throw new CommentSubmitError("Écrivez un commentaire ou enregistrez une note vocale", "VALIDATION")
+    throw new CommentSubmitError("Écrivez un message ou enregistrez votre voix.", "VALIDATION")
   }
 
   const { table, idField, authorField, countTable, contentKey } = tableMeta(target)
@@ -154,12 +210,12 @@ export async function submitFeedComment(
       const msg = uploadError.message.toLowerCase()
       if (msg.includes("mime") || msg.includes("type")) {
         throw new CommentSubmitError(
-          "Format audio refusé par le serveur. Réessayez ou utilisez un commentaire texte.",
+          "Ce format audio n'est pas accepté. Essayez plutôt un message texte.",
           "UPLOAD",
         )
       }
       throw new CommentSubmitError(
-        "Impossible d'envoyer l'audio. Vérifiez votre connexion et réessayez.",
+        "L'envoi audio a échoué. Vérifiez votre connexion, puis réessayez.",
         "UPLOAD",
       )
     }
@@ -172,6 +228,8 @@ export async function submitFeedComment(
 
   const mediaType = resolveCommentMediaType({ hasText, hasAudio: !!audioUrl })
   const textValue = hasText ? text.trim() : null
+  const parent =
+    target.type === "post" && parentCommentId ? parentCommentId : null
 
   const richInsert =
     table === "post_comments"
@@ -181,6 +239,7 @@ export async function submitFeedComment(
           content: textValue,
           comment_type: mediaType,
           audio_url: audioUrl,
+          ...(parent ? { parent_comment_id: parent } : {}),
         }
       : {
           [idField]: target.id,
@@ -196,50 +255,58 @@ export async function submitFeedComment(
       ? {
           [idField]: target.id,
           author_id: userId,
-          content: textValue || (audioUrl ? "🎤 Note vocale" : ""),
+          content: textValue || "Note vocale",
+          ...(parent ? { parent_comment_id: parent } : {}),
         }
       : {
           [idField]: target.id,
           reviewer_id: userId,
-          comment: textValue || (audioUrl ? "🎤 Note vocale" : ""),
+          comment: textValue || "Note vocale",
           rating: 5,
         }
 
   const richSelect =
     table === "post_comments"
-      ? "id, content, comment_type, audio_url, created_at, author_id"
+      ? "id, content, comment_type, audio_url, created_at, author_id, parent_comment_id, likes_count"
       : "id, comment, review_type, audio_url, created_at, reviewer_id"
   const basicSelect =
     table === "post_comments"
-      ? "id, content, created_at, author_id"
+      ? "id, content, created_at, author_id, parent_comment_id, likes_count"
       : "id, comment, created_at, reviewer_id"
 
   let voiceStored = !!audioUrl
   let data: Record<string, unknown> | null = null
 
-  let res = await supabase.from(table).insert(richInsert).select(richSelect).single()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let res = await (supabase.from(table) as any)
+    .insert(richInsert)
+    .select(richSelect)
+    .single()
 
   if (res.error) {
     if (hasVoice && isVoiceSchemaError(res.error.message)) {
       if (audioUrl) {
         throw new CommentSubmitError(
-          "Les commentaires vocaux nécessitent la migration SQL 039 sur Supabase. Le texte fonctionne en attendant.",
+          "Les notes vocales arrivent bientôt. Envoyez un message texte pour l'instant.",
           "SCHEMA",
         )
       }
-      res = await supabase.from(table).insert(basicInsert).select(basicSelect).single()
+      res = await (supabase.from(table) as any).insert(basicInsert).select(basicSelect).single()
       voiceStored = false
-    } else if (isVoiceSchemaError(res.error.message)) {
-      res = await supabase.from(table).insert(basicInsert).select(basicSelect).single()
+    } else if (isVoiceSchemaError(res.error.message) || /parent_comment_id|likes_count/i.test(res.error.message)) {
+      const fallback = { ...basicInsert } as Record<string, unknown>
+      delete fallback.parent_comment_id
+      res = await (supabase.from(table) as any)
+        .insert(fallback)
+        .select(table === "post_comments" ? "id, content, created_at, author_id" : basicSelect)
+        .single()
       voiceStored = false
     }
   }
 
   if (res.error) {
     throw new CommentSubmitError(
-      res.error.message.includes("violates")
-        ? "Commentaire refusé. Vérifiez le contenu et réessayez."
-        : "Erreur lors de l'envoi du commentaire",
+      "Impossible d'envoyer votre message. Réessayez dans un instant.",
       "DB",
     )
   }
@@ -258,18 +325,64 @@ export async function submitFeedComment(
     audio_url: voiceStored ? (data.audio_url as string | null) ?? audioUrl : null,
     comment_type: (data.comment_type ?? data.review_type ?? mediaType) as string,
     created_at: data.created_at as string,
+    parent_comment_id: (data.parent_comment_id as string | null | undefined) ?? parent,
+    likes_count: Number(data.likes_count ?? 0),
+    liked_by_me: false,
+    replies: [],
     author: profile,
   }
 
-  // Incrémenter le compteur (best-effort)
-  const { data: parent } = await supabase
-    .from(countTable)
-    .select("comments_count")
-    .eq("id", target.id)
-    .maybeSingle()
+  // Incrémenter le compteur uniquement pour les racines
+  if (!parent) {
+    const { data: parentRow } = await supabase
+      .from(countTable)
+      .select("comments_count")
+      .eq("id", target.id)
+      .maybeSingle()
 
-  const newCount = ((parent?.comments_count as number) ?? 0) + 1
-  await supabase.from(countTable).update({ comments_count: newCount }).eq("id", target.id)
+    const newCount = ((parentRow?.comments_count as number) ?? 0) + 1
+    await supabase.from(countTable).update({ comments_count: newCount }).eq("id", target.id)
+  }
 
   return { comment, voiceStored }
+}
+
+/** Like / unlike un commentaire de post. */
+export async function toggleCommentLike(
+  supabase: SupabaseClient,
+  userId: string,
+  commentId: string,
+): Promise<{ liked: boolean; likes_count: number }> {
+  const { data: existing } = await supabase
+    .from("comment_likes")
+    .select("id")
+    .eq("comment_id", commentId)
+    .eq("user_id", userId)
+    .maybeSingle()
+
+  if (existing) {
+    await supabase.from("comment_likes").delete().eq("id", existing.id)
+  } else {
+    const { error } = await supabase.from("comment_likes").insert({
+      comment_id: commentId,
+      user_id: userId,
+    })
+    if (error) {
+      throw new CommentSubmitError(
+        "Impossible d'aimer ce commentaire pour le moment.",
+        "DB",
+      )
+    }
+  }
+
+  const { data: row } = await supabase
+    .from("post_comments")
+    .select("likes_count")
+    .eq("id", commentId)
+    .maybeSingle()
+
+  return {
+    liked: !existing,
+    likes_count: Number(row?.likes_count ?? 0),
+  }
 }

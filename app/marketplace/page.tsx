@@ -45,6 +45,84 @@ type Product = {
 
 type Category = { id: string; name: string; slug: string; category_type: string }
 
+function MarketplaceGridCard({
+  product: p,
+  listening,
+  favorited,
+  listenProps,
+  onToggleFavorite,
+  onAddToCart,
+  formatPrice,
+}: {
+  product: Product
+  listening: boolean
+  favorited: boolean
+  listenProps: {
+    text: string
+    audioUrl?: string | null
+    audioLang?: string | null
+    fallbackLabel: string
+    highlight?: boolean
+  }
+  onToggleFavorite: (id: string, e: React.MouseEvent) => void
+  onAddToCart: (id: string, e: React.MouseEvent) => void
+  formatPrice: (n: number) => string
+}) {
+  return (
+    <Link href={`/produit/${p.id}`} className="block active:scale-[0.98] transition-transform">
+      <div
+        className={`relative w-full overflow-hidden rounded-2xl bg-gradient-to-b from-[#F3F4F6] to-[#E8E4DC] ring-1 ${
+          listening ? "ring-2 ring-[#C27D10] shadow-md" : "ring-black/[0.04]"
+        }`}
+        style={{ aspectRatio: "4/5" }}
+      >
+        {p.images?.[0] ? (
+          <Image src={p.images[0]} alt={p.name} fill className="object-cover" sizes="50vw" loading="lazy" />
+        ) : (
+          <div className="w-full h-full bg-gradient-to-br from-[#E8F0E9] via-[#FFF6E5] to-[#E8E4DC] flex items-center justify-center">
+            <ShoppingBag className="h-10 w-10 text-[#2F7D32]/40" />
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={(e) => onToggleFavorite(p.id, e)}
+          className="absolute top-2 right-2 w-8 h-8 bg-white/80 backdrop-blur-sm rounded-full flex items-center justify-center"
+        >
+          <Heart className={`h-4 w-4 ${favorited ? "fill-red-500 text-red-500" : "text-gray-500"}`} />
+        </button>
+        {p.is_organic && (
+          <Badge className="absolute top-2 left-2 bg-[#2F7D32] text-white text-[10px] px-1.5 py-0.5">Bio</Badge>
+        )}
+      </div>
+      <div className="pt-2.5 px-0.5">
+        <div className="flex items-start gap-1">
+          <p className="text-sm font-medium leading-tight line-clamp-2 flex-1 min-w-0">{p.name}</p>
+          <ListenMicButton size="sm" {...listenProps} />
+        </div>
+        {p.profiles && (
+          <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
+            {p.profiles.full_name}
+            {p.profiles.is_verified && <span className="text-[#2F7D32]">{"✓"}</span>}
+          </p>
+        )}
+        <div className="flex items-center justify-between mt-1.5">
+          <span className="text-sm font-bold text-red-600">
+            {formatPrice(p.price)}{" "}
+            <span className="text-[10px] font-normal text-gray-500">FCFA/{p.unit}</span>
+          </span>
+          <button
+            type="button"
+            onClick={(e) => onAddToCart(p.id, e)}
+            className="w-8 h-8 rounded-full bg-[#2F7D32] text-white flex items-center justify-center"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </Link>
+  )
+}
+
 export default function MarketplacePage() {
   return (
     <Suspense fallback={<div className="min-h-screen bg-[#FFF6E5] p-6 text-sm text-muted-foreground">Chargement…</div>}>
@@ -127,7 +205,7 @@ function MarketplaceContent() {
         updated_at: new Date().toISOString(),
       })
       .eq("id", userId)
-      .then(({ error }) => {
+      .then(({ error }: { error: { message: string } | null }) => {
         if (error) console.warn("[marketplace] geo profile update", error.message)
       })
   }, [userId, geoCity, geoCountry, geoLabel, supabase])
@@ -371,7 +449,7 @@ function MarketplaceContent() {
     } catch {
       /* ignore */
     }
-    toast.message("Digest prêt. Tapez la bannière pour écouter.", { duration: 4000 })
+    toast.message("Digest prêt — tapez la bannière verte pour écouter.", { duration: 4000 })
   }, [digestProducts.length, isDigest, isLoading])
 
   function productListenProps(p: Product) {
@@ -384,68 +462,13 @@ function MarketplaceContent() {
     }
   }
 
-  function ProductListenBtn({ p, size = "xs" as const }: { p: Product; size?: "xs" | "sm" }) {
-    return (
-      <ListenMicButton size={size} {...productListenProps(p)} />
-    )
-  }
-
-  // ---- COMPACT CARD (3 cols) — image arrondie plein espace ----
+  // ---- GRID CARD stable (évite remount → cancel TTS au setIndex) ----
   const listeningId =
     parcours.active
       ? parcours.currentProductId
       : digest.active
         ? digest.currentProductId
         : null
-
-  // ---- GRID CARD (2 cols) — micro produit conservé ----
-  function GridCard({ p }: { p: Product }) {
-    const listening = listeningId === p.id
-    return (
-      <Link href={`/produit/${p.id}`} className="block active:scale-[0.98] transition-transform">
-        <div
-          className={`relative w-full overflow-hidden rounded-2xl bg-gradient-to-b from-[#F3F4F6] to-[#E8E4DC] ring-1 ${
-            listening ? "ring-2 ring-[#C27D10] shadow-md" : "ring-black/[0.04]"
-          }`}
-          style={{ aspectRatio: "4/5" }}
-        >
-          {p.images?.[0] ? (
-            <Image src={p.images[0]} alt={p.name} fill className="object-cover" sizes="50vw" loading="lazy" />
-          ) : (
-            <div className="w-full h-full bg-gradient-to-br from-[#E8F0E9] via-[#FFF6E5] to-[#E8E4DC] flex items-center justify-center">
-              <ShoppingBag className="h-10 w-10 text-[#2F7D32]/40" />
-            </div>
-          )}
-          <button onClick={(e) => toggleFavorite(p.id, e)}
-            className="absolute top-2 right-2 w-8 h-8 bg-white/80 backdrop-blur-sm rounded-full flex items-center justify-center">
-            <Heart className={`h-4 w-4 ${favorites.has(p.id) ? "fill-red-500 text-red-500" : "text-gray-500"}`} />
-          </button>
-          {p.is_organic && (
-            <Badge className="absolute top-2 left-2 bg-[#2F7D32] text-white text-[10px] px-1.5 py-0.5">Bio</Badge>
-          )}
-        </div>
-        <div className="pt-2.5 px-0.5">
-          <div className="flex items-start gap-1">
-            <p className="text-sm font-medium leading-tight line-clamp-2 flex-1 min-w-0">{p.name}</p>
-            <ProductListenBtn p={p} size="sm" />
-          </div>
-          {p.profiles && (
-            <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
-              {p.profiles.full_name}
-              {p.profiles.is_verified && <span className="text-[#2F7D32]">{"✓"}</span>}
-            </p>
-          )}
-          <div className="flex items-center justify-between mt-1.5">
-            <span className="text-sm font-bold text-red-600">{fmt(p.price)} <span className="text-[10px] font-normal text-gray-500">FCFA/{p.unit}</span></span>
-            <button onClick={(e) => addToCart(p.id, e)}
-              className="w-8 h-8 rounded-full bg-[#2F7D32] text-white flex items-center justify-center">
-              <Plus className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      </Link>
-    )
-  }
 
   return (
     <div className="min-h-screen bg-[#FFF6E5] pb-20">
@@ -620,7 +643,16 @@ function MarketplaceContent() {
             </p>
             <div className="grid grid-cols-2 gap-3">
               {filteredProducts.map((p) => (
-                <GridCard key={p.id} p={p} />
+                <MarketplaceGridCard
+                  key={p.id}
+                  product={p}
+                  listening={listeningId === p.id}
+                  favorited={favorites.has(p.id)}
+                  listenProps={productListenProps(p)}
+                  onToggleFavorite={toggleFavorite}
+                  onAddToCart={addToCart}
+                  formatPrice={fmt}
+                />
               ))}
             </div>
           </>

@@ -104,6 +104,10 @@ type Comment = {
   audio_url?: string | null
   comment_type?: string
   created_at: string
+  parent_comment_id?: string | null
+  likes_count?: number
+  liked_by_me?: boolean
+  replies?: Comment[]
   author: {
     id: string
     full_name: string
@@ -135,6 +139,7 @@ export default function HomePage() {
   const [loadingComments, setLoadingComments] = useState(false)
   const [newComment, setNewComment] = useState("")
   const [submittingComment, setSubmittingComment] = useState(false)
+  const [replyTo, setReplyTo] = useState<Comment | null>(null)
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set())
   const [followPendingId, setFollowPendingId] = useState<string | null>(null)
   
@@ -387,6 +392,7 @@ export default function HomePage() {
     setSelectedItem(item)
     setLoadingComments(true)
     setComments([])
+    setReplyTo(null)
 
     try {
       const target =
@@ -394,19 +400,67 @@ export default function HomePage() {
           ? { type: "post" as const, id: item.data.id }
           : { type: "product" as const, id: item.data.id }
 
-      const loaded = await loadFeedComments(supabase, target)
+      const loaded = await loadFeedComments(supabase, target, user?.id)
       setComments(loaded)
     } catch (error) {
       console.error("openComments", error)
-      toast.error("Erreur lors du chargement des commentaires")
+      toast.error("Impossible de charger les commentaires. Réessayez.")
     } finally {
       setLoadingComments(false)
     }
   }
 
+  const toggleCommentLike = async (commentId: string) => {
+    if (!user) {
+      toast.error("Connectez-vous pour aimer un commentaire.")
+      return
+    }
+    // Optimiste
+    const patch = (list: Comment[]): Comment[] =>
+      list.map((c) => {
+        if (c.id === commentId) {
+          const liked = !c.liked_by_me
+          return {
+            ...c,
+            liked_by_me: liked,
+            likes_count: Math.max(0, (c.likes_count || 0) + (liked ? 1 : -1)),
+          }
+        }
+        if (c.replies?.length) return { ...c, replies: patch(c.replies) }
+        return c
+      })
+    setComments((prev) => patch(prev))
+
+    try {
+      const res = await fetch("/api/comments/like", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ commentId }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setComments((prev) => patch(prev)) // revert
+        toast.error(data.error || "Impossible d'aimer ce commentaire.")
+        return
+      }
+      const apply = (list: Comment[]): Comment[] =>
+        list.map((c) => {
+          if (c.id === commentId) {
+            return { ...c, liked_by_me: !!data.liked, likes_count: Number(data.likes_count || 0) }
+          }
+          if (c.replies?.length) return { ...c, replies: apply(c.replies) }
+          return c
+        })
+      setComments((prev) => apply(prev))
+    } catch {
+      setComments((prev) => patch(prev))
+      toast.error("Connexion interrompue. Réessayez.")
+    }
+  }
+
   const submitComment = async (voice: { file: File; url: string } | null) => {
     if (!user) {
-      toast.error("Connectez-vous pour commenter")
+      toast.error("Connectez-vous pour commenter.")
       return
     }
     const hasText = !!newComment.trim()
@@ -421,17 +475,15 @@ export default function HomePage() {
       form.append("id", selectedItem.data.id)
       if (hasText) form.append("text", newComment.trim())
       if (hasVoice && voice) form.append("audio", voice.file)
+      if (replyTo && selectedItem.type === "post") {
+        form.append("parentCommentId", replyTo.id)
+      }
 
       const res = await fetch("/api/comments", { method: "POST", body: form })
       const payload = await res.json().catch(() => ({}))
 
       if (!res.ok) {
-        const msg = payload.error || "Erreur lors de l'envoi du commentaire"
-        if (payload.code === "SCHEMA") {
-          toast.error(msg, { duration: 6000 })
-        } else {
-          toast.error(msg)
-        }
+        toast.error(payload.error || "Impossible d'envoyer votre message.")
         return
       }
 
@@ -440,27 +492,43 @@ export default function HomePage() {
         voiceStored: boolean
       }
 
-      setComments((prev) => [created, ...prev])
-
-      const newCount = selectedItem.data.comments_count + 1
-      setFeed((prev) =>
-        prev.map((f) =>
-          f.data.id === selectedItem.data.id
-            ? { ...f, data: { ...f.data, comments_count: newCount } }
-            : f,
-        ),
-      )
-      setSelectedItem((prev) =>
-        prev ? { ...prev, data: { ...prev.data, comments_count: newCount } } : prev,
-      )
+      if (replyTo) {
+        const inject = (list: Comment[]): Comment[] =>
+          list.map((c) => {
+            if (c.id === replyTo.id) {
+              return { ...c, replies: [...(c.replies || []), created] }
+            }
+            if (c.replies?.length) return { ...c, replies: inject(c.replies) }
+            return c
+          })
+        setComments((prev) => inject(prev))
+      } else {
+        setComments((prev) => [created, ...prev])
+        const newCount = selectedItem.data.comments_count + 1
+        setFeed((prev) =>
+          prev.map((f) =>
+            f.data.id === selectedItem.data.id
+              ? { ...f, data: { ...f.data, comments_count: newCount } }
+              : f,
+          ),
+        )
+        setSelectedItem((prev) =>
+          prev ? { ...prev, data: { ...prev.data, comments_count: newCount } } : prev,
+        )
+      }
 
       setNewComment("")
+      setReplyTo(null)
       toast.success(
-        voiceStored ? "Commentaire vocal publié" : hasVoice ? "Commentaire publié (texte uniquement)" : "Commentaire publié",
+        replyTo
+          ? "Réponse envoyée"
+          : voiceStored
+            ? "Votre note vocale est publiée"
+            : "Commentaire publié",
       )
     } catch (error) {
       console.error("[comments]", error)
-      toast.error("Erreur lors de l'envoi du commentaire")
+      toast.error("Impossible d'envoyer votre message. Réessayez.")
     } finally {
       setSubmittingComment(false)
     }
@@ -483,7 +551,6 @@ export default function HomePage() {
       ? `Découvrez ${(shareItem.data as Product).name} sur GWA`
       : `${(shareItem.data as Post).content?.slice(0, 100)}...`
 
-    // Mettre à jour le compteur de partages
     try {
       const countTable = shareItem.type === "post" ? "posts" : "products"
       const newCount = shareItem.data.shares_count + 1
@@ -511,12 +578,15 @@ export default function HomePage() {
         break
       case "copy":
         await navigator.clipboard.writeText(url)
-        toast.success("Lien copié dans le presse-papiers")
+        toast.success("Lien copié — merci de partager GWA !")
         break
     }
 
     setShowShareSheet(false)
     setShareItem(null)
+    if (platform !== "copy") {
+      toast.success("Merci d'avoir partagé !")
+    }
   }
 
   // Suivre un utilisateur
@@ -612,6 +682,13 @@ export default function HomePage() {
             </Link>
             <div className="flex items-center gap-2">
               <ListenRitualBadge streak={listenStreak} />
+              <Link
+                href="/marketplace?digest=1"
+                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full bg-[#1F5C2E]/8 text-[#1F5C2E] text-xs font-semibold active:scale-95 transition-transform"
+                aria-label="Ouvrir le Harmattan Digest"
+              >
+                Digest
+              </Link>
               <ListenModeToggle compact className="shrink-0" />
               <Link href="/recherche">
                 <Button variant="ghost" size="icon" className="rounded-full h-10 w-10">
@@ -828,6 +905,7 @@ export default function HomePage() {
           if (!open) {
             setSelectedItem(null)
             setNewComment("")
+            setReplyTo(null)
           }
         }}
       >
@@ -851,40 +929,34 @@ export default function HomePage() {
                 ))
               ) : comments.length === 0 ? (
                 <p className="text-center text-[#4B5563] py-8">
-                  Aucun commentaire pour le moment. Soyez le premier à commenter !
+                  Soyez le premier à réagir !
                 </p>
               ) : (
-                comments.map(comment => (
-                  <div key={comment.id} className="flex gap-3">
-                    <Avatar className="h-8 w-8">
-                      <AvatarImage src={comment.author?.avatar_url || ""} />
-                      <AvatarFallback className="bg-[#2F7D32] text-white text-xs">
-                        {comment.author?.full_name?.charAt(0) || "?"}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1">
-                      <div className="bg-[#F9FAFB] rounded-2xl px-3 py-2 border border-[#E5E7EB]/60">
-                        <p className="font-medium text-sm text-[#111827] mb-1.5">
-                          {comment.author?.full_name || "Utilisateur"}
-                        </p>
-                        <ClickableListenText
-                          text={comment.content}
-                          audioUrl={comment.audio_url}
-                          fallbackLabel={VOICE_COMMENT_PLACEHOLDER}
-                          textClassName="text-sm"
-                          highlight={listenMode}
-                        />
-                      </div>
-                      <p className="text-xs text-[#9CA3AF] mt-1 ml-2">
-                        {formatTimeAgo(comment.created_at)}
-                      </p>
-                    </div>
-                  </div>
+                comments.map((comment) => (
+                  <CommentThread
+                    key={comment.id}
+                    comment={comment}
+                    formatTimeAgo={formatTimeAgo}
+                    listenMode={listenMode}
+                    canReply={selectedItem?.type === "post"}
+                    onLike={toggleCommentLike}
+                    onReply={(c) => setReplyTo(c)}
+                  />
                 ))
               )}
           </div>
 
-          <div className="shrink-0 pb-safe-bottom">
+          <div className="shrink-0 pb-safe-bottom space-y-2">
+            {replyTo && (
+              <div className="flex items-center justify-between rounded-xl bg-[#FFF6E5] px-3 py-2 text-xs text-[#4B5563]">
+                <span className="truncate">
+                  Réponse à <strong>{replyTo.author?.full_name || "ce commentaire"}</strong>
+                </span>
+                <button type="button" className="text-[#2F7D32] font-medium" onClick={() => setReplyTo(null)}>
+                  Annuler
+                </button>
+              </div>
+            )}
             <CommentComposer
               userInitial={user?.email?.charAt(0)?.toUpperCase() || "?"}
               value={newComment}
@@ -893,7 +965,7 @@ export default function HomePage() {
               submitting={submittingComment}
               loggedIn={!!user}
               onAuthRequired={() => {
-                toast.error("Connectez-vous pour commenter")
+                toast.error("Connectez-vous pour commenter.")
                 router.push("/auth/login?redirect=/")
               }}
             />
@@ -1409,3 +1481,84 @@ function FeedCard({
     </article>
   )
 }
+
+function CommentThread({
+  comment,
+  formatTimeAgo,
+  listenMode,
+  canReply,
+  onLike,
+  onReply,
+  depth = 0,
+}: {
+  comment: Comment
+  formatTimeAgo: (date: string) => string
+  listenMode: boolean
+  canReply: boolean
+  onLike: (id: string) => void
+  onReply: (c: Comment) => void
+  depth?: number
+}) {
+  return (
+    <div className={cn("space-y-3", depth > 0 && "ml-8")}>
+      <div className="flex gap-3">
+        <Avatar className="h-8 w-8 shrink-0">
+          <AvatarImage src={comment.author?.avatar_url || ""} />
+          <AvatarFallback className="bg-[#2F7D32] text-white text-xs">
+            {comment.author?.full_name?.charAt(0) || "?"}
+          </AvatarFallback>
+        </Avatar>
+        <div className="flex-1 min-w-0">
+          <div className="bg-[#F9FAFB] rounded-2xl px-3 py-2 border border-[#E5E7EB]/60">
+            <p className="font-medium text-sm text-[#111827] mb-1.5">
+              {comment.author?.full_name || "Membre GWA"}
+            </p>
+            <ClickableListenText
+              text={comment.content}
+              audioUrl={comment.audio_url}
+              fallbackLabel={VOICE_COMMENT_PLACEHOLDER}
+              textClassName="text-sm"
+              highlight={listenMode}
+            />
+          </div>
+          <div className="flex items-center gap-3 mt-1 ml-2 text-xs text-[#9CA3AF]">
+            <span>{formatTimeAgo(comment.created_at)}</span>
+            <button
+              type="button"
+              onClick={() => onLike(comment.id)}
+              className={cn(
+                "inline-flex items-center gap-1 font-medium",
+                comment.liked_by_me ? "text-[#F39A1F]" : "text-[#4B5563]",
+              )}
+            >
+              <Heart className={cn("h-3.5 w-3.5", comment.liked_by_me && "fill-current")} />
+              {(comment.likes_count || 0) > 0 ? comment.likes_count : "J'aime"}
+            </button>
+            {canReply && depth < 2 && (
+              <button
+                type="button"
+                onClick={() => onReply(comment)}
+                className="font-medium text-[#4B5563]"
+              >
+                Répondre
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+      {(comment.replies || []).map((reply) => (
+        <CommentThread
+          key={reply.id}
+          comment={reply}
+          formatTimeAgo={formatTimeAgo}
+          listenMode={listenMode}
+          canReply={canReply}
+          onLike={onLike}
+          onReply={onReply}
+          depth={depth + 1}
+        />
+      ))}
+    </div>
+  )
+}
+

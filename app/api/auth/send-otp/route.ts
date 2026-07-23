@@ -70,7 +70,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error:
-            "SMS non configuré. Ajoutez AT_USERNAME + AT_API_KEY (Africa's Talking) sur Vercel.",
+            "L'envoi de SMS est temporairement indisponible. Réessayez plus tard ou utilisez l'email.",
           code: "SMS_PROVIDER_MISSING",
         },
         { status: 503 },
@@ -188,7 +188,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error:
-            "SMS non configuré. Ajoutez TWILIO_* ou AT_API_KEY sur Vercel.",
+            "L'envoi de SMS est temporairement indisponible. Réessayez plus tard ou utilisez l'email.",
           code: "SMS_PROVIDER_MISSING",
         },
         { status: 503 },

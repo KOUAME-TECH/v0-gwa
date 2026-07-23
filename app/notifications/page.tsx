@@ -13,6 +13,8 @@ import {
   AlertCircle,
   CheckCheck,
   ChevronLeft,
+  ShieldCheck,
+  Radio,
 } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { fr } from "date-fns/locale"
@@ -39,6 +41,9 @@ const notificationIcons: Record<string, typeof Bell> = {
   review: Star,
   product: Package,
   alert: AlertCircle,
+  verification: ShieldCheck,
+  digest: Radio,
+  system: Bell,
   default: Bell,
 }
 
@@ -49,6 +54,9 @@ const notificationColors: Record<string, string> = {
   review: "bg-yellow-500/10 text-yellow-600",
   product: "bg-orange-500/10 text-orange-600",
   alert: "bg-red-500/10 text-red-600",
+  verification: "bg-emerald-500/10 text-emerald-700",
+  digest: "bg-amber-500/10 text-amber-700",
+  system: "bg-muted text-muted-foreground",
   default: "bg-muted text-muted-foreground",
 }
 

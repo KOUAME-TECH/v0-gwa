@@ -1,4 +1,4 @@
-/** Texte TTS pour un produit (accessibilité — utilisateurs qui ne lisent pas). */
+/** Texte TTS naturel pour un produit (phrases fluides, pauses à la voix). */
 
 export type ProductListenInput = {
   name: string
@@ -15,29 +15,50 @@ function formatPriceFr(price: number): string {
   return new Intl.NumberFormat("fr-FR").format(price)
 }
 
-/** Phrase naturelle pour synthèse vocale ou affichage « écouter ». */
-export function buildProductListenText(product: ProductListenInput): string {
-  const parts: string[] = []
+function unitSpoken(unit?: string | null): string {
+  const u = (unit || "kg").toLowerCase().trim()
+  if (u === "kg" || u === "kilogramme" || u === "kilo") return "le kilo"
+  if (u === "g" || u === "gramme") return "le gramme"
+  if (u === "l" || u === "litre") return "le litre"
+  if (u === "sac" || u === "sacs") return "le sac"
+  if (u === "pièce" || u === "piece" || u === "pce") return "la pièce"
+  if (u === "botte" || u === "bottes") return "la botte"
+  return `le ${u}`
+}
 
-  parts.push(product.name)
-  parts.push(`${formatPriceFr(product.price)} francs CFA le ${product.unit || "kilogramme"}`)
+function softenDescription(raw: string): string {
+  const t = raw.trim().replace(/\s+/g, " ")
+  if (t.length <= 160) return t
+  const cut = t.slice(0, 157)
+  const last = Math.max(cut.lastIndexOf("."), cut.lastIndexOf(","), cut.lastIndexOf(" "))
+  return `${(last > 40 ? cut.slice(0, last) : cut).trim()}…`
+}
+
+/**
+ * Phrase naturelle pour synthèse vocale.
+ * Points et virgules = pauses TTS (voix plus humaine, moins robot).
+ */
+export function buildProductListenText(product: ProductListenInput): string {
+  const name = product.name?.trim() || "Produit"
+  const price = formatPriceFr(product.price)
+  const unit = unitSpoken(product.unit)
+
+  const chunks: string[] = []
+  chunks.push(`Voici ${name}.`)
+  chunks.push(`Il est à ${price} francs CFA, ${unit}.`)
 
   if (product.description?.trim()) {
-    parts.push(product.description.trim())
+    chunks.push(softenDescription(product.description))
   }
 
   const origin = product.origin_region || product.origin_country
   if (origin?.trim()) {
-    parts.push(`Origine ${origin.trim()}`)
-  }
-
-  if (product.product_type?.trim()) {
-    parts.push(`Catégorie ${product.product_type.replace(/_/g, " ")}`)
+    chunks.push(`Il vient de ${origin.trim()}.`)
   }
 
   if (product.is_organic) {
-    parts.push("Produit biologique")
+    chunks.push("C'est un produit biologique.")
   }
 
-  return parts.join(". ")
+  return chunks.join(" ")
 }
