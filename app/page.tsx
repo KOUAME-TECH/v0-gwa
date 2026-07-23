@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
@@ -145,6 +145,10 @@ export default function HomePage() {
   // Suppression d'une publication (post) — propriétaire uniquement
   const [pendingDeletePost, setPendingDeletePost] = useState<Post | null>(null)
   const [deletingPost, setDeletingPost] = useState(false)
+  const [pullY, setPullY] = useState(0)
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshKey, setRefreshKey] = useState(0)
+  const pullStartY = useRef<number | null>(null)
 
   const supabase = createClient()
 
@@ -264,6 +268,7 @@ export default function HomePage() {
 
       setFeed(feedItems)
       setIsLoading(false)
+      setRefreshing(false)
     }
     loadData()
     const onNotifUpdated = () => {
@@ -283,7 +288,8 @@ export default function HomePage() {
     }
     window.addEventListener("gwa:notifications-updated", onNotifUpdated)
     return () => window.removeEventListener("gwa:notifications-updated", onNotifUpdated)
-  }, [supabase])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supabase, refreshKey])
 
   const formatPrice = (price: number) => new Intl.NumberFormat("fr-FR").format(price)
   
@@ -667,7 +673,35 @@ export default function HomePage() {
       </header>
 
       {/* Feed */}
-      <div className="px-3 pt-3 pb-2 space-y-3">
+      <div
+        className="px-3 pt-3 pb-2 space-y-3"
+        onTouchStart={(e) => {
+          if (typeof window !== "undefined" && window.scrollY <= 0) {
+            pullStartY.current = e.touches[0]?.clientY ?? null
+          } else {
+            pullStartY.current = null
+          }
+        }}
+        onTouchMove={(e) => {
+          if (pullStartY.current == null || refreshing) return
+          const y = e.touches[0]?.clientY ?? pullStartY.current
+          const delta = Math.max(0, y - pullStartY.current)
+          if (delta > 12) setPullY(Math.min(delta * 0.45, 72))
+        }}
+        onTouchEnd={() => {
+          if (pullY > 56 && !refreshing) {
+            setRefreshing(true)
+            setRefreshKey((k) => k + 1)
+          }
+          setPullY(0)
+          pullStartY.current = null
+        }}
+      >
+        {(pullY > 8 || refreshing) && (
+          <div className="flex justify-center text-xs text-[#2F7D32] py-1">
+            {refreshing ? "Actualisation…" : pullY > 56 ? "Relâchez pour actualiser" : "Tirez pour actualiser"}
+          </div>
+        )}
         {isLoading ? (
           Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="bg-white p-4 rounded-2xl shadow-sm">
@@ -983,6 +1017,8 @@ function FeedCard({
   
   const [isVideoPlaying, setIsVideoPlaying] = useState(false)
   const [lightboxOpen, setLightboxOpen] = useState(false)
+  const lastTapRef = useRef(0)
+  const touchStartX = useRef<number | null>(null)
   
   const isProduct = item.type === "product"
   const data = item.data
@@ -1131,13 +1167,43 @@ function FeedCard({
         </div>
       )}
 
-      {/* Images — format agréable 4:5, coins arrondis */}
+      {/* Images — format agréable 4:5, double-tap like, swipe */}
       {!hasVideo && medias && medias.length > 0 && (
         <div className="relative mx-2 mb-1">
           <button
             type="button"
-            className="relative aspect-[4/5] max-h-[70vh] bg-gradient-to-b from-[#F3F4F6] to-[#E8E4DC] overflow-hidden w-full block rounded-xl active:opacity-95"
-            onClick={() => setLightboxOpen(true)}
+            className="relative aspect-[4/5] max-h-[70vh] bg-gradient-to-b from-[#E8F0E9] to-[#E8E4DC] overflow-hidden w-full block rounded-xl active:opacity-95"
+            onClick={() => {
+              const now = Date.now()
+              if (now - lastTapRef.current < 280) {
+                lastTapRef.current = 0
+                onLike()
+                return
+              }
+              lastTapRef.current = now
+              window.setTimeout(() => {
+                if (lastTapRef.current === now) setLightboxOpen(true)
+              }, 290)
+            }}
+            onTouchStart={(e) => {
+              touchStartX.current = e.changedTouches[0]?.clientX ?? null
+            }}
+            onTouchEnd={(e) => {
+              if (!hasMultipleImages || touchStartX.current == null) return
+              const endX = e.changedTouches[0]?.clientX ?? touchStartX.current
+              const delta = endX - touchStartX.current
+              touchStartX.current = null
+              if (Math.abs(delta) < 50) return
+              if (delta < 0) {
+                setCurrentImageIndex((prev) =>
+                  prev < medias.length - 1 ? prev + 1 : 0,
+                )
+              } else {
+                setCurrentImageIndex((prev) =>
+                  prev > 0 ? prev - 1 : medias.length - 1,
+                )
+              }
+            }}
             aria-label="Agrandir l'image"
           >
             <Image
@@ -1286,7 +1352,7 @@ function FeedCard({
         </div>
       )}
 
-      {/* Actions prioritaires : like + comment (+ acheter pour produit) */}
+      {/* Actions prioritaires : like + comment + partager (+ acheter pour produit) */}
       <div className="flex items-center gap-1 px-2.5 py-2.5">
         <button
           type="button"
@@ -1318,6 +1384,15 @@ function FeedCard({
           {(data.comments_count || 0) > 0 && (
             <span className="text-sm font-medium tabular-nums">{data.comments_count}</span>
           )}
+        </button>
+
+        <button
+          type="button"
+          onClick={onShare}
+          className="flex items-center gap-1.5 px-2.5 py-2 rounded-full text-[#4B5563] active:bg-[#FFF6E5] transition-colors"
+          aria-label="Partager"
+        >
+          <Share2 className="h-6 w-6" />
         </button>
 
         {isProduct && (

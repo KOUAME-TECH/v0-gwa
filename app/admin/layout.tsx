@@ -36,6 +36,7 @@ import {
   ChevronDown,
   Home,
   Banknote,
+  MessageSquare,
 } from "lucide-react"
 import {
   ADMIN_ROLE_LABELS,
@@ -53,6 +54,7 @@ const NAV_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   Commandes: ShoppingCart,
   Cooperatives: Building2,
   Signalements: Flag,
+  Support: MessageSquare,
   Litiges: AlertTriangle,
   Verifications: Shield,
   "SCG Config": Shield,

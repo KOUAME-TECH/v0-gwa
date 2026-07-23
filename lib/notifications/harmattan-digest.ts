@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { sendPushToUser } from "@/lib/notifications/push"
 import {
   digestSinceHours,
-  filterDigestProducts,
+  selectDigestProducts,
   type DigestProduct,
   type DigestProfile,
 } from "@/lib/products/digest"
@@ -31,7 +31,6 @@ function buildDigestUrl(since: Date, productIds: string[]): string {
 /** Envoie le digest quotidien à tous les utilisateurs éligibles. */
 export async function runHarmattanDigest(): Promise<DigestRunResult> {
   const admin = createAdminClient()
-  const since = digestSinceHours(24)
   const result: DigestRunResult = {
     usersProcessed: 0,
     pushesSent: 0,
@@ -40,33 +39,21 @@ export async function runHarmattanDigest(): Promise<DigestRunResult> {
     errors: 0,
   }
 
-  // Produits récents — fallback sans filtre date si colonne/created_at KO
+  // Catalogue actif — plus large que 24h (fallback digest)
   let recentProducts: DigestProduct[] = []
   {
     const { data: products, error: productsError } = await admin
       .from("products")
       .select(PRODUCT_SELECT)
       .eq("status", "active")
-      .gte("created_at", since.toISOString())
       .order("created_at", { ascending: false })
       .limit(200)
 
     if (productsError) {
-      console.warn("[harmattan-digest] products filter fallback", productsError.message)
-      const { data: fallbackProducts, error: fbErr } = await admin
-        .from("products")
-        .select(PRODUCT_SELECT)
-        .eq("status", "active")
-        .order("created_at", { ascending: false })
-        .limit(50)
-      if (fbErr) {
-        console.error("[harmattan-digest] products unavailable", fbErr.message)
-        return { ...result, errors: result.errors + 1 }
-      }
-      recentProducts = (fallbackProducts ?? []) as DigestProduct[]
-    } else {
-      recentProducts = (products ?? []) as DigestProduct[]
+      console.error("[harmattan-digest] products unavailable", productsError.message)
+      return { ...result, errors: result.errors + 1 }
     }
+    recentProducts = (products ?? []) as DigestProduct[]
   }
 
   if (recentProducts.length === 0) {
@@ -78,14 +65,13 @@ export async function runHarmattanDigest(): Promise<DigestRunResult> {
   const { data: profiles, error: profilesError } = await admin
     .from("profiles")
     .select(profileSelect)
-    .not("city", "is", null)
+    .or("city.not.is.null,country.not.is.null")
 
   if (profilesError) {
-    // Colonnes digest absentes — fallback sans digest_enabled
     const { data: fallbackProfiles, error: fallbackError } = await admin
       .from("profiles")
       .select("id, city, country, onesignal_player_id")
-      .not("city", "is", null)
+      .or("city.not.is.null,country.not.is.null")
 
     if (fallbackError) {
       console.error("[harmattan-digest] profiles unavailable", fallbackError.message)
@@ -93,7 +79,7 @@ export async function runHarmattanDigest(): Promise<DigestRunResult> {
     }
 
     for (const raw of fallbackProfiles ?? []) {
-      await sendDigestToUser(admin, raw as DigestProfile, recentProducts, since, result, true)
+      await sendDigestToUser(admin, raw as DigestProfile, recentProducts, result, true)
     }
     return result
   }
@@ -104,7 +90,7 @@ export async function runHarmattanDigest(): Promise<DigestRunResult> {
       result.skippedOptOut++
       continue
     }
-    await sendDigestToUser(admin, profile, recentProducts, since, result, false)
+    await sendDigestToUser(admin, profile, recentProducts, result, false)
   }
 
   return result
@@ -114,13 +100,13 @@ async function sendDigestToUser(
   admin: ReturnType<typeof createAdminClient>,
   profile: DigestProfile,
   allProducts: DigestProduct[],
-  since: Date,
   result: DigestRunResult,
   skipLastSentUpdate: boolean,
 ) {
   result.usersProcessed++
 
-  const matched = filterDigestProducts(allProducts, profile, since)
+  const selection = selectDigestProducts(allProducts, profile, 10)
+  const matched = selection.products
   if (matched.length === 0) {
     result.skippedNoProducts++
     return
@@ -131,9 +117,9 @@ async function sendDigestToUser(
   const title = `Harmattan Digest — ${cityLabel}`
   const body =
     count === 1
-      ? "1 nouveau produit près de chez vous"
-      : `${count} nouveaux produits près de chez vous`
-  const url = buildDigestUrl(since, matched.map((p) => p.id))
+      ? "1 produit à écouter près de chez vous"
+      : `${count} produits à écouter près de chez vous`
+  const url = buildDigestUrl(selection.since, matched.map((p) => p.id))
 
   try {
     await admin.from("notifications").insert({
@@ -145,25 +131,38 @@ async function sendDigestToUser(
       link: url,
       is_read: false,
       read: false,
+      data: {
+        type: "harmattan_digest",
+        product_ids: matched.map((p) => p.id),
+        since: selection.since.toISOString(),
+        mode: selection.mode,
+      },
     })
 
     const push = await sendPushToUser(admin as never, profile.id, {
       title,
       body,
       url,
-      data: { type: "harmattan_digest", product_ids: matched.map((p) => p.id), since: since.toISOString() },
+      data: {
+        type: "harmattan_digest",
+        product_ids: matched.map((p) => p.id),
+        since: selection.since.toISOString(),
+        mode: selection.mode,
+      },
     })
 
+    // Notif in-app = succès même si push OneSignal échoue
+    if (!skipLastSentUpdate) {
+      await admin
+        .from("profiles")
+        .update({ digest_last_sent_at: new Date().toISOString() })
+        .eq("id", profile.id)
+    }
     if (push.success) {
       result.pushesSent++
-      if (!skipLastSentUpdate) {
-        await admin
-          .from("profiles")
-          .update({ digest_last_sent_at: new Date().toISOString() })
-          .eq("id", profile.id)
-      }
     } else {
-      result.errors++
+      // push KO n'annule pas le digest (in-app OK)
+      console.warn("[harmattan-digest] push failed", profile.id, push)
     }
   } catch (err) {
     console.error("[harmattan-digest] user", profile.id, err)

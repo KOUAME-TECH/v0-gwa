@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Search, SlidersHorizontal, MapPin, Heart, X, ChevronLeft, ShoppingCart, Plus } from "lucide-react"
+import { Search, SlidersHorizontal, MapPin, Heart, X, ChevronLeft, ShoppingCart, Plus, ShoppingBag } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
@@ -18,8 +18,8 @@ import { DigestBanner } from "@/components/media/digest-banner"
 import { useShopVoiceTour } from "@/hooks/use-shop-voice-tour"
 import { useRealtimeLocation } from "@/hooks/use-realtime-location"
 import {
-  digestSinceHours,
-  filterDigestProducts,
+  digestModeLabel,
+  selectDigestProducts,
 } from "@/lib/products/digest"
 
 type Product = {
@@ -237,40 +237,51 @@ function MarketplaceContent() {
   const fmt = (n: number) => new Intl.NumberFormat("fr-FR").format(n)
   const activeFiltersCount = (selectedType !== "all" ? 1 : 0) + (selectedCategory !== "all" ? 1 : 0)
 
-  const digestProducts = useMemo(() => {
-    const since = digestSinceHours(24)
+  const digestSelection = useMemo(() => {
+    const profile = {
+      id: userId || "anon",
+      city: userCity || geoCity,
+      country: userCountry || geoCountry,
+    }
 
     // Deep-link push Digest (?digest=1&ids=…)
     if (isDigest) {
       let list = products
-      if (sinceParam) {
-        const sinceMs = new Date(sinceParam).getTime()
-        if (!Number.isNaN(sinceMs)) {
-          list = list.filter((p) => {
-            if (!p.created_at) return true
-            const createdMs = new Date(p.created_at).getTime()
-            return Number.isNaN(createdMs) || createdMs >= sinceMs
-          })
-        }
-      }
       if (idsParam) {
         const ids = new Set(idsParam.split(",").filter(Boolean))
-        if (ids.size > 0) list = list.filter((p) => ids.has(p.id))
+        if (ids.size > 0) {
+          list = list.filter((p) => ids.has(p.id))
+          if (list.length > 0) {
+            return {
+              products: list,
+              mode: "regional_24h" as const,
+              since: sinceParam ? new Date(sinceParam) : new Date(),
+            }
+          }
+        }
       }
-      return list
+      // Pas d'ids / ids introuvables → sélection intelligente (pas tout le catalogue)
+      return selectDigestProducts(products, profile, 10)
     }
 
-    // Digest ≠ Parcours : nouveautés locales (région + 24h)
-    const regional = filterDigestProducts(
-      products,
-      { id: userId || "anon", city: userCity, country: userCountry },
-      since,
-    )
-    if (regional.length > 0) return regional
+    return selectDigestProducts(products, profile, 10)
+  }, [
+    products,
+    idsParam,
+    isDigest,
+    sinceParam,
+    userCity,
+    userCountry,
+    userId,
+    geoCity,
+    geoCountry,
+  ])
 
-    // Fallback UI : les 5 plus récents (catalogue déjà trié) — pas le Parcours complet
-    return products.slice(0, 5)
-  }, [products, idsParam, isDigest, sinceParam, userCity, userCountry, userId])
+  const digestProducts = digestSelection.products
+  const digestSubtitle = digestModeLabel(
+    digestSelection.mode,
+    userCity || geoCity || geoLabel,
+  )
 
   const parcoursProducts = useMemo(
     () =>
@@ -401,7 +412,9 @@ function MarketplaceContent() {
           {p.images?.[0] ? (
             <Image src={p.images[0]} alt={p.name} fill className="object-cover" sizes="50vw" loading="lazy" />
           ) : (
-            <div className="w-full h-full bg-muted flex items-center justify-center text-3xl">{"📦"}</div>
+            <div className="w-full h-full bg-gradient-to-br from-[#E8F0E9] via-[#FFF6E5] to-[#E8E4DC] flex items-center justify-center">
+              <ShoppingBag className="h-10 w-10 text-[#2F7D32]/40" />
+            </div>
           )}
           <button onClick={(e) => toggleFavorite(p.id, e)}
             className="absolute top-2 right-2 w-8 h-8 bg-white/80 backdrop-blur-sm rounded-full flex items-center justify-center">
@@ -533,16 +546,28 @@ function MarketplaceContent() {
 
       {/* Content */}
       <main className="p-4 sm:p-5">
-        {/* Digest visible seulement via notification (?digest=1) — pas en permanence dans le shop */}
-        {isDigest && digestProducts.length > 0 && (
+        {/* Digest visible dans la boutique (et via ?digest=1) */}
+        {digestProducts.length > 0 && (
           <DigestBanner
             count={digestProducts.length}
             city={userCity || geoCity || geoLabel}
+            subtitle={`${digestProducts.length} · ${digestSubtitle}. Écouter`}
             tourActive={digest.active}
             tourIndex={digest.index}
             tourTotal={digest.total}
             onStartTour={handleDigestClick}
           />
+        )}
+        {digestProducts.length === 0 && !isLoading && (
+          <button
+            type="button"
+            onClick={() => {
+              toast.message("Catalogue vide. Revenez plus tard ou lancez le Parcours.")
+            }}
+            className="mb-3 w-full rounded-2xl border border-dashed border-[#1F5C2E]/25 bg-white px-3 py-2.5 text-left text-xs text-[#4B5563]"
+          >
+            Digest : aucun produit à écouter pour le moment
+          </button>
         )}
         {(parcours.active || digest.active) && (
           <div className="mb-3 rounded-xl bg-[#1F5C2E] text-white px-3 py-2 text-xs font-medium flex items-center justify-between gap-2">

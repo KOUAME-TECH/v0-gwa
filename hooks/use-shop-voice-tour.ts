@@ -13,6 +13,13 @@ export type ShopTourProduct = ProductListenInput & {
 const SILENT_WAV_B64 =
   "UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="
 
+/** Pause entre deux produits (ms) — assez longue pour comprendre */
+const GAP_MS = 1_100
+/** Débit TTS plus lent pour Afrique / bruits ambiants */
+const TTS_RATE = 0.82
+/** Temps mini d'écoute par produit même si TTS échoue (ms) */
+const MIN_DWELL_MS = 3_500
+
 function makeSilentBlobUrl(): string | null {
   try {
     const bin = atob(SILENT_WAV_B64)
@@ -33,7 +40,6 @@ function pickVoice(lang: string): SpeechSynthesisVoice | null {
   return (
     voices.find((v) => v.lang?.toLowerCase() === wanted) ||
     voices.find((v) => v.lang?.toLowerCase().startsWith(prefix)) ||
-    // Langues locales sans voix appareil → français
     voices.find((v) => v.lang?.toLowerCase().startsWith("fr")) ||
     voices.find((v) => v.default) ||
     voices[0] ||
@@ -56,12 +62,12 @@ function unlockAudioGesture() {
       osc.connect(gain)
       gain.connect(ctx.destination)
       osc.start()
-      osc.stop(ctx.currentTime + 0.03)
+      osc.stop(ctx.currentTime + 0.05)
       window.setTimeout(() => {
         void ctx.close().catch(() => {
           /* ignore */
         })
-      }, 200)
+      }, 300)
     }
   } catch {
     /* ignore */
@@ -84,9 +90,14 @@ function unlockAudioGesture() {
   }
 }
 
+function estimateSpeakMs(text: string, rate: number): number {
+  // ~12 caractères / seconde à rate 1
+  const chars = Math.max(text.length, 24)
+  return Math.max(MIN_DWELL_MS, Math.round((chars / 12) * 1000 * (1 / rate)))
+}
+
 /**
- * Parcours / Digest vocal.
- * Démarre dans le geste utilisateur + keepalive Chrome speechSynthesis.
+ * Parcours / Digest vocal — rythme lent, TTS fiable, pas de course.
  */
 export function useShopVoiceTour(products: ShopTourProduct[]) {
   const [active, setActive] = useState(false)
@@ -97,41 +108,55 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
   const activeRef = useRef(false)
   const productsRef = useRef(products)
   const resumeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const playedCountRef = useRef(0)
+  const gapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const dwellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   productsRef.current = products
 
-  const clearResumeKeepalive = useCallback(() => {
+  const clearTimers = useCallback(() => {
     if (resumeTimerRef.current) {
       clearInterval(resumeTimerRef.current)
       resumeTimerRef.current = null
     }
+    if (gapTimerRef.current) {
+      clearTimeout(gapTimerRef.current)
+      gapTimerRef.current = null
+    }
+    if (dwellTimerRef.current) {
+      clearTimeout(dwellTimerRef.current)
+      dwellTimerRef.current = null
+    }
   }, [])
 
   const startResumeKeepalive = useCallback(() => {
-    clearResumeKeepalive()
-    // Chrome coupe TTS après ~15s sans resume()
+    if (resumeTimerRef.current) clearInterval(resumeTimerRef.current)
     resumeTimerRef.current = setInterval(() => {
       if (stoppedRef.current) return
       try {
-        if (window.speechSynthesis?.speaking) {
+        if (window.speechSynthesis?.paused) {
+          window.speechSynthesis.resume()
+        } else if (window.speechSynthesis?.speaking) {
           window.speechSynthesis.resume()
         }
       } catch {
         /* ignore */
       }
-    }, 8_000)
-  }, [clearResumeKeepalive])
+    }, 5_000)
+  }, [])
 
   const stop = useCallback(() => {
     stoppedRef.current = true
     activeRef.current = false
-    clearResumeKeepalive()
+    clearTimers()
     if (audioRef.current) {
       audioRef.current.pause()
       audioRef.current.onended = null
       audioRef.current.onerror = null
       audioRef.current.removeAttribute("src")
-      audioRef.current.load()
+      try {
+        audioRef.current.load()
+      } catch {
+        /* ignore */
+      }
     }
     if (typeof window !== "undefined" && window.speechSynthesis) {
       try {
@@ -142,7 +167,7 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
     }
     setActive(false)
     setIndex(0)
-  }, [clearResumeKeepalive])
+  }, [clearTimers])
 
   const speakProduct = useCallback(
     (product: ShopTourProduct, onDone: () => void) => {
@@ -152,7 +177,8 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
       }
       if (!window.speechSynthesis) {
         setError("Lecture vocale indisponible sur cet appareil")
-        onDone()
+        // Dwell minimum même sans TTS
+        dwellTimerRef.current = setTimeout(onDone, MIN_DWELL_MS)
         return
       }
 
@@ -162,46 +188,61 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
         return
       }
 
-      // Langue demandée, sinon fr-FR (voix fiables)
       let lang = resolveUtterLang(product.audio_lang)
       let voice = pickVoice(lang)
       if (!voice || !voice.lang?.toLowerCase().startsWith(lang.slice(0, 2).toLowerCase())) {
-        // Pas de voix pour wolof/bambara/etc. → français lisible
         lang = "fr-FR"
         voice = pickVoice("fr-FR")
       }
 
       const utter = new SpeechSynthesisUtterance(text)
       utter.lang = lang
-      utter.rate = 0.95
+      utter.rate = TTS_RATE
+      utter.pitch = 1
       utter.volume = 1
       if (voice) utter.voice = voice
 
       let settled = false
-      const finish = () => {
+      const startedAt = Date.now()
+      const minMs = estimateSpeakMs(text, TTS_RATE)
+
+      const finish = (force = false) => {
         if (settled) return
+        const elapsed = Date.now() - startedAt
+        if (!force && elapsed < minMs && !stoppedRef.current) {
+          // Attendre la fin du dwell pour que l'oreille suive
+          dwellTimerRef.current = setTimeout(() => finish(true), minMs - elapsed)
+          return
+        }
         settled = true
         onDone()
       }
 
-      utter.onend = () => {
-        playedCountRef.current += 1
-        finish()
+      utter.onstart = () => {
+        startResumeKeepalive()
       }
+      utter.onend = () => finish()
       utter.onerror = (ev) => {
-        // interrupted = stop volontaire ou nouveau speak — ne pas enchaîner en double
         const errType = (ev as SpeechSynthesisErrorEvent).error
-        if (errType === "interrupted" || errType === "canceled" || stoppedRef.current) {
+        if (stoppedRef.current) {
+          finish(true)
+          return
+        }
+        // interrupted/canceled pendant un speak volontaire → ignorer si on parle encore
+        if (errType === "interrupted" || errType === "canceled") {
+          if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+            return
+          }
+          // Sinon attendre le dwell puis continuer (évite la course)
           finish()
           return
         }
         console.warn("[shop-voice-tour] TTS error", errType)
-        setError("Son coupé. Réessayez avec le volume activé.")
+        setError("Son coupé. Vérifiez le volume et réessayez.")
         finish()
       }
 
       try {
-        // Relancer si Chrome a mis TTS en pause
         window.speechSynthesis.resume()
       } catch {
         /* ignore */
@@ -209,7 +250,15 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
       window.speechSynthesis.speak(utter)
       startResumeKeepalive()
 
-      // Voix chargées en retard (Safari/Chrome)
+      // Filet de sécurité : si onend ne fire jamais, avancer après estimation
+      dwellTimerRef.current = setTimeout(() => {
+        if (!settled && !stoppedRef.current) {
+          if (!window.speechSynthesis.speaking && !window.speechSynthesis.pending) {
+            finish(true)
+          }
+        }
+      }, minMs + 2_000)
+
       if (!window.speechSynthesis.getVoices().length) {
         const retry = () => {
           window.speechSynthesis.removeEventListener("voiceschanged", retry)
@@ -218,20 +267,17 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
           const lateVoice = pickVoice(lang) || pickVoice("fr-FR")
           const again = new SpeechSynthesisUtterance(text)
           again.lang = lateVoice?.lang || "fr-FR"
-          again.rate = 0.95
+          again.rate = TTS_RATE
           again.volume = 1
           if (lateVoice) again.voice = lateVoice
-          again.onend = () => {
-            playedCountRef.current += 1
-            finish()
-          }
+          again.onend = () => finish()
           again.onerror = () => finish()
           window.speechSynthesis.speak(again)
         }
         window.speechSynthesis.addEventListener("voiceschanged", retry)
         window.setTimeout(() => {
           window.speechSynthesis.removeEventListener("voiceschanged", retry)
-        }, 2000)
+        }, 2500)
       }
     },
     [startResumeKeepalive],
@@ -250,10 +296,9 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
 
       const continueNext = () => {
         if (stoppedRef.current) return
-        // Petite pause naturelle entre produits
-        window.setTimeout(() => {
+        gapTimerRef.current = setTimeout(() => {
           if (!stoppedRef.current) playAt(i + 1)
-        }, 280)
+        }, GAP_MS)
       }
 
       if (product.audio_url) {
@@ -261,16 +306,36 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
         const el = audioRef.current
         el.pause()
         el.src = product.audio_url
-        el.onended = () => {
-          playedCountRef.current += 1
+        let settled = false
+        const finishAudio = () => {
+          if (settled || stoppedRef.current) return
+          settled = true
           continueNext()
         }
-        el.onerror = () => speakProduct(product, continueNext)
+        el.onended = () => {
+          // Audio très court → laisser un mini silence pour l'oreille
+          const playedMs = Math.max(0, (el.currentTime || 0) * 1000)
+          const wait = Math.max(0, Math.min(MIN_DWELL_MS - playedMs, MIN_DWELL_MS))
+          if (wait > 200) {
+            dwellTimerRef.current = setTimeout(finishAudio, wait)
+          } else {
+            finishAudio()
+          }
+        }
+        el.onerror = () => {
+          if (settled) return
+          settled = true
+          speakProduct(product, continueNext)
+        }
         void el.play().then(
           () => {
             /* ok */
           },
-          () => speakProduct(product, continueNext),
+          () => {
+            if (settled) return
+            settled = true
+            speakProduct(product, continueNext)
+          },
         )
         return
       }
@@ -287,7 +352,6 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
       return false
     }
 
-    // Toggle stop si déjà actif
     if (activeRef.current) {
       stop()
       return false
@@ -295,7 +359,6 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
 
     stoppedRef.current = false
     activeRef.current = true
-    playedCountRef.current = 0
     setError(null)
     setActive(true)
     setIndex(0)
@@ -308,16 +371,18 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
 
     unlockAudioGesture()
 
+    // Précharger les voix SANS cancel (cancel tue le 1er speak)
     try {
       window.speechSynthesis?.getVoices()
-      window.speechSynthesis?.cancel()
       window.speechSynthesis?.resume()
     } catch {
       /* ignore */
     }
 
-    // Lancer immédiatement dans le geste utilisateur
-    playAt(0)
+    // Lancer dans le geste utilisateur (léger délai pour laisser unlock finir)
+    window.setTimeout(() => {
+      if (!stoppedRef.current) playAt(0)
+    }, 60)
     return true
   }, [playAt, stop])
 
@@ -336,9 +401,7 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
     index,
     total: products.length,
     error,
-    /** Démarre ou arrête */
     start: toggle,
-    /** Démarre forcément (ne toggle pas) */
     startTour: start,
     stop,
     currentProductId: active ? products[index]?.id ?? null : null,

@@ -8,6 +8,8 @@ import { ShopVoiceTourButton } from "@/components/media/shop-voice-tour-button"
 export type DigestBannerProps = {
   count: number
   city?: string | null
+  /** Sous-titre libre (ex. "sélection de la semaine près de Abidjan") */
+  subtitle?: string | null
   tourActive: boolean
   tourIndex: number
   tourTotal: number
@@ -19,6 +21,7 @@ export type DigestBannerProps = {
 export function DigestBanner({
   count,
   city,
+  subtitle,
   tourActive,
   tourIndex,
   tourTotal,
@@ -28,6 +31,9 @@ export function DigestBanner({
   if (count === 0) return null
 
   const place = city?.trim() || "votre région"
+  const idleLine =
+    subtitle?.trim() ||
+    `${count} nouveau${count > 1 ? "x" : ""} près de ${place}. Écouter`
 
   return (
     <div
@@ -52,7 +58,7 @@ export function DigestBanner({
         <p className="text-xs text-[#4B5563] truncate">
           {tourActive
             ? `${tourIndex + 1}/${tourTotal} · ${place}`
-            : `${count} nouveau${count > 1 ? "x" : ""} près de ${place}. Écouter`}
+            : idleLine}
         </p>
       </div>
       <ShopVoiceTourButton

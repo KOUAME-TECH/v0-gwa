@@ -3,6 +3,7 @@ import {
   matchesUserRegion,
   filterDigestProducts,
   digestSinceHours,
+  selectDigestProducts,
 } from "@/lib/products/digest"
 import { buildCognitiveSummary } from "@/lib/accessibility/cognitive-summary"
 import { audioLangLabel, resolveUtterLang } from "@/lib/media/audio-langs"
@@ -69,6 +70,39 @@ describe("filterDigestProducts", () => {
     const result = filterDigestProducts(products, { id: "u", city: "Dakar" }, since)
     expect(result).toHaveLength(1)
     expect(result[0].id).toBe("a")
+  })
+})
+
+describe("selectDigestProducts", () => {
+  it("élargit la fenêtre puis tombe sur newest si besoin", () => {
+    const products = [
+      {
+        id: "old",
+        name: "Old",
+        price: 1,
+        unit: "kg",
+        origin_region: "Abidjan",
+        created_at: "2026-02-01T10:00:00Z",
+      },
+      {
+        id: "nogeo",
+        name: "NoGeo",
+        price: 1,
+        unit: "kg",
+        created_at: "2026-03-01T10:00:00Z",
+      },
+    ]
+    const regional = selectDigestProducts(products, { id: "u", city: "Abidjan", country: "ci" }, 5)
+    expect(regional.products.some((p) => p.id === "old")).toBe(true)
+    expect(["regional_30d", "regional_7d", "newest"]).toContain(regional.mode)
+
+    const newest = selectDigestProducts(
+      [{ id: "x", name: "X", price: 1, unit: "kg", created_at: "2026-01-01T00:00:00Z" }],
+      { id: "u", city: "Dakar" },
+      5,
+    )
+    expect(newest.mode).toBe("newest")
+    expect(newest.products).toHaveLength(1)
   })
 })
 

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
 import { PLACE_TYPES, placeTypeLabel, type PlaceType, type UserPlace } from "@/lib/location/places"
 import { formatCoords, type RealtimeLocation } from "@/hooks/use-realtime-location"
+import { LocationMapCard } from "@/components/location/location-map-card"
 
 type Props = {
   location: RealtimeLocation | null
@@ -114,6 +115,20 @@ export function PlacesManager({ location, onRequestLocation, locating }: Props) 
           </p>
         )}
       </div>
+
+      {location && (
+        <LocationMapCard
+          lat={location.lat}
+          lon={location.lon}
+          accuracy={location.accuracy}
+          altitude={location.altitude}
+          address={location.address}
+          city={location.city}
+          country={location.country}
+          label={location.label}
+          height={180}
+        />
+      )}
 
       <div className="flex flex-wrap gap-1.5">
         {PLACE_TYPES.map((t) => (
