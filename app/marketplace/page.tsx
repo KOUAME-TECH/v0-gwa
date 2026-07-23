@@ -16,6 +16,7 @@ import { buildProductListenText } from "@/lib/media/product-listen"
 import { ListenModeToggle } from "@/components/media/listen-mode-toggle"
 import { ShopVoiceTourButton } from "@/components/media/shop-voice-tour-button"
 import { DigestBanner } from "@/components/media/digest-banner"
+import { LocationMapCard } from "@/components/location/location-map-card"
 import { AudioLangBadge } from "@/components/media/audio-lang-badge"
 import { useListenMode } from "@/hooks/use-listen-mode"
 import { useShopVoiceTour } from "@/hooks/use-shop-voice-tour"
@@ -78,6 +79,7 @@ function MarketplaceContent() {
   const [userCountry, setUserCountry] = useState<string | null>(null)
   const { enabled: listenMode } = useListenMode()
   const {
+    location: geoLocation,
     city: geoCity,
     country: geoCountry,
     label: geoLabel,
@@ -641,6 +643,21 @@ function MarketplaceContent() {
               Autorisez la localisation pour un Digest près de chez vous
             </span>
           </button>
+        )}
+        {geoLocation && geoStatus === "ready" && (
+          <div className="mb-3">
+            <LocationMapCard
+              lat={geoLocation.lat}
+              lon={geoLocation.lon}
+              accuracy={geoLocation.accuracy}
+              altitude={geoLocation.altitude}
+              address={geoLocation.address}
+              city={geoLocation.city}
+              country={geoLocation.country}
+              label={geoLocation.label}
+              height={140}
+            />
+          </div>
         )}
         {digestProducts.length > 0 && (
           <DigestBanner
