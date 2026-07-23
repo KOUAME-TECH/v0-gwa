@@ -135,73 +135,22 @@ Sections : Dashboard, Utilisateurs, Produits, Commandes, Coopératives, Signalem
 
 ---
 
-## 7. Backlog validé — suggestions par compartiment
+## 7. Backlog validé — tous compartiments
 
-> Statut : **validé produit** (à planifier / implémenter par lots).
+> **Statut : VALIDÉ produit** (23 juil. 2026).  
+> Document exhaustif (pages, BO, auth, wallet, PWA, ops…) :  
+> **[backlog-valide-complet-gwa.md](./backlog-valide-complet-gwa.md)** (~150 items, sections A→S).
 
-### Feed
-- [ ] Fil « Suivis » vs « Pour vous »
-- [ ] Stories 24h producteurs proches
-- [ ] Signaler un commentaire
-- [ ] Réaction 👍 rapide sur post
+### Couverture
+Shell/PWA · Auth/Onboarding · Feed/Commentaires · Boutique/Digest · Recherche/Favoris · Produit/Panier · Chat · Commandes/Escrow/Factures · Wallet · Profil/KYC/SCG · Lieux/Météo/Agriculture · Coopératives · Affacturage · Dashboards · Notifications · Support/Légal · Back-office (14 sections) · Confiance/Sécurité/Ops · Marque/Copy
 
-### Boutique / Digest / Parcours
-- [ ] Badge « N nouveautés » sur onglet Boutique
-- [ ] Vitesse Lent / Normal / Rapide
-- [ ] Ville/pays obligatoires à la publication
-- [ ] Prefetch boutique au scroll feed
-
-### Commentaires
-- [ ] Modifier / supprimer mon commentaire
-- [ ] Mentions @
-- [ ] Tri Plus récents / Plus aimés
-
-### Chat
-- [ ] Réactions emoji
-- [ ] Indicateur « en train d’écrire »
-- [ ] Transfert offre→commande encore plus visible
-
-### Produit & panier
-- [ ] Avis produits riches (comme le feed)
-- [ ] « Demander le prix » vocal
-- [ ] Upsell « aussi près de chez vous »
-
-### Profil & KYC
-- [ ] Timeline Envoyé → En revue → Validé/Refusé
-- [ ] Relance si documents flous
-- [ ] SCG expliqué en langage simple
-
-### Commandes / Escrow
-- [ ] Timeline visuelle escrow
-- [ ] Rappel J-1 avant libération fonds
-- [ ] Photo de réception acheteur
-
-### Coopératives
-- [ ] Vitrine publique enrichie
-- [ ] Digest coop dédié
-- [ ] Membres + volumes du mois
-
-### Notifications
-- [ ] Quiet hours
-- [ ] Préférences par canal (push / in-app / WhatsApp)
-- [ ] Groupement Digest + commandes
-
-### Back-office
-- [ ] Réponse email 1 clic depuis Support
-- [ ] Dashboard Digest (runs, ouvertures)
-- [ ] SLA KYC 24h visible
-- [ ] Modération commentaires signalés
-- [ ] Export CSV commandes / litiges
-
-### PWA / Perf
-- [ ] Raccourci « Écouter Digest »
-- [ ] Catalogue hors-ligne récent
-- [ ] Prefetch intelligent
-
-### Confiance & sécurité
-- [ ] Badge vérifié sur carte feed
-- [ ] Alerte prix anormalement bas
-- [ ] Journal privacy « qui a vu mon numéro »
+### Lots d’exécution
+1. Go-live (FeexPay, SMS, OneSignal, géo publish)  
+2. Confiance (KYC timeline, badge, escrow)  
+3. Engagement (Suivis, edit commentaires, typing chat)  
+4. Digest (vitesse, badge, dashboard)  
+5. Back-office (Support reply, SLA, exports)  
+6. PWA / Perf
 
 ---
 
@@ -209,7 +158,7 @@ Sections : Dashboard, Utilisateurs, Produits, Commandes, Coopératives, Signalem
 
 GWA dispose d’une **base produit solide** pour une bêta terrain Afrique de l’Ouest : audio-first, confiance (KYC/SCG/escrow), engagement (feed/chat/Digest) et pilotage (admin + support).
 
-La prochaine phase n’est plus « construire le squelette », mais **industrialiser le go-live** (paiement, SMS, push) et **exécuter le backlog UX validé** par lots prioritaires.
+La prochaine phase : **industrialiser le go-live** puis **exécuter le backlog validé** par lots (voir doc complet).
 
 ---
 
