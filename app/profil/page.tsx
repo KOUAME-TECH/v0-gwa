@@ -40,6 +40,9 @@ type Profile = {
   country: string | null
   is_verified: boolean
   rating: number | null
+  phone?: string | null
+  phone_verified?: boolean | null
+  linked_email?: string | null
 }
 
 type MenuItem = {

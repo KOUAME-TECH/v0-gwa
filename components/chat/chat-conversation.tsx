@@ -5,11 +5,17 @@ import { createClient } from "@/lib/supabase/client"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { toast } from "sonner"
 import { GwaMark } from "@/components/brand/gwa-mark"
-import { CHAT_THEME } from "@/lib/chat/theme"
+import { CHAT_THEME, CHAT_AFRICA_BG } from "@/lib/chat/theme"
+import {
+  buildOfferContent,
+  parseOfferContent,
+  formatOfferAmount,
+  type PriceOfferPayload,
+} from "@/lib/chat/offer"
 import {
   ArrowLeft, Send, Mic, Smile, Phone, Video, MoreVertical,
   Check, CheckCheck, ImageIcon, FileText, X, Trash2, Copy, Reply,
-  Pin, BellOff, UserCircle, Flag, Paperclip, Camera, MapPin
+  Pin, BellOff, UserCircle, Flag, Paperclip, Camera, MapPin, HandCoins
 } from "lucide-react"
 
 interface Message {
@@ -65,11 +71,26 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   const [audioPreview, setAudioPreview] = useState<{ blob: Blob; url: string; duration: string } | null>(null)
   const [isPlayingPreview, setIsPlayingPreview] = useState(false)
   const [loadingMsgs, setLoadingMsgs] = useState(true)
+  const [showOfferSheet, setShowOfferSheet] = useState(false)
+  const [offerAmount, setOfferAmount] = useState("")
+  const [offerNote, setOfferNote] = useState("")
+  const [offerBusy, setOfferBusy] = useState(false)
+  const [offerProducts, setOfferProducts] = useState<
+    { id: string; name: string; price: number }[]
+  >([])
+  const [offerProductId, setOfferProductId] = useState<string>("")
+  const [muted, setMuted] = useState(false)
+  const [pinned, setPinned] = useState(false)
+  const [liveCameraOpen, setLiveCameraOpen] = useState(false)
+  const [cameraBusy, setCameraBusy] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const imgRef = useRef<HTMLInputElement>(null)
+  const camRef = useRef<HTMLInputElement>(null)
+  const liveVideoRef = useRef<HTMLVideoElement>(null)
+  const liveStreamRef = useRef<MediaStream | null>(null)
   const recInterval = useRef<ReturnType<typeof setInterval> | null>(null)
   const mediaRecorder = useRef<MediaRecorder | null>(null)
   const audioChunks = useRef<Blob[]>([])
@@ -79,6 +100,142 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   const other = conversation.other_user
   const otherName = other?.full_name || "Utilisateur"
   const otherInitial = otherName.charAt(0).toUpperCase()
+  const prefsKey = `gwa-chat-prefs:${userId}:${conversation.id}`
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(prefsKey)
+      if (!raw) return
+      const p = JSON.parse(raw) as { muted?: boolean; pinned?: boolean }
+      setMuted(!!p.muted)
+      setPinned(!!p.pinned)
+    } catch {
+      /* ignore */
+    }
+  }, [prefsKey])
+
+  function savePrefs(next: { muted?: boolean; pinned?: boolean }) {
+    const value = {
+      muted: next.muted ?? muted,
+      pinned: next.pinned ?? pinned,
+    }
+    setMuted(value.muted)
+    setPinned(value.pinned)
+    try {
+      localStorage.setItem(prefsKey, JSON.stringify(value))
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function stopLiveCamera() {
+    liveStreamRef.current?.getTracks().forEach((t) => t.stop())
+    liveStreamRef.current = null
+    if (liveVideoRef.current) liveVideoRef.current.srcObject = null
+    setLiveCameraOpen(false)
+  }
+
+  function fallbackNativeCameraInput() {
+    // Délai: laisse l'overlay se fermer avant d'ouvrir le picker (iOS)
+    window.setTimeout(() => {
+      if (camRef.current) {
+        camRef.current.click()
+        return
+      }
+      const camInput = document.createElement("input")
+      camInput.type = "file"
+      camInput.accept = "image/*"
+      camInput.setAttribute("capture", "environment")
+      camInput.onchange = () => {
+        const f = camInput.files?.[0]
+        if (f) void handleFileUpload(f, "image")
+      }
+      camInput.click()
+    }, 120)
+  }
+
+  async function openCameraCapture() {
+    setShowAttach(false)
+    if (!navigator.mediaDevices?.getUserMedia) {
+      fallbackNativeCameraInput()
+      return
+    }
+    setCameraBusy(true)
+    try {
+      liveStreamRef.current?.getTracks().forEach((t) => t.stop())
+      liveStreamRef.current = null
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        },
+      })
+      liveStreamRef.current = stream
+      setLiveCameraOpen(true)
+      // Attacher le flux après le rendu du <video>
+      requestAnimationFrame(() => {
+        const video = liveVideoRef.current
+        if (!video) return
+        video.srcObject = stream
+        void video.play().catch(() => {
+          /* autoplay peut échouer un tick */
+        })
+      })
+    } catch {
+      setLiveCameraOpen(false)
+      fallbackNativeCameraInput()
+    } finally {
+      setCameraBusy(false)
+    }
+  }
+
+  function captureLivePhoto() {
+    const video = liveVideoRef.current
+    if (!video || !video.videoWidth) {
+      toast.error("Caméra pas prête")
+      return
+    }
+    const canvas = document.createElement("canvas")
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
+    ctx.drawImage(video, 0, 0)
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          toast.error("Photo impossible")
+          return
+        }
+        const file = new File([blob], `chat-${Date.now()}.jpg`, {
+          type: "image/jpeg",
+        })
+        stopLiveCamera()
+        void handleFileUpload(file, "image")
+      },
+      "image/jpeg",
+      0.92,
+    )
+  }
+
+  useEffect(() => {
+    return () => {
+      liveStreamRef.current?.getTracks().forEach((t) => t.stop())
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!liveCameraOpen) return
+    const video = liveVideoRef.current
+    const stream = liveStreamRef.current
+    if (!video || !stream) return
+    video.srcObject = stream
+    void video.play().catch(() => {
+      /* ignore */
+    })
+  }, [liveCameraOpen])
 
   const scroll = useCallback(() => {
     requestAnimationFrame(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }))
@@ -119,8 +276,8 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       .channel(`chat-${conversation.id}`)
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversation.id}` },
-        (payload) => {
-          const msg = payload.new as Message
+        (payload: { new: Message }) => {
+          const msg = payload.new
           setMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg])
           scroll()
           if (msg.sender_id !== userId && document.visibilityState === "visible") {
@@ -130,8 +287,8 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       )
       .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversation.id}` },
-        (payload) => {
-          const msg = payload.new as Message
+        (payload: { new: Message }) => {
+          const msg = payload.new
           setMessages(prev => prev.map(m => m.id === msg.id ? msg : m))
         }
       )
@@ -212,29 +369,127 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     inputRef.current?.focus()
   }
 
-  // File upload
   async function handleFileUpload(file: File, type: "image" | "file") {
     setShowAttach(false)
     const toastId = toast.loading(type === "image" ? "Envoi de l'image..." : "Envoi du fichier...")
 
-    const ext = file.name.split('.').pop()
+    const ext = file.name.split(".").pop()
     const path = `chat/${conversation.id}/${Date.now()}.${ext}`
     const { error: upErr } = await supabase.storage.from("chat-media").upload(path, file)
 
-    let mediaUrl: string | undefined
-    if (!upErr) {
-      const { data: { publicUrl } } = supabase.storage.from("chat-media").getPublicUrl(path)
-      mediaUrl = publicUrl
+    if (upErr) {
+      toast.dismiss(toastId)
+      toast.error("Envoi échoué, réessayez")
+      return
     }
 
-    const content = type === "image" ? (mediaUrl ? file.name : `[Photo: ${file.name}]`) : `[${file.name}]`
-    await supabase.from("messages").insert({
-      conversation_id: conversation.id, sender_id: userId,
-      content, message_type: type, media_url: mediaUrl || null,
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from("chat-media").getPublicUrl(path)
+
+    const content = type === "image" ? file.name : `[${file.name}]`
+    const { error: msgErr } = await supabase.from("messages").insert({
+      conversation_id: conversation.id,
+      sender_id: userId,
+      content,
+      message_type: type,
+      media_url: publicUrl,
     })
-    await supabase.from("conversations").update({ last_message_at: new Date().toISOString() }).eq("id", conversation.id)
+    await supabase
+      .from("conversations")
+      .update({ last_message_at: new Date().toISOString() })
+      .eq("id", conversation.id)
     toast.dismiss(toastId)
-    toast.success(type === "image" ? "Photo envoyée" : "Fichier envoyé")
+    if (msgErr) toast.error(msgErr.message)
+    else toast.success(type === "image" ? "Photo envoyée" : "Fichier envoyé")
+  }
+
+  async function shareLocation() {
+    setShowAttach(false)
+    if (!navigator.geolocation) {
+      toast.error("Localisation indisponible")
+      return
+    }
+    const toastId = toast.loading("Position en cours…")
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude, accuracy, altitude } = pos.coords
+        let addressLine = ""
+        try {
+          const res = await fetch(
+            `/api/geocode/reverse?lat=${latitude}&lon=${longitude}`,
+          )
+          const data = await res.json().catch(() => ({}))
+          if (data.address || data.label) {
+            addressLine = String(data.address || data.label)
+          }
+        } catch {
+          /* coords suffisent */
+        }
+        const acc =
+          Number.isFinite(accuracy) ? ` ±${Math.round(accuracy)} m` : ""
+        const alt =
+          altitude != null && Number.isFinite(altitude)
+            ? ` · alt. ${Math.round(altitude)} m`
+            : ""
+        const maps = `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=18/${latitude}/${longitude}`
+        const content = [
+          "📍 Ma position",
+          addressLine || null,
+          `${latitude.toFixed(6)}, ${longitude.toFixed(6)}${acc}${alt}`,
+          maps,
+        ]
+          .filter(Boolean)
+          .join("\n")
+        const { error } = await supabase.from("messages").insert({
+          conversation_id: conversation.id,
+          sender_id: userId,
+          content,
+          message_type: "text",
+        })
+        await supabase
+          .from("conversations")
+          .update({ last_message_at: new Date().toISOString() })
+          .eq("id", conversation.id)
+        toast.dismiss(toastId)
+        if (error) toast.error("Envoi impossible")
+        else toast.success("Position envoyée")
+      },
+      () => {
+        toast.dismiss(toastId)
+        toast.error("Autorisez la localisation")
+      },
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
+    )
+  }
+
+  async function openOfferSheet() {
+    setShowAttach(false)
+    setShowOfferSheet(true)
+    // Produits actifs des deux participants (acheteur négocie sur produit vendeur)
+    const sellerIds = [other?.id, userId].filter(Boolean) as string[]
+    const { data } = await supabase
+      .from("products")
+      .select("id, name, price, seller_id")
+      .in("seller_id", sellerIds)
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .limit(30)
+    const list = (data || []) as {
+      id: string
+      name: string
+      price: number
+      seller_id?: string
+    }[]
+    // Préférer les produits de l'interlocuteur (cas acheteur → vendeur)
+    const preferred = list.filter((p) => p.seller_id === other?.id)
+    const rest = list.filter((p) => p.seller_id !== other?.id)
+    const ordered = preferred.length > 0 ? [...preferred, ...rest] : list
+    setOfferProducts(ordered)
+    if (ordered[0]) {
+      setOfferProductId(ordered[0].id)
+      if (!offerAmount) setOfferAmount(String(Math.round(ordered[0].price)))
+    }
   }
 
   // Voice -- real MediaRecorder
@@ -302,24 +557,30 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     const ext = audioPreview.blob.type.includes('webm') ? 'webm' : 'mp4'
     const path = `chat/${conversation.id}/${Date.now()}.${ext}`
     const { error: upErr } = await supabase.storage.from("chat-media").upload(path, audioPreview.blob)
-
-    let mediaUrl: string | undefined
-    if (!upErr) {
-      const { data: { publicUrl } } = supabase.storage.from("chat-media").getPublicUrl(path)
-      mediaUrl = publicUrl
+    if (upErr) {
+      toast.error("Envoi vocal échoué, réessayez")
+      return
     }
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from("chat-media").getPublicUrl(path)
 
-    await supabase.from("messages").insert({
-      conversation_id: conversation.id, sender_id: authUser.id,
+    const { error: msgErr } = await supabase.from("messages").insert({
+      conversation_id: conversation.id,
+      sender_id: authUser.id,
       content: `Message vocal (${audioPreview.duration})`,
       message_type: "voice",
-      media_url: mediaUrl || null,
+      media_url: publicUrl,
     })
-    await supabase.from("conversations").update({ last_message_at: new Date().toISOString() }).eq("id", conversation.id)
+    await supabase
+      .from("conversations")
+      .update({ last_message_at: new Date().toISOString() })
+      .eq("id", conversation.id)
 
     URL.revokeObjectURL(audioPreview.url)
     setAudioPreview(null)
-    toast.success("Message vocal envoye")
+    if (msgErr) toast.error(msgErr.message)
+    else toast.success("Message vocal envoyé")
   }
 
   function cancelRecording() {
@@ -333,14 +594,82 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     setRecordSec(0)
   }
 
-  // Menu actions
-  function menuAction(a: string) {
+  // Menu actions — comportement réel (prefs locales + actions)
+  async function menuAction(a: string) {
     setShowMenu(false)
-    if (a === "profile") window.location.href = `/profil/${other?.id}`
-    else if (a === "mute") toast.info("Conversation en sourdine")
-    else if (a === "pin") toast.info("Conversation épinglée")
-    else if (a === "clear") toast.info("Historique effacé")
-    else if (a === "report") toast.info("Signalement envoyé")
+    if (a === "profile") {
+      if (other?.id) window.location.href = `/profil/${other.id}`
+      return
+    }
+    if (a === "mute") {
+      savePrefs({ muted: !muted })
+      toast.success(muted ? "Notifications réactivées" : "Conversation en sourdine")
+      return
+    }
+    if (a === "pin") {
+      savePrefs({ pinned: !pinned })
+      // Persister côté DB si colonnes présentes
+      const col =
+        conversation.participant_1 === userId ? "is_pinned_1" : "is_pinned_2"
+      await supabase
+        .from("conversations")
+        .update({ [col]: !pinned })
+        .eq("id", conversation.id)
+      toast.success(pinned ? "Conversation désépinglée" : "Conversation épinglée")
+      return
+    }
+    if (a === "clear") {
+      const ok = window.confirm("Effacer tous les messages de cette conversation ?")
+      if (!ok) return
+      const { error } = await supabase
+        .from("messages")
+        .delete()
+        .eq("conversation_id", conversation.id)
+      if (error) toast.error("Impossible d'effacer")
+      else {
+        setMessages([])
+        toast.success("Historique effacé")
+      }
+      return
+    }
+    if (a === "report") {
+      await supabase.from("messages").insert({
+        conversation_id: conversation.id,
+        sender_id: userId,
+        content: "⚠️ Signalement : comportement inapproprié signalé à GWA.",
+        message_type: "text",
+      })
+      toast.success("Signalement enregistré")
+    }
+  }
+
+  async function callOther(kind: "audio" | "video") {
+    // WhatsApp-like : tenter tel: si numéro accessible, sinon message d'appel
+    try {
+      const { data: p } = await supabase
+        .from("profiles")
+        .select("phone")
+        .eq("id", other?.id || "")
+        .maybeSingle()
+      if (kind === "audio" && p?.phone) {
+        window.location.href = `tel:${p.phone}`
+        return
+      }
+    } catch {
+      /* PII peut être restreint */
+    }
+    const label = kind === "audio" ? "Appel audio" : "Appel vidéo"
+    await supabase.from("messages").insert({
+      conversation_id: conversation.id,
+      sender_id: userId,
+      content: `📞 ${label} demandé. Rappelez via téléphone ou continuez ici.`,
+      message_type: "text",
+    })
+    toast.info(
+      kind === "audio"
+        ? "Message d'appel envoyé"
+        : "Appel vidéo bientôt disponible. Message envoyé.",
+    )
   }
 
   async function msgAction(a: string, msg: Message) {
@@ -354,6 +683,128 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     }
   }
 
+  async function sendPriceOffer() {
+    const amount = Number.parseInt(offerAmount.replace(/\D/g, ""), 10)
+    if (!Number.isFinite(amount) || amount < 1) {
+      toast.error("Indiquez un montant valide")
+      return
+    }
+    setOfferBusy(true)
+    try {
+      const selected = offerProducts.find((p) => p.id === offerProductId)
+      const content = buildOfferContent({
+        amount,
+        note: offerNote.trim() || undefined,
+        productId: offerProductId || undefined,
+        productName: selected?.name,
+      })
+      const { data: refreshed } = await supabase.auth.refreshSession()
+      const authUser =
+        refreshed.session?.user ?? (await supabase.auth.getUser()).data.user
+      if (!authUser) {
+        toast.error("Session expirée")
+        setOfferBusy(false)
+        return
+      }
+      const { data, error } = await supabase
+        .from("messages")
+        .insert({
+          conversation_id: conversation.id,
+          sender_id: authUser.id,
+          content,
+          message_type: "offer",
+        })
+        .select()
+        .single()
+      if (error) {
+        toast.error(error.message || "Envoi impossible")
+      } else if (data) {
+        setMessages((prev) => [...prev, data])
+        scroll()
+        void fetch("/api/messages/notify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            conversation_id: conversation.id,
+            preview: muted
+              ? "Nouvelle offre"
+              : `Offre : ${formatOfferAmount(amount)} FCFA`,
+          }),
+        })
+        await supabase
+          .from("conversations")
+          .update({ last_message_at: new Date().toISOString() })
+          .eq("id", conversation.id)
+        setShowOfferSheet(false)
+        setOfferAmount("")
+        setOfferNote("")
+        toast.success("Offre envoyée")
+      }
+    } catch {
+      toast.error("Erreur réseau")
+    }
+    setOfferBusy(false)
+  }
+
+  async function respondToOffer(
+    msg: Message,
+    offer: PriceOfferPayload,
+    status: "accepted" | "declined",
+  ) {
+    const next = { ...offer, status }
+    const content = JSON.stringify(next)
+    const { error } = await supabase
+      .from("messages")
+      .update({ content, is_edited: true })
+      .eq("id", msg.id)
+    if (error) {
+      toast.error("Mise à jour impossible")
+      return
+    }
+    setMessages((prev) =>
+      prev.map((m) => (m.id === msg.id ? { ...m, content, is_edited: true } : m)),
+    )
+    const replyText =
+      status === "accepted"
+        ? `J'accepte l'offre de ${formatOfferAmount(offer.amount)} FCFA`
+        : `Je refuse l'offre de ${formatOfferAmount(offer.amount)} FCFA`
+    await supabase.from("messages").insert({
+      conversation_id: conversation.id,
+      sender_id: userId,
+      content: replyText,
+      message_type: "text",
+      reply_to_id: msg.id,
+    })
+
+    if (status === "accepted") {
+      const toastId = toast.loading("Création de la commande au prix négocié…")
+      try {
+        const res = await fetch("/api/orders/from-offer", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message_id: msg.id, quantity: 1 }),
+        })
+        const data = await res.json().catch(() => ({}))
+        toast.dismiss(toastId)
+        if (!res.ok) {
+          toast.error(data.error || "Offre acceptée, commande à finaliser")
+        } else {
+          toast.success("Commande créée au prix négocié")
+          if (data.redirect_to) {
+            window.setTimeout(() => {
+              window.location.href = data.redirect_to
+            }, 600)
+          }
+        }
+      } catch {
+        toast.dismiss(toastId)
+        toast.error("Erreur réseau commande")
+      }
+    } else {
+      toast.success("Offre refusée")
+    }
+  }
+
   const fmtTime = (d: string) => new Date(d).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
 
   function playVoiceMsg(msg: Message) {
@@ -364,6 +815,64 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   }
 
   function renderContent(msg: Message) {
+    if (msg.message_type === "offer") {
+      const offer = parseOfferContent(msg.content)
+      if (!offer) {
+        return <p className="text-[15px] whitespace-pre-wrap break-words leading-relaxed">{msg.content}</p>
+      }
+      const own = msg.sender_id === userId
+      const statusLabel: Record<string, string> = {
+        pending: "En attente",
+        accepted: "Acceptée",
+        declined: "Refusée",
+        countered: "Contre-offre",
+      }
+      return (
+        <div className="min-w-[200px] max-w-[260px] space-y-2 py-0.5">
+          <div className="flex items-center gap-1.5 text-[#C27D10]">
+            <HandCoins className="h-4 w-4 shrink-0" />
+            <span className="text-[11px] font-semibold uppercase tracking-wide">
+              Offre de prix
+            </span>
+          </div>
+          {offer.productName && (
+            <p className="text-[12px] text-[#667781] truncate">{offer.productName}</p>
+          )}
+          <p className="text-xl font-bold text-[#1F5C2E] tabular-nums">
+            {formatOfferAmount(offer.amount)}{" "}
+            <span className="text-xs font-medium text-[#667781]">FCFA</span>
+          </p>
+          {offer.note && (
+            <p className="text-[13px] text-[#111b21] leading-snug">{offer.note}</p>
+          )}
+          <p className="text-[11px] text-[#667781]">{statusLabel[offer.status] || offer.status}</p>
+          {!own && offer.status === "pending" && (
+            <div className="flex gap-1.5 pt-1">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void respondToOffer(msg, offer, "accepted")
+                }}
+                className="flex-1 h-8 rounded-full bg-[#1F5C2E] text-white text-[12px] font-semibold active:scale-95"
+              >
+                Accepter
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void respondToOffer(msg, offer, "declined")
+                }}
+                className="flex-1 h-8 rounded-full border border-[#E5E7EB] text-[12px] font-medium text-[#54656f] active:scale-95"
+              >
+                Refuser
+              </button>
+            </div>
+          )}
+        </div>
+      )
+    }
     if (msg.message_type === "voice") {
       return (
         <button type="button" onClick={(e) => { e.stopPropagation(); playVoiceMsg(msg) }}
@@ -406,7 +915,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col bg-[#efeae2]">
+    <div className="fixed inset-0 z-[100] flex flex-col" style={{ backgroundColor: CHAT_AFRICA_BG.color }}>
       {/* HEADER */}
       <header className="text-white flex items-center gap-1 px-1 py-1.5 shrink-0 safe-top" style={{ backgroundColor: CHAT_THEME.primary }}>
         <button onClick={onBack} className="p-2 rounded-full active:bg-white/20 transition-colors" aria-label="Retour">
@@ -426,10 +935,20 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
           </div>
         </button>
 
-        <button onClick={() => toast.info("Appel audio bientôt disponible")} className="p-2.5 rounded-full active:bg-white/20" aria-label="Appel audio">
+        <button
+          type="button"
+          onClick={() => void callOther("audio")}
+          className="p-2.5 rounded-full active:bg-white/20"
+          aria-label="Appel audio"
+        >
           <Phone className="h-5 w-5" />
         </button>
-        <button onClick={() => toast.info("Appel vidéo bientôt disponible")} className="p-2.5 rounded-full active:bg-white/20" aria-label="Appel vidéo">
+        <button
+          type="button"
+          onClick={() => void callOther("video")}
+          className="p-2.5 rounded-full active:bg-white/20"
+          aria-label="Appel vidéo"
+        >
           <Video className="h-5 w-5" />
         </button>
 
@@ -443,10 +962,18 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
               <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-2xl shadow-2xl z-[120] py-2 text-[#111]">
                 {[
                   { key: "profile", icon: UserCircle, label: "Voir le profil" },
-                  { key: "pin", icon: Pin, label: "Épingler la conversation" },
-                  { key: "mute", icon: BellOff, label: "Mettre en sourdine" },
+                  {
+                    key: "pin",
+                    icon: Pin,
+                    label: pinned ? "Désépingler" : "Épingler la conversation",
+                  },
+                  {
+                    key: "mute",
+                    icon: BellOff,
+                    label: muted ? "Réactiver les notifs" : "Mettre en sourdine",
+                  },
                   { key: "clear", icon: Trash2, label: "Effacer les messages" },
-                ].map(item => (
+                ].map((item) => (
                   <button key={item.key} onClick={() => menuAction(item.key)}
                     className="w-full flex items-center gap-3 px-4 py-3 active:bg-gray-100 text-sm">
                     <item.icon className="h-4 w-4 text-[#6B7280]" />{item.label}
@@ -462,10 +989,14 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
         </div>
       </header>
 
-      {/* MESSAGES AREA */}
-      <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-3" style={{
-        backgroundImage: `url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23c8b68a' fillOpacity='0.06'%3E%3Cpath d='M20 20.5V18H0v-2h20v-2l4 3-4 3z'/%3E%3C/g%3E%3C/svg%3E")`
-      }}>
+      {/* MESSAGES AREA — fond terre / motif wax Afrique */}
+      <div
+        className="flex-1 overflow-y-auto overscroll-contain px-3 py-3"
+        style={{
+          backgroundColor: CHAT_AFRICA_BG.color,
+          backgroundImage: CHAT_AFRICA_BG.image,
+        }}
+      >
         {loadingMsgs ? (
           <div className="flex items-center justify-center h-full">
             <div className="w-8 h-8 border-3 border-[#1F5C2E] border-t-transparent rounded-full animate-spin" />
@@ -618,22 +1149,45 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
             <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-6" />
             <div className="grid grid-cols-3 gap-6">
               {[
-                { icon: ImageIcon, color: "bg-violet-500", label: "Galerie", action: () => { imgRef.current?.click(); setShowAttach(false) } },
-                { icon: Camera, color: "bg-pink-500", label: "Caméra", action: () => {
-                const camInput = document.createElement('input')
-                camInput.type = 'file'
-                camInput.accept = 'image/*'
-                camInput.capture = 'environment'
-                camInput.onchange = (ev) => {
-                  const f = (ev.target as HTMLInputElement).files?.[0]
-                  if (f) handleFileUpload(f, "image")
-                }
-                camInput.click()
-                setShowAttach(false)
-              } },
-                { icon: FileText, color: "bg-blue-500", label: "Document", action: () => { fileRef.current?.click(); setShowAttach(false) } },
-                { icon: MapPin, color: "bg-green-500", label: "Position", action: () => { toast.info("Partage de position bientôt disponible"); setShowAttach(false) } },
-              ].map(item => (
+                {
+                  icon: ImageIcon,
+                  color: "bg-violet-500",
+                  label: "Galerie",
+                  action: () => {
+                    imgRef.current?.click()
+                    setShowAttach(false)
+                  },
+                },
+                {
+                  icon: Camera,
+                  color: "bg-pink-500",
+                  label: "Caméra",
+                  action: () => {
+                    void openCameraCapture()
+                  },
+                },
+                {
+                  icon: FileText,
+                  color: "bg-blue-500",
+                  label: "Document",
+                  action: () => {
+                    fileRef.current?.click()
+                    setShowAttach(false)
+                  },
+                },
+                {
+                  icon: HandCoins,
+                  color: "bg-[#C27D10]",
+                  label: "Négocier",
+                  action: () => void openOfferSheet(),
+                },
+                {
+                  icon: MapPin,
+                  color: "bg-green-500",
+                  label: "Position",
+                  action: () => void shareLocation(),
+                },
+              ].map((item) => (
                 <button key={item.label} onClick={item.action} className="flex flex-col items-center gap-2">
                   <div className={`w-14 h-14 ${item.color} rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform`}>
                     <item.icon className="h-6 w-6 text-white" />
@@ -642,6 +1196,71 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
                 </button>
               ))}
             </div>
+          </div>
+        </>
+      )}
+
+      {/* OFFRE DE PRIX — négociation commande */}
+      {showOfferSheet && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-[108]" onClick={() => setShowOfferSheet(false)} />
+          <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl z-[109] p-5 pb-8 safe-bottom animate-slideUp">
+            <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-4" />
+            <div className="flex items-center gap-2 mb-1">
+              <HandCoins className="h-5 w-5 text-[#C27D10]" />
+              <h3 className="text-lg font-semibold text-[#111]">Proposer un prix</h3>
+            </div>
+            <p className="text-sm text-[#667781] mb-4">
+              Proposez un prix. S&apos;il accepte, la commande part toute seule.
+            </p>
+            {offerProducts.length > 0 && (
+              <>
+                <label className="text-sm font-medium text-[#111] mb-1.5 block">
+                  Produit
+                </label>
+                <select
+                  value={offerProductId}
+                  onChange={(e) => {
+                    setOfferProductId(e.target.value)
+                    const p = offerProducts.find((x) => x.id === e.target.value)
+                    if (p) setOfferAmount(String(Math.round(p.price)))
+                  }}
+                  className="w-full h-11 rounded-xl border border-[#E5E7EB] px-3 text-sm mb-3 bg-white"
+                >
+                  {offerProducts.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} · {formatOfferAmount(p.price)} FCFA
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
+            <label className="text-sm font-medium text-[#111] mb-1.5 block">Montant (FCFA)</label>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              value={offerAmount}
+              onChange={(e) => setOfferAmount(e.target.value)}
+              placeholder="15000"
+              className="w-full h-12 rounded-xl border border-[#E5E7EB] px-4 text-lg font-semibold tabular-nums mb-3 focus:outline-none focus:ring-2 focus:ring-[#1F5C2E]/30"
+            />
+            <label className="text-sm font-medium text-[#111] mb-1.5 block">Message</label>
+            <input
+              type="text"
+              value={offerNote}
+              onChange={(e) => setOfferNote(e.target.value)}
+              placeholder="2 sacs, livraison demain"
+              className="w-full h-11 rounded-xl border border-[#E5E7EB] px-4 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-[#1F5C2E]/30"
+            />
+            <button
+              type="button"
+              disabled={offerBusy}
+              onClick={() => void sendPriceOffer()}
+              className="w-full h-12 rounded-xl bg-[#1F5C2E] text-white font-semibold active:scale-[0.98] disabled:opacity-50"
+            >
+              {offerBusy ? "Envoi…" : "Envoyer l'offre"}
+            </button>
           </div>
         </>
       )}
@@ -672,8 +1291,13 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
               </button>
 
               {!newMessage.trim() && (
-                <button type="button" onClick={() => imgRef.current?.click()}
-                  className="p-2 text-[#54656f] active:text-[#1F5C2E] shrink-0" aria-label="Photo rapide">
+                <button
+                  type="button"
+                  onClick={() => void openCameraCapture()}
+                  disabled={cameraBusy}
+                  className="p-2 text-[#54656f] active:text-[#1F5C2E] shrink-0 disabled:opacity-50"
+                  aria-label="Caméra"
+                >
                   <Camera className="h-6 w-6" />
                 </button>
               )}
@@ -694,10 +1318,12 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
             )}
           </form>
 
+          <input ref={camRef} type="file" className="hidden" accept="image/*" capture="environment"
+            onChange={e => { const f = e.target.files?.[0]; if (f) void handleFileUpload(f, "image"); e.target.value = "" }} />
           <input ref={fileRef} type="file" className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar"
-            onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f, "file"); e.target.value = "" }} />
+            onChange={e => { const f = e.target.files?.[0]; if (f) void handleFileUpload(f, "file"); e.target.value = "" }} />
           <input ref={imgRef} type="file" className="hidden" accept="image/*,video/*"
-            onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f, "image"); e.target.value = "" }} />
+            onChange={e => { const f = e.target.files?.[0]; if (f) void handleFileUpload(f, "image"); e.target.value = "" }} />
 
           {/* EMOJI PICKER */}
           {showEmojis && (
@@ -712,6 +1338,51 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* CAMÉRA LIVE — getUserMedia (comme WhatsApp) */}
+      {liveCameraOpen && (
+        <div className="fixed inset-0 z-[130] bg-black flex flex-col">
+          <div className="flex items-center justify-between px-3 py-3 safe-top text-white">
+            <button
+              type="button"
+              onClick={stopLiveCamera}
+              className="p-2 rounded-full active:bg-white/15"
+              aria-label="Fermer"
+            >
+              <X className="h-6 w-6" />
+            </button>
+            <span className="text-sm font-medium">Photo</span>
+            <span className="w-10" />
+          </div>
+          <div className="flex-1 relative min-h-0">
+            <video
+              ref={liveVideoRef}
+              autoPlay
+              playsInline
+              muted
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+          </div>
+          <div className="safe-bottom py-6 flex items-center justify-center gap-10 bg-black/80">
+            <button
+              type="button"
+              onClick={fallbackNativeCameraInput}
+              className="text-white text-xs opacity-80"
+            >
+              Autre
+            </button>
+            <button
+              type="button"
+              onClick={captureLivePhoto}
+              className="w-[72px] h-[72px] rounded-full border-4 border-white flex items-center justify-center active:scale-95 transition-transform"
+              aria-label="Prendre la photo"
+            >
+              <span className="w-14 h-14 rounded-full bg-white" />
+            </button>
+            <span className="w-10" />
+          </div>
         </div>
       )}
     </div>

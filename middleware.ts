@@ -14,10 +14,10 @@ const MALICIOUS_UA = ['sqlmap', 'nikto', 'nmap', 'masscan', 'zgrab', 'dirbuster'
 // Security: Rate limiting (in-memory)
 const RL_MAP = new Map<string, { count: number; ts: number }>()
 const RL_LIMITS: Record<string, number> = {
-  auth: 30,
+  auth: 60,
   admin: 40,
   api: 120,
-  default: 240,
+  default: 480,
 }
 
 function getClientIP(req: NextRequest): string {
@@ -41,28 +41,34 @@ export async function middleware(request: NextRequest) {
     }
   } catch { /* malformed URL */ }
 
-  // Layer 2: Rate limiting (admin plus strict que API générale)
-  const rlKey = pathname.startsWith('/auth')
-    ? 'auth'
-    : pathname.startsWith('/api/admin')
+  // Layer 2: Rate limiting — pages GET publiques hors compteur (RSC prefetch).
+  // Compte uniquement API + mutations auth pour éviter 429 navigation normale.
+  const isApi = pathname.startsWith('/api')
+  const isAuthMutation =
+    pathname.startsWith('/auth') && request.method !== 'GET' && request.method !== 'HEAD'
+  if (isApi || isAuthMutation) {
+    const rlKey = pathname.startsWith('/api/admin')
       ? 'admin'
-      : pathname.startsWith('/api')
-        ? 'api'
-        : 'default'
-  const limit = RL_LIMITS[rlKey]
-  const mapKey = `${ip}:${rlKey}`
-  const now = Date.now()
-  const entry = RL_MAP.get(mapKey)
-  if (entry && now - entry.ts < 60_000) {
-    entry.count++
-    if (entry.count > limit) {
-      return NextResponse.json(
-        { error: 'Trop de requetes. Reessayez dans 1 minute.' },
-        { status: 429, headers: { 'Retry-After': '60' } }
-      )
+      : pathname.startsWith('/api/auth') || isAuthMutation
+        ? 'auth'
+        : pathname.startsWith('/api')
+          ? 'api'
+          : 'default'
+    const limit = RL_LIMITS[rlKey]
+    const mapKey = `${ip}:${rlKey}`
+    const now = Date.now()
+    const entry = RL_MAP.get(mapKey)
+    if (entry && now - entry.ts < 60_000) {
+      entry.count++
+      if (entry.count > limit) {
+        return NextResponse.json(
+          { error: 'Trop de requetes. Reessayez dans 1 minute.' },
+          { status: 429, headers: { 'Retry-After': '60' } }
+        )
+      }
+    } else {
+      RL_MAP.set(mapKey, { count: 1, ts: now })
     }
-  } else {
-    RL_MAP.set(mapKey, { count: 1, ts: now })
   }
 
   // Continue with existing auth session logic

@@ -44,21 +44,46 @@ export function WeatherWidget() {
   useEffect(() => {
     async function loadWeather() {
       try {
-        // Try geolocation
+        // Réutiliser le cache GPS partagé (évite un 2e prompt / double GPS)
+        try {
+          const raw = localStorage.getItem("gwa-realtime-location")
+          if (raw) {
+            const cached = JSON.parse(raw) as {
+              lat?: number
+              lon?: number
+              city?: string | null
+            }
+            if (typeof cached.lat === "number" && typeof cached.lon === "number") {
+              const city = cached.city || "Ma position"
+              const res = await fetch(
+                `/api/weather?lat=${cached.lat}&lon=${cached.lon}&city=${encodeURIComponent(city)}`,
+              )
+              if (res.ok) {
+                setWeather(await res.json())
+                setLoading(false)
+                return
+              }
+            }
+          }
+        } catch {
+          /* continue GPS */
+        }
+
         if (navigator.geolocation) {
           navigator.geolocation.getCurrentPosition(
             async (pos) => {
-              const res = await fetch(`/api/weather?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&city=Ma position`)
+              const res = await fetch(
+                `/api/weather?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&city=Ma position`,
+              )
               if (res.ok) setWeather(await res.json())
               setLoading(false)
             },
             async () => {
-              // Fallback to Abidjan
               const res = await fetch("/api/weather")
               if (res.ok) setWeather(await res.json())
               setLoading(false)
             },
-            { timeout: 3000 }
+            { enableHighAccuracy: false, timeout: 10000, maximumAge: 300_000 },
           )
         } else {
           const res = await fetch("/api/weather")
@@ -69,7 +94,7 @@ export function WeatherWidget() {
         setLoading(false)
       }
     }
-    loadWeather()
+    void loadWeather()
   }, [])
 
   if (loading) {

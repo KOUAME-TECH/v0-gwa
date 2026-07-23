@@ -113,6 +113,16 @@ export default function CartPage() {
     setCart(cart.map(c => c.id === itemId ? { ...c, quantity: newQuantity } : c))
   }
 
+  const setQuantityExact = async (itemId: string, raw: string) => {
+    const item = cart.find((c) => c.id === itemId)
+    if (!item) return
+    const parsed = Number.parseInt(raw.replace(/\D/g, ""), 10)
+    if (!Number.isFinite(parsed)) return
+    const newQuantity = Math.min(999_999, Math.max(1, parsed))
+    await supabase.from("cart_items").update({ quantity: newQuantity }).eq("id", itemId)
+    setCart(cart.map((c) => (c.id === itemId ? { ...c, quantity: newQuantity } : c)))
+  }
+
   const removeItem = async (itemId: string) => {
     await supabase.from("cart_items").delete().eq("id", itemId)
     setCart(cart.filter(c => c.id !== itemId))
@@ -330,13 +340,24 @@ export default function CartPage() {
                     <button 
                       onClick={() => updateQuantity(item.id, -1)}
                       className="w-7 h-7 rounded-full bg-muted flex items-center justify-center"
+                      aria-label="Diminuer"
                     >
                       <Minus className="h-3 w-3" />
                     </button>
-                    <span className="w-6 text-center text-sm font-medium">{item.quantity}</span>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={1}
+                      max={999999}
+                      value={item.quantity}
+                      onChange={(e) => setQuantityExact(item.id, e.target.value)}
+                      className="w-12 h-7 text-center text-sm font-medium rounded-lg border border-border bg-background tabular-nums"
+                      aria-label="Quantité"
+                    />
                     <button 
                       onClick={() => updateQuantity(item.id, 1)}
                       className="w-7 h-7 rounded-full bg-muted flex items-center justify-center"
+                      aria-label="Augmenter"
                     >
                       <Plus className="h-3 w-3" />
                     </button>

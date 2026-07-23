@@ -128,14 +128,56 @@ export async function POST(request: Request) {
 
         await clearOtp(formatted)
 
-        await admin
+        // Cooldown si un autre numéro vérifié est déjà lié
+        const { data: bindProfile } = await admin
           .from("profiles")
-          .update({
-            phone: formatted,
-            phone_verified: true,
-            updated_at: new Date().toISOString(),
-          })
+          .select("phone, phone_verified, phone_linked_at")
           .eq("id", sessionUser.id)
+          .maybeSingle()
+
+        if (
+          bindProfile?.phone_verified &&
+          bindProfile.phone &&
+          bindProfile.phone !== formatted
+        ) {
+          const { getLinkCooldown, linkCooldownMessage } = await import(
+            "@/lib/auth/link-cooldown"
+          )
+          const cooldown = getLinkCooldown(bindProfile.phone_linked_at)
+          if (!cooldown.allowed) {
+            return NextResponse.json(
+              {
+                error: linkCooldownMessage("téléphone", cooldown),
+                code: "LINK_COOLDOWN",
+                daysRemaining: cooldown.daysRemaining,
+                nextChangeAt: cooldown.nextChangeAt,
+              },
+              { status: 403 },
+            )
+          }
+        }
+
+        const bindUpdate: Record<string, unknown> = {
+          phone: formatted,
+          phone_verified: true,
+          phone_linked_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }
+        const { error: bindErr } = await admin
+          .from("profiles")
+          .update(bindUpdate)
+          .eq("id", sessionUser.id)
+
+        if (bindErr && /phone_linked_at|column/i.test(bindErr.message)) {
+          await admin
+            .from("profiles")
+            .update({
+              phone: formatted,
+              phone_verified: true,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", sessionUser.id)
+        }
 
         await admin.auth.admin.updateUserById(sessionUser.id, {
           phone: formatted,
@@ -154,6 +196,200 @@ export async function POST(request: Request) {
           redirect_to: path,
           bound: true,
           user: { id: sessionUser.id, phone: formatted },
+        })
+      }
+
+      // REGISTER — créer le compte téléphone après OTP SMS custom
+      if (stored.mode === "register") {
+        const syntheticEmail =
+          stored.email || `${formatted.replace(/\D/g, "")}@users.gwa.local`
+
+        let userId = stored.userId !== "pending" ? stored.userId : ""
+
+        if (!userId || userId === "pending") {
+          const { data: created, error: createErr } =
+            await admin.auth.admin.createUser({
+              email: syntheticEmail,
+              email_confirm: true,
+              phone: formatted,
+              phone_confirm: true,
+              user_metadata: {
+                phone: formatted,
+                auth_method: "phone",
+              },
+            })
+
+          if (createErr || !created.user) {
+            console.error("[auth/verify-otp] createUser", createErr?.message)
+            const msg = (createErr?.message || "").toLowerCase()
+            const taken =
+              msg.includes("already") ||
+              msg.includes("registered") ||
+              msg.includes("exists") ||
+              msg.includes("duplicate")
+
+            // Compte déjà là (course / phone auth) → reprendre en login
+            if (taken) {
+              const { data: existingByPhone } = await admin
+                .from("profiles")
+                .select("id, email, linked_email")
+                .eq("phone", formatted)
+                .maybeSingle()
+
+              if (existingByPhone?.id) {
+                userId = existingByPhone.id
+                const resumeEmail = (
+                  existingByPhone.linked_email ||
+                  existingByPhone.email ||
+                  syntheticEmail
+                )
+                  .trim()
+                  .toLowerCase()
+
+                await clearOtp(formatted)
+
+                const { data: linkData, error: linkError } =
+                  await admin.auth.admin.generateLink({
+                    type: "magiclink",
+                    email: resumeEmail,
+                  })
+
+                if (linkError || !linkData?.properties?.hashed_token) {
+                  return NextResponse.json(
+                    {
+                      error:
+                        "Compte trouvé — impossible d'ouvrir la session. Réessayez.",
+                      code: "LOGIN_RESUME_FAILED",
+                    },
+                    { status: 500 },
+                  )
+                }
+
+                const { data: sessionData, error: sessionErr } =
+                  await supabase.auth.verifyOtp({
+                    type: "email",
+                    token_hash: linkData.properties.hashed_token,
+                  })
+
+                if (sessionErr || !sessionData.user) {
+                  return NextResponse.json(
+                    { error: "Session expirée. Demandez un nouveau code." },
+                    { status: 400 },
+                  )
+                }
+
+                await admin
+                  .from("profiles")
+                  .update({
+                    phone: formatted,
+                    phone_verified: true,
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq("id", sessionData.user.id)
+
+                const { path, isNewUser } = await resolvePostAuthRedirect(
+                  supabase,
+                  sessionData.user.id,
+                )
+                await runScg(sessionData.user.id)
+
+                return NextResponse.json({
+                  success: true,
+                  is_new_user: isNewUser,
+                  redirect_to: path,
+                  resumed_login: true,
+                  user: { id: sessionData.user.id, phone: formatted },
+                })
+              }
+            }
+
+            return NextResponse.json(
+              {
+                error: "Impossible de créer le compte. Réessayez.",
+                code: "REGISTER_FAILED",
+              },
+              { status: 400 },
+            )
+          }
+          userId = created.user.id
+        }
+
+        await clearOtp(formatted)
+
+        const { data: linkData, error: linkError } =
+          await admin.auth.admin.generateLink({
+            type: "magiclink",
+            email: syntheticEmail,
+          })
+
+        if (linkError || !linkData?.properties?.hashed_token) {
+          console.error("[auth/verify-otp] register generateLink", linkError?.message)
+          return NextResponse.json(
+            { error: "Impossible de créer la session. Réessayez." },
+            { status: 500 },
+          )
+        }
+
+        const { data, error } = await supabase.auth.verifyOtp({
+          type: "email",
+          token_hash: linkData.properties.hashed_token,
+        })
+
+        if (error || !data.user) {
+          console.error("[auth/verify-otp] register session", error?.message)
+          return NextResponse.json(
+            { error: "Session expirée. Demandez un nouveau code." },
+            { status: 400 },
+          )
+        }
+
+        await admin.from("profiles").upsert({
+          id: data.user.id,
+          phone: formatted,
+          phone_verified: true,
+          email: syntheticEmail,
+          linked_email: syntheticEmail,
+          auth_method: "phone",
+          updated_at: new Date().toISOString(),
+        })
+
+        if (profileData) {
+          const mappedType = profileData.userType
+            ? USER_TYPE_MAP[profileData.userType] || profileData.userType
+            : undefined
+          const profileUpdate = {
+            phone: formatted,
+            full_name: profileData.name || undefined,
+            user_type: mappedType,
+            country: profileData.country || undefined,
+            city: profileData.city || undefined,
+            auth_method: "phone" as const,
+          }
+          const completion = computeProfileCompletion({
+            ...profileUpdate,
+            email: syntheticEmail,
+          })
+          await admin
+            .from("profiles")
+            .update({
+              ...profileUpdate,
+              profile_completion_pct: completion,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", data.user.id)
+        }
+
+        const { path, isNewUser } = await resolvePostAuthRedirect(
+          supabase,
+          data.user.id,
+        )
+        await runScg(data.user.id)
+
+        return NextResponse.json({
+          success: true,
+          is_new_user: isNewUser,
+          redirect_to: path,
+          user: { id: data.user.id, phone: formatted },
         })
       }
 

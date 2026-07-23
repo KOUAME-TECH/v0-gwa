@@ -17,6 +17,8 @@ import {
   Check,
   Phone,
   Mail,
+  MapPin,
+  Loader2,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { mapAuthErrorMessage } from "@/lib/auth/auth-errors"
@@ -29,6 +31,7 @@ import {
 } from "@/lib/auth/post-auth"
 import { cn } from "@/lib/utils"
 import { HibpPasswordBanner } from "@/components/auth/hibp-password-banner"
+import { useRealtimeLocation, formatCoords } from "@/hooks/use-realtime-location"
 
 const userTypes = [
   { value: "farmer", label: "Producteur", icon: Sprout },
@@ -51,6 +54,20 @@ const countries = [
   { value: "ma", label: "Maroc" },
 ]
 
+function countryNameToCode(name: string | null | undefined): string {
+  if (!name) return ""
+  const n = name.toLowerCase()
+  const hit = countries.find(
+    (c) =>
+      c.label.toLowerCase() === n ||
+      n.includes(c.label.toLowerCase()) ||
+      c.label.toLowerCase().includes(n),
+  )
+  if (hit) return hit.value
+  if (n.includes("ivoire") || n.includes("ivory")) return "ci"
+  return ""
+}
+
 function SignupForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -66,10 +83,17 @@ function SignupForm() {
   const [otp, setOtp] = useState("")
   const [otpExpiresAt, setOtpExpiresAt] = useState(0)
   const [phoneVerified, setPhoneVerified] = useState(false)
+  const [existingAccountHint, setExistingAccountHint] = useState(false)
 
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const {
+    location: gpsLocation,
+    status: geoStatus,
+    request: requestGps,
+  } = useRealtimeLocation({ auto: false, maximumAge: 0 })
+
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -77,6 +101,9 @@ function SignupForm() {
     userType: preselectedType || "",
     country: "",
     city: "",
+    address: "",
+    lat: null as number | null,
+    lon: null as number | null,
     acceptTerms: false,
     linkedEmail: "",
     phone: "",
@@ -108,7 +135,7 @@ function SignupForm() {
       const res = await fetch("/api/auth/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, countryCode }),
+        body: JSON.stringify({ phone, countryCode, intent: "signup" }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -120,6 +147,13 @@ function SignupForm() {
       setOtpExpiresAt(Date.now() + (data.expires_in || 600) * 1000)
       setPhoneOtpStep("otp")
       setOtp("")
+      if (data.account_hint === "existing") {
+        setError(null)
+        // Soft info: compte existant → OTP = connexion
+        setExistingAccountHint(true)
+      } else {
+        setExistingAccountHint(false)
+      }
     } catch {
       setError("Connexion impossible.")
     }
@@ -147,6 +181,11 @@ function SignupForm() {
       }
       setPhoneVerified(true)
       setPhoneOtpStep("verified")
+      if (data.resumed_login || data.is_new_user === false) {
+        router.refresh()
+        router.push(data.redirect_to || "/profil")
+        return
+      }
       setStep(2)
       router.refresh()
     } catch {
@@ -216,6 +255,21 @@ function SignupForm() {
       })
     }
 
+    if (formData.lat != null && formData.lon != null) {
+      await fetch("/api/location/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lat: formData.lat,
+          lon: formData.lon,
+          city: formData.city,
+          country:
+            countries.find((c) => c.value === formData.country)?.label || formData.country,
+          address: formData.address,
+        }),
+      })
+    }
+
     router.push("/profil")
     return true
   }
@@ -236,12 +290,32 @@ function SignupForm() {
     }
 
     if (step < 3) {
-      setStep(step + 1)
+      const next = step + 1
+      setStep(next)
+      if (next === 3) {
+        void requestGps().then((loc) => {
+          if (!loc) return
+          const code = countryNameToCode(loc.country)
+          setFormData((prev) => ({
+            ...prev,
+            city: loc.city || prev.city,
+            country: code || prev.country,
+            address: loc.address || prev.address,
+            lat: loc.lat,
+            lon: loc.lon,
+          }))
+        })
+      }
       return
     }
 
     if (!formData.acceptTerms) {
       setError("Veuillez accepter les conditions")
+      return
+    }
+
+    if (formData.lat == null && geoStatus !== "denied" && !formData.city) {
+      setError("Touchez « Utiliser ma position » pour continuer")
       return
     }
 
@@ -375,7 +449,9 @@ function SignupForm() {
             <>
               <div className="mb-4">
                 <h1 className="text-3xl font-bold tracking-tight mb-2">Créer un compte</h1>
-                <p className="text-neutral-500">Rejoignez GWA — mobile ou email</p>
+                <p className="text-neutral-500 text-sm">
+                  Déjà un compte avec ce numéro ? On vous reconnecte tout de suite.
+                </p>
               </div>
 
               <Tabs
@@ -417,6 +493,11 @@ function SignupForm() {
 
                   {phoneOtpStep === "otp" && (
                     <>
+                      {existingAccountHint && (
+                        <div className="rounded-xl bg-[#E8F5E9] px-3 py-2.5 text-sm text-[#1F5C2E]">
+                          Ce numéro a déjà un compte. Entrez le code SMS pour vous connecter.
+                        </div>
+                      )}
                       <p className="text-sm text-center text-neutral-500">
                         Code envoyé au{" "}
                         <span className="font-medium text-neutral-900">{maskedPhone}</span>
@@ -516,7 +597,7 @@ function SignupForm() {
                     onChange={(e) => setFormData({ ...formData, linkedEmail: e.target.value })}
                   />
                   <p className="text-xs text-neutral-400 mt-1">
-                    Optionnel — rattaché au téléphone déjà vérifié ({maskedPhone || phone})
+                    Facultatif. Lié à {maskedPhone || phone}.
                   </p>
                 </div>
               )}
@@ -584,41 +665,96 @@ function SignupForm() {
             <>
               <div className="mb-8">
                 <h1 className="text-3xl font-bold tracking-tight mb-2">Localisation</h1>
-                <p className="text-neutral-500">Où êtes-vous situé ?</p>
+                <p className="text-neutral-500">On détecte votre position. Pas besoin de saisir.</p>
               </div>
 
-              <div>
-                <label htmlFor="country" className="text-sm font-medium text-neutral-700 mb-2 block">
-                  Pays
-                </label>
-                <select
-                  id="country"
-                  value={formData.country}
-                  onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                  className="w-full h-14 rounded-xl border border-neutral-200 bg-white px-4 text-[15px] focus:border-neutral-400 focus:outline-none"
-                >
-                  <option value="">Sélectionnez</option>
-                  {countries.map((country) => (
-                    <option key={country.value} value={country.value}>
-                      {country.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  const loc = await requestGps()
+                  if (!loc) {
+                    setError("Autorisez la localisation pour continuer")
+                    return
+                  }
+                  setError(null)
+                  const code = countryNameToCode(loc.country)
+                  setFormData((prev) => ({
+                    ...prev,
+                    city: loc.city || prev.city,
+                    country: code || prev.country,
+                    address: loc.address || prev.address,
+                    lat: loc.lat,
+                    lon: loc.lon,
+                  }))
+                }}
+                className="w-full h-14 rounded-xl bg-[#2F7D32] text-white font-medium flex items-center justify-center gap-2 active:scale-[0.99]"
+              >
+                {geoStatus === "prompting" || geoStatus === "locating" ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <MapPin className="h-5 w-5" />
+                )}
+                {formData.lat != null ? "Actualiser ma position" : "Utiliser ma position"}
+              </button>
 
-              <div>
-                <label htmlFor="city" className="text-sm font-medium text-neutral-700 mb-2 block">
-                  Ville
-                </label>
-                <Input
-                  id="city"
-                  type="text"
-                  placeholder="Abidjan, Dakar, etc."
-                  className="h-14 rounded-xl border-neutral-200 text-[15px] focus:border-neutral-400 focus:ring-0"
-                  value={formData.city}
-                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                />
-              </div>
+              {(formData.lat != null || gpsLocation) && (
+                <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 space-y-1">
+                  <p className="text-sm font-medium text-neutral-900 leading-snug">
+                    {formData.address ||
+                      gpsLocation?.address ||
+                      gpsLocation?.label ||
+                      "Position détectée"}
+                  </p>
+                  {(formData.city || gpsLocation?.city) && (
+                    <p className="text-xs text-neutral-600">
+                      {[
+                        formData.city || gpsLocation?.city,
+                        countries.find((c) => c.value === formData.country)?.label ||
+                          gpsLocation?.country,
+                      ]
+                        .filter(Boolean)
+                        .join(", ")}
+                    </p>
+                  )}
+                  <p className="text-[11px] font-mono text-neutral-500 tabular-nums">
+                    {formatCoords(
+                      formData.lat ?? gpsLocation!.lat,
+                      formData.lon ?? gpsLocation!.lon,
+                      gpsLocation?.accuracy,
+                    )}
+                  </p>
+                </div>
+              )}
+
+              {/* Fallback discret si GPS refusé */}
+              {geoStatus === "denied" && (
+                <div className="space-y-3">
+                  <p className="text-xs text-amber-700">
+                    Localisation refusée. Choisissez votre pays et votre ville.
+                  </p>
+                  <select
+                    id="country"
+                    value={formData.country}
+                    onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                    className="w-full h-14 rounded-xl border border-neutral-200 bg-white px-4 text-[15px] focus:border-neutral-400 focus:outline-none"
+                  >
+                    <option value="">Pays</option>
+                    {countries.map((country) => (
+                      <option key={country.value} value={country.value}>
+                        {country.label}
+                      </option>
+                    ))}
+                  </select>
+                  <Input
+                    id="city"
+                    type="text"
+                    placeholder="Ville"
+                    className="h-14 rounded-xl border-neutral-200 text-[15px] focus:border-neutral-400 focus:ring-0"
+                    value={formData.city}
+                    onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                  />
+                </div>
+              )}
 
               <div className="flex items-start gap-3 p-4 bg-neutral-50 rounded-xl">
                 <Checkbox
@@ -631,11 +767,11 @@ function SignupForm() {
                 />
                 <label htmlFor="terms" className="text-sm leading-relaxed text-neutral-600">
                   J&apos;accepte les{" "}
-                  <Link href="/legal/terms" className="font-medium text-neutral-900 underline">
+                  <Link href="/conditions" className="font-medium text-neutral-900 underline">
                     conditions
                   </Link>{" "}
                   et la{" "}
-                  <Link href="/legal/privacy" className="font-medium text-neutral-900 underline">
+                  <Link href="/confidentialite" className="font-medium text-neutral-900 underline">
                     politique de confidentialité
                   </Link>
                 </label>

@@ -1,7 +1,16 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { hasSmsProvider } from '@/lib/auth/sms'
+import {
+  getOneSignalAppId,
+  getOneSignalRestApiKey,
+} from '@/lib/notifications/onesignal-config'
 
 export const dynamic = 'force-dynamic'
+
+function envSet(name: string): boolean {
+  return !!(process.env[name] || '').replace(/^"|"$/g, '').trim()
+}
 
 export async function GET() {
   let dbStatus = 'unknown'
@@ -13,6 +22,11 @@ export async function GET() {
     dbStatus = 'error'
   }
   const healthy = dbStatus === 'connected'
+  const smsConfigured = hasSmsProvider()
+  const otpPepper = envSet('OTP_PEPPER')
+  const cronSecret = envSet('CRON_SECRET')
+  const onesignalApp = !!getOneSignalAppId()
+  const onesignalRest = !!getOneSignalRestApiKey()
   return NextResponse.json({
     status: healthy ? 'healthy' : 'degraded',
     app: 'GWA Platform',
@@ -21,5 +35,27 @@ export async function GET() {
     ts: new Date().toISOString(),
     env: process.env.NODE_ENV,
     db: dbStatus,
+    // Booléens ops uniquement — jamais les valeurs des secrets
+    secrets: {
+      OTP_PEPPER: otpPepper,
+      CRON_SECRET: cronSecret,
+      SMS_PROVIDER: smsConfigured,
+      SMS_AT: envSet('AT_API_KEY') || envSet('AFRICASTALKING_API_KEY'),
+      SMS_TWILIO:
+        envSet('TWILIO_ACCOUNT_SID') &&
+        envSet('TWILIO_AUTH_TOKEN') &&
+        (envSet('TWILIO_PHONE_NUMBER') || envSet('TWILIO_MESSAGING_SERVICE_SID')),
+      SMS_TERMII: envSet('TERMII_API_KEY'),
+      ONESIGNAL_APP_ID: onesignalApp,
+      ONESIGNAL_REST_API_KEY: onesignalRest,
+    },
+    resilience: {
+      onesignal_app_id_fallback: true,
+      cron_auth: ['bearer', 'x-vercel-cron', 'digest_internal_key'],
+      digest_scheduler: 'supabase_pg_cron',
+      digest_job: 'gwa-harmattan-digest-daily',
+      weather_degraded_fallback: true,
+      sw_cache: 'gwa-v17-resilient',
+    },
   }, { status: healthy ? 200 : 503 })
 }

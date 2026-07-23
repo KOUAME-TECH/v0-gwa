@@ -7,8 +7,14 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
-import { Leaf, MapPin, Search, Heart, SlidersHorizontal, ChevronLeft, X } from "lucide-react"
+import { Leaf, Search, Heart, SlidersHorizontal, ChevronLeft, X } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+import {
+  FEED_FILTER_CHIPS,
+  productMatchesFeedFilter,
+} from "@/lib/catalog/feed-filters"
+import { ListenMicButton } from "@/components/media/clickable-listen-text"
+import { buildProductListenText } from "@/lib/media/product-listen"
 
 interface Product {
   id: string
@@ -16,6 +22,9 @@ interface Product {
   price: number
   unit: string
   images: string[] | null
+  description?: string | null
+  audio_url?: string | null
+  audio_lang?: string | null
   origin_country: string
   origin_region: string | null
   product_type: string | null
@@ -23,16 +32,10 @@ interface Product {
   categories: { name: string; slug?: string } | null
 }
 
-const categories = [
-  { name: "Tout", icon: "🌍", slug: "all" },
-  { name: "Céréales", icon: "🌾", slug: "cereales" },
-  { name: "Cacao", icon: "🍫", slug: "cacao" },
-  { name: "Café", icon: "☕", slug: "cafe" },
-  { name: "Fruits", icon: "🥭", slug: "fruits" },
-  { name: "Légumes", icon: "🥬", slug: "legumes" },
-  { name: "Épices", icon: "🌶", slug: "epices" },
-  { name: "Élevage", icon: "🐄", slug: "elevage" }
-]
+const categories = FEED_FILTER_CHIPS.map((c) => ({
+  name: c.name,
+  slug: c.id,
+}))
 
 export default function AgriculturePage() {
   const [products, setProducts] = useState<Product[]>([])
@@ -51,7 +54,8 @@ export default function AgriculturePage() {
     const { data, error } = await supabase
       .from("products")
       .select(`
-        id, name, price, unit, images, origin_country, origin_region, product_type,
+        id, name, price, unit, images, description, audio_url, audio_lang,
+        origin_country, origin_region, product_type,
         profiles:seller_id(full_name, is_verified),
         categories:category_id(name, slug)
       `)
@@ -84,15 +88,11 @@ export default function AgriculturePage() {
       p.name.toLowerCase().includes(q) ||
       (p.categories?.name || "").toLowerCase().includes(q)
     if (!matchesSearch) return false
-    if (selectedCategory === "all") return true
-    const slug = (p.categories?.slug || p.categories?.name || p.product_type || "")
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/\p{M}/gu, "")
-    return (
-      slug.includes(selectedCategory) ||
-      (p.name || "").toLowerCase().includes(selectedCategory)
-    )
+    return productMatchesFeedFilter(selectedCategory, {
+      categorySlug: p.categories?.slug,
+      categoryName: p.categories?.name,
+      productName: p.name,
+    })
   })
 
   const formatPrice = (price: number) => new Intl.NumberFormat("fr-FR").format(price)
@@ -105,7 +105,7 @@ export default function AgriculturePage() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-background pb-24">
       {/* Header */}
       <header className="sticky top-0 z-40 bg-[#1a472a]">
         <div className="px-4 pt-12 pb-6">
@@ -113,7 +113,7 @@ export default function AgriculturePage() {
             <Link href="/" className="text-white/80">
               <ChevronLeft className="h-6 w-6" />
             </Link>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
               <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
                 <Leaf className="h-4 w-4 text-white" />
               </div>
@@ -163,22 +163,22 @@ export default function AgriculturePage() {
           {categories.map(cat => (
             <button
               key={cat.slug}
+              type="button"
               onClick={() => setSelectedCategory(cat.slug)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
+              className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
                 selectedCategory === cat.slug
                   ? "bg-white text-[#1a472a]"
                   : "bg-white/20 text-white"
               }`}
             >
-              <span>{cat.icon}</span>
-              <span>{cat.name}</span>
+              {cat.name}
             </button>
           ))}
         </div>
       </header>
 
       {/* Products */}
-      <main className="p-4">
+      <main className="p-4 sm:p-5">
         {isLoading ? (
           <div className="grid grid-cols-2 gap-3">
             {[...Array(6)].map((_, i) => (
@@ -214,12 +214,12 @@ export default function AgriculturePage() {
             <p className="text-sm text-muted-foreground mb-3">
               {filteredProducts.length} produit{filteredProducts.length > 1 ? "s" : ""} agricole{filteredProducts.length > 1 ? "s" : ""}
             </p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 sm:gap-4">
               {filteredProducts.map(product => (
                 <Link 
                   key={product.id} 
                   href={`/produit/${product.id}`}
-                  className="bg-card rounded-2xl overflow-hidden shadow-sm active:scale-[0.98] transition-transform"
+                  className="bg-card rounded-2xl overflow-hidden shadow-sm ring-1 ring-black/[0.03] active:scale-[0.98] transition-transform"
                 >
                   <div className="relative aspect-square bg-muted">
                     {product.images?.[0] ? (
@@ -250,7 +250,16 @@ export default function AgriculturePage() {
                     )}
                   </div>
                   <div className="p-3">
-                    <h3 className="font-medium text-sm line-clamp-2 mb-1">{product.name}</h3>
+                    <div className="flex items-start gap-1 mb-1">
+                      <h3 className="font-medium text-sm line-clamp-2 flex-1 min-w-0">{product.name}</h3>
+                      <ListenMicButton
+                        size="xs"
+                        text={buildProductListenText(product)}
+                        audioUrl={product.audio_url}
+                        audioLang={product.audio_lang}
+                        fallbackLabel={product.name}
+                      />
+                    </div>
                     <div className="flex items-center gap-1 text-xs text-muted-foreground mb-2">
                       <span>{getCountryFlag(product.origin_country)}</span>
                       <span className="truncate">{product.origin_region || product.profiles?.full_name}</span>

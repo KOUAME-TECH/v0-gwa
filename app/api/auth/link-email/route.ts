@@ -1,16 +1,12 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { formatPhoneE164, validateWestAfricaPhone } from "@/lib/auth/phone"
+import { getLinkCooldown, linkCooldownMessage } from "@/lib/auth/link-cooldown"
 
 /**
  * POST /api/auth/link-email
  * Lie un email au compte déjà authentifié par téléphone (ou inverse).
- * Body: { email: string } — optionnel phone si on veut aussi synchroniser
- *
- * Règle GWA Afrique-first :
- * - Le téléphone profil est la clé d'identité terrain
- * - L'email est rattaché au même compte auth (updateUser)
- * - Stocké aussi dans profiles.linked_email + profiles.email
+ * Si déjà lié à un autre email : cooldown de fiabilité (30 j).
  */
 export async function POST(request: Request) {
   try {
@@ -35,9 +31,37 @@ export async function POST(request: Request) {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("phone, email, linked_email")
+      .select("phone, email, linked_email, email_linked_at, phone_verified")
       .eq("id", user.id)
       .maybeSingle()
+
+    const currentLinked = (
+      profile?.linked_email ||
+      profile?.email ||
+      user.email ||
+      ""
+    )
+      .toLowerCase()
+      .trim()
+    const isSynthetic =
+      !currentLinked ||
+      currentLinked.includes("@users.gwa.local") ||
+      currentLinked.endsWith("@gwa.local")
+
+    if (!isSynthetic && currentLinked && currentLinked !== email) {
+      const cooldown = getLinkCooldown(profile?.email_linked_at)
+      if (!cooldown.allowed) {
+        return NextResponse.json(
+          {
+            error: linkCooldownMessage("email", cooldown),
+            code: "LINK_COOLDOWN",
+            daysRemaining: cooldown.daysRemaining,
+            nextChangeAt: cooldown.nextChangeAt,
+          },
+          { status: 403 },
+        )
+      }
+    }
 
     const profilePhone = profile?.phone || user.phone || null
     if (!profilePhone && !phoneRaw) {
@@ -56,12 +80,11 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Numéro de téléphone invalide" }, { status: 400 })
       }
       const nextPhone = formatPhoneE164(phoneRaw, countryCode)
-      // Interdit de changer de numéro sans preuve OTP (évite takeover / collision)
       if (profilePhone && nextPhone !== profilePhone) {
         return NextResponse.json(
           {
             error:
-              "Pour changer de numéro, utilisez la vérification SMS OTP depuis Connexion / Profil.",
+              "Pour changer de numéro, utilisez la vérification SMS OTP (Lier email ou téléphone).",
             code: "PHONE_CHANGE_REQUIRES_OTP",
           },
           { status: 403 },
@@ -70,7 +93,6 @@ export async function POST(request: Request) {
       phoneE164 = nextPhone
     }
 
-    // Mettre à jour l'email Auth uniquement (pas de phone non vérifié)
     const { error: updateAuthError } = await supabase.auth.updateUser({
       email,
       data: {
@@ -86,20 +108,34 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: msg }, { status: 400 })
     }
 
-    // Email uniquement : le numéro N'EST JAMAIS écrit ici (même en premier set).
-    // Un numéro ne peut être lié qu'après un OTP réussi (flow "bind phone" via
-    // /api/auth/send-otp + /api/auth/verify-otp), sinon risque de takeover.
+    const profileUpdate: Record<string, unknown> = {
+      email,
+      linked_email: email,
+      email_linked_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+
     const { error: profileError } = await supabase
       .from("profiles")
-      .update({
-        email,
-        linked_email: email,
-        updated_at: new Date().toISOString(),
-      })
+      .update(profileUpdate)
       .eq("id", user.id)
 
     if (profileError) {
-      return NextResponse.json({ error: profileError.message }, { status: 400 })
+      if (/email_linked_at|column/i.test(profileError.message)) {
+        const { error: retryErr } = await supabase
+          .from("profiles")
+          .update({
+            email,
+            linked_email: email,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", user.id)
+        if (retryErr) {
+          return NextResponse.json({ error: retryErr.message }, { status: 400 })
+        }
+      } else {
+        return NextResponse.json({ error: profileError.message }, { status: 400 })
+      }
     }
 
     return NextResponse.json({

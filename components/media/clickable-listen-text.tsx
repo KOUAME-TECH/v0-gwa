@@ -7,16 +7,20 @@ import { AudioWaveIcon } from "@/components/media/audio-wave-icon"
 import { VoiceMessageChip } from "@/components/media/voice-message-chip"
 import { AudioLangBadge } from "@/components/media/audio-lang-badge"
 import { AUDIO_LABELS } from "@/lib/accessibility/audio-labels"
-import { buildCognitiveSummary } from "@/lib/accessibility/cognitive-summary"
 import { resolveUtterLang } from "@/lib/media/audio-langs"
 import { recordListenActivity } from "@/hooks/use-listen-ritual"
 import { useAutoListenOnView } from "@/hooks/use-contextual-listen"
+import { isShopTourActive } from "@/lib/media/shop-tour-lock"
 
 type ListenMode = "audio" | "tts" | "none"
 
-function resolveListenMode(text?: string | null, audioUrl?: string | null): ListenMode {
+export function resolveListenMode(
+  text?: string | null,
+  audioUrl?: string | null,
+  fallbackLabel?: string | null,
+): ListenMode {
   if (audioUrl) return "audio"
-  if (text && text.trim()) return "tts"
+  if ((text && text.trim()) || (fallbackLabel && fallbackLabel.trim())) return "tts"
   return "none"
 }
 
@@ -36,19 +40,25 @@ function useListenPlayback({
   audioLang,
 }: ListenPlaybackProps) {
   const utterLang = lang ?? resolveUtterLang(audioLang)
-  const mode = resolveListenMode(text, audioUrl)
+  const mode = resolveListenMode(text, audioUrl, fallbackLabel)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const [playing, setPlaying] = useState(false)
 
-  const speechText = text?.trim() || fallbackLabel || ""
+  const speechText = text?.trim() || fallbackLabel?.trim() || ""
   const canListen = mode !== "none" && (mode === "audio" ? !!audioUrl : !!speechText)
 
-  const stopAll = useCallback(() => {
+  const stopAll = useCallback((opts?: { forceCancelSpeech?: boolean }) => {
     if (audioRef.current) {
       audioRef.current.pause()
       audioRef.current.currentTime = 0
     }
-    if (typeof window !== "undefined" && window.speechSynthesis) {
+    // Ne jamais cancel le TTS d'un Parcours/Digest en cours (sinon les produits suivants sont sautés)
+    if (
+      opts?.forceCancelSpeech !== false &&
+      typeof window !== "undefined" &&
+      window.speechSynthesis &&
+      !isShopTourActive()
+    ) {
       window.speechSynthesis.cancel()
     }
     setPlaying(false)
@@ -66,7 +76,20 @@ function useListenPlayback({
       if (!audioRef.current) {
         audioRef.current = new Audio(audioUrl)
         audioRef.current.onended = () => setPlaying(false)
-        audioRef.current.onerror = () => setPlaying(false)
+        audioRef.current.onerror = () => {
+          // Fichier audio KO → bascule TTS si texte dispo
+          setPlaying(false)
+          if (speechText && typeof window !== "undefined" && window.speechSynthesis) {
+            window.speechSynthesis.cancel()
+            const utter = new SpeechSynthesisUtterance(speechText)
+            utter.lang = utterLang
+            utter.rate = 0.95
+            utter.onend = () => setPlaying(false)
+            utter.onerror = () => setPlaying(false)
+            setPlaying(true)
+            window.speechSynthesis.speak(utter)
+          }
+        }
       } else {
         audioRef.current.src = audioUrl
       }
@@ -75,14 +98,25 @@ function useListenPlayback({
       try {
         await audioRef.current.play()
       } catch {
-        setPlaying(false)
+        // Autoplay / lecture bloquée → TTS
+        if (speechText && typeof window !== "undefined" && window.speechSynthesis) {
+          window.speechSynthesis.cancel()
+          const utter = new SpeechSynthesisUtterance(speechText)
+          utter.lang = utterLang
+          utter.rate = 0.95
+          utter.onend = () => setPlaying(false)
+          utter.onerror = () => setPlaying(false)
+          window.speechSynthesis.speak(utter)
+        } else {
+          setPlaying(false)
+        }
       }
       return
     }
 
-    if (mode === "tts" && typeof window !== "undefined" && window.speechSynthesis && text?.trim()) {
+    if (mode === "tts" && typeof window !== "undefined" && window.speechSynthesis && speechText) {
       window.speechSynthesis.cancel()
-      const utter = new SpeechSynthesisUtterance(text.trim())
+      const utter = new SpeechSynthesisUtterance(speechText)
       utter.lang = utterLang
       utter.rate = 0.95
       utter.onend = () => setPlaying(false)
@@ -91,9 +125,15 @@ function useListenPlayback({
       recordListenActivity()
       window.speechSynthesis.speak(utter)
     }
-  }, [audioUrl, canListen, utterLang, mode, playing, stopAll, text])
+  }, [audioUrl, canListen, utterLang, mode, playing, speechText, stopAll])
 
-  useEffect(() => () => stopAll(), [stopAll])
+  useEffect(
+    () => () => {
+      // Unmount (ex. remount GridCard au setIndex) : pause audio local, PAS cancel du parcours
+      stopAll({ forceCancelSpeech: false })
+    },
+    [stopAll],
+  )
 
   return { mode, playing, canListen, toggleListen, speechText }
 }
@@ -193,7 +233,7 @@ export type ClickableListenTextProps = ListenPlaybackProps & {
   showText?: boolean
   textClassName?: string
   highlight?: boolean
-  /** Résumé cognitif 1 phrase (contraste cognitif) */
+  /** @deprecated plus affiché — évite les lignes « … » redondantes */
   showSummary?: boolean
   /** Écoute auto au scroll (mode écoute feed) */
   autoListen?: boolean
@@ -210,7 +250,6 @@ export function ClickableListenText({
   showText = true,
   textClassName,
   highlight,
-  showSummary,
   autoListen,
 }: ClickableListenTextProps) {
   const { mode, playing, canListen, toggleListen, speechText } = useListenPlayback({
@@ -222,7 +261,6 @@ export function ClickableListenText({
   })
 
   const autoRef = useAutoListenOnView(!!autoListen, canListen, toggleListen, playing)
-  const summary = showSummary ? buildCognitiveSummary(speechText) : null
 
   if (!canListen && !speechText) return null
 
@@ -285,13 +323,8 @@ export function ClickableListenText({
         </span>
         <AudioLangBadge lang={audioLang} />
       </p>
-      {summary && (
-        <p className="pl-8 text-xs text-[#6B7280] leading-snug" aria-hidden>
-          {summary}
-        </p>
-      )}
     </div>
   )
 }
 
-export { resolveListenMode, useListenPlayback }
+export { useListenPlayback }

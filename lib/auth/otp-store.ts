@@ -6,11 +6,11 @@ import {
 import { Redis } from "@upstash/redis"
 
 /**
- * "login": verified phone → mint a fresh session via linked email magiclink.
- * "bind":  authenticated user is attaching a phone to their own account; verify
- *          must confirm the requester's session uid matches `userId` before write.
+ * "login":    phone known (verified or not) → mint session after OTP.
+ * "bind":     authenticated user attaching phone to own account.
+ * "register": new phone → create auth user + profile after OTP.
  */
-export type OtpMode = "login" | "bind"
+export type OtpMode = "login" | "bind" | "register"
 
 export type StoredOtp = {
   /** SHA-256 hex of code + pepper — never store plaintext */

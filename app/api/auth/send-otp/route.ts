@@ -12,17 +12,24 @@ import {
   generateOtpCode,
   storeOtp,
   canSendOtp,
+  clearOtp,
 } from "@/lib/auth/otp-store"
-import { hasSmsProvider, sendSmsOtp } from "@/lib/auth/sms"
+import { hasSmsProvider, hasTwilioProvider, sendSmsOtp } from "@/lib/auth/sms"
 
 /**
  * POST /api/auth/send-otp
- * SMS obligatoire. Le numéro doit être lié au compte email de 1ère inscription.
+ *
+ * Parcours indépendant du statut de liaison :
+ * - login / signup : toujours envoyer un OTP si le numéro est valide
+ *   (compte existant → login ; inconnu → register ; déjà « lié » → login)
+ * - bind : session authentifiée qui attache le numéro à SON compte
+ *
+ * La fusion email/téléphone et la KYC (pièce + selfie) se font après, à part.
  */
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { phone, countryCode = "ci" } = body
+    const { phone, countryCode = "ci", intent = "login" } = body
 
     if (!phone || typeof phone !== "string") {
       return NextResponse.json(
@@ -63,27 +70,13 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error:
-            "SMS non configuré. Ajoutez AT_USERNAME + AT_API_KEY (Africa's Talking) sur Vercel.",
+            "L'envoi de SMS est temporairement indisponible. Réessayez plus tard ou utilisez l'email.",
           code: "SMS_PROVIDER_MISSING",
         },
         { status: 503 },
       )
     }
 
-    // Réponse générique anti-énumération : identique que le numéro soit inconnu,
-    // non lié ou non vérifié — n'expose jamais l'existence d'un compte.
-    const genericDenied = NextResponse.json(
-      {
-        error:
-          "Si ce numéro est lié à un compte vérifié, un code sera envoyé. Sinon connectez-vous par email puis liez votre numéro dans Profil.",
-        code: "OTP_LOOKUP",
-      },
-      { status: 400 },
-    )
-
-    // Détermine le flow : bind (utilisateur authentifié qui lie SON numéro) ou
-    // login (numéro déjà lié ET vérifié). On ne fait JAMAIS de lookup-then-login
-    // sur un numéro non vérifié (risque de takeover).
     const supabase = await createClient()
     const {
       data: { user: sessionUser },
@@ -91,7 +84,6 @@ export async function POST(request: Request) {
 
     const admin = createAdminClient()
 
-    // Match E.164 exact uniquement (pas de fuzzy last-9 — risque de takeover)
     const { data: profileByPhone } = await admin
       .from("profiles")
       .select("id, email, linked_email, phone, phone_verified, full_name")
@@ -100,17 +92,25 @@ export async function POST(request: Request) {
 
     let otpUserId: string
     let otpEmail: string
-    let mode: "login" | "bind"
+    let mode: "login" | "bind" | "register"
+    let accountHint: "existing" | "new" | "bind" = "new"
 
-    if (sessionUser) {
-      // BIND — l'utilisateur connecté lie ce numéro à son propre compte.
-      // Refus si le numéro est déjà vérifié sur un AUTRE compte (anti-takeover).
+    if (sessionUser && intent === "bind") {
+      // BIND — uniquement si l'utilisateur le demande explicitement (intent bind)
       if (
         profileByPhone &&
         profileByPhone.id !== sessionUser.id &&
         profileByPhone.phone_verified === true
       ) {
-        return genericDenied
+        return NextResponse.json(
+          {
+            error:
+              "Ce numéro est déjà vérifié sur un autre compte. Connectez-vous avec ce numéro, puis liez vos comptes depuis Profil.",
+            code: "PHONE_ON_OTHER_ACCOUNT",
+            can_login: true,
+          },
+          { status: 409 },
+        )
       }
       const { data: ownProfile } = await admin
         .from("profiles")
@@ -127,23 +127,33 @@ export async function POST(request: Request) {
         .trim()
         .toLowerCase()
       mode = "bind"
-    } else {
-      // LOGIN — autorisé uniquement si le numéro est lié ET vérifié.
-      if (!profileByPhone || profileByPhone.phone_verified !== true) {
-        return genericDenied
-      }
+      accountHint = "bind"
+    } else if (profileByPhone) {
+      // Compte existant (vérifié OU non) → toujours login, jamais bloqué
       otpUserId = profileByPhone.id
       otpEmail = (profileByPhone.linked_email || profileByPhone.email || "")
         .trim()
         .toLowerCase()
       mode = "login"
+      accountHint = "existing"
+    } else {
+      // Numéro inconnu → inscription (login ou signup aboutissent au même OTP)
+      otpUserId = "pending"
+      otpEmail = ""
+      mode = "register"
+      accountHint = "new"
+    }
+
+    // Session connectée sans intent bind : ne pas forcer bind ;
+    // l'utilisateur peut se reconnecter avec un autre numéro (logout implicite côté client).
+    if (sessionUser && intent !== "bind" && mode === "login") {
+      // OK — login vers le compte du téléphone
     }
 
     const linkedEmail = otpEmail
 
-    // 1) SMS natif Supabase (Path A) — login d'un numéro déjà vérifié seulement.
-    //    (En bind, l'utilisateur a déjà une session : on ne mint pas de session phone.)
-    if (mode === "login") {
+    let supabasePhoneError: string | null = null
+    if (mode === "login" && !hasTwilioProvider()) {
       const { error: smsError } = await supabase.auth.signInWithOtp({
         phone: formatted,
         options: { shouldCreateUser: false },
@@ -161,13 +171,50 @@ export async function POST(request: Request) {
           linked_email_masked: linkedEmail
             ? maskEmail(linkedEmail)
             : undefined,
+          otp_mode: "supabase",
+          account_hint: accountHint,
+          phone_verified: profileByPhone?.phone_verified === true,
         })
       }
 
+      supabasePhoneError = smsError.message
       console.warn("[auth/send-otp] supabase phone:", smsError.message)
     }
 
-    // 2) OTP custom + SMS Twilio/Termii (obligatoire)
+    // Login custom OTP : email synthétique OK si pas d'email réel
+    // (évite de bloquer les comptes téléphone-only)
+
+    if (!hasSmsProvider() && mode !== "login") {
+      return NextResponse.json(
+        {
+          error:
+            "L'envoi de SMS est temporairement indisponible. Réessayez plus tard ou utilisez l'email.",
+          code: "SMS_PROVIDER_MISSING",
+        },
+        { status: 503 },
+      )
+    }
+
+    if (mode === "login" && !hasSmsProvider()) {
+      return NextResponse.json(
+        {
+          error:
+            "Impossible d'envoyer le SMS pour le moment. Réessayez plus tard.",
+          code: "SMS_SEND_FAILED",
+          hint: [
+            supabasePhoneError
+              ? `supabase:${supabasePhoneError.slice(0, 80)}`
+              : null,
+            "sms_provider:missing",
+            "twilio_vercel:missing",
+          ]
+            .filter(Boolean)
+            .join(" | "),
+        },
+        { status: 502 },
+      )
+    }
+
     if (!(await canSendOtp(formatted, 55))) {
       return NextResponse.json(
         { error: "Patientez 1 minute avant de renvoyer un code." },
@@ -176,10 +223,13 @@ export async function POST(request: Request) {
     }
 
     const code = generateOtpCode()
+    const storeEmail =
+      linkedEmail || `${formatted.replace(/\D/g, "")}@users.gwa.local`
+
     await storeOtp(formatted, {
       code,
       userId: otpUserId,
-      email: linkedEmail,
+      email: storeEmail,
       phone: formatted,
       mode,
     })
@@ -187,11 +237,46 @@ export async function POST(request: Request) {
     const sms = await sendSmsOtp(formatted, code)
     if (!sms.success) {
       console.error("[auth/send-otp] sms", sms.error)
+      if (mode === "login") {
+        const { error: smsError } = await supabase.auth.signInWithOtp({
+          phone: formatted,
+          options: { shouldCreateUser: false },
+        })
+        if (!smsError) {
+          await clearOtp(formatted).catch(() => {})
+          return NextResponse.json({
+            success: true,
+            phone: formatted,
+            masked_phone: maskPhone(formatted),
+            channel: "sms",
+            message: "Code SMS envoyé",
+            expires_in: 600,
+            resend_after: 60,
+            linked_email_masked: linkedEmail
+              ? maskEmail(linkedEmail)
+              : undefined,
+            otp_mode: "supabase_fallback",
+            account_hint: accountHint,
+          })
+        }
+        supabasePhoneError = smsError.message
+        console.warn("[auth/send-otp] supabase fallback:", smsError.message)
+      }
+      const hintParts = [
+        sms.provider
+          ? `${sms.provider}:${(sms.error || "fail").slice(0, 80)}`
+          : null,
+        supabasePhoneError
+          ? `supabase:${supabasePhoneError.slice(0, 80)}`
+          : null,
+        !hasTwilioProvider() ? "twilio_vercel:missing" : null,
+      ].filter(Boolean)
       return NextResponse.json(
         {
           error:
             "Impossible d'envoyer le SMS pour le moment. Réessayez plus tard.",
           code: "SMS_SEND_FAILED",
+          hint: hintParts.join(" | ") || undefined,
         },
         { status: 502 },
       )
@@ -207,7 +292,9 @@ export async function POST(request: Request) {
       expires_in: 600,
       resend_after: 60,
       linked_email_masked: linkedEmail ? maskEmail(linkedEmail) : undefined,
-      otp_mode: "sms",
+      otp_mode: mode,
+      account_hint: accountHint,
+      phone_verified: profileByPhone?.phone_verified === true,
     })
   } catch (err) {
     console.error("[auth/send-otp]", err)

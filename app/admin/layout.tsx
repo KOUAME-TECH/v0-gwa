@@ -36,6 +36,7 @@ import {
   ChevronDown,
   Home,
   Banknote,
+  MessageSquare,
 } from "lucide-react"
 import {
   ADMIN_ROLE_LABELS,
@@ -53,8 +54,10 @@ const NAV_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   Commandes: ShoppingCart,
   Cooperatives: Building2,
   Signalements: Flag,
+  Support: MessageSquare,
   Litiges: AlertTriangle,
   Verifications: Shield,
+  Vérification: Shield,
   "SCG Config": Shield,
   Finances: TrendingUp,
   Affacturage: Banknote,
@@ -78,6 +81,7 @@ export default function AdminLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [adminUser, setAdminUser] = useState<AdminUser | null>(null)
   const [loading, setLoading] = useState(true)
+  const [supportOpenCount, setSupportOpenCount] = useState(0)
   const pathname = usePathname()
   const router = useRouter()
 
@@ -97,7 +101,6 @@ export default function AdminLayout({
           return
         }
 
-        // Server gate (service role) — avoids RLS recursion on admin_roles
         const statusRes = await fetch("/api/auth/admin-status")
         const status = await statusRes.json().catch(() => ({}))
 
@@ -108,7 +111,6 @@ export default function AdminLayout({
           return
         }
 
-        // Get profile
         const { data: profile } = await supabase
           .from("profiles")
           .select("full_name, avatar_url, email")
@@ -124,6 +126,16 @@ export default function AdminLayout({
           avatar_url: profile?.avatar_url,
           role: status.role as AdminRole,
         })
+
+        if (canAccessSection(status.role as AdminRole, "support")) {
+          const supportRes = await fetch("/api/admin/support?status=open")
+          const supportData = await supportRes.json().catch(() => ({}))
+          if (isMounted) {
+            setSupportOpenCount(
+              Array.isArray(supportData.messages) ? supportData.messages.length : 0,
+            )
+          }
+        }
         
         setLoading(false)
       } catch (error) {
@@ -223,7 +235,17 @@ export default function AdminLayout({
                     onClick={() => setSidebarOpen(false)}
                   >
                     <Icon className="h-5 w-5 flex-shrink-0" />
-                    {item.name}
+                    <span className="flex-1">{item.name}</span>
+                    {item.name === "Support" && supportOpenCount > 0 && (
+                      <span
+                        className={cn(
+                          "min-w-[1.25rem] h-5 px-1.5 rounded-full text-[10px] font-bold flex items-center justify-center",
+                          isActive ? "bg-white/25 text-white" : "bg-[#F39A1F] text-white",
+                        )}
+                      >
+                        {supportOpenCount > 99 ? "99+" : supportOpenCount}
+                      </span>
+                    )}
                   </Link>
                 )
               })}

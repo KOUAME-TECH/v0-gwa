@@ -6,7 +6,7 @@ const securityHeaders = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'X-XSS-Protection', value: '1; mode=block' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-  { key: 'Permissions-Policy', value: 'camera=(), microphone=(self), geolocation=(self), payment=(self)' },
+  { key: 'Permissions-Policy', value: 'camera=(self), microphone=(self), geolocation=(self), payment=(self)' },
   {
     key: 'Content-Security-Policy',
     value: [
@@ -20,7 +20,8 @@ const securityHeaders = [
       "font-src 'self' data:",
       "style-src 'self' 'unsafe-inline'",
       "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.onesignal.com https://onesignal.com https://api.onesignal.com",
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://onesignal.com https://*.onesignal.com https://api.onesignal.com https://api.open-meteo.com https://*.upstash.io",
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://onesignal.com https://*.onesignal.com https://api.onesignal.com https://api.open-meteo.com https://*.upstash.io https://nominatim.openstreetmap.org",
+      "frame-src 'self' https://www.openstreetmap.org",
       "worker-src 'self' blob:",
       "manifest-src 'self'",
     ].join('; '),
@@ -32,11 +33,34 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   images: {
-    unoptimized: true,
+    formats: ["image/avif", "image/webp"],
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "frorfexbcyfbydkiwxqv.supabase.co",
+        pathname: "/storage/v1/object/public/**",
+      },
+    ],
   },
   poweredByHeader: false,
   compress: true,
-  headers: async () => [{ source: '/(.*)', headers: securityHeaders }],
+  experimental: {
+    optimizePackageImports: ["lucide-react", "date-fns", "@radix-ui/react-icons"],
+  },
+  headers: async () => [
+    { source: "/(.*)", headers: securityHeaders },
+    {
+      source: "/sw.js",
+      headers: [
+        { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+        { key: "Service-Worker-Allowed", value: "/" },
+      ],
+    },
+    {
+      source: "/manifest.json",
+      headers: [{ key: "Cache-Control", value: "public, max-age=3600" }],
+    },
+  ],
   /** Alias legacy — une seule source de vérité pour les redirections */
   redirects: async () => [
     // Alias legacy
@@ -48,6 +72,11 @@ const nextConfig = {
     { source: '/marketplace/product/:id', destination: '/produit/:id', permanent: true },
     { source: '/auth/sign-up', destination: '/auth/signup', permanent: true },
     { source: '/auth/sign-up/:path*', destination: '/auth/signup', permanent: true },
+    // Liens cassés / alias legacy → pages réelles
+    { source: '/legal/terms', destination: '/conditions', permanent: true },
+    { source: '/legal/privacy', destination: '/confidentialite', permanent: true },
+    { source: '/legal/:path*', destination: '/conditions', permanent: false },
+    { source: '/feed', destination: '/', permanent: false },
     // Hors scope bêta F1–F6 (soft-lock) — pages conservées mais inaccessibles
     { source: '/formations', destination: '/', permanent: false },
     { source: '/formations/:path*', destination: '/', permanent: false },

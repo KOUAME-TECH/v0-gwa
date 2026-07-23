@@ -2,12 +2,9 @@ import React from "react"
 import type { Metadata, Viewport } from "next"
 import { Inter } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
-import { BottomNav } from "@/components/bottom-nav"
-import { Toaster } from "@/components/ui/sonner"
-import { OfflineBanner } from "@/components/layout/offline-banner"
 import { OneSignalProvider } from "@/components/pwa/onesignal-provider"
 import { ServiceWorkerRegister } from "@/components/pwa/service-worker-register"
-import { IncompleteRouteBanner } from "@/components/dev/incomplete-route-banner"
+import { AppShell } from "@/components/layout/app-shell"
 import "./globals.css"
 
 const inter = Inter({
@@ -18,14 +15,15 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: "GWA - La Super App Africaine",
-  description: "Achetez, vendez, discutez et partagez. Le marketplace social africain qui connecte producteurs, coopératives et acheteurs du monde entier.",
+  description:
+    "Achetez, vendez, discutez et partagez. Le marketplace social africain qui connecte producteurs, coopératives et acheteurs du monde entier.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
     title: "GWA",
   },
-    generator: 'v0.app'
+  generator: "v0.app",
 }
 
 export const viewport: Viewport = {
@@ -48,15 +46,13 @@ export default function RootLayout({
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <link rel="preconnect" href="https://frorfexbcyfbydkiwxqv.supabase.co" />
+        <link rel="dns-prefetch" href="https://cdn.onesignal.com" />
       </head>
-      <body className="font-sans antialiased min-h-dvh">
+      <body className="font-sans antialiased min-h-dvh bg-background">
         <OneSignalProvider>
           <ServiceWorkerRegister />
-          <OfflineBanner />
-          <IncompleteRouteBanner />
-          <main className="pb-[76px] safe-bottom">{children}</main>
-          <BottomNav />
-          <Toaster position="top-center" />
+          <AppShell>{children}</AppShell>
           <Analytics />
         </OneSignalProvider>
       </body>

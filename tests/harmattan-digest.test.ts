@@ -3,6 +3,7 @@ import {
   matchesUserRegion,
   filterDigestProducts,
   digestSinceHours,
+  selectDigestProducts,
 } from "@/lib/products/digest"
 import { buildCognitiveSummary } from "@/lib/accessibility/cognitive-summary"
 import { audioLangLabel, resolveUtterLang } from "@/lib/media/audio-langs"
@@ -25,6 +26,38 @@ describe("matchesUserRegion", () => {
       ),
     ).toBe(false)
   })
+
+  it("extrait la ville d'une adresse complète", () => {
+    expect(
+      matchesUserRegion(
+        {
+          id: "1",
+          name: "Tomate",
+          price: 100,
+          unit: "kg",
+          origin_region: "Abidjan",
+          created_at: "",
+        },
+        { id: "u1", city: "Cocody, Abidjan, Côte d'Ivoire" },
+      ),
+    ).toBe(true)
+  })
+
+  it("match pays via alias CI", () => {
+    expect(
+      matchesUserRegion(
+        {
+          id: "1",
+          name: "Tomate",
+          price: 100,
+          unit: "kg",
+          origin_country: "Côte d'Ivoire",
+          created_at: "",
+        },
+        { id: "u1", country: "ci" },
+      ),
+    ).toBe(true)
+  })
 })
 
 describe("filterDigestProducts", () => {
@@ -37,6 +70,54 @@ describe("filterDigestProducts", () => {
     const result = filterDigestProducts(products, { id: "u", city: "Dakar" }, since)
     expect(result).toHaveLength(1)
     expect(result[0].id).toBe("a")
+  })
+})
+
+describe("selectDigestProducts", () => {
+  it("élargit la fenêtre puis tombe sur newest si besoin", () => {
+    const products = [
+      {
+        id: "old",
+        name: "Old",
+        price: 1,
+        unit: "kg",
+        origin_region: "Abidjan",
+        created_at: "2026-02-01T10:00:00Z",
+      },
+      {
+        id: "nogeo",
+        name: "NoGeo",
+        price: 1,
+        unit: "kg",
+        created_at: "2026-03-01T10:00:00Z",
+      },
+    ]
+    const regional = selectDigestProducts(products, { id: "u", city: "Abidjan", country: "ci" }, 5)
+    expect(regional.products.some((p) => p.id === "old")).toBe(true)
+    expect(["regional_30d", "regional_7d", "newest"]).toContain(regional.mode)
+    if (regional.mode === "regional_30d" || regional.mode === "newest") {
+      expect(regional.isNotifiable).toBe(false)
+    }
+
+    const newest = selectDigestProducts(
+      [{ id: "x", name: "X", price: 1, unit: "kg", created_at: "2026-01-01T00:00:00Z" }],
+      { id: "u", city: "Dakar" },
+      5,
+    )
+    expect(newest.mode).toBe("newest")
+    expect(newest.isNotifiable).toBe(false)
+    expect(newest.products).toHaveLength(1)
+  })
+
+  it("marque regional_24h comme notifiable", () => {
+    const now = new Date().toISOString()
+    const sel = selectDigestProducts(
+      [{ id: "n", name: "N", price: 1, unit: "kg", origin_region: "Abidjan", created_at: now }],
+      { id: "u", city: "Abidjan" },
+      5,
+    )
+    expect(sel.mode).toBe("regional_24h")
+    expect(sel.isNotifiable).toBe(true)
   })
 })
 

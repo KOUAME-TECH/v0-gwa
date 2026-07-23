@@ -75,7 +75,8 @@ export default function ContactPage() {
       <main className="max-w-2xl mx-auto px-4 py-6 space-y-6">
         <p className="text-[#4B5563] text-[15px]">
           Une question sur GWA (commandes, escrow, paiement, Score de Confiance) ?
-          L&apos;équipe GWA vous répond. Le moyen le plus rapide reste WhatsApp.
+          L&apos;équipe support lit vos messages dans le back-office GWA
+          (section Support). Le moyen le plus rapide reste WhatsApp.
         </p>
 
         {/* WhatsApp — canal prioritaire */}
@@ -105,8 +106,8 @@ export default function ContactPage() {
               <h3 className="font-semibold text-[#111827] mb-0.5">Email</h3>
               <p className="text-sm text-[#4B5563] break-all">{CONTACT_EMAIL}</p>
               <p className="text-xs text-[#9CA3AF] mt-1">
-                Les messages envoyés via le formulaire ci-dessous arrivent
-                directement dans la boîte de l&apos;équipe GWA.
+                Chaque message du formulaire est enregistré dans l&apos;inbox
+                Support (/admin/support) et transmis à l&apos;équipe GWA.
               </p>
             </div>
           </div>
@@ -143,7 +144,8 @@ export default function ContactPage() {
                 Message envoyé !
               </h3>
               <p className="text-[#4B5563] text-sm">
-                L&apos;équipe GWA vous répondra très bientôt.
+                Votre message est bien dans l&apos;inbox Support. L&apos;équipe
+                GWA vous répondra très bientôt.
               </p>
             </div>
           ) : (

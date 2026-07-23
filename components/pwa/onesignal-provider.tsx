@@ -8,6 +8,12 @@ declare global {
   interface Window {
     OneSignalDeferred?: Array<(OneSignal: OneSignalSDK) => void | Promise<void>>
     OneSignal?: OneSignalSDK
+    __GWA_ONESIGNAL_STATUS?: {
+      ok: boolean
+      error?: string
+      origin?: string
+      playerId?: string | null
+    }
   }
 }
 
@@ -25,8 +31,11 @@ interface OneSignalSDK {
     PushSubscription: {
       id?: string | null
       optedIn?: boolean
+      optIn?: () => Promise<void>
       addEventListener: (event: string, listener: () => void) => void
     }
+    addTag?: (key: string, value: string) => void
+    addTags?: (tags: Record<string, string>) => void
   }
   Notifications: {
     requestPermission(): Promise<boolean | void>
@@ -47,8 +56,8 @@ async function registerPlayerId(playerId: string) {
 }
 
 /**
- * OneSignal Web SDK v16 — PWA (pas Expo/RN)
- * App ID public ; REST API key côté serveur uniquement.
+ * OneSignal Web SDK v16 — PWA
+ * SW GWA (/sw.js) importe déjà le worker OneSignal (évite double scope).
  */
 export function OneSignalProvider({ children }: { children: React.ReactNode }) {
   const initialized = useRef(false)
@@ -59,9 +68,11 @@ export function OneSignalProvider({ children }: { children: React.ReactNode }) {
 
     const appId = getOneSignalAppId()
     if (!appId) {
-      console.warn(
-        "[OneSignal] NEXT_PUBLIC_ONESIGNAL_APP_ID manquant ou invalide — init push ignorée",
-      )
+      window.__GWA_ONESIGNAL_STATUS = {
+        ok: false,
+        error: "NEXT_PUBLIC_ONESIGNAL_APP_ID manquant",
+        origin: window.location.origin,
+      }
       return
     }
 
@@ -71,24 +82,47 @@ export function OneSignalProvider({ children }: { children: React.ReactNode }) {
         await OneSignal.init({
           appId,
           allowLocalhostAsSecureOrigin: true,
-          serviceWorkerPath: "/OneSignalSDKWorker.js",
-          serviceWorkerUpdaterPath: "/OneSignalSDKUpdaterWorker.js",
+          serviceWorkerPath: "/sw.js",
+          serviceWorkerParam: { scope: "/" },
           notifyButton: { enable: false },
         })
+        window.__GWA_ONESIGNAL_STATUS = {
+          ok: true,
+          origin: window.location.origin,
+          playerId: OneSignal.User.PushSubscription.id || null,
+        }
       } catch (err) {
-        console.warn("[OneSignal] init échouée (App ID / SW / cache) :", err)
+        const msg = err instanceof Error ? err.message : String(err)
+        console.warn("[OneSignal] init échouée (App ID / SW / domaine) :", err)
+        window.__GWA_ONESIGNAL_STATUS = {
+          ok: false,
+          error: msg,
+          origin: window.location.origin,
+        }
+        // Domaine preview non déclaré dans OneSignal Dashboard → message actionnable
+        if (/not configured for web push/i.test(msg)) {
+          console.warn(
+            `[OneSignal] Ajoutez l'origine ${window.location.origin} dans OneSignal → Settings → Platforms → Web`,
+          )
+        }
         return
       }
 
       const sync = async () => {
         const playerId = OneSignal.User.PushSubscription.id
+        window.__GWA_ONESIGNAL_STATUS = {
+          ok: true,
+          origin: window.location.origin,
+          playerId: playerId || null,
+        }
         if (playerId) await registerPlayerId(playerId)
       }
 
       await sync()
-      OneSignal.User.PushSubscription.addEventListener("change", sync)
+      OneSignal.User.PushSubscription.addEventListener("change", () => {
+        void sync()
+      })
 
-      // Lier l'utilisateur Supabase (external_id) si connecté
       try {
         const supabase = createClient()
         const {
@@ -96,18 +130,34 @@ export function OneSignalProvider({ children }: { children: React.ReactNode }) {
         } = await supabase.auth.getUser()
         if (user?.id && OneSignal.login) {
           await OneSignal.login(user.id)
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("user_type")
+            .eq("id", user.id)
+            .maybeSingle()
+          const role = (profile?.user_type || "acheteur").toString()
+          if (OneSignal.User.addTags) {
+            OneSignal.User.addTags({ role, platform: "web_pwa" })
+          } else if (OneSignal.User.addTag) {
+            OneSignal.User.addTag("role", role)
+          }
         }
-      } catch {
-        // ignore
+      } catch (err) {
+        console.warn("[OneSignal] login/tags", err)
       }
 
       if (!OneSignal.User.PushSubscription.optedIn) {
         try {
           await OneSignal.Notifications.requestPermission()
+          if (OneSignal.User.PushSubscription.optIn) {
+            await OneSignal.User.PushSubscription.optIn()
+          }
           await sync()
         } catch {
           // permission refusée
         }
+      } else {
+        await sync()
       }
     })
 

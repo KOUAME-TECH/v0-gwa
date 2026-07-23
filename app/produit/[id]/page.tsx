@@ -108,6 +108,19 @@ export default function ProduitPage() {
     }
   }
 
+  const handleQuantityInput = (raw: string) => {
+    const minQty = product?.min_order_quantity || 1
+    const maxQty = product?.stock_quantity || 100
+    const digits = raw.replace(/\D/g, "")
+    if (!digits) {
+      setQuantity(minQty)
+      return
+    }
+    const parsed = Number.parseInt(digits, 10)
+    if (!Number.isFinite(parsed)) return
+    setQuantity(Math.min(maxQty, Math.max(minQty, parsed)))
+  }
+
   const handleAddToCart = async () => {
     if (!user) {
       router.push("/auth/login")
@@ -379,14 +392,25 @@ export default function ProduitPage() {
               onClick={() => handleQuantityChange(-1)}
               className="w-9 h-9 rounded-full flex items-center justify-center bg-white shadow-sm active:scale-95 transition-transform"
               disabled={quantity <= (product.min_order_quantity || 1)}
+              aria-label="Diminuer"
             >
               <Minus className="h-4 w-4" />
             </button>
-            <span className="w-10 text-center font-semibold text-lg">{quantity}</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={product.min_order_quantity || 1}
+              max={product.stock_quantity}
+              value={quantity}
+              onChange={(e) => handleQuantityInput(e.target.value)}
+              className="w-12 text-center font-semibold text-lg bg-transparent tabular-nums border-0 focus:outline-none"
+              aria-label="Quantité"
+            />
             <button 
               onClick={() => handleQuantityChange(1)}
               className="w-9 h-9 rounded-full flex items-center justify-center bg-white shadow-sm active:scale-95 transition-transform"
               disabled={quantity >= product.stock_quantity}
+              aria-label="Augmenter"
             >
               <Plus className="h-4 w-4" />
             </button>

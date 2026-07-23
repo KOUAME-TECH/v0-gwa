@@ -197,7 +197,6 @@ export default function PostDetailPage() {
               text={post.content}
               audioUrl={post.audio_url}
               fallbackLabel={VOICE_COMMENT_PLACEHOLDER}
-              showSummary
             />
           </div>
         )}

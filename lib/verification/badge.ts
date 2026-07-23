@@ -32,3 +32,16 @@ export function shouldShowVerifiedBadge(profile: VerifiableProfile | null | unde
   }
   return true
 }
+
+/**
+ * Afficher le CTA « vérifier mon identité » seulement si pas encore fait
+ * (ni badge, ni demande pending/approved).
+ */
+export function shouldPromptIdentityVerification(opts: {
+  is_verified?: boolean | null
+  kyc_status?: KycStatus
+}): boolean {
+  if (opts.is_verified === true) return false
+  if (opts.kyc_status === "pending" || opts.kyc_status === "approved") return false
+  return true
+}

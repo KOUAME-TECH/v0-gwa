@@ -84,7 +84,13 @@ function LoginForm() {
       })
       const data = await res.json()
       if (!res.ok) {
-        setError(data.error || "Envoi impossible")
+        if (data.code === "SMS_SEND_FAILED") {
+          setError(
+            "SMS indisponible pour le moment. Connectez-vous par email, ou réessayez plus tard.",
+          )
+        } else {
+          setError(data.error || "Envoi impossible")
+        }
         setIsLoading(false)
         return
       }
@@ -180,7 +186,9 @@ function LoginForm() {
       <main className="flex-1 px-5 pt-8 pb-10">
         <div className="mb-8">
           <h1 className="text-3xl font-bold tracking-tight mb-2">Connexion</h1>
-          <p className="text-neutral-500">Heureux de vous revoir</p>
+          <p className="text-neutral-500">
+            Téléphone ou email — même si le compte est déjà lié ailleurs.
+          </p>
         </div>
 
         <HibpPasswordBanner />

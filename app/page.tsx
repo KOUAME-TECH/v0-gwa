@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
@@ -31,7 +31,7 @@ import { toast } from "sonner"
 import { GwaMark } from "@/components/brand/gwa-mark"
 import { WeatherWidget } from "@/components/weather-widget"
 import { ClickableListenText, ListenMicButton } from "@/components/media/clickable-listen-text"
-import { ListenModeToggle } from "@/components/media/listen-mode-toggle"
+import { isLowQualityPostContent } from "@/lib/feed/content-quality"
 import { ListenRitualBadge } from "@/components/media/listen-ritual-badge"
 import { useListenMode } from "@/hooks/use-listen-mode"
 import { useListenRitual } from "@/hooks/use-listen-ritual"
@@ -45,6 +45,10 @@ import {
   followButtonLabel,
   shouldShowFollowButton,
 } from "@/lib/social/follow"
+import {
+  FEED_FILTER_CHIPS,
+  productMatchesFeedFilter,
+} from "@/lib/catalog/feed-filters"
 
 type Product = {
   id: string
@@ -63,6 +67,7 @@ type Product = {
   shares_count: number
   created_at: string
   is_organic?: boolean | null
+  categories?: { name: string; slug?: string | null } | null
   profiles: {
     id: string
     full_name: string
@@ -98,6 +103,10 @@ type Comment = {
   audio_url?: string | null
   comment_type?: string
   created_at: string
+  parent_comment_id?: string | null
+  likes_count?: number
+  liked_by_me?: boolean
+  replies?: Comment[]
   author: {
     id: string
     full_name: string
@@ -109,14 +118,7 @@ type FeedItem =
   | { type: "product"; data: Product; isLiked: boolean; isSaved: boolean }
   | { type: "post"; data: Post; isLiked: boolean; isSaved: boolean }
 
-const categories = [
-  { id: "all", name: "Tout", icon: "🌍" },
-  { id: "cereales", name: "Céréales", icon: "🌾" },
-  { id: "cacao", name: "Cacao", icon: "🍫" },
-  { id: "cafe", name: "Café", icon: "☕" },
-  { id: "fruits", name: "Fruits", icon: "🥭" },
-  { id: "legumes", name: "Légumes", icon: "🥬" },
-]
+const categories = FEED_FILTER_CHIPS.map((c) => ({ id: c.id, name: c.name }))
 
 export default function HomePage() {
   const router = useRouter()
@@ -128,6 +130,7 @@ export default function HomePage() {
   const { streak: listenStreak } = useListenRitual()
   const [activeCategory, setActiveCategory] = useState("all")
   const [activeTab, setActiveTab] = useState<"tout" | "produits" | "publications">("tout")
+  const [unreadNotifications, setUnreadNotifications] = useState(0)
   
   // États pour les commentaires
   const [selectedItem, setSelectedItem] = useState<FeedItem | null>(null)
@@ -135,6 +138,7 @@ export default function HomePage() {
   const [loadingComments, setLoadingComments] = useState(false)
   const [newComment, setNewComment] = useState("")
   const [submittingComment, setSubmittingComment] = useState(false)
+  const [replyTo, setReplyTo] = useState<Comment | null>(null)
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set())
   const [followPendingId, setFollowPendingId] = useState<string | null>(null)
   
@@ -145,6 +149,10 @@ export default function HomePage() {
   // Suppression d'une publication (post) — propriétaire uniquement
   const [pendingDeletePost, setPendingDeletePost] = useState<Post | null>(null)
   const [deletingPost, setDeletingPost] = useState(false)
+  const [pullY, setPullY] = useState(0)
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshKey, setRefreshKey] = useState(0)
+  const pullStartY = useRef<number | null>(null)
 
   const supabase = createClient()
 
@@ -178,11 +186,16 @@ export default function HomePage() {
       let userFavorites: string[] = []
       
       if (currentUser) {
-        const [likesRes, favsRes, profileRes, followsRes] = await Promise.all([
-          supabase.from("post_likes").select("post_id").eq("user_id", currentUser.id),
-          supabase.from("favorites").select("product_id").eq("user_id", currentUser.id),
-          supabase.from("profiles").select("user_type").eq("id", currentUser.id).single(),
-          supabase.from("followers").select("following_id").eq("follower_id", currentUser.id),
+        const [likesRes, favsRes, profileRes, followsRes, notifRes] = await Promise.all([
+          supabase.from("post_likes").select("post_id").eq("user_id", currentUser.id).limit(200),
+          supabase.from("favorites").select("product_id").eq("user_id", currentUser.id).limit(200),
+          supabase.from("profiles").select("user_type").eq("id", currentUser.id).maybeSingle(),
+          supabase.from("followers").select("following_id").eq("follower_id", currentUser.id).limit(200),
+          supabase
+            .from("notifications")
+            .select("id", { count: "exact", head: true })
+            .eq("user_id", currentUser.id)
+            .eq("is_read", false),
         ])
         if (profileRes.data) {
           setUserType(profileRes.data.user_type)
@@ -190,8 +203,11 @@ export default function HomePage() {
         if (followsRes.data) {
           setFollowingIds(new Set(followsRes.data.map((f) => f.following_id)))
         }
+        setUnreadNotifications(notifRes.count || 0)
         userLikes = likesRes.data?.map(l => l.post_id) || []
         userFavorites = favsRes.data?.map(f => f.product_id) || []
+      } else {
+        setUnreadNotifications(0)
       }
 
       // Charger produits
@@ -200,7 +216,8 @@ export default function HomePage() {
         .select(`
           id, name, description, price, unit, images, audio_url, origin_region, origin_country, product_type, seller_id,
           likes_count, comments_count, shares_count, created_at, is_organic, is_fair_trade,
-          profiles:seller_id(id, full_name, avatar_url, is_verified, city)
+          profiles:seller_id(id, full_name, avatar_url, is_verified, city),
+          categories:category_id(name, slug)
         `)
         .eq("status", "active")
         .order("created_at", { ascending: false })
@@ -255,9 +272,28 @@ export default function HomePage() {
 
       setFeed(feedItems)
       setIsLoading(false)
+      setRefreshing(false)
     }
     loadData()
-  }, [supabase])
+    const onNotifUpdated = () => {
+      void (async () => {
+        const { data: { user: u } } = await supabase.auth.getUser()
+        if (!u) {
+          setUnreadNotifications(0)
+          return
+        }
+        const { count } = await supabase
+          .from("notifications")
+          .select("*", { count: "exact", head: true })
+          .eq("user_id", u.id)
+          .eq("is_read", false)
+        setUnreadNotifications(count || 0)
+      })()
+    }
+    window.addEventListener("gwa:notifications-updated", onNotifUpdated)
+    return () => window.removeEventListener("gwa:notifications-updated", onNotifUpdated)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supabase, refreshKey])
 
   const formatPrice = (price: number) => new Intl.NumberFormat("fr-FR").format(price)
   
@@ -355,6 +391,7 @@ export default function HomePage() {
     setSelectedItem(item)
     setLoadingComments(true)
     setComments([])
+    setReplyTo(null)
 
     try {
       const target =
@@ -362,19 +399,84 @@ export default function HomePage() {
           ? { type: "post" as const, id: item.data.id }
           : { type: "product" as const, id: item.data.id }
 
-      const loaded = await loadFeedComments(supabase, target)
+      const loaded = await loadFeedComments(supabase, target, user?.id)
       setComments(loaded)
+      // Resync compteur affiché (évite "Commentaires (3)" alors qu'il n'y en a que 2)
+      const realCount = loaded.reduce((n, c) => n + 1 + (c.replies?.length || 0), 0)
+      setFeed((prev) =>
+        prev.map((f) =>
+          f.data.id === item.data.id
+            ? { ...f, data: { ...f.data, comments_count: realCount } }
+            : f,
+        ),
+      )
+      setSelectedItem((prev) =>
+        prev && prev.data.id === item.data.id
+          ? { ...prev, data: { ...prev.data, comments_count: realCount } }
+          : prev,
+      )
     } catch (error) {
       console.error("openComments", error)
-      toast.error("Erreur lors du chargement des commentaires")
+      toast.error("Impossible de charger les commentaires. Réessayez.")
     } finally {
       setLoadingComments(false)
     }
   }
 
+  const toggleCommentLike = async (commentId: string) => {
+    if (!user) {
+      toast.error("Connectez-vous pour aimer un commentaire.")
+      return
+    }
+    // Optimiste
+    const patch = (list: Comment[]): Comment[] =>
+      list.map((c) => {
+        if (c.id === commentId) {
+          const liked = !c.liked_by_me
+          return {
+            ...c,
+            liked_by_me: liked,
+            likes_count: Math.max(0, (c.likes_count || 0) + (liked ? 1 : -1)),
+          }
+        }
+        if (c.replies?.length) return { ...c, replies: patch(c.replies) }
+        return c
+      })
+    setComments((prev) => patch(prev))
+
+    try {
+      const res = await fetch("/api/comments/like", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          commentId,
+          type: selectedItem?.type === "product" ? "product" : "post",
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setComments((prev) => patch(prev)) // revert
+        toast.error(data.error || "Impossible d'aimer ce commentaire.")
+        return
+      }
+      const apply = (list: Comment[]): Comment[] =>
+        list.map((c) => {
+          if (c.id === commentId) {
+            return { ...c, liked_by_me: !!data.liked, likes_count: Number(data.likes_count || 0) }
+          }
+          if (c.replies?.length) return { ...c, replies: apply(c.replies) }
+          return c
+        })
+      setComments((prev) => apply(prev))
+    } catch {
+      setComments((prev) => patch(prev))
+      toast.error("Connexion interrompue. Réessayez.")
+    }
+  }
+
   const submitComment = async (voice: { file: File; url: string } | null) => {
     if (!user) {
-      toast.error("Connectez-vous pour commenter")
+      toast.error("Connectez-vous pour commenter.")
       return
     }
     const hasText = !!newComment.trim()
@@ -389,17 +491,15 @@ export default function HomePage() {
       form.append("id", selectedItem.data.id)
       if (hasText) form.append("text", newComment.trim())
       if (hasVoice && voice) form.append("audio", voice.file)
+      if (replyTo && selectedItem) {
+        form.append("parentCommentId", replyTo.id)
+      }
 
       const res = await fetch("/api/comments", { method: "POST", body: form })
       const payload = await res.json().catch(() => ({}))
 
       if (!res.ok) {
-        const msg = payload.error || "Erreur lors de l'envoi du commentaire"
-        if (payload.code === "SCHEMA") {
-          toast.error(msg, { duration: 6000 })
-        } else {
-          toast.error(msg)
-        }
+        toast.error(payload.error || "Impossible d'envoyer votre message.")
         return
       }
 
@@ -408,27 +508,43 @@ export default function HomePage() {
         voiceStored: boolean
       }
 
-      setComments((prev) => [created, ...prev])
-
-      const newCount = selectedItem.data.comments_count + 1
-      setFeed((prev) =>
-        prev.map((f) =>
-          f.data.id === selectedItem.data.id
-            ? { ...f, data: { ...f.data, comments_count: newCount } }
-            : f,
-        ),
-      )
-      setSelectedItem((prev) =>
-        prev ? { ...prev, data: { ...prev.data, comments_count: newCount } } : prev,
-      )
+      if (replyTo) {
+        const inject = (list: Comment[]): Comment[] =>
+          list.map((c) => {
+            if (c.id === replyTo.id) {
+              return { ...c, replies: [...(c.replies || []), created] }
+            }
+            if (c.replies?.length) return { ...c, replies: inject(c.replies) }
+            return c
+          })
+        setComments((prev) => inject(prev))
+      } else {
+        setComments((prev) => [created, ...prev])
+        const newCount = selectedItem.data.comments_count + 1
+        setFeed((prev) =>
+          prev.map((f) =>
+            f.data.id === selectedItem.data.id
+              ? { ...f, data: { ...f.data, comments_count: newCount } }
+              : f,
+          ),
+        )
+        setSelectedItem((prev) =>
+          prev ? { ...prev, data: { ...prev.data, comments_count: newCount } } : prev,
+        )
+      }
 
       setNewComment("")
+      setReplyTo(null)
       toast.success(
-        voiceStored ? "Commentaire vocal publié" : hasVoice ? "Commentaire publié (texte uniquement)" : "Commentaire publié",
+        replyTo
+          ? "Réponse envoyée"
+          : voiceStored
+            ? "Votre note vocale est publiée"
+            : "Commentaire publié",
       )
     } catch (error) {
       console.error("[comments]", error)
-      toast.error("Erreur lors de l'envoi du commentaire")
+      toast.error("Impossible d'envoyer votre message. Réessayez.")
     } finally {
       setSubmittingComment(false)
     }
@@ -451,7 +567,6 @@ export default function HomePage() {
       ? `Découvrez ${(shareItem.data as Product).name} sur GWA`
       : `${(shareItem.data as Post).content?.slice(0, 100)}...`
 
-    // Mettre à jour le compteur de partages
     try {
       const countTable = shareItem.type === "post" ? "posts" : "products"
       const newCount = shareItem.data.shares_count + 1
@@ -479,12 +594,15 @@ export default function HomePage() {
         break
       case "copy":
         await navigator.clipboard.writeText(url)
-        toast.success("Lien copié dans le presse-papiers")
+        toast.success("Lien copié — merci de partager GWA !")
         break
     }
 
     setShowShareSheet(false)
     setShareItem(null)
+    if (platform !== "copy") {
+      toast.success("Merci d'avoir partagé !")
+    }
   }
 
   // Suivre un utilisateur
@@ -542,13 +660,23 @@ export default function HomePage() {
     // Filtre par onglet
     if (activeTab === "produits" && item.type !== "product") return false
     if (activeTab === "publications" && item.type !== "post") return false
+
+    // Masquer posts marketing / démo peu utiles
+    if (item.type === "post" && isLowQualityPostContent((item.data as Post).content)) {
+      return false
+    }
     
-    // Filtre par categorie (s'applique aux produits)
+    // Filtre par catégorie (slug réel, pas product_type)
     if (activeCategory !== "all" && item.type === "product") {
       const product = item.data as Product
-      const cat = product.product_type?.toLowerCase() || ""
-      if (!cat.includes(activeCategory)) return false
+      return productMatchesFeedFilter(activeCategory, {
+        categorySlug: product.categories?.slug,
+        categoryName: product.categories?.name,
+        productName: product.name,
+      })
     }
+    // En filtre catégorie, masquer les posts (pas de catégorie)
+    if (activeCategory !== "all" && item.type === "post") return false
     return true
   })
 
@@ -570,16 +698,25 @@ export default function HomePage() {
             </Link>
             <div className="flex items-center gap-2">
               <ListenRitualBadge streak={listenStreak} />
-              <ListenModeToggle compact className="shrink-0" />
+              <Link
+                href="/marketplace?digest=1"
+                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full bg-[#1F5C2E]/8 text-[#1F5C2E] text-xs font-semibold active:scale-95 transition-transform"
+                aria-label="Écouter les nouveautés — Harmattan Digest"
+                title="Écouter les nouveautés près de chez vous"
+              >
+                Digest
+              </Link>
               <Link href="/recherche">
                 <Button variant="ghost" size="icon" className="rounded-full h-10 w-10">
                   <Search className="h-5 w-5 text-[#4B5563]" />
                 </Button>
               </Link>
-              <Link href="/notifications">
+              <Link href="/notifications" aria-label="Notifications">
                 <Button variant="ghost" size="icon" className="rounded-full h-10 w-10 relative">
                   <Bell className="h-5 w-5 text-[#4B5563]" />
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-[#F39A1F] rounded-full" />
+                  {unreadNotifications > 0 && (
+                    <span className="absolute top-1 right-1 min-w-[8px] h-2 px-0.5 bg-[#F39A1F] rounded-full" />
+                  )}
                 </Button>
               </Link>
             </div>
@@ -608,31 +745,59 @@ export default function HomePage() {
           ))}
         </div>
         
-        {/* Catégories */}
+        {/* Catégories — texte seul, slugs cohérents */}
         <div className="flex gap-2 overflow-x-auto scrollbar-none px-4 py-3">
           {categories.map((cat) => (
             <button
               key={cat.id}
+              type="button"
               onClick={() => setActiveCategory(cat.id)}
               className={cn(
-                "flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors",
+                "px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors",
                 activeCategory === cat.id
                   ? "bg-[#2F7D32] text-white"
                   : "bg-white text-[#4B5563] border border-[#E5E7EB]"
               )}
             >
-              <span>{cat.icon}</span>
-              <span>{cat.name}</span>
+              {cat.name}
             </button>
           ))}
         </div>
       </header>
 
       {/* Feed */}
-      <div className="divide-y divide-[#E5E7EB]">
+      <div
+        className="px-3 pt-3 pb-2 space-y-3"
+        onTouchStart={(e) => {
+          if (typeof window !== "undefined" && window.scrollY <= 0) {
+            pullStartY.current = e.touches[0]?.clientY ?? null
+          } else {
+            pullStartY.current = null
+          }
+        }}
+        onTouchMove={(e) => {
+          if (pullStartY.current == null || refreshing) return
+          const y = e.touches[0]?.clientY ?? pullStartY.current
+          const delta = Math.max(0, y - pullStartY.current)
+          if (delta > 12) setPullY(Math.min(delta * 0.45, 72))
+        }}
+        onTouchEnd={() => {
+          if (pullY > 56 && !refreshing) {
+            setRefreshing(true)
+            setRefreshKey((k) => k + 1)
+          }
+          setPullY(0)
+          pullStartY.current = null
+        }}
+      >
+        {(pullY > 8 || refreshing) && (
+          <div className="flex justify-center text-xs text-[#2F7D32] py-1">
+            {refreshing ? "Actualisation…" : pullY > 56 ? "Relâchez pour actualiser" : "Tirez pour actualiser"}
+          </div>
+        )}
         {isLoading ? (
           Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="bg-white p-4">
+            <div key={i} className="bg-white p-4 rounded-2xl shadow-sm">
               <div className="flex items-center gap-3 mb-4">
                 <Skeleton className="h-11 w-11 rounded-full" />
                 <div className="space-y-2">
@@ -640,16 +805,15 @@ export default function HomePage() {
                   <Skeleton className="h-3 w-24" />
                 </div>
               </div>
-              <Skeleton className="aspect-square w-full rounded-xl mb-4" />
+              <Skeleton className="aspect-[4/5] w-full rounded-xl mb-4" />
               <div className="flex gap-4">
-                <Skeleton className="h-8 w-20" />
                 <Skeleton className="h-8 w-20" />
                 <Skeleton className="h-8 w-20" />
               </div>
             </div>
           ))
         ) : filteredFeed.length === 0 ? (
-          <div className="bg-white p-8 text-center">
+          <div className="bg-white p-8 text-center rounded-2xl shadow-sm">
             <div className="w-20 h-20 rounded-full bg-[#2F7D32]/10 flex items-center justify-center mx-auto mb-4">
               <ShoppingBag className="h-10 w-10 text-[#2F7D32]" />
             </div>
@@ -757,13 +921,19 @@ export default function HomePage() {
           if (!open) {
             setSelectedItem(null)
             setNewComment("")
+            setReplyTo(null)
           }
         }}
       >
         <SheetContent side="bottom" className="h-[85vh] rounded-t-3xl flex flex-col p-4 bg-white">
           <SheetHeader className="border-b border-[#E5E7EB] pb-4 shrink-0">
             <SheetTitle className="text-center text-[#111827]">
-              Commentaires ({selectedItem?.data.comments_count || 0})
+              Commentaires (
+              {comments.reduce(
+                (n, c) => n + 1 + (c.replies?.length || 0),
+                0,
+              ) || selectedItem?.data.comments_count || 0}
+              )
             </SheetTitle>
           </SheetHeader>
           
@@ -780,41 +950,34 @@ export default function HomePage() {
                 ))
               ) : comments.length === 0 ? (
                 <p className="text-center text-[#4B5563] py-8">
-                  Aucun commentaire pour le moment. Soyez le premier à commenter !
+                  Soyez le premier à réagir !
                 </p>
               ) : (
-                comments.map(comment => (
-                  <div key={comment.id} className="flex gap-3">
-                    <Avatar className="h-8 w-8">
-                      <AvatarImage src={comment.author?.avatar_url || ""} />
-                      <AvatarFallback className="bg-[#2F7D32] text-white text-xs">
-                        {comment.author?.full_name?.charAt(0) || "?"}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1">
-                      <div className="bg-[#F9FAFB] rounded-2xl px-3 py-2 border border-[#E5E7EB]/60">
-                        <p className="font-medium text-sm text-[#111827] mb-1.5">
-                          {comment.author?.full_name || "Utilisateur"}
-                        </p>
-                        <ClickableListenText
-                          text={comment.content}
-                          audioUrl={comment.audio_url}
-                          fallbackLabel={VOICE_COMMENT_PLACEHOLDER}
-                          textClassName="text-sm"
-                          highlight={listenMode}
-                          showSummary={listenMode}
-                        />
-                      </div>
-                      <p className="text-xs text-[#9CA3AF] mt-1 ml-2">
-                        {formatTimeAgo(comment.created_at)}
-                      </p>
-                    </div>
-                  </div>
+                comments.map((comment) => (
+                  <CommentThread
+                    key={comment.id}
+                    comment={comment}
+                    formatTimeAgo={formatTimeAgo}
+                    listenMode={listenMode}
+                    canReply={!!selectedItem}
+                    onLike={toggleCommentLike}
+                    onReply={(c) => setReplyTo(c)}
+                  />
                 ))
               )}
           </div>
 
-          <div className="shrink-0 pb-safe-bottom">
+          <div className="shrink-0 pb-safe-bottom space-y-2">
+            {replyTo && (
+              <div className="flex items-center justify-between rounded-xl bg-[#FFF6E5] px-3 py-2 text-xs text-[#4B5563]">
+                <span className="truncate">
+                  Réponse à <strong>{replyTo.author?.full_name || "ce commentaire"}</strong>
+                </span>
+                <button type="button" className="text-[#2F7D32] font-medium" onClick={() => setReplyTo(null)}>
+                  Annuler
+                </button>
+              </div>
+            )}
             <CommentComposer
               userInitial={user?.email?.charAt(0)?.toUpperCase() || "?"}
               value={newComment}
@@ -823,7 +986,7 @@ export default function HomePage() {
               submitting={submittingComment}
               loggedIn={!!user}
               onAuthRequired={() => {
-                toast.error("Connectez-vous pour commenter")
+                toast.error("Connectez-vous pour commenter.")
                 router.push("/auth/login?redirect=/")
               }}
             />
@@ -946,6 +1109,9 @@ function FeedCard({
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   
   const [isVideoPlaying, setIsVideoPlaying] = useState(false)
+  const [lightboxOpen, setLightboxOpen] = useState(false)
+  const lastTapRef = useRef(0)
+  const touchStartX = useRef<number | null>(null)
   
   const isProduct = item.type === "product"
   const data = item.data
@@ -968,14 +1134,14 @@ function FeedCard({
   const hasMultipleImages = medias && medias.length > 1
 
   return (
-    <article className="bg-white">
-      {/* Header auteur */}
-      <div className="flex items-center justify-between px-4 py-3">
+    <article className="bg-white rounded-2xl overflow-hidden shadow-sm ring-1 ring-black/[0.04]">
+      {/* Header auteur — actions secondaires dans le menu */}
+      <div className="flex items-center justify-between px-3.5 py-3">
         <Link 
           href={isProduct ? `/profil/${(data as Product).seller_id}` : `/profil/${(data as Post).author_id}`} 
-          className="flex items-center gap-3"
+          className="flex items-center gap-2.5 min-w-0"
         >
-          <Avatar className="h-11 w-11 border-2 border-[#E5E7EB]">
+          <Avatar className="h-10 w-10 ring-2 ring-[#FFF6E5]">
             <AvatarImage src={profile?.avatar_url || ""} />
             <AvatarFallback className={cn(
               "text-white text-sm",
@@ -984,99 +1150,93 @@ function FeedCard({
               {profile?.full_name?.[0] || "?"}
             </AvatarFallback>
           </Avatar>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-1">
-              <span className="font-semibold text-[#111827] text-sm">
+              <span className="font-semibold text-[#111827] text-sm truncate">
                 {profile?.full_name || "Utilisateur"}
               </span>
               {profile?.is_verified && (
-                <BadgeCheck className="h-4 w-4 text-[#2F7D32]" />
+                <BadgeCheck className="h-4 w-4 text-[#2F7D32] shrink-0" />
               )}
             </div>
-            <p className="text-xs text-[#4B5563] flex items-center gap-1">
+            <p className="text-[11px] text-[#6B7280] flex items-center gap-1 truncate">
               {isProduct ? (
                 <>
-                  <MapPin className="h-3 w-3" />
+                  <MapPin className="h-3 w-3 shrink-0" />
                   {(data as Product).origin_region || (data as Product).origin_country || profile?.city || "Afrique"}
                 </>
               ) : (
-                <>
-                  {(profile as any)?.user_type || "Membre"} · {formatTimeAgo(data.created_at)}
-                </>
+                <>{formatTimeAgo(data.created_at)}</>
               )}
             </p>
           </div>
         </Link>
         
-        <div className="flex items-center gap-2">
-          {shouldShowFollowButton(currentUserId, authorUserId) && (
-            <Button
-              variant={isFollowing ? "default" : "outline"}
-              size="sm"
-              onClick={onFollow}
-              disabled={followPending}
-              className={cn(
-                "rounded-full h-8 px-3 text-xs font-semibold transition-all",
-                isFollowing
-                  ? "bg-[#1F5C2E] hover:bg-[#174A24] text-white border-transparent"
-                  : "bg-transparent border-[#1F5C2E] text-[#1F5C2E] hover:bg-[#1F5C2E]/10",
-              )}
-            >
-              {isFollowing ? (
-                <UserCheck className="h-3.5 w-3.5 mr-1" />
-              ) : (
-                <UserPlus className="h-3.5 w-3.5 mr-1" />
-              )}
-              {followButtonLabel(isFollowing)}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="rounded-full h-9 w-9 shrink-0">
+              <MoreHorizontal className="h-5 w-5 text-[#4B5563]" />
             </Button>
-          )}
-<DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="rounded-full h-9 w-9">
-                    <MoreHorizontal className="h-5 w-5 text-[#4B5563]" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
-                  <DropdownMenuItem onClick={() => {
-                    const url = `${window.location.origin}/${isProduct ? "produit" : "post"}/${data.id}`
-                    navigator.clipboard.writeText(url)
-                    toast.success("Lien copié !")
-                  }}>
-                    <LinkIcon className="h-4 w-4 mr-2" />
-                    Copier le lien
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => toast.success("Publication masquée")}>
-                    <EyeOff className="h-4 w-4 mr-2" />
-                    Masquer
-                  </DropdownMenuItem>
-                  {isOwnPost && onDelete ? (
-                    <DropdownMenuItem
-                      onClick={onDelete}
-                      className="text-destructive focus:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Supprimer
-                    </DropdownMenuItem>
-                  ) : (
-                    <DropdownMenuItem onClick={() => toast.success("Signalement envoyé")} className="text-destructive">
-                      <Flag className="h-4 w-4 mr-2" />
-                      Signaler
-                    </DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-        </div>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            {shouldShowFollowButton(currentUserId, authorUserId) && (
+              <DropdownMenuItem onClick={onFollow} disabled={followPending}>
+                {isFollowing ? (
+                  <UserCheck className="h-4 w-4 mr-2" />
+                ) : (
+                  <UserPlus className="h-4 w-4 mr-2" />
+                )}
+                {followButtonLabel(isFollowing)}
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem onClick={onShare}>
+              <Share2 className="h-4 w-4 mr-2" />
+              Partager
+            </DropdownMenuItem>
+            {isProduct && (
+              <DropdownMenuItem onClick={onSave}>
+                <Bookmark className="h-4 w-4 mr-2" />
+                {item.isSaved ? "Retirer des favoris" : "Enregistrer"}
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem onClick={() => {
+              const url = `${window.location.origin}/${isProduct ? "produit" : "post"}/${data.id}`
+              navigator.clipboard.writeText(url)
+              toast.success("Lien copié")
+            }}>
+              <LinkIcon className="h-4 w-4 mr-2" />
+              Copier le lien
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => toast.success("Publication masquée")}>
+              <EyeOff className="h-4 w-4 mr-2" />
+              Masquer
+            </DropdownMenuItem>
+            {isOwnPost && onDelete ? (
+              <DropdownMenuItem
+                onClick={onDelete}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Supprimer
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem onClick={() => toast.success("Signalement envoyé")} className="text-destructive">
+                <Flag className="h-4 w-4 mr-2" />
+                Signaler
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
-      {/* Texte / voix — tap pour écouter (TTS ou audio_url) */}
+      {/* Texte post */}
       {!isProduct && ((data as Post).content || postAudioUrl) && (
-        <div className="px-4 pb-3">
+        <div className="px-3.5 pb-2.5">
           <ClickableListenText
             text={(data as Post).content}
             audioUrl={postAudioUrl}
             fallbackLabel={VOICE_COMMENT_PLACEHOLDER}
             highlight={listenModeHighlight}
-            showSummary={listenModeHighlight}
             autoListen={listenModeHighlight}
           />
         </div>
@@ -1084,8 +1244,8 @@ function FeedCard({
 
       {/* Videos */}
       {hasVideo && (
-        <div className="relative">
-          <div className="relative aspect-video bg-black overflow-hidden">
+        <div className="relative mx-2 mb-1 rounded-xl overflow-hidden bg-black">
+          <div className="relative aspect-video">
             <video
               src={videos[0].url}
               controls
@@ -1097,49 +1257,90 @@ function FeedCard({
               onPause={() => setIsVideoPlaying(false)}
             />
           </div>
-          {!isProduct && (
-            <div className="absolute top-3 left-3 bg-red-500 text-white px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1">
-              <svg viewBox="0 0 24 24" className="h-3 w-3 fill-current"><polygon points="5,3 19,12 5,21"/></svg>
-              Video
-            </div>
-          )}
         </div>
       )}
 
-      {/* Images (seulement si pas de video) */}
+      {/* Images — format agréable 4:5, double-tap like, swipe */}
       {!hasVideo && medias && medias.length > 0 && (
-        <div className="relative">
-          <div className="relative aspect-square bg-[#F3F4F6] overflow-hidden">
+        <div className="relative mx-2 mb-1">
+          <button
+            type="button"
+            className="relative aspect-[4/5] max-h-[70vh] bg-gradient-to-b from-[#E8F0E9] to-[#E8E4DC] overflow-hidden w-full block rounded-xl active:opacity-95"
+            onClick={() => {
+              const now = Date.now()
+              if (now - lastTapRef.current < 280) {
+                lastTapRef.current = 0
+                onLike()
+                return
+              }
+              lastTapRef.current = now
+              window.setTimeout(() => {
+                if (lastTapRef.current === now) setLightboxOpen(true)
+              }, 290)
+            }}
+            onTouchStart={(e) => {
+              touchStartX.current = e.changedTouches[0]?.clientX ?? null
+            }}
+            onTouchEnd={(e) => {
+              if (!hasMultipleImages || touchStartX.current == null) return
+              const endX = e.changedTouches[0]?.clientX ?? touchStartX.current
+              const delta = endX - touchStartX.current
+              touchStartX.current = null
+              if (Math.abs(delta) < 50) return
+              if (delta < 0) {
+                setCurrentImageIndex((prev) =>
+                  prev < medias.length - 1 ? prev + 1 : 0,
+                )
+              } else {
+                setCurrentImageIndex((prev) =>
+                  prev > 0 ? prev - 1 : medias.length - 1,
+                )
+              }
+            }}
+            aria-label="Agrandir l'image"
+          >
             <Image
               src={medias[currentImageIndex]?.url || "/placeholder.svg"}
               alt={isProduct ? (data as Product).name : "Publication"}
               fill
+              loading="lazy"
+              sizes="(max-width: 768px) 100vw, 480px"
               className="object-cover"
             />
-          </div>
+          </button>
 
           {hasMultipleImages && (
             <>
               <button
-                onClick={() => setCurrentImageIndex(prev => prev > 0 ? prev - 1 : medias.length - 1)}
-                className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/50 flex items-center justify-center text-white"
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setCurrentImageIndex(prev => prev > 0 ? prev - 1 : medias.length - 1)
+                }}
+                className="absolute left-2 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-black/35 backdrop-blur-sm flex items-center justify-center text-white"
+                aria-label="Image précédente"
               >
                 <ChevronLeft className="h-5 w-5" />
               </button>
               <button
-                onClick={() => setCurrentImageIndex(prev => prev < medias.length - 1 ? prev + 1 : 0)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/50 flex items-center justify-center text-white"
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setCurrentImageIndex(prev => prev < medias.length - 1 ? prev + 1 : 0)
+                }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-black/35 backdrop-blur-sm flex items-center justify-center text-white"
+                aria-label="Image suivante"
               >
                 <ChevronRight className="h-5 w-5" />
               </button>
               
-              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 px-2 py-1 rounded-full bg-black/25 backdrop-blur-sm">
                 {medias.map((_, idx) => (
                   <div
                     key={idx}
                     className={cn(
-                      "h-1.5 w-1.5 rounded-full transition-colors",
-                      idx === currentImageIndex ? "bg-white" : "bg-white/50"
+                      "h-1.5 rounded-full transition-all",
+                      idx === currentImageIndex ? "bg-white w-4" : "bg-white/50 w-1.5"
                     )}
                   />
                 ))}
@@ -1148,7 +1349,7 @@ function FeedCard({
           )}
 
           {isProduct && (
-            <div className="absolute top-3 left-3 bg-[#2F7D32]/95 backdrop-blur-sm text-white pl-2.5 pr-1.5 py-1 rounded-full text-xs font-medium flex items-center gap-1 shadow-sm">
+            <div className="absolute top-3 left-3 bg-[#2F7D32]/95 backdrop-blur-sm text-white pl-2.5 pr-1.5 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 shadow-sm">
               <ShoppingBag className="h-3 w-3 shrink-0" />
               <span>Produit</span>
               <ListenMicButton
@@ -1164,75 +1365,221 @@ function FeedCard({
         </div>
       )}
 
+      {lightboxOpen && medias?.[currentImageIndex]?.url && (
+        <div
+          className="fixed inset-0 z-[200] bg-black/95 flex flex-col"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Image en plein écran"
+        >
+          <button
+            type="button"
+            className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-white/15 text-white flex items-center justify-center"
+            onClick={() => setLightboxOpen(false)}
+            aria-label="Fermer"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          <button
+            type="button"
+            className="flex-1 relative w-full"
+            onClick={() => setLightboxOpen(false)}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={medias[currentImageIndex].url}
+              alt={isProduct ? (data as Product).name : "Publication"}
+              className="absolute inset-0 m-auto max-h-full max-w-full object-contain p-4"
+            />
+          </button>
+          {hasMultipleImages && (
+            <div className="flex items-center justify-center gap-6 pb-8 safe-bottom">
+              <button
+                type="button"
+                className="w-11 h-11 rounded-full bg-white/15 text-white flex items-center justify-center"
+                onClick={() =>
+                  setCurrentImageIndex((prev) =>
+                    prev > 0 ? prev - 1 : medias.length - 1,
+                  )
+                }
+                aria-label="Précédente"
+              >
+                <ChevronLeft className="h-6 w-6" />
+              </button>
+              <span className="text-white/80 text-sm tabular-nums">
+                {currentImageIndex + 1} / {medias.length}
+              </span>
+              <button
+                type="button"
+                className="w-11 h-11 rounded-full bg-white/15 text-white flex items-center justify-center"
+                onClick={() =>
+                  setCurrentImageIndex((prev) =>
+                    prev < medias.length - 1 ? prev + 1 : 0,
+                  )
+                }
+                aria-label="Suivante"
+              >
+                <ChevronRight className="h-6 w-6" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Info produit */}
       {isProduct && (
-        <div className="px-4 py-3 border-b border-[#E5E7EB]/50">
-          <Link href={`/produit/${data.id}`}>
-            <h3 className="font-semibold text-[#111827] mb-1">{(data as Product).name}</h3>
-            <p className="text-lg font-bold text-[#2F7D32]">
-              {formatPrice((data as Product).price)} FCFA
-              <span className="text-sm font-normal text-[#4B5563]">/{(data as Product).unit}</span>
-            </p>
-            {(data as Product).description?.trim() && (
-              <p className="text-sm text-[#6B7280] mt-1.5 line-clamp-2 leading-snug">
-                {(data as Product).description}
+        <div className="px-3.5 pt-3">
+          <Link href={`/produit/${data.id}`} className="block">
+            <div className="flex items-start justify-between gap-3">
+              <h3 className="font-semibold text-[#111827] text-[15px] leading-snug line-clamp-2">
+                {(data as Product).name}
+              </h3>
+              <p className="text-base font-bold text-red-600 tabular-nums shrink-0">
+                {formatPrice((data as Product).price)}
+                <span className="text-[10px] font-medium text-[#6B7280] ml-0.5">
+                  /{(data as Product).unit}
+                </span>
               </p>
-            )}
+            </div>
           </Link>
         </div>
       )}
 
-      {/* Actions */}
-      <div className="flex items-center justify-between px-4 py-3">
-        <div className="flex items-center gap-5">
-          {/* J'aime */}
-          <button onClick={onLike} className="flex items-center gap-1.5 active:scale-90 transition-transform">
-            <Heart className={cn(
-              "h-6 w-6 transition-colors",
-              item.isLiked ? "fill-[#F39A1F] text-[#F39A1F]" : "text-[#4B5563]"
-            )} />
+      {/* Actions prioritaires : like + comment + partager (+ acheter pour produit) */}
+      <div className="flex items-center gap-1 px-2.5 py-2.5">
+        <button
+          type="button"
+          onClick={onLike}
+          className="flex items-center gap-1.5 px-2.5 py-2 rounded-full active:bg-[#FFF6E5] transition-colors"
+          aria-label="J'aime"
+        >
+          <Heart className={cn(
+            "h-6 w-6 transition-colors",
+            item.isLiked ? "fill-[#F39A1F] text-[#F39A1F]" : "text-[#4B5563]"
+          )} />
+          {(data.likes_count || 0) > 0 && (
             <span className={cn(
-              "text-sm font-medium",
+              "text-sm font-medium tabular-nums",
               item.isLiked ? "text-[#F39A1F]" : "text-[#4B5563]"
             )}>
-              {data.likes_count || 0}
+              {data.likes_count}
             </span>
-          </button>
+          )}
+        </button>
 
-          {/* Commenter */}
-          <button onClick={onComment} className="flex items-center gap-1.5 text-[#4B5563] active:scale-90 transition-transform">
-            <MessageCircle className="h-6 w-6" />
-            <span className="text-sm font-medium">{data.comments_count || 0}</span>
-          </button>
+        <button
+          type="button"
+          onClick={onComment}
+          className="flex items-center gap-1.5 px-2.5 py-2 rounded-full text-[#4B5563] active:bg-[#FFF6E5] transition-colors"
+          aria-label="Commenter"
+        >
+          <MessageCircle className="h-6 w-6" />
+          {(data.comments_count || 0) > 0 && (
+            <span className="text-sm font-medium tabular-nums">{data.comments_count}</span>
+          )}
+        </button>
 
-          {/* Partager */}
-          <button onClick={onShare} className="flex items-center gap-1.5 text-[#4B5563] active:scale-90 transition-transform">
-            <Share2 className="h-6 w-6" />
-            <span className="text-sm font-medium">{data.shares_count || 0}</span>
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={onShare}
+          className="flex items-center gap-1.5 px-2.5 py-2 rounded-full text-[#4B5563] active:bg-[#FFF6E5] transition-colors"
+          aria-label="Partager"
+        >
+          <Share2 className="h-6 w-6" />
+        </button>
 
-        {/* Sauvegarder (produits uniquement) */}
         {isProduct && (
-          <button onClick={onSave} className="active:scale-90 transition-transform">
-            <Bookmark className={cn(
-              "h-6 w-6 transition-colors",
-              item.isSaved ? "fill-[#2F7D32] text-[#2F7D32]" : "text-[#4B5563]"
-            )} />
-          </button>
-        )}
-      </div>
-
-      {/* CTA Acheter (produits uniquement) */}
-      {isProduct && (
-        <div className="px-4 pb-4">
-          <Link href={`/produit/${data.id}`}>
-            <Button className="w-full rounded-full bg-[#2F7D32] hover:bg-[#256427] text-white font-semibold">
-              Acheter maintenant
+          <Link href={`/produit/${data.id}`} className="ml-auto pr-1">
+            <Button
+              size="sm"
+              className="rounded-full h-9 px-5 bg-[#2F7D32] hover:bg-[#256427] text-white font-semibold shadow-sm"
+            >
+              Acheter
             </Button>
           </Link>
-        </div>
-      )}
+        )}
+      </div>
     </article>
   )
 }
+
+function CommentThread({
+  comment,
+  formatTimeAgo,
+  listenMode,
+  canReply,
+  onLike,
+  onReply,
+  depth = 0,
+}: {
+  comment: Comment
+  formatTimeAgo: (date: string) => string
+  listenMode: boolean
+  canReply: boolean
+  onLike: (id: string) => void
+  onReply: (c: Comment) => void
+  depth?: number
+}) {
+  return (
+    <div className={cn("space-y-3", depth > 0 && "ml-8")}>
+      <div className="flex gap-3">
+        <Avatar className="h-8 w-8 shrink-0">
+          <AvatarImage src={comment.author?.avatar_url || ""} />
+          <AvatarFallback className="bg-[#2F7D32] text-white text-xs">
+            {comment.author?.full_name?.charAt(0) || "?"}
+          </AvatarFallback>
+        </Avatar>
+        <div className="flex-1 min-w-0">
+          <div className="bg-[#F9FAFB] rounded-2xl px-3 py-2 border border-[#E5E7EB]/60">
+            <p className="font-medium text-sm text-[#111827] mb-1.5">
+              {comment.author?.full_name || "Membre GWA"}
+            </p>
+            <ClickableListenText
+              text={comment.content}
+              audioUrl={comment.audio_url}
+              fallbackLabel={VOICE_COMMENT_PLACEHOLDER}
+              textClassName="text-sm"
+              highlight={listenMode}
+            />
+          </div>
+          <div className="flex items-center gap-3 mt-1 ml-2 text-xs text-[#9CA3AF]">
+            <span>{formatTimeAgo(comment.created_at)}</span>
+            <button
+              type="button"
+              onClick={() => onLike(comment.id)}
+              className={cn(
+                "inline-flex items-center gap-1 font-medium",
+                comment.liked_by_me ? "text-[#F39A1F]" : "text-[#4B5563]",
+              )}
+            >
+              <Heart className={cn("h-3.5 w-3.5", comment.liked_by_me && "fill-current")} />
+              {(comment.likes_count || 0) > 0 ? comment.likes_count : "J'aime"}
+            </button>
+            {canReply && depth < 2 && (
+              <button
+                type="button"
+                onClick={() => onReply(comment)}
+                className="font-medium text-[#4B5563]"
+              >
+                Répondre
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+      {(comment.replies || []).map((reply) => (
+        <CommentThread
+          key={reply.id}
+          comment={reply}
+          formatTimeAgo={formatTimeAgo}
+          listenMode={listenMode}
+          canReply={canReply}
+          onLike={onLike}
+          onReply={onReply}
+          depth={depth + 1}
+        />
+      ))}
+    </div>
+  )
+}
+

@@ -21,7 +21,10 @@ export async function GET(request: NextRequest) {
     }
 
     const supabase = await createClient()
-    const comments = await loadFeedComments(supabase, { type, id })
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    const comments = await loadFeedComments(supabase, { type, id }, user?.id)
     return NextResponse.json({ comments })
   } catch (err) {
     console.error("[api/comments GET]", err)
@@ -47,6 +50,8 @@ export async function POST(request: NextRequest) {
     const text = form.get("text")?.toString() ?? ""
     const audioEntry = form.get("audio")
 
+    const parentCommentId = form.get("parentCommentId")?.toString() || null
+
     if (type !== "post" && type !== "product") {
       return NextResponse.json({ error: "type invalide" }, { status: 400 })
     }
@@ -69,6 +74,7 @@ export async function POST(request: NextRequest) {
       userId: user.id,
       text,
       audioFile,
+      parentCommentId: parentCommentId || null,
     })
 
     return NextResponse.json(result)

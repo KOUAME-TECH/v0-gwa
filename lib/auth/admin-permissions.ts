@@ -17,6 +17,7 @@ export type AdminSection =
   | "factoring"
   | "analytics"
   | "settings"
+  | "support"
 
 export const ADMIN_ROLE_LABELS: Record<AdminRole, string> = {
   super_admin: "Super administrateur",
@@ -33,8 +34,9 @@ export const ADMIN_NAV: { name: string; href: string; section: AdminSection }[] 
   { name: "Commandes", href: "/admin/orders", section: "orders" },
   { name: "Cooperatives", href: "/admin/cooperatives", section: "cooperatives" },
   { name: "Signalements", href: "/admin/reports", section: "reports" },
+  { name: "Support", href: "/admin/support", section: "support" },
   { name: "Litiges", href: "/admin/disputes", section: "disputes" },
-  { name: "Verifications", href: "/admin/verifications", section: "verifications" },
+  { name: "Vérification", href: "/admin/verifications", section: "verifications" },
   { name: "SCG Config", href: "/admin/scg", section: "scg" },
   { name: "Finances", href: "/admin/finances", section: "finances" },
   { name: "Affacturage", href: "/admin/factoring", section: "factoring" },
@@ -52,11 +54,12 @@ const ROLE_SECTIONS: Record<AdminRole, AdminSection[]> = {
     "users",
     "orders",
     "reports",
+    "support",
     "disputes",
     "verifications",
     "factoring",
   ],
-  moderator: ["dashboard", "products", "reports"],
+  moderator: ["dashboard", "products", "reports", "support"],
 }
 
 export type AdminAction =
