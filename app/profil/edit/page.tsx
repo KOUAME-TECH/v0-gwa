@@ -29,6 +29,7 @@ import {
 } from "@/lib/verification/badge"
 import { useRealtimeLocation } from "@/hooks/use-realtime-location"
 import { PlacesManager } from "@/components/location/places-manager"
+import { LocationMapCard } from "@/components/location/location-map-card"
 import {
   getLinkCooldown,
   LINK_CHANGE_COOLDOWN_DAYS,
@@ -600,27 +601,17 @@ export default function EditProfilPage() {
           </div>
 
           {location ? (
-            <div className="rounded-xl bg-[#FFF6E5]/80 border border-[#E5E7EB] px-3 py-3 space-y-1.5">
-              <p className="text-sm font-medium text-[#111827] leading-snug">
-                {location.address || location.label || formData.address || "Position GPS"}
-              </p>
-              {(location.city || formData.city) && (
-                <p className="text-xs text-[#4B5563]">
-                  {[location.city || formData.city, location.country || formData.country]
-                    .filter(Boolean)
-                    .join(", ")}
-                </p>
-              )}
-              <p className="text-[11px] font-mono text-[#6B7280] tabular-nums break-all">
-                {location.lat.toFixed(6)}, {location.lon.toFixed(6)}
-                {location.accuracy != null
-                  ? ` · ±${Math.round(location.accuracy)} m`
-                  : ""}
-                {location.altitude != null
-                  ? ` · alt. ${Math.round(location.altitude)} m`
-                  : ""}
-              </p>
-            </div>
+            <LocationMapCard
+              lat={location.lat}
+              lon={location.lon}
+              accuracy={location.accuracy}
+              altitude={location.altitude}
+              address={location.address || formData.address}
+              city={location.city || formData.city}
+              country={location.country || formData.country}
+              label={location.label}
+              height={220}
+            />
           ) : (
             <p className="text-sm text-[#6B7280]">
               {geoStatus === "denied"

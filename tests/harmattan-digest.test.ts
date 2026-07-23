@@ -25,6 +25,38 @@ describe("matchesUserRegion", () => {
       ),
     ).toBe(false)
   })
+
+  it("extrait la ville d'une adresse complète", () => {
+    expect(
+      matchesUserRegion(
+        {
+          id: "1",
+          name: "Tomate",
+          price: 100,
+          unit: "kg",
+          origin_region: "Abidjan",
+          created_at: "",
+        },
+        { id: "u1", city: "Cocody, Abidjan, Côte d'Ivoire" },
+      ),
+    ).toBe(true)
+  })
+
+  it("match pays via alias CI", () => {
+    expect(
+      matchesUserRegion(
+        {
+          id: "1",
+          name: "Tomate",
+          price: 100,
+          unit: "kg",
+          origin_country: "Côte d'Ivoire",
+          created_at: "",
+        },
+        { id: "u1", country: "ci" },
+      ),
+    ).toBe(true)
+  })
 })
 
 describe("filterDigestProducts", () => {

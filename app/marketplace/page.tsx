@@ -149,25 +149,52 @@ function MarketplaceContent() {
       ? supabase.from("profiles").select("city, country, digest_enabled").eq("id", user.id).maybeSingle()
       : Promise.resolve({ data: null as { city?: string | null; country?: string | null } | null })
 
-    const [productsRes, categoriesRes, favsRes, profileRes] = await Promise.all([
-      supabase
-        .from("products")
-        .select(`
+    const digestIds = idsParam
+      ? idsParam.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 40)
+      : []
+
+    const catalogQuery = supabase
+      .from("products")
+      .select(`
           id, name, price, unit, description, audio_url, audio_lang, created_at, images,
           origin_country, origin_region,
           is_organic, is_fair_trade, product_type, category_id, seller_id,
           profiles:seller_id(full_name, avatar_url, is_verified),
           categories:category_id(name, slug)
         `)
-        .eq("status", "active")
-        .order("created_at", { ascending: false })
-        .limit(36),
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .limit(60)
+
+    const digestIdsQuery =
+      digestIds.length > 0
+        ? supabase
+            .from("products")
+            .select(`
+          id, name, price, unit, description, audio_url, audio_lang, created_at, images,
+          origin_country, origin_region,
+          is_organic, is_fair_trade, product_type, category_id, seller_id,
+          profiles:seller_id(full_name, avatar_url, is_verified),
+          categories:category_id(name, slug)
+        `)
+            .eq("status", "active")
+            .in("id", digestIds)
+        : Promise.resolve({ data: [] as Product[] })
+
+    const [productsRes, digestIdsRes, categoriesRes, favsRes, profileRes] = await Promise.all([
+      catalogQuery,
+      digestIdsQuery,
       supabase.from("categories").select("id, name, slug, category_type").eq("category_type", "agriculture").is("parent_id", null).order("name"),
       user ? supabase.from("favorites").select("product_id").eq("user_id", user.id).limit(200) : Promise.resolve({ data: [] as { product_id: string }[] }),
       profilePromise,
     ])
 
-    if (productsRes.data) setProducts(productsRes.data as Product[])
+    const catalog = (productsRes.data || []) as Product[]
+    const digestExtra = (digestIdsRes.data || []) as Product[]
+    // Fusionner ids digest (hors top 60) + catalogue
+    const byId = new Map<string, Product>()
+    for (const p of [...digestExtra, ...catalog]) byId.set(p.id, p)
+    setProducts([...byId.values()])
     if (categoriesRes.data) setCategories(categoriesRes.data)
     if (favsRes.data) setFavorites(new Set((favsRes.data as { product_id: string }[]).map(f => f.product_id)))
     // Profil = fallback si GPS pas encore autorisé
@@ -293,25 +320,47 @@ function MarketplaceContent() {
   const digest = useShopVoiceTour(digestTourProducts)
 
   const handleParcoursClick = () => {
+    if (parcours.active) {
+      parcours.stop()
+      toast.message("Parcours arrêté")
+      return
+    }
     if (parcours.total === 0) {
       toast.error("Aucun produit à parcourir pour le moment")
       return
     }
     if (digest.active) digest.stop()
-    parcours.start()
+    const ok = parcours.startTour()
+    if (ok) toast.success(`Parcours · ${parcours.total} produit${parcours.total > 1 ? "s" : ""}`)
+    else if (parcours.error) toast.error(parcours.error)
   }
 
   const handleDigestClick = () => {
+    if (digest.active) {
+      digest.stop()
+      toast.message("Digest arrêté")
+      return
+    }
     if (digest.total === 0) {
       toast.error("Aucun nouveau produit dans le digest")
       return
     }
     if (parcours.active) parcours.stop()
-    digest.start()
+    const ok = digest.startTour()
+    if (ok) toast.success(`Digest · ${digest.total} nouveauté${digest.total > 1 ? "s" : ""}`)
+    else if (digest.error) toast.error(digest.error)
   }
 
   useEffect(() => {
-    // Deep-link digest : activer le mode écoute (pas d'autoplay sans geste)
+    if (parcours.error) toast.error(parcours.error)
+  }, [parcours.error])
+
+  useEffect(() => {
+    if (digest.error) toast.error(digest.error)
+  }, [digest.error])
+
+  useEffect(() => {
+    // Deep-link digest : mode écoute prêt (l'utilisateur tape le banner)
     if (!isDigest || digestProducts.length === 0 || digestStartedRef.current || isLoading) return
     digestStartedRef.current = true
     try {
@@ -319,6 +368,7 @@ function MarketplaceContent() {
     } catch {
       /* ignore */
     }
+    toast.message("Digest prêt. Tapez la bannière pour écouter.", { duration: 4000 })
   }, [digestProducts.length, isDigest, isLoading])
 
   function productListenProps(p: Product) {
@@ -338,10 +388,25 @@ function MarketplaceContent() {
   }
 
   // ---- COMPACT CARD (3 cols) — image arrondie plein espace ----
+  const listeningId =
+    parcours.active
+      ? parcours.currentProductId
+      : digest.active
+        ? digest.currentProductId
+        : null
+
   function CompactCard({ p }: { p: Product }) {
+    const listening = listeningId === p.id
     return (
-      <Link href={`/produit/${p.id}`} className="block active:scale-[0.97] transition-transform">
-        <div className="relative aspect-square w-full overflow-hidden rounded-2xl bg-muted ring-1 ring-black/[0.04]">
+      <Link
+        href={`/produit/${p.id}`}
+        className={`block active:scale-[0.97] transition-transform ${listening ? "opacity-100" : ""}`}
+      >
+        <div
+          className={`relative aspect-square w-full overflow-hidden rounded-2xl bg-muted ring-1 ${
+            listening ? "ring-2 ring-[#C27D10] shadow-md" : "ring-black/[0.04]"
+          }`}
+        >
           {p.images?.[0] ? (
             <Image src={p.images[0]} alt={p.name} fill className="object-cover" sizes="140px" loading="lazy" />
           ) : (
@@ -371,8 +436,15 @@ function MarketplaceContent() {
 
   // ---- LIST CARD (1 per row) ----
   function ListCard({ p }: { p: Product }) {
+    const listening = listeningId === p.id
     return (
-      <Link href={`/produit/${p.id}`} className="flex items-center gap-3 bg-white rounded-xl p-2 shadow-sm active:scale-[0.99] transition-transform" style={{ maxHeight: 74 }}>
+      <Link
+        href={`/produit/${p.id}`}
+        className={`flex items-center gap-3 bg-white rounded-xl p-2 shadow-sm active:scale-[0.99] transition-transform ${
+          listening ? "ring-2 ring-[#C27D10]" : ""
+        }`}
+        style={{ maxHeight: 74 }}
+      >
         <div className="relative w-[58px] h-[58px] rounded-2xl overflow-hidden shrink-0 bg-muted">
           {p.images?.[0] ? (
             <Image src={p.images[0]} alt={p.name} fill className="object-cover" sizes="58px" loading="lazy" />
@@ -411,9 +483,15 @@ function MarketplaceContent() {
 
   // ---- GRID CARD (2 cols) — image arrondie qui remplit l’espace ----
   function GridCard({ p }: { p: Product }) {
+    const listening = listeningId === p.id
     return (
       <Link href={`/produit/${p.id}`} className="block active:scale-[0.98] transition-transform">
-        <div className="relative w-full overflow-hidden rounded-2xl bg-muted ring-1 ring-black/[0.04]" style={{ aspectRatio: "4/3" }}>
+        <div
+          className={`relative w-full overflow-hidden rounded-2xl bg-muted ring-1 ${
+            listening ? "ring-2 ring-[#C27D10] shadow-md" : "ring-black/[0.04]"
+          }`}
+          style={{ aspectRatio: "4/3" }}
+        >
           {p.images?.[0] ? (
             <Image src={p.images[0]} alt={p.name} fill className="object-cover" sizes="50vw" loading="lazy" />
           ) : (
@@ -567,12 +645,35 @@ function MarketplaceContent() {
         {digestProducts.length > 0 && (
           <DigestBanner
             count={digestProducts.length}
-            city={geoLabel || userCity}
+            city={userCity || geoCity || geoLabel}
             tourActive={digest.active}
             tourIndex={digest.index}
             tourTotal={digest.total}
             onStartTour={handleDigestClick}
           />
+        )}
+        {(parcours.active || digest.active) && (
+          <div className="mb-3 rounded-xl bg-[#1F5C2E] text-white px-3 py-2 text-xs font-medium flex items-center justify-between gap-2">
+            <span className="truncate">
+              {parcours.active
+                ? `Parcours ${parcours.index + 1}/${parcours.total}`
+                : `Digest ${digest.index + 1}/${digest.total}`}
+              {" · "}
+              {(parcours.active
+                ? parcoursProducts[parcours.index]?.name
+                : digestTourProducts[digest.index]?.name) || "…"}
+            </span>
+            <button
+              type="button"
+              className="shrink-0 underline"
+              onClick={() => {
+                if (parcours.active) parcours.stop()
+                if (digest.active) digest.stop()
+              }}
+            >
+              Stop
+            </button>
+          </div>
         )}
         {isLoading ? (
           <div className={`grid gap-2 ${viewMode === "compact" ? "grid-cols-3" : viewMode === "list" ? "grid-cols-1" : "grid-cols-2"}`}>

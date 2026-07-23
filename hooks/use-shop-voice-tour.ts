@@ -24,60 +24,158 @@ function makeSilentBlobUrl(): string | null {
   }
 }
 
+function pickVoice(lang: string): SpeechSynthesisVoice | null {
+  if (typeof window === "undefined" || !window.speechSynthesis) return null
+  const voices = window.speechSynthesis.getVoices()
+  if (!voices.length) return null
+  const wanted = lang.toLowerCase()
+  const prefix = wanted.slice(0, 2)
+  return (
+    voices.find((v) => v.lang?.toLowerCase() === wanted) ||
+    voices.find((v) => v.lang?.toLowerCase().startsWith(prefix)) ||
+    // Langues locales sans voix appareil → français
+    voices.find((v) => v.lang?.toLowerCase().startsWith("fr")) ||
+    voices.find((v) => v.default) ||
+    voices[0] ||
+    null
+  )
+}
+
+function unlockAudioGesture() {
+  try {
+    const AC =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext
+    if (AC) {
+      const ctx = new AC()
+      void ctx.resume()
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      gain.gain.value = 0.0001
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.start()
+      osc.stop(ctx.currentTime + 0.03)
+      window.setTimeout(() => {
+        void ctx.close().catch(() => {
+          /* ignore */
+        })
+      }, 200)
+    }
+  } catch {
+    /* ignore */
+  }
+
+  const silentUrl = makeSilentBlobUrl()
+  if (!silentUrl) return
+  try {
+    const unlock = new Audio(silentUrl)
+    unlock.volume = 0.01
+    void unlock.play().then(
+      () => {
+        unlock.pause()
+        URL.revokeObjectURL(silentUrl)
+      },
+      () => URL.revokeObjectURL(silentUrl),
+    )
+  } catch {
+    URL.revokeObjectURL(silentUrl)
+  }
+}
+
 /**
- * Parcours vocal séquentiel.
- * Important : démarrer le son dans le même geste utilisateur (autoplay policies).
+ * Parcours / Digest vocal.
+ * Démarre dans le geste utilisateur + keepalive Chrome speechSynthesis.
  */
 export function useShopVoiceTour(products: ShopTourProduct[]) {
   const [active, setActive] = useState(false)
   const [index, setIndex] = useState(0)
+  const [error, setError] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
-  const stoppedRef = useRef(false)
+  const stoppedRef = useRef(true)
+  const activeRef = useRef(false)
   const productsRef = useRef(products)
+  const resumeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const playedCountRef = useRef(0)
   productsRef.current = products
+
+  const clearResumeKeepalive = useCallback(() => {
+    if (resumeTimerRef.current) {
+      clearInterval(resumeTimerRef.current)
+      resumeTimerRef.current = null
+    }
+  }, [])
+
+  const startResumeKeepalive = useCallback(() => {
+    clearResumeKeepalive()
+    // Chrome coupe TTS après ~15s sans resume()
+    resumeTimerRef.current = setInterval(() => {
+      if (stoppedRef.current) return
+      try {
+        if (window.speechSynthesis?.speaking) {
+          window.speechSynthesis.resume()
+        }
+      } catch {
+        /* ignore */
+      }
+    }, 8_000)
+  }, [clearResumeKeepalive])
 
   const stop = useCallback(() => {
     stoppedRef.current = true
+    activeRef.current = false
+    clearResumeKeepalive()
     if (audioRef.current) {
       audioRef.current.pause()
       audioRef.current.onended = null
       audioRef.current.onerror = null
-      audioRef.current.currentTime = 0
+      audioRef.current.removeAttribute("src")
+      audioRef.current.load()
     }
     if (typeof window !== "undefined" && window.speechSynthesis) {
-      window.speechSynthesis.cancel()
+      try {
+        window.speechSynthesis.cancel()
+      } catch {
+        /* ignore */
+      }
     }
     setActive(false)
     setIndex(0)
-  }, [])
+  }, [clearResumeKeepalive])
 
   const speakProduct = useCallback(
     (product: ShopTourProduct, onDone: () => void) => {
-      if (typeof window === "undefined" || !window.speechSynthesis) {
+      if (typeof window === "undefined") {
         onDone()
         return
       }
+      if (!window.speechSynthesis) {
+        setError("Lecture vocale indisponible sur cet appareil")
+        onDone()
+        return
+      }
+
       const text = buildProductListenText(product)
       if (!text.trim()) {
         onDone()
         return
       }
 
-      // Ne pas cancel juste avant speak (bug Chrome : speak ignoré)
-      const utter = new SpeechSynthesisUtterance(text)
-      utter.lang = resolveUtterLang(product.audio_lang)
-      utter.rate = 0.92
-      utter.volume = 1
-
-      const voices = window.speechSynthesis.getVoices()
-      if (voices.length) {
-        const lang = utter.lang.slice(0, 2).toLowerCase()
-        const match =
-          voices.find((v) => v.lang?.toLowerCase().startsWith(lang)) ||
-          voices.find((v) => v.default) ||
-          voices[0]
-        if (match) utter.voice = match
+      // Langue demandée, sinon fr-FR (voix fiables)
+      let lang = resolveUtterLang(product.audio_lang)
+      let voice = pickVoice(lang)
+      if (!voice || !voice.lang?.toLowerCase().startsWith(lang.slice(0, 2).toLowerCase())) {
+        // Pas de voix pour wolof/bambara/etc. → français lisible
+        lang = "fr-FR"
+        voice = pickVoice("fr-FR")
       }
+
+      const utter = new SpeechSynthesisUtterance(text)
+      utter.lang = lang
+      utter.rate = 0.95
+      utter.volume = 1
+      if (voice) utter.voice = voice
 
       let settled = false
       const finish = () => {
@@ -85,41 +183,58 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
         settled = true
         onDone()
       }
-      utter.onend = finish
-      utter.onerror = () => finish()
 
-      // File d'attente TTS dans le geste utilisateur
+      utter.onend = () => {
+        playedCountRef.current += 1
+        finish()
+      }
+      utter.onerror = (ev) => {
+        // interrupted = stop volontaire ou nouveau speak — ne pas enchaîner en double
+        const errType = (ev as SpeechSynthesisErrorEvent).error
+        if (errType === "interrupted" || errType === "canceled" || stoppedRef.current) {
+          finish()
+          return
+        }
+        console.warn("[shop-voice-tour] TTS error", errType)
+        setError("Son coupé. Réessayez avec le volume activé.")
+        finish()
+      }
+
+      try {
+        // Relancer si Chrome a mis TTS en pause
+        window.speechSynthesis.resume()
+      } catch {
+        /* ignore */
+      }
       window.speechSynthesis.speak(utter)
+      startResumeKeepalive()
 
-      // Si les voix arrivent tard (iOS/Chrome), relancer une fois
-      if (!voices.length) {
+      // Voix chargées en retard (Safari/Chrome)
+      if (!window.speechSynthesis.getVoices().length) {
         const retry = () => {
           window.speechSynthesis.removeEventListener("voiceschanged", retry)
           if (settled || stoppedRef.current) return
           if (window.speechSynthesis.speaking || window.speechSynthesis.pending) return
-          const late = window.speechSynthesis.getVoices()
-          if (!late.length) return
+          const lateVoice = pickVoice(lang) || pickVoice("fr-FR")
           const again = new SpeechSynthesisUtterance(text)
-          again.lang = utter.lang
-          again.rate = utter.rate
+          again.lang = lateVoice?.lang || "fr-FR"
+          again.rate = 0.95
           again.volume = 1
-          const lang = again.lang.slice(0, 2).toLowerCase()
-          const match =
-            late.find((v) => v.lang?.toLowerCase().startsWith(lang)) ||
-            late.find((v) => v.default) ||
-            late[0]
-          if (match) again.voice = match
-          again.onend = finish
+          if (lateVoice) again.voice = lateVoice
+          again.onend = () => {
+            playedCountRef.current += 1
+            finish()
+          }
           again.onerror = () => finish()
           window.speechSynthesis.speak(again)
         }
         window.speechSynthesis.addEventListener("voiceschanged", retry)
         window.setTimeout(() => {
           window.speechSynthesis.removeEventListener("voiceschanged", retry)
-        }, 1500)
+        }, 2000)
       }
     },
-    [],
+    [startResumeKeepalive],
   )
 
   const playAt = useCallback(
@@ -135,7 +250,10 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
 
       const continueNext = () => {
         if (stoppedRef.current) return
-        playAt(i + 1)
+        // Petite pause naturelle entre produits
+        window.setTimeout(() => {
+          if (!stoppedRef.current) playAt(i + 1)
+        }, 280)
       }
 
       if (product.audio_url) {
@@ -143,11 +261,17 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
         const el = audioRef.current
         el.pause()
         el.src = product.audio_url
-        el.onended = continueNext
+        el.onended = () => {
+          playedCountRef.current += 1
+          continueNext()
+        }
         el.onerror = () => speakProduct(product, continueNext)
-        void el.play().then(undefined, () => {
-          speakProduct(product, continueNext)
-        })
+        void el.play().then(
+          () => {
+            /* ok */
+          },
+          () => speakProduct(product, continueNext),
+        )
         return
       }
 
@@ -156,15 +280,23 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
     [speakProduct, stop],
   )
 
-  const startTour = useCallback(() => {
+  const start = useCallback(() => {
     const list = productsRef.current
-    if (!list.length || typeof window === "undefined") return
-    if (active) {
+    if (!list.length || typeof window === "undefined") {
+      setError("Aucun produit à lire")
+      return false
+    }
+
+    // Toggle stop si déjà actif
+    if (activeRef.current) {
       stop()
-      return
+      return false
     }
 
     stoppedRef.current = false
+    activeRef.current = true
+    playedCountRef.current = 0
+    setError(null)
     setActive(true)
     setIndex(0)
 
@@ -174,61 +306,28 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
       /* ignore */
     }
 
-    // iOS / Chrome : réveiller AudioContext dans le geste
-    try {
-      const AC =
-        window.AudioContext ||
-        (window as unknown as { webkitAudioContext?: typeof AudioContext })
-          .webkitAudioContext
-      if (AC) {
-        const ctx = new AC()
-        void ctx.resume()
-        const osc = ctx.createOscillator()
-        const gain = ctx.createGain()
-        gain.gain.value = 0.0001
-        osc.connect(gain)
-        gain.connect(ctx.destination)
-        osc.start()
-        osc.stop(ctx.currentTime + 0.02)
-      }
-    } catch {
-      /* ignore */
-    }
+    unlockAudioGesture()
 
-    // Déblocage sur un Audio SÉPARÉ — ne jamais pause() le player du tour
-    // (sinon audio_url démarré juste après est coupé par le .then du silent unlock)
-    const silentUrl = makeSilentBlobUrl()
-    if (silentUrl) {
-      try {
-        const unlock = new Audio(silentUrl)
-        unlock.volume = 0.01
-        void unlock.play().then(
-          () => {
-            unlock.pause()
-            URL.revokeObjectURL(silentUrl)
-          },
-          () => URL.revokeObjectURL(silentUrl),
-        )
-      } catch {
-        URL.revokeObjectURL(silentUrl)
-      }
-    }
-
-    // Précharger les voix TTS si besoin
     try {
       window.speechSynthesis?.getVoices()
+      window.speechSynthesis?.cancel()
+      window.speechSynthesis?.resume()
     } catch {
       /* ignore */
     }
 
-    // Lancer le 1er produit tout de suite (même tick que le clic)
+    // Lancer immédiatement dans le geste utilisateur
     playAt(0)
-  }, [active, playAt, stop])
+    return true
+  }, [playAt, stop])
 
   const toggle = useCallback(() => {
-    if (!productsRef.current.length || typeof window === "undefined") return
-    startTour()
-  }, [startTour])
+    if (activeRef.current) {
+      stop()
+      return
+    }
+    start()
+  }, [start, stop])
 
   useEffect(() => () => stop(), [stop])
 
@@ -236,8 +335,12 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
     active,
     index,
     total: products.length,
+    error,
+    /** Démarre ou arrête */
     start: toggle,
-    startTour,
+    /** Démarre forcément (ne toggle pas) */
+    startTour: start,
     stop,
+    currentProductId: active ? products[index]?.id ?? null : null,
   }
 }

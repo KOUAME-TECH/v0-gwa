@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
 import { PLACE_TYPES, placeTypeLabel, type PlaceType, type UserPlace } from "@/lib/location/places"
-import { formatCoords, type RealtimeLocation } from "@/hooks/use-realtime-location"
+import type { RealtimeLocation } from "@/hooks/use-realtime-location"
+import { LocationMapCard } from "@/components/location/location-map-card"
 
 type Props = {
   location: RealtimeLocation | null
@@ -111,12 +112,21 @@ export function PlacesManager({ location, onRequestLocation, locating }: Props) 
         <p className="text-xs text-[#6B7280] mt-1 leading-relaxed">
           Enregistrez un champ, un entrepôt, un marché ou votre domicile à votre position actuelle.
         </p>
-        {location && (
-          <p className="text-[11px] font-mono text-[#9CA3AF] mt-1.5 tabular-nums">
-            {formatCoords(location.lat, location.lon, location.accuracy)}
-          </p>
-        )}
       </div>
+
+      {location && (
+        <LocationMapCard
+          lat={location.lat}
+          lon={location.lon}
+          accuracy={location.accuracy}
+          altitude={location.altitude}
+          address={location.address}
+          city={location.city}
+          country={location.country}
+          label={location.label}
+          height={160}
+        />
+      )}
 
       <div className="flex flex-wrap gap-1.5">
         {PLACE_TYPES.map((t) => (
