@@ -107,7 +107,8 @@ async function sendDigestToUser(
 
   const selection = selectDigestProducts(allProducts, profile, 10)
   const matched = selection.products
-  if (matched.length === 0) {
+  // Push / notif uniquement s'il y a de vraies nouveautés (24h / 7j)
+  if (matched.length === 0 || !selection.isNotifiable) {
     result.skippedNoProducts++
     return
   }
@@ -117,8 +118,8 @@ async function sendDigestToUser(
   const title = `Harmattan Digest — ${cityLabel}`
   const body =
     count === 1
-      ? "1 produit à écouter près de chez vous"
-      : `${count} produits à écouter près de chez vous`
+      ? "1 nouveau produit près de chez vous — écoutez"
+      : `${count} nouveaux produits près de chez vous — écoutez`
   const url = buildDigestUrl(selection.since, matched.map((p) => p.id))
 
   try {

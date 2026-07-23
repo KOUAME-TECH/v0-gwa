@@ -6,8 +6,7 @@ import {
 } from "@/lib/comments/feed-comments"
 
 /**
- * POST /api/comments/like — body JSON { commentId }
- * Toggle like sur un commentaire de publication.
+ * POST /api/comments/like — body JSON { commentId, type?: "post"|"product" }
  */
 export async function POST(request: NextRequest) {
   try {
@@ -24,11 +23,12 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json().catch(() => ({}))
     const commentId = String(body.commentId || "").trim()
+    const type = body.type === "product" ? "product" : "post"
     if (!commentId) {
       return NextResponse.json({ error: "Commentaire introuvable." }, { status: 400 })
     }
 
-    const result = await toggleCommentLike(supabase, user.id, commentId)
+    const result = await toggleCommentLike(supabase, user.id, commentId, type)
     return NextResponse.json(result)
   } catch (err) {
     if (err instanceof CommentSubmitError) {

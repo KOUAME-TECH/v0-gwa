@@ -36,7 +36,7 @@ export const ADMIN_NAV: { name: string; href: string; section: AdminSection }[] 
   { name: "Signalements", href: "/admin/reports", section: "reports" },
   { name: "Support", href: "/admin/support", section: "support" },
   { name: "Litiges", href: "/admin/disputes", section: "disputes" },
-  { name: "Verifications", href: "/admin/verifications", section: "verifications" },
+  { name: "Vérification", href: "/admin/verifications", section: "verifications" },
   { name: "SCG Config", href: "/admin/scg", section: "scg" },
   { name: "Finances", href: "/admin/finances", section: "finances" },
   { name: "Affacturage", href: "/admin/factoring", section: "factoring" },

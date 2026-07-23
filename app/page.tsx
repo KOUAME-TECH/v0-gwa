@@ -31,7 +31,6 @@ import { toast } from "sonner"
 import { GwaMark } from "@/components/brand/gwa-mark"
 import { WeatherWidget } from "@/components/weather-widget"
 import { ClickableListenText, ListenMicButton } from "@/components/media/clickable-listen-text"
-import { ListenModeToggle } from "@/components/media/listen-mode-toggle"
 import { isLowQualityPostContent } from "@/lib/feed/content-quality"
 import { ListenRitualBadge } from "@/components/media/listen-ritual-badge"
 import { useListenMode } from "@/hooks/use-listen-mode"
@@ -402,6 +401,20 @@ export default function HomePage() {
 
       const loaded = await loadFeedComments(supabase, target, user?.id)
       setComments(loaded)
+      // Resync compteur affiché (évite "Commentaires (3)" alors qu'il n'y en a que 2)
+      const realCount = loaded.reduce((n, c) => n + 1 + (c.replies?.length || 0), 0)
+      setFeed((prev) =>
+        prev.map((f) =>
+          f.data.id === item.data.id
+            ? { ...f, data: { ...f.data, comments_count: realCount } }
+            : f,
+        ),
+      )
+      setSelectedItem((prev) =>
+        prev && prev.data.id === item.data.id
+          ? { ...prev, data: { ...prev.data, comments_count: realCount } }
+          : prev,
+      )
     } catch (error) {
       console.error("openComments", error)
       toast.error("Impossible de charger les commentaires. Réessayez.")
@@ -435,7 +448,10 @@ export default function HomePage() {
       const res = await fetch("/api/comments/like", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ commentId }),
+        body: JSON.stringify({
+          commentId,
+          type: selectedItem?.type === "product" ? "product" : "post",
+        }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -475,7 +491,7 @@ export default function HomePage() {
       form.append("id", selectedItem.data.id)
       if (hasText) form.append("text", newComment.trim())
       if (hasVoice && voice) form.append("audio", voice.file)
-      if (replyTo && selectedItem.type === "post") {
+      if (replyTo && selectedItem) {
         form.append("parentCommentId", replyTo.id)
       }
 
@@ -685,11 +701,11 @@ export default function HomePage() {
               <Link
                 href="/marketplace?digest=1"
                 className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full bg-[#1F5C2E]/8 text-[#1F5C2E] text-xs font-semibold active:scale-95 transition-transform"
-                aria-label="Ouvrir le Harmattan Digest"
+                aria-label="Écouter les nouveautés — Harmattan Digest"
+                title="Écouter les nouveautés près de chez vous"
               >
                 Digest
               </Link>
-              <ListenModeToggle compact className="shrink-0" />
               <Link href="/recherche">
                 <Button variant="ghost" size="icon" className="rounded-full h-10 w-10">
                   <Search className="h-5 w-5 text-[#4B5563]" />
@@ -912,7 +928,12 @@ export default function HomePage() {
         <SheetContent side="bottom" className="h-[85vh] rounded-t-3xl flex flex-col p-4 bg-white">
           <SheetHeader className="border-b border-[#E5E7EB] pb-4 shrink-0">
             <SheetTitle className="text-center text-[#111827]">
-              Commentaires ({selectedItem?.data.comments_count || 0})
+              Commentaires (
+              {comments.reduce(
+                (n, c) => n + 1 + (c.replies?.length || 0),
+                0,
+              ) || selectedItem?.data.comments_count || 0}
+              )
             </SheetTitle>
           </SheetHeader>
           
@@ -938,7 +959,7 @@ export default function HomePage() {
                     comment={comment}
                     formatTimeAgo={formatTimeAgo}
                     listenMode={listenMode}
-                    canReply={selectedItem?.type === "post"}
+                    canReply={!!selectedItem}
                     onLike={toggleCommentLike}
                     onReply={(c) => setReplyTo(c)}
                   />

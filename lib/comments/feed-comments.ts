@@ -77,11 +77,11 @@ export async function loadFeedComments(
   const voiceSelect =
     table === "post_comments"
       ? "id, content, comment_type, audio_url, created_at, author_id, parent_comment_id, likes_count"
-      : "id, comment, review_type, audio_url, created_at, reviewer_id"
+      : "id, comment, review_type, audio_url, created_at, reviewer_id, parent_review_id, likes_count"
   const basicSelect =
     table === "post_comments"
       ? "id, content, created_at, author_id, parent_comment_id, likes_count"
-      : "id, comment, created_at, reviewer_id"
+      : "id, comment, created_at, reviewer_id, parent_review_id, likes_count"
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let res: any = await (supabase.from(table) as any)
@@ -124,14 +124,16 @@ export async function loadFeedComments(
   const profileMap = new Map(profiles?.map((p) => [p.id, p]) || [])
 
   let likedIds = new Set<string>()
-  if (target.type === "post" && currentUserId) {
+  if (currentUserId) {
     const commentIds = rawData.map((c) => c.id as string)
-    const { data: likes } = await (supabase.from("comment_likes") as any)
-      .select("comment_id")
+    const likesTable = target.type === "post" ? "comment_likes" : "review_likes"
+    const likesFk = target.type === "post" ? "comment_id" : "review_id"
+    const { data: likes } = await (supabase.from(likesTable) as any)
+      .select(likesFk)
       .eq("user_id", currentUserId)
-      .in("comment_id", commentIds)
+      .in(likesFk, commentIds)
     likedIds = new Set(
-      ((likes || []) as { comment_id: string }[]).map((l) => l.comment_id),
+      ((likes || []) as Record<string, string>[]).map((l) => l[likesFk]),
     )
   }
 
@@ -141,16 +143,14 @@ export async function loadFeedComments(
     audio_url: (c.audio_url ?? null) as string | null,
     comment_type: (c.comment_type ?? c.review_type ?? "text") as string,
     created_at: c.created_at as string,
-    parent_comment_id: (c.parent_comment_id as string | null | undefined) ?? null,
+    parent_comment_id:
+      ((c.parent_comment_id ?? c.parent_review_id) as string | null | undefined) ?? null,
     likes_count: Number(c.likes_count ?? 0),
     liked_by_me: likedIds.has(c.id as string),
     author: profileMap.get(c[authorField] as string) || null,
   }))
 
-  if (target.type === "post") {
-    return nestComments(flat).reverse() // plus récents en haut
-  }
-  return flat.reverse()
+  return nestComments(flat).reverse()
 }
 
 export type SubmitFeedCommentInput = {
@@ -228,8 +228,7 @@ export async function submitFeedComment(
 
   const mediaType = resolveCommentMediaType({ hasText, hasAudio: !!audioUrl })
   const textValue = hasText ? text.trim() : null
-  const parent =
-    target.type === "post" && parentCommentId ? parentCommentId : null
+  const parent = parentCommentId || null
 
   const richInsert =
     table === "post_comments"
@@ -248,6 +247,7 @@ export async function submitFeedComment(
           review_type: mediaType,
           audio_url: audioUrl,
           rating: 5,
+          ...(parent ? { parent_review_id: parent } : {}),
         }
 
   const basicInsert =
@@ -263,16 +263,17 @@ export async function submitFeedComment(
           reviewer_id: userId,
           comment: textValue || "Note vocale",
           rating: 5,
+          ...(parent ? { parent_review_id: parent } : {}),
         }
 
   const richSelect =
     table === "post_comments"
       ? "id, content, comment_type, audio_url, created_at, author_id, parent_comment_id, likes_count"
-      : "id, comment, review_type, audio_url, created_at, reviewer_id"
+      : "id, comment, review_type, audio_url, created_at, reviewer_id, parent_review_id, likes_count"
   const basicSelect =
     table === "post_comments"
       ? "id, content, created_at, author_id, parent_comment_id, likes_count"
-      : "id, comment, created_at, reviewer_id"
+      : "id, comment, created_at, reviewer_id, parent_review_id, likes_count"
 
   let voiceStored = !!audioUrl
   let data: Record<string, unknown> | null = null
@@ -325,46 +326,55 @@ export async function submitFeedComment(
     audio_url: voiceStored ? (data.audio_url as string | null) ?? audioUrl : null,
     comment_type: (data.comment_type ?? data.review_type ?? mediaType) as string,
     created_at: data.created_at as string,
-    parent_comment_id: (data.parent_comment_id as string | null | undefined) ?? parent,
+    parent_comment_id:
+      ((data.parent_comment_id ?? data.parent_review_id) as string | null | undefined) ??
+      parent,
     likes_count: Number(data.likes_count ?? 0),
     liked_by_me: false,
     replies: [],
     author: profile,
   }
 
-  // Incrémenter le compteur uniquement pour les racines
+  // Compteur : triggers SQL recalculent ; best-effort UI
   if (!parent) {
-    const { data: parentRow } = await supabase
-      .from(countTable)
-      .select("comments_count")
-      .eq("id", target.id)
-      .maybeSingle()
-
-    const newCount = ((parentRow?.comments_count as number) ?? 0) + 1
-    await supabase.from(countTable).update({ comments_count: newCount }).eq("id", target.id)
+    const { count } = await supabase
+      .from(table)
+      .select("id", { count: "exact", head: true })
+      .eq(idField, target.id)
+      .is(
+        table === "post_comments" ? "parent_comment_id" : "parent_review_id",
+        null,
+      )
+    if (typeof count === "number") {
+      await supabase.from(countTable).update({ comments_count: count }).eq("id", target.id)
+    }
   }
 
   return { comment, voiceStored }
 }
 
-/** Like / unlike un commentaire de post. */
+/** Like / unlike un commentaire (post) ou un avis (produit). */
 export async function toggleCommentLike(
   supabase: SupabaseClient,
   userId: string,
   commentId: string,
+  targetType: "post" | "product" = "post",
 ): Promise<{ liked: boolean; likes_count: number }> {
-  const { data: existing } = await supabase
-    .from("comment_likes")
+  const likesTable = targetType === "post" ? "comment_likes" : "review_likes"
+  const likesFk = targetType === "post" ? "comment_id" : "review_id"
+  const parentTable = targetType === "post" ? "post_comments" : "reviews"
+
+  const { data: existing } = await (supabase.from(likesTable) as any)
     .select("id")
-    .eq("comment_id", commentId)
+    .eq(likesFk, commentId)
     .eq("user_id", userId)
     .maybeSingle()
 
   if (existing) {
-    await supabase.from("comment_likes").delete().eq("id", existing.id)
+    await (supabase.from(likesTable) as any).delete().eq("id", existing.id)
   } else {
-    const { error } = await supabase.from("comment_likes").insert({
-      comment_id: commentId,
+    const { error } = await (supabase.from(likesTable) as any).insert({
+      [likesFk]: commentId,
       user_id: userId,
     })
     if (error) {
@@ -375,8 +385,7 @@ export async function toggleCommentLike(
     }
   }
 
-  const { data: row } = await supabase
-    .from("post_comments")
+  const { data: row } = await (supabase.from(parentTable) as any)
     .select("likes_count")
     .eq("id", commentId)
     .maybeSingle()

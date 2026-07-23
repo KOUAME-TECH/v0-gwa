@@ -57,6 +57,7 @@ const NAV_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   Support: MessageSquare,
   Litiges: AlertTriangle,
   Verifications: Shield,
+  Vérification: Shield,
   "SCG Config": Shield,
   Finances: TrendingUp,
   Affacturage: Banknote,

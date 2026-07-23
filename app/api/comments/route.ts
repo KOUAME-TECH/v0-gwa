@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
       userId: user.id,
       text,
       audioFile,
-      parentCommentId: type === "post" ? parentCommentId : null,
+      parentCommentId: parentCommentId || null,
     })
 
     return NextResponse.json(result)

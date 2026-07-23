@@ -26,7 +26,7 @@ interface VerificationRequest {
   id: string
   user_id: string
   cooperative_id: string | null
-  request_type: 'profile' | 'cooperative' | 'certification'
+  request_type: 'user' | 'profile' | 'cooperative' | 'certification' | 'product'
   documents: {
     type: string
     url: string
@@ -115,10 +115,16 @@ export default function AdminVerificationsPage() {
 
   const getRequestTypeLabel = (type: string) => {
     switch (type) {
-      case 'profile': return 'Verification de profil'
-      case 'cooperative': return 'Verification cooperative'
-      case 'certification': return 'Certification produit'
-      default: return type
+      case 'user':
+      case 'profile':
+        return "Vérification d'identité"
+      case 'cooperative':
+        return 'Vérification coopérative'
+      case 'certification':
+      case 'product':
+        return 'Certification produit'
+      default:
+        return type
     }
   }
 
@@ -162,8 +168,10 @@ export default function AdminVerificationsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold">Verifications</h1>
-          <p className="text-muted-foreground">Gerer les demandes de verification des utilisateurs</p>
+          <h1 className="text-2xl md:text-3xl font-bold">Vérification d&apos;identité</h1>
+          <p className="text-muted-foreground">
+            Demandes KYC des membres GWA — approuver ou refuser
+          </p>
         </div>
         <Button variant="outline" onClick={loadRequests}>
           <RefreshCw className="h-4 w-4 mr-2" />

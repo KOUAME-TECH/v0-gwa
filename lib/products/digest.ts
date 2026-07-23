@@ -29,6 +29,8 @@ export type DigestSelection = {
   /** regional_24h | regional_7d | regional_30d | country | newest */
   mode: "regional_24h" | "regional_7d" | "regional_30d" | "country" | "newest"
   since: Date
+  /** true = assez récent pour push notification */
+  isNotifiable: boolean
 }
 
 function norm(s?: string | null): string {
@@ -141,7 +143,14 @@ export function selectDigestProducts(
     const matched = sorted
       .filter((p) => newerThan(p, since) && matchesUserRegion(p, profile))
       .slice(0, limit)
-    if (matched.length > 0) return { products: matched, mode, since }
+    if (matched.length > 0) {
+      return {
+        products: matched,
+        mode,
+        since,
+        isNotifiable: mode === "regional_24h" || mode === "regional_7d",
+      }
+    }
     return null
   }
 
@@ -157,7 +166,7 @@ export function selectDigestProducts(
     .filter((p) => newerThan(p, since30) && matchesUserCountry(p, profile))
     .slice(0, limit)
   if (byCountry.length > 0) {
-    return { products: byCountry, mode: "country", since: since30 }
+    return { products: byCountry, mode: "country", since: since30, isNotifiable: false }
   }
 
   const newest = sorted.slice(0, Math.min(limit, 5))
@@ -165,6 +174,7 @@ export function selectDigestProducts(
     products: newest,
     mode: "newest",
     since: digestSinceHours(24 * 365),
+    isNotifiable: false,
   }
 }
 
