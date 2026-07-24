@@ -43,7 +43,7 @@ public/              # Logo, PWA, service workers
 scripts/schema/      # Migrations SQL (ordre 001 → …)
 scripts/ops/         # Bootstrap admin / checks
 scripts/demo/        # Seed démo (jamais en prod sans intention)
-docs/                # Architecture, ops, brand
+docs/                # Index : docs/README.md (archi, brand, ops)
 tests/               # Vitest
 ```
 

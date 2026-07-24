@@ -80,4 +80,5 @@ app/api/admin/         ↔  lib/supabase/admin + checks rôle
 | Scope produit | `docs/scope-beta.md` |
 | Logo / marque | `docs/brand.md` |
 | Ops Auth / OTP | `docs/ops-auth.md` |
-| Advisor DB | `docs/supabase-advisor-hardening-2026-07-24.md` |
+| Advisor DB | `scripts/schema/048_advisor_hardening.sql` |
+| Sécurité | `docs/security.md` |

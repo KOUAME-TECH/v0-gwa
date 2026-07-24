@@ -8,7 +8,7 @@
 - Admin client : `server-only`
 - Middleware : gates `/admin`, `/dashboard`, `/panier`…
 - Headers : HSTS, CSP, XFO…
-- Advisor DB (juil. 2026) : voir `docs/supabase-advisor-hardening-2026-07-24.md`
+- Advisor DB (juil. 2026) : migration `scripts/schema/048_advisor_hardening.sql`
 
 ## À activer manuellement
 
