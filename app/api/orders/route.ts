@@ -136,8 +136,19 @@ export async function POST(request: NextRequest) {
     }
 
     // Frais serveur uniquement (ignore body.shipping_cost / service_fee clients)
-    const shipping = subtotal > 100_000 ? 0 : 5_000
-    const serviceFee = Math.round(subtotal * 0.02)
+    // Pas de logistique GWA pour l’instant → shipping = 0
+    const shipping = 0
+    const { data: buyerProfile } = await supabase
+      .from("profiles")
+      .select("subscription_tier")
+      .eq("id", user.id)
+      .maybeSingle()
+    const { computeServiceFee } = await import("@/lib/pricing/service-fee")
+    const feeInfo = computeServiceFee(
+      subtotal,
+      (buyerProfile as { subscription_tier?: string } | null)?.subscription_tier,
+    )
+    const serviceFee = feeInfo.fee
     const totalAmount = subtotal + shipping + serviceFee
     const commissionPct = 5
     const commissionFcfa = Math.round(totalAmount * (commissionPct / 100))

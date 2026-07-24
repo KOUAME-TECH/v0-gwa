@@ -74,7 +74,7 @@ export function EscrowStepper({
         {escrowStatusMessage(step, escrow_status)}
       </p>
       <p className="mt-2 text-[11px] text-[#6B7280]">
-        Tu paies maintenant ; le vendeur touche l’argent après ta confirmation de livraison.
+        Tu paies maintenant. Le vendeur touche l’argent après ta confirmation de réception.
       </p>
     </div>
   )

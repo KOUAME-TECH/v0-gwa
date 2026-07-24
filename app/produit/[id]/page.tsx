@@ -141,7 +141,7 @@ export default function ProduitPage() {
     const res = await addOrIncrementCart(supabase, user.id, product.id, quantity)
     setAdding(false)
     if (!res.ok) {
-      toast.error("On n’a pas pu ajouter — réessaie.")
+      toast.error("On n’a pas pu ajouter. Réessaie.")
       return
     }
     toast.success(goCheckout ? "C’est dans ton panier" : "Ajouté au panier")
@@ -509,7 +509,7 @@ export default function ProduitPage() {
                   onClick={() => void handleAddToCart(true)}
                   className="h-12 w-full rounded-xl bg-[#1F5C2E] text-[15px] font-semibold hover:bg-[#184a25]"
                 >
-                  Acheter · {formatPrice(totalPrice)} FCFA
+                  Acheter {formatPrice(totalPrice)} FCFA
                 </Button>
                 <Button
                   disabled={adding}

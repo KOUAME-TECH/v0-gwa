@@ -4,7 +4,10 @@ import { useCallback, useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { CART_CHANGED_EVENT } from "@/lib/cart/events"
 
-/** Nombre d’articles au panier (somme des quantités) + écoute live. */
+/**
+ * Badge charette = nombre de produits distincts (lignes panier),
+ * pas la somme des quantités.
+ */
 export function useCartCount() {
   const [count, setCount] = useState(0)
   const supabase = createClient()
@@ -18,15 +21,15 @@ export function useCartCount() {
         setCount(0)
         return
       }
-      const { data } = await supabase
+      const { count: n, error } = await supabase
         .from("cart_items")
-        .select("quantity")
+        .select("id", { count: "exact", head: true })
         .eq("user_id", user.id)
-      const sum = (data || []).reduce(
-        (s: number, row: { quantity?: number | null }) => s + (Number(row.quantity) || 0),
-        0,
-      )
-      setCount(sum)
+      if (error) {
+        setCount(0)
+        return
+      }
+      setCount(n || 0)
     } catch {
       /* ignore */
     }

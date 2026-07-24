@@ -186,7 +186,7 @@ export default function OrdersPage() {
       toast.error(data.error || "Mise à jour impossible")
       return
     }
-    toast.success("C’est noté — on avance.")
+    toast.success("C’est noté. On avance.")
     loadOrders()
     if (selectedOrder?.id === orderId) loadAuditLog(orderId)
   }
@@ -230,7 +230,7 @@ export default function OrdersPage() {
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) {
-      toast.error(data.error || "On n’a pas pu confirmer — réessaie.")
+      toast.error(data.error || "On n’a pas pu confirmer. Réessaie.")
       return
     }
     toast.success("Merci ! L’argent part chez le vendeur.")
@@ -298,7 +298,7 @@ export default function OrdersPage() {
           <div>
             <h1 className="font-display text-2xl md:text-3xl text-[#1F5C2E]">Mes commandes</h1>
             <p className="text-[#4B5563] mt-1 text-sm md:text-base">
-              Suis tes achats et ventes — l’argent reste protégé jusqu’à la réception.
+              Suis tes achats et ventes. L’argent reste protégé jusqu’à la réception.
             </p>
           </div>
           <Link href="/marketplace">
@@ -410,7 +410,7 @@ export default function OrdersPage() {
                 ))}
               {filteredOrders.filter((o) => o.seller_id !== user?.id).length === 0 ? (
                 <p className="text-center text-sm text-[#6B7280] py-10">
-                  Pas encore d’achat — le marché t’attend.
+                  Pas encore d’achat. Le marché t’attend.
                 </p>
               ) : null}
             </div>
@@ -445,7 +445,7 @@ export default function OrdersPage() {
                 <Package className="mx-auto mb-3 h-11 w-11 text-[#1F5C2E]/50" />
                 <h3 className="font-display text-lg text-[#1F5C2E]">Pas encore de commande</h3>
                 <p className="mx-auto mt-2 max-w-sm text-sm text-[#6B7280]">
-                  Quand tu achètes ou vends, le fil apparaît ici — paiement, route, réception.
+                  Quand tu achètes ou vends, le fil apparaît ici : paiement, route, réception.
                 </p>
                 <Button asChild className="mt-5 rounded-xl bg-[#1F5C2E] hover:bg-[#184a25]">
                   <Link href="/marketplace">Parcourir le marché</Link>
@@ -644,7 +644,7 @@ export default function OrdersPage() {
                                 ) : null}
                               </>
                             ) : (
-                              <> — {log.action}</>
+                              <> : {log.action}</>
                             )}
                           </p>
                           {log.notes ? (

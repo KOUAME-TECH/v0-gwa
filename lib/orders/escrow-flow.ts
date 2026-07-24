@@ -121,11 +121,11 @@ export function escrowStatusMessage(step: number, escrow?: EscrowStatus): string
     case 1:
       return "Ton argent est en sécurité. Le vendeur le touche seulement quand tu confirmes que tout est arrivé."
     case 2:
-      return "C’est en route. Quand tu reçois le colis, confirme — sinon dis-nous s’il y a un souci."
+      return "C’est en route. Quand tu reçois le colis, confirme. Sinon dis-nous s’il y a un souci."
     case 3:
       return "Merci d’avoir confirmé. On envoie l’argent au vendeur maintenant."
     case 4:
-      return "Tout est réglé — le vendeur a reçu son argent. Merci d’avoir choisi GWA."
+      return "Tout est réglé. Le vendeur a reçu son argent. Merci d’avoir choisi GWA."
     default:
       return ""
   }
@@ -140,12 +140,12 @@ export function humanPaymentLabel(method?: string | null, status?: string | null
         ? "en attente"
         : st === "failed"
           ? "échoué"
-          : st || "—"
+          : st || "en cours"
   const methodLabel =
     !method || method === "feexpay" || method === "FeexPay"
       ? "Paiement sécurisé"
       : method
-  return `${methodLabel} · ${statusLabel}`
+  return `${methodLabel} (${statusLabel})`
 }
 
 /** Acheteur peut confirmer réception seulement si fonds réellement en séquestre. */
