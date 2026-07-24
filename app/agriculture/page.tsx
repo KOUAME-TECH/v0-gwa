@@ -105,7 +105,7 @@ export default function AgriculturePage() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-24">
+    <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="sticky top-0 z-40 bg-[#1a472a]">
         <div className="px-4 pt-12 pb-6">

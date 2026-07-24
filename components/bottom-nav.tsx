@@ -192,7 +192,7 @@ export function BottomNav() {
       {user && (
         <div
           className={cn(
-            "pointer-events-none fixed bottom-[76px] right-3 z-40 flex flex-col items-end gap-2 animate-fadeIn transition-transform duration-300 ease-out",
+            "pointer-events-none fixed bottom-[76px] right-3 z-40 flex flex-col items-end gap-2 animate-fadeIn transition-transform duration-300 ease-out lg:hidden",
             scrollHidden && "translate-y-[120%] pointer-events-none opacity-0",
           )}
         >
@@ -221,7 +221,7 @@ export function BottomNav() {
 
       <nav
         className={cn(
-          "fixed bottom-0 left-0 right-0 z-50 transition-transform duration-300 ease-out",
+          "fixed bottom-0 left-0 right-0 z-50 transition-transform duration-300 ease-out lg:hidden",
           scrollHidden && "translate-y-full",
         )}
         role="navigation"

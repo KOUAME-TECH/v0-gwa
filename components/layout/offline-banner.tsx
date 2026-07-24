@@ -1,57 +1,113 @@
-'use client'
-import { useEffect, useState } from 'react'
-import { WifiOff, Wifi } from 'lucide-react'
-import { loadOfflineDraft } from '@/lib/offline/drafts'
-import { createClient } from '@/lib/supabase/client'
+"use client"
 
-export function OfflineBanner() {
-  const [status, setStatus] = useState<'online'|'offline'|'restored'>('online')
+import { useEffect, useState } from "react"
+import Link from "next/link"
+import { WifiOff, Wifi, FilePenLine, ShoppingBag } from "lucide-react"
+import { loadOfflineDraft } from "@/lib/offline/drafts"
+import { loadCatalogCache } from "@/lib/offline/catalog-cache"
+import { createClient } from "@/lib/supabase/client"
+import { cn } from "@/lib/utils"
+
+type Status = "online" | "offline" | "restored"
+
+export function OfflineBanner({ offsetForDesktopNav = false }: { offsetForDesktopNav?: boolean }) {
+  const [status, setStatus] = useState<Status>("online")
   const [draftHint, setDraftHint] = useState(false)
+  const [catalogHint, setCatalogHint] = useState(false)
 
   useEffect(() => {
-    if (typeof navigator !== 'undefined' && !navigator.onLine) setStatus('offline')
-    const goOff = () => setStatus('offline')
-    const goOn = async () => {
-      setStatus('restored')
+    const refreshHints = async () => {
       try {
+        const cache = loadCatalogCache()
+        setCatalogHint(!!cache?.products?.length)
+
         const supabase = createClient()
-        const { data: { user } } = await supabase.auth.getUser()
-        if (user) {
-          const product = await loadOfflineDraft(user.id, 'product')
-          const post = await loadOfflineDraft(user.id, 'post')
-          setDraftHint(!!(product || post))
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+        if (!user) {
+          setDraftHint(false)
+          return
         }
+        const product = await loadOfflineDraft(user.id, "product")
+        const post = await loadOfflineDraft(user.id, "post")
+        setDraftHint(!!(product || post))
       } catch {
         // ignore
       }
-      setTimeout(() => {
-        setStatus('online')
+    }
+
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setStatus("offline")
+      void refreshHints()
+    }
+
+    const goOff = () => {
+      setStatus("offline")
+      void refreshHints()
+    }
+
+    const goOn = async () => {
+      setStatus("restored")
+      await refreshHints()
+      window.setTimeout(() => {
+        setStatus("online")
         setDraftHint(false)
       }, 4500)
     }
-    window.addEventListener('offline', goOff)
-    window.addEventListener('online', goOn)
-    return () => { window.removeEventListener('offline', goOff); window.removeEventListener('online', goOn) }
+
+    window.addEventListener("offline", goOff)
+    window.addEventListener("online", goOn)
+    return () => {
+      window.removeEventListener("offline", goOff)
+      window.removeEventListener("online", goOn)
+    }
   }, [])
 
-  if (status === 'online') return null
+  if (status === "online") return null
 
   return (
-    <div className={`fixed top-0 left-0 right-0 z-[100] flex items-center justify-center 
-      gap-2 px-4 py-2 text-xs font-semibold animate-slideUp ${
-      status === 'offline' 
-        ? 'bg-amber-500 text-white' 
-        : 'bg-green-500 text-white'
-    }`}>
-      {status === 'offline' ? (
-        <><WifiOff className="h-3 w-3" /> Hors ligne — brouillons sauvegardés sur /publier</>
-      ) : (
+    <div
+      className={cn(
+        "fixed left-0 right-0 z-[100] flex flex-wrap items-center justify-center gap-x-3 gap-y-1 px-4 py-2 text-xs font-semibold shadow-sm animate-slideUp",
+        offsetForDesktopNav ? "top-0 lg:top-14" : "top-0",
+        status === "offline" ? "bg-amber-500 text-white" : "bg-green-600 text-white",
+      )}
+      role="status"
+      aria-live="polite"
+    >
+      {status === "offline" ? (
         <>
-          <Wifi className="h-3 w-3" />
-          {draftHint
-            ? 'Connexion rétablie — ouvre /publier pour reprendre ton brouillon'
-            : 'Connexion rétablie'}
+          <span className="inline-flex items-center gap-1.5">
+            <WifiOff className="h-3.5 w-3.5" />
+            Hors ligne — mode limité
+          </span>
+          {catalogHint && (
+            <Link
+              href="/marketplace"
+              className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-0.5 underline-offset-2 hover:underline"
+            >
+              <ShoppingBag className="h-3 w-3" />
+              Boutique en cache
+            </Link>
+          )}
+          {draftHint && (
+            <Link
+              href="/publier"
+              className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-0.5 underline-offset-2 hover:underline"
+            >
+              <FilePenLine className="h-3 w-3" />
+              Reprendre brouillon
+            </Link>
+          )}
         </>
+      ) : (
+        <span className="inline-flex items-center gap-1.5">
+          <Wifi className="h-3.5 w-3.5" />
+          {draftHint
+            ? "Connexion rétablie — ouvre Publier pour reprendre ton brouillon"
+            : "Connexion rétablie"}
+        </span>
       )}
     </div>
   )

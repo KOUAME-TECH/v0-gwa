@@ -55,7 +55,7 @@ export async function GET() {
       digest_scheduler: 'supabase_pg_cron',
       digest_job: 'gwa-harmattan-digest-daily',
       weather_degraded_fallback: true,
-      sw_cache: 'gwa-v17-resilient',
+      sw_cache: 'gwa-v18-offline',
     },
   }, { status: healthy ? 200 : 503 })
 }

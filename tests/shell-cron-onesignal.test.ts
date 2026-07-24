@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { shouldShowBottomNav } from "@/lib/navigation/shell-routes"
+import { shouldShowBottomNav, shouldShowDesktopNav } from "@/lib/navigation/shell-routes"
 import { authorizeCronRequest, getCronSecret } from "@/lib/security/cron-auth"
 import {
   getOneSignalAppId,
@@ -28,6 +28,16 @@ describe("shouldShowBottomNav", () => {
     expect(shouldShowBottomNav("/download")).toBe(false)
     expect(shouldShowBottomNav("/profil/lier")).toBe(false)
     expect(shouldShowBottomNav("/profil/verification")).toBe(false)
+  })
+})
+
+describe("shouldShowDesktopNav", () => {
+  it("suit le même périmètre shell que la bottom nav", () => {
+    expect(shouldShowDesktopNav("/")).toBe(true)
+    expect(shouldShowDesktopNav("/marketplace")).toBe(true)
+    expect(shouldShowDesktopNav("/messages")).toBe(true)
+    expect(shouldShowDesktopNav("/admin")).toBe(false)
+    expect(shouldShowDesktopNav("/auth/login")).toBe(false)
   })
 })
 

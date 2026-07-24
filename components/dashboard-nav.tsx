@@ -25,7 +25,7 @@ export function DashboardNav({ userType }: DashboardNavProps) {
   ]
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 pb-safe" role="navigation" aria-label="Navigation dashboard">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 pb-safe lg:hidden" role="navigation" aria-label="Navigation dashboard">
       <div className="h-[2px] bg-[#E5E7EB] relative">
         <div className="absolute top-0 h-full bg-[#2F7D32] transition-all duration-300 rounded-full"
           style={{ width: "20%", left: "20%" }}

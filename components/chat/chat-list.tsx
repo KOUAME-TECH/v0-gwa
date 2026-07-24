@@ -87,7 +87,7 @@ export function ChatList({ conversations, userId, onSelectConversation }: ChatLi
   }
 
   return (
-    <div className="min-h-[100dvh] bg-white flex flex-col">
+    <div className="relative min-h-[100dvh] lg:min-h-0 lg:h-full bg-white flex flex-col">
       {/* HEADER */}
       <header className="bg-[#1F5C2E] text-white shrink-0 sticky top-0 z-40">
         <div className="px-4 pt-safe-top">
@@ -131,7 +131,7 @@ export function ChatList({ conversations, userId, onSelectConversation }: ChatLi
       </header>
 
       {/* CONVERSATIONS */}
-      <div className="flex-1 overflow-y-auto pb-24">
+      <div className="flex-1 overflow-y-auto pb-24 lg:pb-6">
         {pinned.length > 0 && (
           <>
             <div className="px-4 pt-3 pb-1 flex items-center gap-1.5">
@@ -152,7 +152,7 @@ export function ChatList({ conversations, userId, onSelectConversation }: ChatLi
 
       {/* FAB */}
       <button onClick={() => router.push("/recherche")}
-        className="fixed bottom-24 right-5 w-14 h-14 bg-[#1F5C2E] text-white rounded-2xl shadow-lg flex items-center justify-center active:scale-90 transition-transform z-30">
+        className="fixed bottom-24 right-5 lg:bottom-6 lg:right-6 w-14 h-14 bg-[#1F5C2E] text-white rounded-2xl shadow-lg flex items-center justify-center active:scale-90 transition-transform z-30 lg:absolute">
         <Plus className="h-6 w-6" />
       </button>
     </div>

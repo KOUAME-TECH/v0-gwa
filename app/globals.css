@@ -377,3 +377,44 @@
 /* Scrollbar cachee */
 .gwa-no-scroll::-webkit-scrollbar { display: none; }
 .gwa-no-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Largeurs shell — tablette / desktop (évite étirement téléphone) */
+.gwa-shell-feed {
+  width: 100%;
+  margin-inline: auto;
+  max-width: 36rem; /* ~max-w-xl */
+}
+@media (min-width: 1024px) {
+  .gwa-shell-feed { max-width: 42rem; }
+}
+@media (min-width: 1280px) {
+  .gwa-shell-feed { max-width: 48rem; }
+}
+
+.gwa-shell-wide {
+  width: 100%;
+  margin-inline: auto;
+  max-width: 72rem; /* ~max-w-6xl */
+}
+
+.gwa-shell-page {
+  width: 100%;
+  margin-inline: auto;
+  max-width: 40rem;
+}
+@media (min-width: 768px) {
+  .gwa-shell-page { max-width: 48rem; }
+}
+@media (min-width: 1024px) {
+  .gwa-shell-page { max-width: 56rem; }
+}
+
+/* Atmosphère légère desktop — pas de fond plat unique */
+@media (min-width: 1024px) {
+  .gwa-desktop-atmosphere {
+    background-image:
+      radial-gradient(900px 420px at 8% -8%, rgba(31, 92, 46, 0.08), transparent 55%),
+      radial-gradient(700px 380px at 96% 0%, rgba(194, 125, 16, 0.1), transparent 50%);
+    background-attachment: fixed;
+  }
+}
