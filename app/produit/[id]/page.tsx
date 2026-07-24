@@ -26,6 +26,10 @@ import { buildProductListenText } from "@/lib/media/product-listen"
 import { shouldShowVerifiedBadge } from "@/lib/verification/badge"
 import { addOrIncrementCart } from "@/lib/cart/add"
 import { CartIconButton } from "@/components/cart/cart-icon-button"
+import {
+  cacheProductPreview,
+  readProductPreview,
+} from "@/lib/products/prefetch"
 
 type Product = {
   id: string
@@ -70,6 +74,13 @@ export default function ProduitPage() {
 
   useEffect(() => {
     const loadProduct = async () => {
+      const cached = readProductPreview<Product>(String(params.id))
+      if (cached?.id) {
+        setProduct(cached)
+        setQuantity(cached.min_order_quantity || 1)
+        setIsLoading(false)
+      }
+
       const {
         data: { user: currentUser },
       } = await supabase.auth.getUser()
@@ -94,6 +105,7 @@ export default function ProduitPage() {
       if (data) {
         setProduct(data as Product)
         setQuantity(data.min_order_quantity || 1)
+        cacheProductPreview(data as Product & Record<string, unknown>)
         if (currentUser) {
           const { data: fav } = await supabase
             .from("favorites")

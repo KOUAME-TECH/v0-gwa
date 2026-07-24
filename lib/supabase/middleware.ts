@@ -6,6 +6,36 @@ export async function updateSession(request: NextRequest) {
     request,
   })
 
+  const path = request.nextUrl.pathname
+  const method = request.method.toUpperCase()
+
+  // Routes publiques GET sans cookie session → pas de getUser (TTFB)
+  const publicFast =
+    method === "GET" &&
+    (path === "/" ||
+      path === "/marketplace" ||
+      path === "/agriculture" ||
+      path === "/recherche" ||
+      path === "/conditions" ||
+      path === "/confidentialite" ||
+      path === "/contact" ||
+      path === "/download" ||
+      path.startsWith("/produit/") ||
+      path.startsWith("/post/") ||
+      (path.startsWith("/profil/") && !path.startsWith("/profil/edit")))
+
+  const hasAuthCookie = request.cookies
+    .getAll()
+    .some(
+      (c) =>
+        c.name.includes("-auth-token") ||
+        c.name.startsWith("sb-") && c.name.includes("auth"),
+    )
+
+  if (publicFast && !hasAuthCookie) {
+    return supabaseResponse
+  }
+
   // With Fluid compute, don't put this client in a global environment
   // variable. Always create a new one on each request.
   const supabase = createServerClient(
@@ -41,7 +71,6 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const path = request.nextUrl.pathname
   const protectedPrefixes = [
     '/protected',
     '/admin',

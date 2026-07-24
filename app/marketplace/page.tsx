@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo, useRef, Suspense } from "react"
-import { useSearchParams } from "next/navigation"
+import { useSearchParams, useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -30,6 +30,7 @@ import {
 } from "@/lib/offline/catalog-cache"
 import { CartIconButton } from "@/components/cart/cart-icon-button"
 import { addOrIncrementCart } from "@/lib/cart/add"
+import { prefetchProduct } from "@/lib/products/prefetch"
 import { cn } from "@/lib/utils"
 import { useHideOnScroll } from "@/hooks/use-hide-on-scroll"
 
@@ -65,6 +66,8 @@ function MarketplaceGridCard({
   onAddToCart,
   formatPrice,
   imageQuality,
+  priority = false,
+  onPrefetch,
 }: {
   product: Product
   listening: boolean
@@ -80,9 +83,17 @@ function MarketplaceGridCard({
   onAddToCart: (id: string, e: React.MouseEvent) => void
   formatPrice: (n: number) => string
   imageQuality: number
+  priority?: boolean
+  onPrefetch?: (p: Product) => void
 }) {
   return (
-    <Link href={`/produit/${p.id}`} className="block active:scale-[0.98] transition-transform">
+    <Link
+      href={`/produit/${p.id}`}
+      className="block active:scale-[0.98] transition-transform"
+      onMouseEnter={() => onPrefetch?.(p)}
+      onFocus={() => onPrefetch?.(p)}
+      onTouchStart={() => onPrefetch?.(p)}
+    >
       <div
         className={`relative w-full overflow-hidden rounded-2xl bg-gradient-to-b from-[#F3F4F6] to-[#E8E4DC] ring-1 gwa-product-media ${
           listening ? "ring-2 ring-[#C27D10] shadow-md" : "ring-black/[0.04]"
@@ -96,7 +107,9 @@ function MarketplaceGridCard({
             fill
             className="object-cover"
             sizes="(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 25vw"
-            loading="lazy"
+            {...(priority
+              ? { priority: true, fetchPriority: "high" as const }
+              : { loading: "lazy" as const })}
             quality={imageQuality}
           />
         ) : (
@@ -165,6 +178,7 @@ export default function MarketplacePage() {
 
 function MarketplaceContent() {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const isDigest = searchParams.get("digest") === "1"
   const sinceParam = searchParams.get("since")
   const idsParam = searchParams.get("ids")
@@ -716,7 +730,7 @@ function MarketplaceContent() {
               {filteredProducts.length} produit{filteredProducts.length > 1 ? "s" : ""}
             </p>
             <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-4 lg:gap-5 xl:grid-cols-5">
-              {filteredProducts.map((p) => (
+              {filteredProducts.map((p, idx) => (
                 <MarketplaceGridCard
                   key={p.id}
                   product={p}
@@ -727,6 +741,10 @@ function MarketplaceContent() {
                   onAddToCart={addToCart}
                   formatPrice={fmt}
                   imageQuality={imageQuality}
+                  priority={idx < 4}
+                  onPrefetch={(prod) =>
+                    prefetchProduct(router, prod as Product & Record<string, unknown>)
+                  }
                 />
               ))}
             </div>

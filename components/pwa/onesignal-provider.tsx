@@ -159,12 +159,27 @@ export function OneSignalProvider({ children }: { children: React.ReactNode }) {
       }
     })
 
-    if (!document.querySelector('script[data-onesignal="true"]')) {
+    // Charge le SDK OneSignal hors chemin critique (idle / après 4s)
+    const inject = () => {
+      if (document.querySelector('script[data-onesignal="true"]')) return
       const script = document.createElement("script")
       script.src = "https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"
       script.defer = true
       script.dataset.onesignal = "true"
       document.head.appendChild(script)
+    }
+    let idleId: number | undefined
+    let timer: ReturnType<typeof setTimeout> | undefined
+    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+      idleId = window.requestIdleCallback(() => inject(), { timeout: 5000 })
+    } else {
+      timer = setTimeout(inject, 4000)
+    }
+    return () => {
+      if (idleId != null && "cancelIdleCallback" in window) {
+        window.cancelIdleCallback(idleId)
+      }
+      if (timer) clearTimeout(timer)
     }
   }, [])
 

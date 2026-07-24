@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback, useRef, memo } from "react"
+import { useEffect, useState, useCallback, useRef, memo, startTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
@@ -41,7 +41,6 @@ import { useListenMode } from "@/hooks/use-listen-mode"
 import { useListenRitual } from "@/hooks/use-listen-ritual"
 import { useNavBadges } from "@/hooks/use-nav-badges"
 import { useDataSaver } from "@/hooks/use-data-saver"
-import { CommentComposer } from "@/components/comments/comment-composer"
 import {
   VOICE_COMMENT_PLACEHOLDER,
 } from "@/lib/comments/voice-comment"
@@ -56,13 +55,19 @@ import {
   productMatchesFeedFilter,
 } from "@/lib/catalog/feed-filters"
 import { saveFeedCache, loadFeedCache, feedCacheAgeLabel } from "@/lib/offline/feed-cache"
+import { prefetchProduct } from "@/lib/products/prefetch"
 
-const FEED_PAGE_SIZE = 12
+const CommentComposer = dynamic(
+  () => import("@/components/comments/comment-composer").then((m) => m.CommentComposer),
+  { ssr: false, loading: () => null },
+)
 
 const WeatherWidget = dynamic(
   () => import("@/components/weather-widget").then((m) => m.WeatherWidget),
   { ssr: false, loading: () => null },
 )
+
+const FEED_PAGE_SIZE = 12
 
 type Product = {
   id: string
@@ -171,9 +176,22 @@ export default function HomePage() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [offlineMode, setOfflineMode] = useState(false)
   const pullStartY = useRef<number | null>(null)
+  const feedSentinelRef = useRef<HTMLDivElement | null>(null)
   const headerHidden = useHideOnScroll(true)
 
   const supabase = createClient()
+
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      try {
+        router.prefetch("/marketplace")
+        router.prefetch("/recherche")
+      } catch {
+        /* ignore */
+      }
+    }, 1500)
+    return () => window.clearTimeout(t)
+  }, [router])
 
   // Bell badge — shared store (BottomNav owns fetch); keep local mirror for UI
   useEffect(() => {
@@ -219,7 +237,7 @@ export default function HomePage() {
         .from("products")
         .select(`
           id, name, description, price, unit, images, audio_url, origin_region, origin_country, product_type, seller_id,
-          likes_count, comments_count, shares_count, created_at, is_organic, is_fair_trade,
+          likes_count, comments_count, shares_count, created_at, is_organic,
           profiles:seller_id(id, full_name, avatar_url, is_verified, city),
           categories:category_id(name, slug)
         `)
@@ -357,7 +375,7 @@ export default function HomePage() {
         .from("products")
         .select(`
           id, name, description, price, unit, images, audio_url, origin_region, origin_country, product_type, seller_id,
-          likes_count, comments_count, shares_count, created_at, is_organic, is_fair_trade,
+          likes_count, comments_count, shares_count, created_at, is_organic,
           profiles:seller_id(id, full_name, avatar_url, is_verified, city),
           categories:category_id(name, slug)
         `)
@@ -433,6 +451,20 @@ export default function HomePage() {
       setLoadingMore(false)
     }
   }
+
+  useEffect(() => {
+    const node = feedSentinelRef.current
+    if (!node || offlineMode || !hasMoreFeed) return
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) void loadMoreFeed()
+      },
+      { rootMargin: "480px 0px" },
+    )
+    io.observe(node)
+    return () => io.disconnect()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasMoreFeed, offlineMode, loadingMore, feed.length])
 
   const formatPrice = (price: number) => new Intl.NumberFormat("fr-FR").format(price)
   
@@ -887,7 +919,7 @@ export default function HomePage() {
           ].map(tab => (
             <button
               key={tab.key}
-              onClick={() => setActiveTab(tab.key as any)}
+              onClick={() => startTransition(() => setActiveTab(tab.key as typeof activeTab))}
               className={cn(
                 "flex-1 py-3 text-sm font-medium transition-colors",
                 activeTab === tab.key
@@ -906,7 +938,7 @@ export default function HomePage() {
             <button
               key={cat.id}
               type="button"
-              onClick={() => setActiveCategory(cat.id)}
+              onClick={() => startTransition(() => setActiveCategory(cat.id))}
               className={cn(
                 "px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-colors",
                 activeCategory === cat.id
@@ -934,7 +966,7 @@ export default function HomePage() {
               <button
                 key={cat.id}
                 type="button"
-                onClick={() => setActiveCategory(cat.id)}
+                onClick={() => startTransition(() => setActiveCategory(cat.id))}
                 className={cn(
                   "text-left px-3 py-2 rounded-xl text-sm font-medium transition-colors",
                   activeCategory === cat.id
@@ -956,7 +988,7 @@ export default function HomePage() {
               <button
                 key={tab.key}
                 type="button"
-                onClick={() => setActiveTab(tab.key as any)}
+                onClick={() => startTransition(() => setActiveTab(tab.key as typeof activeTab))}
                 className={cn(
                   "text-left px-3 py-2 rounded-xl text-sm font-medium",
                   activeTab === tab.key ? "text-[#1F5C2E] font-semibold" : "text-[#4B5563]",
@@ -1094,6 +1126,14 @@ export default function HomePage() {
             <FeedCard
               key={`${item.type}-${item.data.id}`}
               item={item}
+              priority={index < 2}
+              onPrefetch={() => {
+                if (item.type === "product") {
+                  prefetchProduct(router, item.data as Product & Record<string, unknown>)
+                } else {
+                  try { router.prefetch(`/post/${item.data.id}`) } catch { /* */ }
+                }
+              }}
               onLike={() => handleLike(item)}
               onComment={() => openComments(item)}
               onShare={() => openShare(item)}
@@ -1130,6 +1170,7 @@ export default function HomePage() {
           ))}
           {hasMoreFeed && !offlineMode ? (
             <div className="px-3 pb-4 pt-1">
+              <div ref={feedSentinelRef} className="h-1 w-full" aria-hidden />
               <Button
                 type="button"
                 variant="outline"
@@ -1368,7 +1409,9 @@ const FeedCard = memo(function FeedCard({
   formatPrice,
   formatTimeAgo,
   listenModeHighlight,
-}): { 
+  priority = false,
+  onPrefetch,
+}: { 
   item: FeedItem
   onLike: () => void
   onComment: () => void
@@ -1383,6 +1426,8 @@ const FeedCard = memo(function FeedCard({
   formatPrice: (price: number) => string
   formatTimeAgo: (date: string) => string
   listenModeHighlight?: boolean
+  priority?: boolean
+  onPrefetch?: () => void
 }) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   
@@ -1413,7 +1458,7 @@ const FeedCard = memo(function FeedCard({
   const hasMultipleImages = medias && medias.length > 1
 
   return (
-    <article className="bg-white rounded-2xl overflow-hidden shadow-sm ring-1 ring-black/[0.04]">
+    <article className="bg-white rounded-2xl overflow-hidden shadow-sm ring-1 ring-black/[0.04]" onMouseEnter={() => onPrefetch?.()} onFocusCapture={() => onPrefetch?.()} onTouchStart={() => onPrefetch?.()}>
       {/* Header auteur — actions secondaires dans le menu */}
       <div className="flex items-center justify-between px-3.5 py-3">
         <Link 
@@ -1585,7 +1630,9 @@ const FeedCard = memo(function FeedCard({
               src={medias[currentImageIndex]?.url || "/placeholder.svg"}
               alt={isProduct ? (data as Product).name : "Publication"}
               fill
-              loading="lazy"
+              {...(priority
+                ? { priority: true, fetchPriority: "high" as const }
+                : { loading: "lazy" as const })}
               quality={imageQuality}
               sizes="(max-width: 768px) 100vw, 480px"
               className="object-cover"

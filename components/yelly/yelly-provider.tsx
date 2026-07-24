@@ -10,8 +10,13 @@ import {
   type ReactNode,
 } from "react"
 import { usePathname, useRouter } from "next/navigation"
+import dynamic from "next/dynamic"
 import { trackYelly } from "@/lib/yelly/analytics"
-import { YellyPanel } from "@/components/yelly/yelly-panel"
+
+const YellyPanel = dynamic(
+  () => import("@/components/yelly/yelly-panel").then((m) => m.YellyPanel),
+  { ssr: false },
+)
 
 type YellyCtx = {
   open: boolean
@@ -78,7 +83,7 @@ export function YellyProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider value={value}>
       {children}
-      {!hidden ? <YellyPanel open={open} onClose={closeYelly} /> : null}
+      {!hidden && open ? <YellyPanel open={open} onClose={closeYelly} /> : null}
     </Ctx.Provider>
   )
 }
