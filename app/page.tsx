@@ -310,7 +310,7 @@ export default function HomePage() {
   // Gérer le like
   const handleLike = async (item: FeedItem) => {
     if (!user) {
-      toast.error("Connectez-vous pour aimer cette publication")
+      toast.error("Connecte-toi pour aimer cette publication")
       return
     }
 
@@ -360,7 +360,7 @@ export default function HomePage() {
   // Gérer la sauvegarde (favoris)
   const handleSave = async (item: FeedItem) => {
     if (!user) {
-      toast.error("Connectez-vous pour sauvegarder")
+      toast.error("Connecte-toi pour sauvegarder")
       return
     }
     if (item.type !== "product") return
@@ -426,7 +426,7 @@ export default function HomePage() {
 
   const toggleCommentLike = async (commentId: string) => {
     if (!user) {
-      toast.error("Connectez-vous pour aimer un commentaire.")
+      toast.error("Connecte-toi pour aimer un commentaire.")
       return
     }
     // Optimiste
@@ -477,7 +477,7 @@ export default function HomePage() {
 
   const submitComment = async (voice: { file: File; url: string } | null) => {
     if (!user) {
-      toast.error("Connectez-vous pour commenter.")
+      toast.error("Connecte-toi pour commenter.")
       return
     }
     const hasText = !!newComment.trim()
@@ -609,7 +609,7 @@ export default function HomePage() {
   // Suivre un utilisateur
   const handleFollow = async (userId: string) => {
     if (!user) {
-      toast.error("Connectez-vous pour suivre cet utilisateur")
+      toast.error("Connecte-toi pour suivre cet utilisateur")
       router.push("/auth/login?redirect=/")
       return
     }
@@ -1080,7 +1080,7 @@ export default function HomePage() {
               submitting={submittingComment}
               loggedIn={!!user}
               onAuthRequired={() => {
-                toast.error("Connectez-vous pour commenter.")
+                toast.error("Connecte-toi pour commenter.")
                 router.push("/auth/login?redirect=/")
               }}
             />

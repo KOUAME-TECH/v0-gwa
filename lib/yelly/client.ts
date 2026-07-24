@@ -13,39 +13,35 @@ export type YellyChatResult = {
 function keywordFallback(message: string, page?: string): string {
   const m = message.toLowerCase()
   if (/digest|harmattan|écouter|parcours/.test(m)) {
-    return "Le Digest Harmattan, c'est la lecture audio des nouveautés boutique. Ouvre Boutique, puis lance « Écouter ». Tu peux aussi démarrer un Parcours depuis le fil. Si rien ne joue, vérifie le son du téléphone."
+    return "Le Digest, c’est l’écoute des nouveautés près de chez toi. Va dans Boutique, appuie sur Écouter — et laisse tourner. Si ça coupe, vérifie juste le son du téléphone."
   }
   if (/kyc|vérif|identit|badge|document/.test(m)) {
-    return "Pour te faire vérifier : Profil → Vérification d'identité, puis envoie une pièce claire (photo nette). L'équipe GWA valide ensuite. Le badge apparaît sur ton profil une fois approuvé."
+    return "Pour le badge vérifié : ouvre Profil, puis Vérification. Envoie une photo nette de ta pièce — l’équipe regarde et te dit oui. Tranquille, ça prend souvent moins d’un jour."
   }
   if (/scg|score|confiance|bancable/.test(m)) {
-    return "Le Score de Confiance (SCG) reflète ton sérieux sur GWA (profil, ventes, avis). Améliore-le en complétant ton profil, en livrant correctement et en gardant de bons échanges."
+    return "Ton score de confiance, c’est la confiance des autres sur toi. Remplis bien ton profil, livre correctement, reste cool dans les messages — ça monte tout seul."
   }
-  if (/commande|escrow|paiement|payer|feex/.test(m)) {
-    return "Les commandes passent par un paiement sécurisé (escrow) : l'argent est retenu jusqu'à confirmation de réception. Suis l'état dans Commandes. En litige, ouvre un litige depuis la commande ou contacte le support."
+  if (/commande|escrow|paiement|payer|feex|argent/.test(m)) {
+    return "Quand tu paies, l’argent est gardé en sécurité jusqu’à ce que tu confirmes la réception. Tu suis tout dans Mes commandes. Souci ? Ouvre un litige ou WhatsApp."
   }
   if (/publier|offre|vendre|produit/.test(m)) {
-    return "Pour vendre : Boutique ou Publier → crée ton offre (nom, prix, photos, ville). Indique bien ta ville et ton pays pour apparaître dans le Digest local."
+    return "Pour vendre : Publier → mets le nom, le prix, des photos claires, ta ville et ton pays. Comme ça tu sors dans le Digest local. On gère."
   }
   if (/panier|acheter|marketplace|boutique/.test(m)) {
-    return "Pour acheter : ouvre Boutique, choisis un produit, ajoute au panier puis valide. Tu peux discuter avec le vendeur via Messages avant de commander."
+    return "Pour acheter : Boutique, choisis, ajoute au panier, et valide. Tu peux d’abord écrire au vendeur dans Messages si tu veux négocier."
   }
-  if (/whatsapp|contact|aide|humain|support/.test(m)) {
-    return "Pour parler à quelqu'un : WhatsApp +225 07 88 32 60 19, ou la page Contact. Je reste dispo pour les questions GWA rapides."
+  if (/whatsapp|contact|aide|humain|support|quelqu.?un/.test(m)) {
+    return "Pour parler à une vraie personne : WhatsApp +225 07 88 32 60 19. Moi je reste là pour les questions rapides."
   }
   if (/coopérat|cooperative/.test(m)) {
-    return "Les coopératives ont une vitrine sur GWA. Cherche « Coopératives » dans le menu, ou demande à un admin de t'ajouter comme membre."
+    return "Les coopératives ont leur vitrine sur GWA. Cherche « Coopératives » ou demande à ton admin de t’ajouter. Simple."
   }
   if (page?.includes("profil")) {
-    return "Sur Profil tu gères photo, bio, lieux, vérification et préférences Digest. Que veux-tu faire exactement ?"
+    return "Sur Profil tu changes ta photo, ta bio, tes lieux… Dis-moi ce que tu veux régler, je te guide."
   }
-  return "Je suis Yelly, l'assistante GWA. Je peux t'aider sur boutique, Digest, commandes, vérification et profil. Dis-moi en une phrase ce dont tu as besoin — ou écris-nous sur WhatsApp +225 07 88 32 60 19."
+  return "Dis-moi juste ce dont tu as besoin — vendre, acheter, une commande, ou parler à quelqu’un. On avance ensemble."
 }
 
-/**
- * Appel LLM OpenAI-compatible (OpenAI / Groq / autre).
- * Env : YELLY_API_KEY, YELLY_MODEL, YELLY_BASE_URL (optionnel).
- */
 export async function askYelly(opts: {
   message: string
   page?: string
@@ -62,8 +58,8 @@ export async function askYelly(opts: {
   }
 
   const systemParts = [YELLY_SYSTEM_PROMPT]
-  if (opts.page) systemParts.push(`Page actuelle de l'utilisateur : ${opts.page}`)
-  if (opts.contextHint) systemParts.push(`Contexte produit/app : ${opts.contextHint}`)
+  if (opts.page) systemParts.push(`Page actuelle : ${opts.page}`)
+  if (opts.contextHint) systemParts.push(`Contexte : ${opts.contextHint}`)
 
   const messages: YellyMessage[] = [
     { role: "system", content: systemParts.join("\n\n") },
@@ -81,8 +77,8 @@ export async function askYelly(opts: {
       body: JSON.stringify({
         model,
         messages,
-        temperature: 0.4,
-        max_tokens: 350,
+        temperature: 0.85,
+        max_tokens: 220,
       }),
       signal: AbortSignal.timeout(20_000),
     })

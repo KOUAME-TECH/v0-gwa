@@ -29,9 +29,9 @@ export function EscrowStepper({
   const frozen = escrow_status === "frozen"
 
   return (
-    <div className={cn("rounded-2xl border border-[#E5E7EB] bg-white p-4", className)}>
-      <p className="text-[11px] font-medium uppercase tracking-wide text-[#9CA3AF]">
-        Paiement protégé (Feexpay)
+    <div className={cn("rounded-2xl border border-[#1F5C2E]/12 bg-[#FFF6E5]/80 p-4", className)}>
+      <p className="text-[11px] font-medium uppercase tracking-wide text-[#6B7280]">
+        Suivi de ton argent
       </p>
       <ol className={cn("mt-3 flex items-start justify-between gap-1", compact && "mt-2")}>
         {ESCROW_STEP_LABELS.map((s, i) => {
@@ -76,17 +76,6 @@ export function EscrowStepper({
       <p className="mt-2 text-[11px] text-[#6B7280]">
         Tu paies maintenant ; le vendeur touche l’argent après ta confirmation de livraison.
       </p>
-      {!compact ? (
-        <ul className="mt-3 space-y-1 border-t border-[#E5E7EB] pt-3 text-[11px] text-[#4B5563]">
-          {ESCROW_STEP_LABELS.map((s, i) => (
-            <li key={s.id} className={cn(i <= step ? "text-[#1F5C2E] font-medium" : "")}>
-              {i + 1}. {s.label}
-              {i === step ? " ← tu es ici" : ""}
-              {i < step ? " ✓" : ""}
-            </li>
-          ))}
-        </ul>
-      ) : null}
     </div>
   )
 }

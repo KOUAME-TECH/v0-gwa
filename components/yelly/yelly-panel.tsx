@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react"
 import { usePathname } from "next/navigation"
 import Link from "next/link"
 import { X, Send, LifeBuoy, Mic } from "lucide-react"
-import { YELLY_NAME, YELLY_SUGGESTIONS, YELLY_TAGLINE } from "@/lib/yelly/prompt"
+import { YELLY_NAME, YELLY_SUGGESTIONS, YELLY_TAGLINE, YELLY_WELCOME } from "@/lib/yelly/prompt"
 import { WHATSAPP_LINK } from "@/lib/contact"
 import { trackYelly } from "@/lib/yelly/analytics"
 import { cn } from "@/lib/utils"
@@ -13,8 +13,7 @@ type ChatLine = { role: "user" | "assistant"; content: string }
 
 const WELCOME: ChatLine = {
   role: "assistant",
-  content:
-    "Salut, je suis Yelly — l'assistante GWA. Boutique, Digest, commandes, vérification… dis-moi ce dont tu as besoin.",
+  content: YELLY_WELCOME,
 }
 
 function TypingDots() {
@@ -310,7 +309,7 @@ export function YellyPanel({
             className="inline-flex items-center gap-1.5 rounded-full border border-[#1F5C2E]/20 bg-white px-3 py-1 text-xs font-medium text-[#1F5C2E] disabled:opacity-50"
           >
             <LifeBuoy className="h-3.5 w-3.5" />
-            Passer à un agent
+            Passer à quelqu’un
           </button>
           {guestLeft != null && guestLeft <= 3 ? (
             <span className="text-[11px] text-[#6B7280]">
@@ -384,7 +383,7 @@ export function YellyPanel({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             maxLength={800}
-            placeholder="Écris à Yelly…"
+            placeholder="Dis-moi ce dont tu as besoin…"
             className="min-w-0 flex-1 rounded-full border border-[#1F5C2E]/15 bg-[#F7F4EE] px-4 py-2.5 text-sm outline-none ring-[#1F5C2E]/30 focus:ring-2"
             disabled={pending}
             autoComplete="off"

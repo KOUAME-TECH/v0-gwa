@@ -327,7 +327,7 @@ function MarketplaceContent() {
 
   async function toggleFavorite(id: string, e: React.MouseEvent) {
     e.preventDefault(); e.stopPropagation()
-    if (!userId) { toast.error("Connectez-vous pour ajouter aux favoris"); return }
+    if (!userId) { toast.error("Connecte-toi pour ajouter aux favoris"); return }
     const isFav = favorites.has(id)
     setFavorites(prev => { const s = new Set(prev); isFav ? s.delete(id) : s.add(id); return s })
     if (isFav) {
@@ -339,7 +339,7 @@ function MarketplaceContent() {
 
   async function addToCart(id: string, e: React.MouseEvent) {
     e.preventDefault(); e.stopPropagation()
-    if (!userId) { toast.error("Connectez-vous pour ajouter au panier"); return }
+    if (!userId) { toast.error("Connecte-toi pour ajouter au panier"); return }
     const { error } = await supabase.from("cart_items").upsert(
       { user_id: userId, product_id: id, quantity: 1 },
       { onConflict: "user_id,product_id" }

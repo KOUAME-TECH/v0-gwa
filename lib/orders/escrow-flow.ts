@@ -14,24 +14,24 @@ export type EscrowStatus = "pending" | "held" | "released" | "frozen" | null | u
 
 export const ORDER_STATUS_LABELS: Record<string, string> = {
   draft: "Brouillon",
-  pending: "En attente",
-  confirmed: "Confirmée",
-  processing: "En préparation",
-  shipped: "En livraison",
-  delivered: "Livrée",
+  pending: "En attente du vendeur",
+  confirmed: "Acceptée",
+  processing: "On prépare",
+  shipped: "En route",
+  delivered: "Bien reçue",
   cancelled: "Annulée",
-  disputed: "Litige",
+  disputed: "Un souci",
   // legacy UI aliases
-  preparing: "En préparation",
-  shipping: "En livraison",
+  preparing: "On prépare",
+  shipping: "En route",
 }
 
 export const ESCROW_STEP_LABELS = [
   { id: "payer", label: "Payer" },
-  { id: "sequestre", label: "Séquestre" },
-  { id: "livre", label: "Livré" },
-  { id: "confirme", label: "Confirmé" },
-  { id: "libere", label: "Libéré" },
+  { id: "sequestre", label: "Argent protégé" },
+  { id: "livre", label: "En route" },
+  { id: "confirme", label: "Reçu" },
+  { id: "libere", label: "Vendeur payé" },
 ] as const
 
 /** Raisons litige alignées CHECK DB (004_admin_system.sql). */
@@ -113,22 +113,39 @@ export function orderFlowIndex(status: string): number {
 
 export function escrowStatusMessage(step: number, escrow?: EscrowStatus): string {
   if (escrow === "frozen") {
-    return "Fonds gelés — litige en cours. L’équipe GWA examine le dossier."
+    return "On a mis l’argent de côté le temps que l’équipe GWA regarde le litige. Tu n’es pas seul."
   }
   switch (step) {
     case 0:
-      return "Paiement en cours. L’argent n’est pas encore en séquestre."
+      return "Le paiement n’est pas encore terminé. Dès que c’est bon, ton argent est protégé."
     case 1:
-      return "Fonds en séquestre Feexpay — le vendeur ne peut pas encore retirer."
+      return "Ton argent est en sécurité. Le vendeur le touche seulement quand tu confirmes que tout est arrivé."
     case 2:
-      return "Commande en livraison — confirme la réception pour libérer l’argent."
+      return "C’est en route. Quand tu reçois le colis, confirme — sinon dis-nous s’il y a un souci."
     case 3:
-      return "Réception confirmée — libération des fonds en cours."
+      return "Merci d’avoir confirmé. On envoie l’argent au vendeur maintenant."
     case 4:
-      return "Fonds libérés au vendeur. Transaction terminée."
+      return "Tout est réglé — le vendeur a reçu son argent. Merci d’avoir choisi GWA."
     default:
       return ""
   }
+}
+
+export function humanPaymentLabel(method?: string | null, status?: string | null): string {
+  const st = (status || "").toLowerCase()
+  const statusLabel =
+    st === "paid"
+      ? "payé"
+      : st === "pending"
+        ? "en attente"
+        : st === "failed"
+          ? "échoué"
+          : st || "—"
+  const methodLabel =
+    !method || method === "feexpay" || method === "FeexPay"
+      ? "Paiement sécurisé"
+      : method
+  return `${methodLabel} · ${statusLabel}`
 }
 
 /** Acheteur peut confirmer réception seulement si fonds réellement en séquestre. */
