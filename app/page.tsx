@@ -39,6 +39,8 @@ import { isLowQualityPostContent } from "@/lib/feed/content-quality"
 import { ListenRitualBadge } from "@/components/media/listen-ritual-badge"
 import { useListenMode } from "@/hooks/use-listen-mode"
 import { useListenRitual } from "@/hooks/use-listen-ritual"
+import { useNavBadges } from "@/hooks/use-nav-badges"
+import { useDataSaver } from "@/hooks/use-data-saver"
 
 const WeatherWidget = dynamic(
   () => import("@/components/weather-widget").then((m) => m.WeatherWidget),
@@ -137,9 +139,10 @@ export default function HomePage() {
   const [userType, setUserType] = useState<string | null>(null)
   const { enabled: listenMode } = useListenMode()
   const { streak: listenStreak } = useListenRitual()
+  const { unreadNotifs } = useNavBadges()
+  const [unreadNotifications, setUnreadNotifications] = useState(0)
   const [activeCategory, setActiveCategory] = useState("all")
   const [activeTab, setActiveTab] = useState<"tout" | "suivis" | "produits" | "publications">("tout")
-  const [unreadNotifications, setUnreadNotifications] = useState(0)
   
   // États pour les commentaires
   const [selectedItem, setSelectedItem] = useState<FeedItem | null>(null)
@@ -165,6 +168,11 @@ export default function HomePage() {
   const headerHidden = useHideOnScroll(true)
 
   const supabase = createClient()
+
+  // Bell badge — shared store (BottomNav owns fetch); keep local mirror for UI
+  useEffect(() => {
+    setUnreadNotifications(unreadNotifs)
+  }, [unreadNotifs])
 
   const handleConfirmDeletePost = async () => {
     if (!pendingDeletePost) return
@@ -228,11 +236,6 @@ export default function HomePage() {
             supabase.from("favorites").select("product_id").eq("user_id", currentUser.id).limit(200),
             supabase.from("profiles").select("user_type").eq("id", currentUser.id).maybeSingle(),
             supabase.from("followers").select("following_id").eq("follower_id", currentUser.id).limit(200),
-            supabase
-              .from("notifications")
-              .select("id", { count: "exact", head: true })
-              .eq("user_id", currentUser.id)
-              .eq("is_read", false),
           ])
         : Promise.resolve(null)
 
@@ -247,18 +250,15 @@ export default function HomePage() {
       const [metaRes, authorsRes] = await Promise.all([metaPromise, authorsPromise])
 
       if (metaRes) {
-        const [likesRes, favsRes, profileRes, followsRes, notifRes] = metaRes
+        const [likesRes, favsRes, profileRes, followsRes] = metaRes
         if (profileRes.data) {
           setUserType(profileRes.data.user_type)
         }
         if (followsRes.data) {
           setFollowingIds(new Set(followsRes.data.map((f) => f.following_id)))
         }
-        setUnreadNotifications(notifRes.count || 0)
         userLikes = likesRes.data?.map((l) => l.post_id) || []
         userFavorites = favsRes.data?.map((f) => f.product_id) || []
-      } else {
-        setUnreadNotifications(0)
       }
 
       const profileMap = new Map(
@@ -297,23 +297,6 @@ export default function HomePage() {
       setRefreshing(false)
     }
     loadData()
-    const onNotifUpdated = () => {
-      void (async () => {
-        const { data: { user: u } } = await supabase.auth.getUser()
-        if (!u) {
-          setUnreadNotifications(0)
-          return
-        }
-        const { count } = await supabase
-          .from("notifications")
-          .select("*", { count: "exact", head: true })
-          .eq("user_id", u.id)
-          .eq("is_read", false)
-        setUnreadNotifications(count || 0)
-      })()
-    }
-    window.addEventListener("gwa:notifications-updated", onNotifUpdated)
-    return () => window.removeEventListener("gwa:notifications-updated", onNotifUpdated)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase, refreshKey])
 
@@ -1255,6 +1238,7 @@ function FeedCard({
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const lastTapRef = useRef(0)
   const touchStartX = useRef<number | null>(null)
+  const { imageQuality, allowAutoplay } = useDataSaver()
   
   const isProduct = item.type === "product"
   const data = item.data
@@ -1396,7 +1380,7 @@ function FeedCard({
               src={videos[0].url}
               controls
               playsInline
-              preload="metadata"
+              preload={allowAutoplay ? "metadata" : "none"}
               poster={images?.[0] || undefined}
               className="w-full h-full object-contain"
               onPlay={() => setIsVideoPlaying(true)}
@@ -1450,6 +1434,7 @@ function FeedCard({
               alt={isProduct ? (data as Product).name : "Publication"}
               fill
               loading="lazy"
+              quality={imageQuality}
               sizes="(max-width: 768px) 100vw, 480px"
               className="object-cover"
             />

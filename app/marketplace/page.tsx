@@ -18,6 +18,7 @@ import { DigestBanner } from "@/components/media/digest-banner"
 import { YellyAideButton } from "@/components/yelly/yelly-aide-button"
 import { useShopVoiceTour } from "@/hooks/use-shop-voice-tour"
 import { useRealtimeLocation } from "@/hooks/use-realtime-location"
+import { useDataSaver } from "@/hooks/use-data-saver"
 import {
   digestModeLabel,
   selectDigestProducts,
@@ -63,6 +64,7 @@ function MarketplaceGridCard({
   onToggleFavorite,
   onAddToCart,
   formatPrice,
+  imageQuality,
 }: {
   product: Product
   listening: boolean
@@ -77,6 +79,7 @@ function MarketplaceGridCard({
   onToggleFavorite: (id: string, e: React.MouseEvent) => void
   onAddToCart: (id: string, e: React.MouseEvent) => void
   formatPrice: (n: number) => string
+  imageQuality: number
 }) {
   return (
     <Link href={`/produit/${p.id}`} className="block active:scale-[0.98] transition-transform">
@@ -94,6 +97,7 @@ function MarketplaceGridCard({
             className="object-cover"
             sizes="(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 25vw"
             loading="lazy"
+            quality={imageQuality}
           />
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-[#E8F0E9] via-[#FFF6E5] to-[#E8E4DC] flex items-center justify-center">
@@ -184,6 +188,7 @@ function MarketplaceContent() {
   } = useRealtimeLocation({ auto: true, maximumAge: 300_000 })
   const supabase = createClient()
   const headerHidden = useHideOnScroll(true)
+  const { imageQuality } = useDataSaver()
 
   useEffect(() => { fetchData() }, [])
 
@@ -716,6 +721,7 @@ function MarketplaceContent() {
                   onToggleFavorite={toggleFavorite}
                   onAddToCart={addToCart}
                   formatPrice={fmt}
+                  imageQuality={imageQuality}
                 />
               ))}
             </div>

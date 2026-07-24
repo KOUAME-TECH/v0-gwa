@@ -24,6 +24,7 @@ import { Switch } from "@/components/ui/switch"
 import { toast } from "sonner"
 import { useListenMode } from "@/hooks/use-listen-mode"
 import { useA11yPrefs } from "@/hooks/use-a11y-prefs"
+import { useDataSaver } from "@/hooks/use-data-saver"
 import { AUDIO_LANGS } from "@/lib/media/audio-langs"
 import {
   shouldPromptIdentityVerification,
@@ -95,6 +96,11 @@ export default function EditProfilPage() {
   const { enabled: listenMode, toggle: toggleListenMode, hydrated: listenHydrated } =
     useListenMode()
   const { largeText, setLargeText, quietHours, setQuietHours } = useA11yPrefs()
+  const {
+    enabled: dataSaver,
+    toggle: toggleDataSaver,
+    hydrated: dataSaverHydrated,
+  } = useDataSaver()
 
   // Auto-enregistrer la position dès qu'elle est captée (pas de saisie manuelle)
   useEffect(() => {
@@ -577,6 +583,19 @@ export default function EditProfilPage() {
               checked={quietHours}
               onCheckedChange={setQuietHours}
               aria-label="Quiet hours"
+            />
+          </div>
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-[#E5E7EB] px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="text-sm text-[#374151]">Économie de données</p>
+              <p className="text-[11px] text-[#9CA3AF]">
+                Images plus légères, pas d&apos;autoplay (idéal en 2G/3G)
+              </p>
+            </div>
+            <Switch
+              checked={dataSaverHydrated ? dataSaver : false}
+              onCheckedChange={() => toggleDataSaver()}
+              aria-label="Économie de données"
             />
           </div>
         </div>
