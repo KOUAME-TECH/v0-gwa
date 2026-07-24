@@ -1,6 +1,6 @@
 # OneSignal Web Push — config dashboard GWA
 
-Les fichiers officiels sont dans `public/` (racine Vercel) :
+Les fichiers dans `public/` (racine Vercel) :
 
 | Champ dashboard (**Advanced Push Settings**) | Valeur |
 |----------------------------------------------|--------|
@@ -14,11 +14,7 @@ URL de contrôle :
 - `https://<ton-domaine>/OneSignalSDKWorker.js`
 - `https://<ton-domaine>/OneSignalSDKUpdaterWorker.js`
 
-Contenu attendu des workers (fichier officiel v16) :
-
-```js
-importScripts("https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js");
-```
+Contenu des workers (v19) : `importScripts` OneSignal **puis** cache offline GWA (`gwa-v19-offline`) — shell, navigations network-first, fallback `/offline.html`.
 
 Le SDK client (`components/pwa/onesignal-provider.tsx`) utilise :
 
@@ -32,4 +28,4 @@ Le SDK client (`components/pwa/onesignal-provider.tsx`) utilise :
 2. Ajouter les origines (prod + preview Vercel)
 3. Sauvegarder, recharger le site, accepter les notifs
 
-`/sw.js` reste disponible (OneSignal + cache offline GWA) pour les anciennes installations PWA.
+`/sw.js` reste un miroir du même worker (installations PWA anciennes).

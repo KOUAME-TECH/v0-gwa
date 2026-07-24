@@ -17,14 +17,61 @@ type StoryItem = {
   verified: boolean
 }
 
+/** Produits déjà chargés par le feed — évite un 2e round-trip catalogue. */
+export type StoriesSeedProduct = {
+  id: string
+  name: string
+  images?: string[] | null
+  created_at?: string | null
+  seller_id?: string
+  profiles?: {
+    id?: string
+    full_name?: string | null
+    avatar_url?: string | null
+    is_verified?: boolean | null
+  } | null
+}
+
+function mapSeed(products: StoriesSeedProduct[]): StoryItem[] {
+  const since = Date.now() - 24 * 60 * 60 * 1000
+  return products
+    .filter((p) => {
+      if (!p.created_at) return true
+      return new Date(p.created_at).getTime() >= since
+    })
+    .slice(0, 12)
+    .map((p) => ({
+      id: String(p.id),
+      name: String(p.name || ""),
+      image: p.images?.[0] || null,
+      sellerId: String(p.seller_id || p.profiles?.id || ""),
+      sellerName: p.profiles?.full_name || "Vendeur",
+      sellerAvatar: p.profiles?.avatar_url || null,
+      verified: !!p.profiles?.is_verified,
+    }))
+}
+
 /**
  * Rail « Aujourd’hui » — offres des dernières 24 h (stories légères sans nouvelle table).
  */
-export function StoriesRail({ className }: { className?: string }) {
-  const [items, setItems] = useState<StoryItem[]>([])
+export function StoriesRail({
+  className,
+  seedProducts,
+}: {
+  className?: string
+  seedProducts?: StoriesSeedProduct[]
+}) {
+  const [items, setItems] = useState<StoryItem[]>(() =>
+    seedProducts?.length ? mapSeed(seedProducts) : [],
+  )
   const supabase = createClient()
 
   useEffect(() => {
+    if (seedProducts && seedProducts.length > 0) {
+      setItems(mapSeed(seedProducts))
+      return
+    }
+
     let cancelled = false
     ;(async () => {
       const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
@@ -64,7 +111,7 @@ export function StoriesRail({ className }: { className?: string }) {
     return () => {
       cancelled = true
     }
-  }, [supabase])
+  }, [supabase, seedProducts])
 
   if (items.length === 0) return null
 

@@ -181,7 +181,7 @@ function MarketplaceContent() {
     city: geoCity,
     country: geoCountry,
     label: geoLabel,
-  } = useRealtimeLocation({ auto: true, maximumAge: 0 })
+  } = useRealtimeLocation({ auto: true, maximumAge: 300_000 })
   const supabase = createClient()
   const headerHidden = useHideOnScroll(true)
 

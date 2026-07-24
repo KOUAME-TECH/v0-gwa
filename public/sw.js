@@ -1,7 +1,7 @@
-/* GWA PWA + OneSignal — v18 offline (navigations + shell + fallback) */
+/* GWA PWA + OneSignal — v19 offline (OneSignal + shell) (navigations + shell + fallback) */
 importScripts("https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js")
 
-const CACHE = "gwa-v18-offline"
+const CACHE = "gwa-v19-offline"
 const SHELL = [
   "/",
   "/marketplace",

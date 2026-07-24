@@ -36,6 +36,9 @@ const nextConfig = {
   },
   images: {
     formats: ["image/avif", "image/webp"],
+    minimumCacheTTL: 86400,
+    deviceSizes: [640, 750, 828, 1080, 1200],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
     remotePatterns: [
       {
         protocol: "https",
@@ -47,12 +50,26 @@ const nextConfig = {
   poweredByHeader: false,
   compress: true,
   experimental: {
-    optimizePackageImports: ["lucide-react", "date-fns", "@radix-ui/react-icons"],
+    optimizePackageImports: ["lucide-react", "date-fns"],
   },
   headers: async () => [
     { source: "/(.*)", headers: securityHeaders },
     {
       source: "/sw.js",
+      headers: [
+        { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+        { key: "Service-Worker-Allowed", value: "/" },
+      ],
+    },
+    {
+      source: "/OneSignalSDKWorker.js",
+      headers: [
+        { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+        { key: "Service-Worker-Allowed", value: "/" },
+      ],
+    },
+    {
+      source: "/OneSignalSDKUpdaterWorker.js",
       headers: [
         { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
         { key: "Service-Worker-Allowed", value: "/" },

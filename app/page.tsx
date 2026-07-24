@@ -30,10 +30,14 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { GwaMark } from "@/components/brand/gwa-mark"
 import { YellyAideButton } from "@/components/yelly/yelly-aide-button"
-import { StoriesRail } from "@/components/feed/stories-rail"
+import dynamic from "next/dynamic"
+import { StoriesRail, type StoriesSeedProduct } from "@/components/feed/stories-rail"
 import { useHideOnScroll } from "@/hooks/use-hide-on-scroll"
 import { shouldShowVerifiedBadge } from "@/lib/verification/badge"
-import { WeatherWidget } from "@/components/weather-widget"
+const WeatherWidget = dynamic(
+  () => import("@/components/weather-widget").then((m) => m.WeatherWidget),
+  { ssr: false, loading: () => null },
+)
 import { ClickableListenText, ListenMicButton } from "@/components/media/clickable-listen-text"
 import { isLowQualityPostContent } from "@/lib/feed/content-quality"
 import { ListenRitualBadge } from "@/components/media/listen-ritual-badge"
@@ -180,43 +184,10 @@ export default function HomePage() {
     }
   }
 
-  // Charger l'utilisateur et le feed
+  // Charger l'utilisateur et le feed (parallèle : auth + catalogue)
   useEffect(() => {
     const loadData = async () => {
-      const { data: { user: currentUser } } = await supabase.auth.getUser()
-      setUser(currentUser)
-
-      // Charger les likes, favoris et profil de l'utilisateur
-      let userLikes: string[] = []
-      let userFavorites: string[] = []
-      
-      if (currentUser) {
-        const [likesRes, favsRes, profileRes, followsRes, notifRes] = await Promise.all([
-          supabase.from("post_likes").select("post_id").eq("user_id", currentUser.id).limit(200),
-          supabase.from("favorites").select("product_id").eq("user_id", currentUser.id).limit(200),
-          supabase.from("profiles").select("user_type").eq("id", currentUser.id).maybeSingle(),
-          supabase.from("followers").select("following_id").eq("follower_id", currentUser.id).limit(200),
-          supabase
-            .from("notifications")
-            .select("id", { count: "exact", head: true })
-            .eq("user_id", currentUser.id)
-            .eq("is_read", false),
-        ])
-        if (profileRes.data) {
-          setUserType(profileRes.data.user_type)
-        }
-        if (followsRes.data) {
-          setFollowingIds(new Set(followsRes.data.map((f) => f.following_id)))
-        }
-        setUnreadNotifications(notifRes.count || 0)
-        userLikes = likesRes.data?.map(l => l.post_id) || []
-        userFavorites = favsRes.data?.map(f => f.product_id) || []
-      } else {
-        setUnreadNotifications(0)
-      }
-
-      // Charger produits
-      const { data: products } = await supabase
+      const productsQuery = supabase
         .from("products")
         .select(`
           id, name, description, price, unit, images, audio_url, origin_region, origin_country, product_type, seller_id,
@@ -228,49 +199,94 @@ export default function HomePage() {
         .order("created_at", { ascending: false })
         .limit(20)
 
-      // Charger posts (sans join FK car posts.author_id -> auth.users, pas profiles)
-      const { data: rawPosts } = await supabase
+      const postsQuery = supabase
         .from("posts")
         .select("id, content, media_urls, video_url, audio_url, likes_count, comments_count, shares_count, created_at, author_id")
         .eq("visibility", "public")
         .order("created_at", { ascending: false })
         .limit(20)
 
-      // Charger les profiles des auteurs de posts
-      let posts = rawPosts || []
-      if (rawPosts && rawPosts.length > 0) {
-        const authorIds = [...new Set(rawPosts.map(p => p.author_id))]
-        const { data: postProfiles } = await supabase
-          .from("profiles")
-          .select("id, full_name, avatar_url, is_verified, user_type")
-          .in("id", authorIds)
+      const [
+        {
+          data: { user: currentUser },
+        },
+        { data: products },
+        { data: rawPosts },
+      ] = await Promise.all([supabase.auth.getUser(), productsQuery, postsQuery])
 
-        const profileMap = new Map(postProfiles?.map(p => [p.id, p]) || [])
-        posts = rawPosts.map(post => ({
-          ...post,
-          profiles: profileMap.get(post.author_id) || null
-        }))
+      setUser(currentUser)
+
+      let userLikes: string[] = []
+      let userFavorites: string[] = []
+
+      const authorIds = [...new Set((rawPosts || []).map((p) => p.author_id).filter(Boolean))]
+
+      const metaPromise = currentUser
+        ? Promise.all([
+            supabase.from("post_likes").select("post_id").eq("user_id", currentUser.id).limit(200),
+            supabase.from("favorites").select("product_id").eq("user_id", currentUser.id).limit(200),
+            supabase.from("profiles").select("user_type").eq("id", currentUser.id).maybeSingle(),
+            supabase.from("followers").select("following_id").eq("follower_id", currentUser.id).limit(200),
+            supabase
+              .from("notifications")
+              .select("id", { count: "exact", head: true })
+              .eq("user_id", currentUser.id)
+              .eq("is_read", false),
+          ])
+        : Promise.resolve(null)
+
+      const authorsPromise =
+        authorIds.length > 0
+          ? supabase
+              .from("profiles")
+              .select("id, full_name, avatar_url, is_verified, user_type")
+              .in("id", authorIds)
+          : Promise.resolve({ data: [] as { id: string; full_name: string | null; avatar_url: string | null; is_verified: boolean | null; user_type: string | null }[] })
+
+      const [metaRes, authorsRes] = await Promise.all([metaPromise, authorsPromise])
+
+      if (metaRes) {
+        const [likesRes, favsRes, profileRes, followsRes, notifRes] = metaRes
+        if (profileRes.data) {
+          setUserType(profileRes.data.user_type)
+        }
+        if (followsRes.data) {
+          setFollowingIds(new Set(followsRes.data.map((f) => f.following_id)))
+        }
+        setUnreadNotifications(notifRes.count || 0)
+        userLikes = likesRes.data?.map((l) => l.post_id) || []
+        userFavorites = favsRes.data?.map((f) => f.product_id) || []
+      } else {
+        setUnreadNotifications(0)
       }
+
+      const profileMap = new Map(
+        (authorsRes.data || []).map((p) => [p.id, p]),
+      )
+      const posts = (rawPosts || []).map((post) => ({
+        ...post,
+        profiles: profileMap.get(post.author_id) || null,
+      }))
 
       // Melanger produits et posts dans le feed
       const feedItems: FeedItem[] = []
-      const maxLen = Math.max(products?.length || 0, posts?.length || 0)
-      
+      const maxLen = Math.max(products?.length || 0, posts.length)
+
       for (let i = 0; i < maxLen; i++) {
         if (products?.[i]) {
-          feedItems.push({ 
-            type: "product", 
+          feedItems.push({
+            type: "product",
             data: products[i] as Product,
             isLiked: userFavorites.includes(products[i].id),
-            isSaved: userFavorites.includes(products[i].id)
+            isSaved: userFavorites.includes(products[i].id),
           })
         }
-        if (posts?.[i]) {
-          feedItems.push({ 
-            type: "post", 
+        if (posts[i]) {
+          feedItems.push({
+            type: "post",
             data: posts[i] as Post,
             isLiked: userLikes.includes(posts[i].id),
-            isSaved: false
+            isSaved: false,
           })
         }
       }
@@ -950,7 +966,12 @@ export default function HomePage() {
           </div>
         ) : (
           <>
-            <StoriesRail className="lg:px-0" />
+            <StoriesRail
+              className="lg:px-0"
+              seedProducts={feed
+                .filter((item) => item.type === "product")
+                .map((item) => item.data as StoriesSeedProduct)}
+            />
             {filteredFeed.map((item, index) => (
             <FeedCard
               key={`${item.type}-${item.data.id}`}

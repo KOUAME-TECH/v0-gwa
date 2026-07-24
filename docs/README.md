@@ -14,5 +14,6 @@
 | [`beta-test-matrix.md`](./beta-test-matrix.md) | Matrice QA |
 | [`scg-v2-fastapi-contract.md`](./scg-v2-fastapi-contract.md) | Contrat SCG post-bêta |
 | [`audit-complet-2026-07-24.md`](./audit-complet-2026-07-24.md) | Audit full (code + prod + MCP) |
+| [`suggestions-optimisation.md`](./suggestions-optimisation.md) | Optimisations livrées + roadmap |
 
 Agents Cursor locaux : `.cursor/agents/` (pas de doublon dans `docs/`).
