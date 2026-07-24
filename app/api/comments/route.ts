@@ -2,8 +2,10 @@ import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import {
   CommentSubmitError,
+  deleteFeedComment,
   loadFeedComments,
   submitFeedComment,
+  updateFeedComment,
   type FeedCommentTarget,
 } from "@/lib/comments/feed-comments"
 import { validateAudioFile } from "@/lib/media/compress"
@@ -116,5 +118,73 @@ export async function POST(request: NextRequest) {
     }
     console.error("[api/comments POST]", err)
     return NextResponse.json({ error: "Erreur lors de l'envoi du commentaire" }, { status: 500 })
+  }
+}
+
+/** PATCH /api/comments — body JSON { id, text, type } */
+export async function PATCH(request: NextRequest) {
+  try {
+    const csrf = assertSameOrigin(request)
+    if (csrf) return csrf
+    const rate = await checkRateLimit("MESSAGE_SEND")
+    if (!rate.success) {
+      return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })
+    }
+    const supabase = await createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ error: "Connecte-toi pour modifier" }, { status: 401 })
+    }
+    const body = await request.json().catch(() => ({}))
+    const id = String(body.id || "")
+    const type = body.type === "product" ? "product" : "post"
+    const parsed = commentTextSchema.safeParse(String(body.text || ""))
+    if (!id || !/^[0-9a-f-]{36}$/i.test(id) || !parsed.success) {
+      return NextResponse.json({ error: "Données invalides" }, { status: 400 })
+    }
+    const comment = await updateFeedComment(supabase, user.id, id, parsed.data, type)
+    return NextResponse.json({ comment })
+  } catch (err) {
+    if (err instanceof CommentSubmitError) {
+      return NextResponse.json(
+        { error: err.message },
+        { status: err.code === "AUTH" ? 403 : 400 },
+      )
+    }
+    console.error("[api/comments PATCH]", err)
+    return NextResponse.json({ error: "Modification impossible" }, { status: 500 })
+  }
+}
+
+/** DELETE /api/comments?id=&type=post|product */
+export async function DELETE(request: NextRequest) {
+  try {
+    const csrf = assertSameOrigin(request)
+    if (csrf) return csrf
+    const supabase = await createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ error: "Connecte-toi" }, { status: 401 })
+    }
+    const id = request.nextUrl.searchParams.get("id")
+    const type = request.nextUrl.searchParams.get("type") === "product" ? "product" : "post"
+    if (!id || !/^[0-9a-f-]{36}$/i.test(id)) {
+      return NextResponse.json({ error: "id requis" }, { status: 400 })
+    }
+    await deleteFeedComment(supabase, user.id, id, type)
+    return NextResponse.json({ ok: true })
+  } catch (err) {
+    if (err instanceof CommentSubmitError) {
+      return NextResponse.json(
+        { error: err.message },
+        { status: err.code === "AUTH" ? 403 : 400 },
+      )
+    }
+    console.error("[api/comments DELETE]", err)
+    return NextResponse.json({ error: "Suppression impossible" }, { status: 500 })
   }
 }

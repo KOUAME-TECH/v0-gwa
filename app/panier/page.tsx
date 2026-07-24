@@ -277,37 +277,37 @@ export default function CartPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-32">
+    <div className="min-h-screen bg-[#FFF6E5] pb-32">
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-background border-b border-border">
-        <div className="flex items-center gap-3 px-4 py-3">
+      <header className="sticky top-0 z-40 border-b border-[#1F5C2E]/10 bg-[#FFF6E5]/95 backdrop-blur-sm">
+        <div className="mx-auto flex max-w-md items-center gap-3 px-4 py-3">
           {step > 1 ? (
-            <button onClick={() => setStep(step - 1)}>
+            <button type="button" onClick={() => setStep(step - 1)} aria-label="Retour">
               <ChevronLeft className="h-6 w-6" />
             </button>
           ) : (
-            <Link href="/">
+            <Link href="/" aria-label="Retour">
               <ChevronLeft className="h-6 w-6" />
             </Link>
           )}
-          <h1 className="text-lg font-semibold flex-1">
-            {step === 1 && `Panier (${cart.length})`}
-            {step === 2 && "Livraison"}
-            {step === 3 && "Paiement"}
+          <h1 className="flex-1 font-display text-lg text-[#1F5C2E]">
+            {step === 1 && `Ton panier (${cart.length})`}
+            {step === 2 && "Où livrer ?"}
+            {step === 3 && "Payer en sécurité"}
           </h1>
         </div>
         
         {/* Progress */}
-        <div className="flex gap-1 px-4 pb-3">
+        <div className="mx-auto flex max-w-md gap-1 px-4 pb-3">
           {[1, 2, 3].map(s => (
-            <div key={s} className={`h-1 flex-1 rounded-full transition-colors ${step >= s ? "bg-primary" : "bg-muted"}`} />
+            <div key={s} className={`h-1 flex-1 rounded-full transition-colors ${step >= s ? "bg-[#1F5C2E]" : "bg-[#E5E7EB]"}`} />
           ))}
         </div>
       </header>
 
       {/* Step 1: Cart Items */}
       {step === 1 && (
-        <div className="p-4 space-y-3">
+        <div className="mx-auto max-w-md space-y-3 p-4">
           {cart.map(item => (
             <div key={item.id} className="flex gap-3 bg-card rounded-2xl p-3 border border-border">
               <div className="w-20 h-20 relative rounded-xl overflow-hidden bg-muted shrink-0">
@@ -374,7 +374,7 @@ export default function CartPage() {
 
       {/* Step 2: Delivery */}
       {step === 2 && (
-        <div className="p-4 space-y-4">
+        <div className="mx-auto max-w-md space-y-4 p-4">
           <div className="space-y-4">
             <div>
               <Label className="text-sm">Nom complet</Label>
@@ -443,8 +443,9 @@ export default function CartPage() {
 
       {/* Step 3: Payment */}
       {step === 3 && (
-        <div className="p-4 space-y-3">
+        <div className="mx-auto max-w-md space-y-3 p-4">
           <EscrowStepper payment_status="pending" escrow_status="pending" status="pending" />
+          <p className="text-sm text-[#4B5563]">Choisis comment payer — ton argent reste protégé jusqu’à la réception.</p>
           <RadioGroup value={paymentMethod} onValueChange={setPaymentMethod}>
             {paymentMethods.map(method => (
               <div 
@@ -469,36 +470,37 @@ export default function CartPage() {
       )}
 
       {/* Fixed Bottom Summary */}
-      <div className="fixed bottom-[76px] left-0 right-0 bg-background border-t border-border p-4 pb-4 space-y-3 z-40">
+      <div className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] left-0 right-0 z-40 border-t border-[#1F5C2E]/10 bg-white/95 p-4 backdrop-blur-sm lg:bottom-0">
+        <div className="mx-auto max-w-md space-y-3">
         {checkoutError && (
-          <p className="text-sm text-destructive text-center">{checkoutError}</p>
+          <p className="text-center text-sm text-red-600">{checkoutError}</p>
         )}
         <div className="space-y-2 text-sm">
           <div className="flex justify-between">
-            <span className="text-muted-foreground">Sous-total</span>
+            <span className="text-[#6B7280]">Articles</span>
             <span>{formatPrice(subtotal)} FCFA</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-muted-foreground">Livraison</span>
-            <span>{deliveryFee === 0 ? "Gratuit" : `${formatPrice(deliveryFee)} FCFA`}</span>
+            <span className="text-[#6B7280]">Livraison</span>
+            <span>{deliveryFee === 0 ? "Offerte" : `${formatPrice(deliveryFee)} FCFA`}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-muted-foreground">Frais service (2%)</span>
+            <span className="text-[#6B7280]">Service GWA</span>
             <span>{formatPrice(serviceFee)} FCFA</span>
           </div>
-          <div className="flex justify-between text-lg font-bold pt-2 border-t">
+          <div className="flex justify-between border-t border-[#E5E7EB] pt-2 text-lg font-bold">
             <span>Total</span>
-            <span className="text-primary">{formatPrice(total)} FCFA</span>
+            <span className="text-[#1F5C2E]">{formatPrice(total)} FCFA</span>
           </div>
         </div>
         
         <Button 
           onClick={handleCheckout}
           disabled={!canProceed() || isProcessing}
-          className="w-full h-14 rounded-2xl text-base font-semibold"
+          className="h-14 w-full rounded-xl bg-[#1F5C2E] text-base font-semibold hover:bg-[#184a25]"
         >
           {isProcessing ? (
-            <div className="w-5 h-5 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
           ) : (
             <>
               {step < 3 ? "Continuer" : "Payer maintenant"}
@@ -506,6 +508,7 @@ export default function CartPage() {
             </>
           )}
         </Button>
+        </div>
       </div>
     </div>
   )

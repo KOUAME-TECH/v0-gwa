@@ -30,6 +30,9 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { GwaMark } from "@/components/brand/gwa-mark"
 import { YellyAideButton } from "@/components/yelly/yelly-aide-button"
+import { StoriesRail } from "@/components/feed/stories-rail"
+import { useHideOnScroll } from "@/hooks/use-hide-on-scroll"
+import { shouldShowVerifiedBadge } from "@/lib/verification/badge"
 import { WeatherWidget } from "@/components/weather-widget"
 import { ClickableListenText, ListenMicButton } from "@/components/media/clickable-listen-text"
 import { isLowQualityPostContent } from "@/lib/feed/content-quality"
@@ -154,6 +157,7 @@ export default function HomePage() {
   const [refreshing, setRefreshing] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
   const pullStartY = useRef<number | null>(null)
+  const headerHidden = useHideOnScroll(true)
 
   const supabase = createClient()
 
@@ -697,8 +701,15 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Header mobile */}
-      <header className="sticky top-0 z-40 bg-white border-b border-[#E5E7EB] lg:hidden">
+      {/* Header mobile — disparaît au scroll bas comme bottom nav */}
+      <header
+        className={cn(
+          "sticky top-0 z-40 bg-white border-b border-[#E5E7EB] lg:hidden",
+          "transition-transform duration-300 ease-out will-change-transform",
+          headerHidden && "-translate-y-full",
+        )}
+        aria-hidden={headerHidden}
+      >
         <div className="px-4 py-3">
           <div className="flex items-center justify-between">
             <Link href="/" className="flex items-center gap-2" aria-label="GWA accueil">
@@ -938,7 +949,9 @@ export default function HomePage() {
             )}
           </div>
         ) : (
-          filteredFeed.map((item, index) => (
+          <>
+            <StoriesRail className="lg:px-0" />
+            {filteredFeed.map((item, index) => (
             <FeedCard
               key={`${item.type}-${item.data.id}`}
               item={item}
@@ -975,36 +988,40 @@ export default function HomePage() {
               formatTimeAgo={formatTimeAgo}
               listenModeHighlight={listenMode}
             />
-          ))
+          ))}
+          </>
         )}
       </div>
 
-        <aside className="hidden lg:block sticky top-20 space-y-4">
-          <div className="rounded-2xl border border-[#1F5C2E]/10 bg-white/80 p-4">
-            <p className="font-display text-base text-[#1F5C2E] mb-1">Harmattan Digest</p>
-            <p className="text-sm text-[#4B5563] mb-4 leading-relaxed">
-              Écoute les nouveautés près de chez toi — parcours audio des produits du jour.
+        <aside className="hidden lg:block sticky top-20 space-y-5">
+          <div className="rounded-2xl bg-white/90 p-5 ring-1 ring-[#1F5C2E]/10">
+            <p className="font-display text-lg text-[#1F5C2E]">Le Digest</p>
+            <p className="mt-2 text-sm leading-relaxed text-[#4B5563]">
+              Les nouveautés près de chez toi, à écouter comme une radio du marché.
             </p>
             <Link
               href="/marketplace?digest=1"
-              className="inline-flex w-full items-center justify-center rounded-xl bg-[#1F5C2E] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#184a25]"
+              className="mt-4 inline-flex w-full items-center justify-center rounded-xl bg-[#1F5C2E] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#184a25]"
             >
-              Écouter le Digest
+              Écouter maintenant
             </Link>
           </div>
-          <Link
-            href="/recherche"
-            className="block rounded-2xl border border-[#E5E7EB] bg-white/70 px-4 py-3 text-sm font-medium text-[#4B5563] hover:text-[#111827]"
-          >
-            Rechercher un produit ou un producteur →
-          </Link>
-          <Link
-            href="/notifications"
-            className="block rounded-2xl border border-[#E5E7EB] bg-white/70 px-4 py-3 text-sm font-medium text-[#4B5563] hover:text-[#111827]"
-          >
-            Notifications
-            {unreadNotifications > 0 ? ` · ${unreadNotifications}` : ""}
-          </Link>
+          <div className="space-y-2 text-sm">
+            <Link
+              href="/recherche"
+              className="block rounded-xl px-1 py-2 font-medium text-[#1F5C2E] underline-offset-4 hover:underline"
+            >
+              Chercher quelqu’un ou un produit
+            </Link>
+            <Link
+              href="/notifications"
+              className="block rounded-xl px-1 py-2 font-medium text-[#4B5563] hover:text-[#111827]"
+            >
+              {unreadNotifications > 0
+                ? `Tes notifs (${unreadNotifications})`
+                : "Tes notifications"}
+            </Link>
+          </div>
         </aside>
       </div>
 
@@ -1054,8 +1071,18 @@ export default function HomePage() {
                     formatTimeAgo={formatTimeAgo}
                     listenMode={listenMode}
                     canReply={!!selectedItem}
+                    currentUserId={user?.id || null}
+                    targetType={selectedItem?.type === "product" ? "product" : "post"}
                     onLike={toggleCommentLike}
                     onReply={(c) => setReplyTo(c)}
+                    onDeleted={(id) =>
+                      setComments((prev) => prev.filter((c) => c.id !== id))
+                    }
+                    onUpdated={(updated) =>
+                      setComments((prev) =>
+                        prev.map((c) => (c.id === updated.id ? { ...c, ...updated } : c)),
+                      )
+                    }
                   />
                 ))
               )}
@@ -1245,19 +1272,22 @@ function FeedCard({
             </AvatarFallback>
           </Avatar>
           <div className="min-w-0">
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
               <span className="font-semibold text-[#111827] text-sm truncate">
                 {profile?.full_name || "Utilisateur"}
               </span>
-              {profile?.is_verified && (
-                <BadgeCheck className="h-4 w-4 text-[#2F7D32] shrink-0" />
+              {shouldShowVerifiedBadge(profile) && (
+                <span className="inline-flex items-center gap-0.5 rounded-full bg-[#E8F0E9] px-1.5 py-0.5 text-[10px] font-semibold text-[#1F5C2E]">
+                  <BadgeCheck className="h-3.5 w-3.5 shrink-0" />
+                  Vérifié
+                </span>
               )}
             </div>
             <p className="text-[11px] text-[#6B7280] flex items-center gap-1 truncate">
               {isProduct ? (
                 <>
                   <MapPin className="h-3 w-3 shrink-0" />
-                  {(data as Product).origin_region || (data as Product).origin_country || profile?.city || "Afrique"}
+                  {(data as Product).origin_region || (data as Product).origin_country || ("city" in (profile || {}) ? (profile as { city?: string }).city : null) || "Afrique"}
                 </>
               ) : (
                 <>{formatTimeAgo(data.created_at)}</>
@@ -1602,18 +1632,71 @@ function CommentThread({
   formatTimeAgo,
   listenMode,
   canReply,
+  currentUserId,
+  targetType,
   onLike,
   onReply,
+  onDeleted,
+  onUpdated,
   depth = 0,
 }: {
   comment: Comment
   formatTimeAgo: (date: string) => string
   listenMode: boolean
   canReply: boolean
+  currentUserId: string | null
+  targetType: "post" | "product"
   onLike: (id: string) => void
   onReply: (c: Comment) => void
+  onDeleted: (id: string) => void
+  onUpdated: (c: Comment) => void
   depth?: number
 }) {
+  const [editing, setEditing] = useState(false)
+  const [editText, setEditText] = useState(comment.content || "")
+  const [busy, setBusy] = useState(false)
+  const isMine = !!currentUserId && comment.author?.id === currentUserId
+
+  const saveEdit = async () => {
+    setBusy(true)
+    try {
+      const res = await fetch("/api/comments", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: comment.id, text: editText, type: targetType }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(data.error || "Modification impossible")
+        return
+      }
+      onUpdated({ ...comment, content: data.comment?.content || editText })
+      setEditing(false)
+      toast.success("C’est modifié")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const remove = async () => {
+    if (!confirm("Supprimer ce commentaire ?")) return
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/comments?id=${comment.id}&type=${targetType}`, {
+        method: "DELETE",
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        toast.error(data.error || "Suppression impossible")
+        return
+      }
+      onDeleted(comment.id)
+      toast.success("Commentaire retiré")
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className={cn("space-y-3", depth > 0 && "ml-8")}>
       <div className="flex gap-3">
@@ -1628,13 +1711,41 @@ function CommentThread({
             <p className="font-medium text-sm text-[#111827] mb-1.5">
               {comment.author?.full_name || "Membre GWA"}
             </p>
-            <ClickableListenText
-              text={comment.content}
-              audioUrl={comment.audio_url}
-              fallbackLabel={VOICE_COMMENT_PLACEHOLDER}
-              textClassName="text-sm"
-              highlight={listenMode}
-            />
+            {editing ? (
+              <div className="space-y-2">
+                <textarea
+                  value={editText}
+                  onChange={(e) => setEditText(e.target.value)}
+                  className="w-full rounded-xl border border-[#E5E7EB] bg-white p-2 text-sm"
+                  rows={2}
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void saveEdit()}
+                    className="text-xs font-semibold text-[#1F5C2E]"
+                  >
+                    Enregistrer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditing(false)}
+                    className="text-xs text-[#6B7280]"
+                  >
+                    Annuler
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <ClickableListenText
+                text={comment.content}
+                audioUrl={comment.audio_url}
+                fallbackLabel={VOICE_COMMENT_PLACEHOLDER}
+                textClassName="text-sm"
+                highlight={listenMode}
+              />
+            )}
           </div>
           <div className="flex items-center gap-3 mt-1 ml-2 text-xs text-[#9CA3AF]">
             <span>{formatTimeAgo(comment.created_at)}</span>
@@ -1658,6 +1769,29 @@ function CommentThread({
                 Répondre
               </button>
             )}
+            {isMine && !editing ? (
+              <>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    setEditText(comment.content || "")
+                    setEditing(true)
+                  }}
+                  className="font-medium text-[#4B5563]"
+                >
+                  Modifier
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void remove()}
+                  className="font-medium text-red-600"
+                >
+                  Supprimer
+                </button>
+              </>
+            ) : null}
           </div>
         </div>
       </div>
@@ -1668,8 +1802,12 @@ function CommentThread({
           formatTimeAgo={formatTimeAgo}
           listenMode={listenMode}
           canReply={canReply}
+          currentUserId={currentUserId}
+          targetType={targetType}
           onLike={onLike}
           onReply={onReply}
+          onDeleted={onDeleted}
+          onUpdated={onUpdated}
           depth={depth + 1}
         />
       ))}

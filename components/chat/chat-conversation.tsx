@@ -83,8 +83,12 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   const [pinned, setPinned] = useState(false)
   const [liveCameraOpen, setLiveCameraOpen] = useState(false)
   const [cameraBusy, setCameraBusy] = useState(false)
+  const [peerTyping, setPeerTyping] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastTypingSent = useRef(0)
+  const channelRef = useRef<ReturnType<ReturnType<typeof createClient>["channel"]> | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const imgRef = useRef<HTMLInputElement>(null)
@@ -292,10 +296,36 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
           setMessages(prev => prev.map(m => m.id === msg.id ? msg : m))
         }
       )
+      .on("broadcast", { event: "typing" }, (msg: { payload?: { userId?: string } }) => {
+        const p = msg.payload
+        if (p?.userId && p.userId !== userId) {
+          setPeerTyping(true)
+          if (typingTimer.current) clearTimeout(typingTimer.current)
+          typingTimer.current = setTimeout(() => setPeerTyping(false), 2200)
+        }
+      })
       .subscribe()
 
-    return () => { mounted = false; supabase.removeChannel(channel) }
+    channelRef.current = channel
+
+    return () => {
+      mounted = false
+      channelRef.current = null
+      if (typingTimer.current) clearTimeout(typingTimer.current)
+      supabase.removeChannel(channel)
+    }
   }, [conversation.id])
+
+  const signalTyping = () => {
+    const now = Date.now()
+    if (now - lastTypingSent.current < 1200) return
+    lastTypingSent.current = now
+    void channelRef.current?.send({
+      type: "broadcast",
+      event: "typing",
+      payload: { userId },
+    })
+  }
 
   useEffect(() => { scroll() }, [messages.length, scroll])
 
@@ -1079,6 +1109,11 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
           })
         )}
         <div ref={messagesEndRef} />
+        {peerTyping ? (
+          <p className="px-4 pb-2 text-xs italic text-[#6B7280]">
+            {other?.full_name?.split(" ")[0] || "L’autre"} écrit…
+          </p>
+        ) : null}
       </div>
 
       {/* REPLY PREVIEW */}
@@ -1281,8 +1316,11 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
               <input
                 ref={inputRef}
                 value={newMessage}
-                onChange={e => setNewMessage(e.target.value)}
-                placeholder="Message"
+                onChange={e => {
+                  setNewMessage(e.target.value)
+                  signalTyping()
+                }}
+                placeholder="Écris un message…"
                 className="flex-1 bg-transparent border-0 text-[15px] h-[48px] focus:outline-none placeholder:text-[#8696a0] px-1"
                 enterKeyHint="send"
                 autoComplete="off"

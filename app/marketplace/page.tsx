@@ -28,6 +28,7 @@ import {
   saveCatalogCache,
 } from "@/lib/offline/catalog-cache"
 import { cn } from "@/lib/utils"
+import { useHideOnScroll } from "@/hooks/use-hide-on-scroll"
 
 type Product = {
   id: string
@@ -180,6 +181,7 @@ function MarketplaceContent() {
     label: geoLabel,
   } = useRealtimeLocation({ auto: true, maximumAge: 0 })
   const supabase = createClient()
+  const headerHidden = useHideOnScroll(true)
 
   useEffect(() => { fetchData() }, [])
 
@@ -525,7 +527,14 @@ function MarketplaceContent() {
   return (
     <div className="min-h-screen bg-[#FFF6E5]">
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-white/95 border-b border-[#E5E7EB] backdrop-blur-sm lg:bg-[#FFF6E5]/90 lg:border-[#1F5C2E]/10">
+      <header
+        className={cn(
+          "sticky top-0 z-40 bg-white/95 border-b border-[#E5E7EB] backdrop-blur-sm lg:bg-[#FFF6E5]/90 lg:border-[#1F5C2E]/10",
+          "transition-transform duration-300 ease-out will-change-transform",
+          headerHidden && "-translate-y-full",
+        )}
+        aria-hidden={headerHidden}
+      >
         <div className="gwa-shell-wide flex items-center gap-3 p-3 md:px-5 lg:py-4">
           <Link href="/" className="lg:hidden"><ChevronLeft className="h-6 w-6" /></Link>
           <div className="flex-1 min-w-0">

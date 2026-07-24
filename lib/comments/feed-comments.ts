@@ -395,3 +395,79 @@ export async function toggleCommentLike(
     likes_count: Number(row?.likes_count ?? 0),
   }
 }
+
+/** Supprime son propre commentaire / avis. */
+export async function deleteFeedComment(
+  supabase: SupabaseClient,
+  userId: string,
+  commentId: string,
+  targetType: "post" | "product",
+): Promise<void> {
+  const { table, authorField } = tableMeta({ type: targetType, id: "" })
+  const { data: row, error: findErr } = await (supabase.from(table) as any)
+    .select(`id, ${authorField}`)
+    .eq("id", commentId)
+    .maybeSingle()
+  if (findErr || !row) {
+    throw new CommentSubmitError("Commentaire introuvable", "VALIDATION")
+  }
+  if (row[authorField] !== userId) {
+    throw new CommentSubmitError("Tu ne peux supprimer que tes messages", "AUTH")
+  }
+  const { error } = await (supabase.from(table) as any).delete().eq("id", commentId)
+  if (error) {
+    throw new CommentSubmitError("Impossible de supprimer pour le moment", "DB")
+  }
+}
+
+/** Modifie le texte de son propre commentaire (posts uniquement). */
+export async function updateFeedComment(
+  supabase: SupabaseClient,
+  userId: string,
+  commentId: string,
+  text: string,
+  targetType: "post" | "product" = "post",
+): Promise<FeedCommentRow> {
+  const trimmed = text.trim()
+  if (!trimmed || trimmed.length > 1000) {
+    throw new CommentSubmitError("Texte invalide", "VALIDATION")
+  }
+  const { table, authorField, contentKey } = tableMeta({ type: targetType, id: "" })
+  const { data: row } = await (supabase.from(table) as any)
+    .select(`id, ${authorField}`)
+    .eq("id", commentId)
+    .maybeSingle()
+  if (!row || row[authorField] !== userId) {
+    throw new CommentSubmitError("Tu ne peux modifier que tes messages", "AUTH")
+  }
+  const { data, error } = await (supabase.from(table) as any)
+    .update({ [contentKey]: trimmed })
+    .eq("id", commentId)
+    .select(
+      table === "post_comments"
+        ? "id, content, comment_type, audio_url, created_at, author_id, parent_comment_id, likes_count"
+        : "id, comment, review_type, audio_url, created_at, reviewer_id, parent_review_id, likes_count",
+    )
+    .single()
+  if (error || !data) {
+    throw new CommentSubmitError("Modification impossible", "DB")
+  }
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id, full_name, avatar_url")
+    .eq("id", userId)
+    .single()
+  return {
+    id: data.id,
+    content: (data[contentKey] ?? trimmed) as string,
+    audio_url: data.audio_url ?? null,
+    comment_type: (data.comment_type ?? data.review_type ?? "text") as string,
+    created_at: data.created_at,
+    parent_comment_id: data.parent_comment_id ?? data.parent_review_id ?? null,
+    likes_count: Number(data.likes_count ?? 0),
+    liked_by_me: false,
+    replies: [],
+    author: profile,
+  }
+}
+

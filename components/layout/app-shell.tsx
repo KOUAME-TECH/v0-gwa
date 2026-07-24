@@ -10,6 +10,17 @@ import { YellyProvider } from "@/components/yelly/yelly-provider"
 import { Toaster } from "@/components/ui/sonner"
 import { shouldShowBottomNav, shouldShowDesktopNav } from "@/lib/navigation/shell-routes"
 import { cn } from "@/lib/utils"
+import { useEffect } from "react"
+
+function hydrateA11yPrefs() {
+  try {
+    if (localStorage.getItem("gwa_large_text") === "1") {
+      document.documentElement.classList.add("gwa-large-text")
+    }
+  } catch {
+    /* ignore */
+  }
+}
 
 /**
  * Shell plein écran — mobile bottom nav, desktop top nav.
@@ -20,6 +31,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const showBottomNav = shouldShowBottomNav(pathname)
   const showDesktopNav = shouldShowDesktopNav(pathname)
+
+  useEffect(() => {
+    hydrateA11yPrefs()
+  }, [])
 
   return (
     <YellyProvider>

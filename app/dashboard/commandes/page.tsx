@@ -192,7 +192,42 @@ export default function OrdersPage() {
   }
 
   async function confirmReception(orderId: string) {
-    const res = await fetch(`/api/orders/${orderId}/confirm`, { method: "POST" })
+    let receptionPhotoUrl: string | undefined
+    try {
+      const pick = window.confirm(
+        "Tu as bien reçu ? Tu peux ajouter une photo (recommandé), ou confirmer sans.",
+      )
+      if (!pick) return
+      const wantPhoto = window.confirm("Ajouter une photo du colis ?")
+      if (wantPhoto && user) {
+        const input = document.createElement("input")
+        input.type = "file"
+        input.accept = "image/*"
+        input.capture = "environment"
+        const file = await new Promise<File | null>((resolve) => {
+          input.onchange = () => resolve(input.files?.[0] || null)
+          input.click()
+        })
+        if (file && file.size < 8_000_000) {
+          const path = `reception/${user.id}/${orderId}-${Date.now()}.jpg`
+          const { error: upErr } = await supabase.storage
+            .from("product-images")
+            .upload(path, file, { upsert: true, contentType: file.type || "image/jpeg" })
+          if (!upErr) {
+            const { data: pub } = supabase.storage.from("product-images").getPublicUrl(path)
+            receptionPhotoUrl = pub?.publicUrl
+          }
+        }
+      }
+    } catch {
+      /* continue without photo */
+    }
+
+    const res = await fetch(`/api/orders/${orderId}/confirm`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ receptionPhotoUrl }),
+    })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) {
       toast.error(data.error || "On n’a pas pu confirmer — réessaie.")
@@ -336,29 +371,73 @@ export default function OrdersPage() {
           </Button>
         </div>
 
-        <Tabs defaultValue="all">
+        <Tabs defaultValue="achats">
           <TabsList className="bg-white/80 border border-[#E5E7EB] rounded-xl h-auto flex-wrap p-1">
+            <TabsTrigger value="achats" className="rounded-lg">
+              Mes achats ({orders.filter((o) => o.seller_id !== user?.id).length})
+            </TabsTrigger>
+            <TabsTrigger value="ventes" className="rounded-lg">
+              Mes ventes ({orders.filter((o) => o.seller_id === user?.id).length})
+            </TabsTrigger>
             <TabsTrigger value="all" className="rounded-lg">
               Toutes ({orders.length})
             </TabsTrigger>
             <TabsTrigger value="active" className="rounded-lg">
-              En cours (
-              {
-                orders.filter((o) =>
-                  ["pending", "confirmed", "processing", "shipped", "preparing", "shipping"].includes(
-                    normalizeOrderStatus(o.status),
-                  ),
-                ).length
-              }
-              )
+              En cours
             </TabsTrigger>
             <TabsTrigger value="delivered" className="rounded-lg">
-              Reçues ({orders.filter((o) => o.status === "delivered").length})
+              Reçues
             </TabsTrigger>
             <TabsTrigger value="cancelled" className="rounded-lg">
-              Annulées ({orders.filter((o) => o.status === "cancelled").length})
+              Annulées
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="achats" className="mt-6">
+            <div className="space-y-4">
+              {filteredOrders
+                .filter((o) => o.seller_id !== user?.id)
+                .map((order) => (
+                  <OrderCard
+                    key={order.id}
+                    order={order}
+                    onViewDetails={() => handleViewDetails(order)}
+                    onUpdateStatus={updateOrderStatus}
+                    onConfirmReception={confirmReception}
+                    onOpenLitige={openLitige}
+                    currentUserId={user?.id}
+                  />
+                ))}
+              {filteredOrders.filter((o) => o.seller_id !== user?.id).length === 0 ? (
+                <p className="text-center text-sm text-[#6B7280] py-10">
+                  Pas encore d’achat — le marché t’attend.
+                </p>
+              ) : null}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="ventes" className="mt-6">
+            <div className="space-y-4">
+              {filteredOrders
+                .filter((o) => o.seller_id === user?.id)
+                .map((order) => (
+                  <OrderCard
+                    key={order.id}
+                    order={order}
+                    onViewDetails={() => handleViewDetails(order)}
+                    onUpdateStatus={updateOrderStatus}
+                    onConfirmReception={confirmReception}
+                    onOpenLitige={openLitige}
+                    currentUserId={user?.id}
+                  />
+                ))}
+              {filteredOrders.filter((o) => o.seller_id === user?.id).length === 0 ? (
+                <p className="text-center text-sm text-[#6B7280] py-10">
+                  Aucune vente pour l’instant.
+                </p>
+              ) : null}
+            </div>
+          </TabsContent>
 
           <TabsContent value="all" className="mt-6">
             {filteredOrders.length === 0 ? (

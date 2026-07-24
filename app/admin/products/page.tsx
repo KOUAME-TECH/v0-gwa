@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -259,6 +259,30 @@ function AdminProductsContent() {
           </Button>
         </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Digest (écoute boutique)</CardTitle>
+          <CardDescription>
+            Les nouveautés actives sortent automatiquement dans le Digest boutique. Vérifie ville/pays
+            sur les annonces pour un Digest local propre.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-3 text-sm">
+          <Badge variant="secondary">
+            Actifs : {products.filter((p) => p.status === "active").length}
+          </Badge>
+          <Badge variant="outline">
+            En attente modération :{" "}
+            {products.filter((p) => p.moderation_status === "pending").length}
+          </Badge>
+          <Button asChild size="sm" variant="outline">
+            <a href="/marketplace?digest=1" target="_blank" rel="noreferrer">
+              Ouvrir le Digest
+            </a>
+          </Button>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
