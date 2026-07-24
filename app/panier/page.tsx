@@ -7,9 +7,9 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { 
-  ShoppingCart, Trash2, Plus, Minus, MapPin, Truck, 
-  CreditCard, Smartphone, Building2, ArrowRight, ChevronLeft,
-  Package, Clock, X, CheckCircle2
+  ShoppingCart, Trash2, Plus, Minus, MapPin, 
+  Smartphone, Building2, ArrowRight, ChevronLeft,
+  Package, X
 } from "lucide-react"
 import Link from "next/link"
 import { EscrowStepper } from "@/components/orders/escrow-stepper"
@@ -111,6 +111,8 @@ export default function CartPage() {
     
     await supabase.from("cart_items").update({ quantity: newQuantity }).eq("id", itemId)
     setCart(cart.map(c => c.id === itemId ? { ...c, quantity: newQuantity } : c))
+    const { notifyCartChanged } = await import("@/lib/cart/events")
+    notifyCartChanged()
   }
 
   const setQuantityExact = async (itemId: string, raw: string) => {
@@ -121,17 +123,21 @@ export default function CartPage() {
     const newQuantity = Math.min(999_999, Math.max(1, parsed))
     await supabase.from("cart_items").update({ quantity: newQuantity }).eq("id", itemId)
     setCart(cart.map((c) => (c.id === itemId ? { ...c, quantity: newQuantity } : c)))
+    const { notifyCartChanged } = await import("@/lib/cart/events")
+    notifyCartChanged()
   }
 
   const removeItem = async (itemId: string) => {
     await supabase.from("cart_items").delete().eq("id", itemId)
     setCart(cart.filter(c => c.id !== itemId))
+    const { notifyCartChanged } = await import("@/lib/cart/events")
+    notifyCartChanged()
   }
 
   const subtotal = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0)
-  const deliveryFee = subtotal > 100000 ? 0 : 5000
+  // Pas de logistique GWA pour l’instant → pas de frais de livraison affichés
   const serviceFee = Math.round(subtotal * 0.02)
-  const total = subtotal + deliveryFee + serviceFee
+  const total = subtotal + serviceFee
 
   const formatPrice = (price: number) => new Intl.NumberFormat("fr-FR").format(price)
 
@@ -277,28 +283,28 @@ export default function CartPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FFF6E5] pb-32">
+    <div className="min-h-screen bg-[#FFF6E5] pb-32 lg:pb-40">
       {/* Header */}
       <header className="sticky top-0 z-40 border-b border-[#1F5C2E]/10 bg-[#FFF6E5]/95 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-md items-center gap-3 px-4 py-3">
+        <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-3">
           {step > 1 ? (
             <button type="button" onClick={() => setStep(step - 1)} aria-label="Retour">
               <ChevronLeft className="h-6 w-6" />
             </button>
           ) : (
-            <Link href="/" aria-label="Retour">
+            <Link href="/marketplace" aria-label="Retour">
               <ChevronLeft className="h-6 w-6" />
             </Link>
           )}
           <h1 className="flex-1 font-display text-lg text-[#1F5C2E]">
             {step === 1 && `Ton panier (${cart.length})`}
-            {step === 2 && "Où livrer ?"}
+            {step === 2 && "Tes coordonnées"}
             {step === 3 && "Payer en sécurité"}
           </h1>
         </div>
         
         {/* Progress */}
-        <div className="mx-auto flex max-w-md gap-1 px-4 pb-3">
+        <div className="mx-auto flex max-w-3xl gap-1 px-4 pb-3">
           {[1, 2, 3].map(s => (
             <div key={s} className={`h-1 flex-1 rounded-full transition-colors ${step >= s ? "bg-[#1F5C2E]" : "bg-[#E5E7EB]"}`} />
           ))}
@@ -307,7 +313,7 @@ export default function CartPage() {
 
       {/* Step 1: Cart Items */}
       {step === 1 && (
-        <div className="mx-auto max-w-md space-y-3 p-4">
+        <div className="mx-auto max-w-3xl space-y-3 p-4">
           {cart.map(item => (
             <div key={item.id} className="flex gap-3 bg-card rounded-2xl p-3 border border-border">
               <div className="w-20 h-20 relative rounded-xl overflow-hidden bg-muted shrink-0">
@@ -374,7 +380,7 @@ export default function CartPage() {
 
       {/* Step 2: Delivery */}
       {step === 2 && (
-        <div className="mx-auto max-w-md space-y-4 p-4">
+        <div className="mx-auto max-w-3xl space-y-4 p-4">
           <div className="space-y-4">
             <div>
               <Label className="text-sm">Nom complet</Label>
@@ -431,11 +437,13 @@ export default function CartPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3 p-4 bg-muted rounded-2xl">
-            <Clock className="h-5 w-5 text-primary shrink-0" />
+          <div className="flex items-center gap-3 rounded-2xl bg-[#E8F0E9] p-4">
+            <Package className="h-5 w-5 shrink-0 text-[#1F5C2E]" />
             <div>
-              <p className="font-medium text-sm">Delai estime</p>
-              <p className="text-xs text-muted-foreground">3-7 jours ouvrables</p>
+              <p className="text-sm font-medium text-[#111827]">Remise en main propre</p>
+              <p className="text-xs text-[#4B5563]">
+                Tu t’arranges avec le vendeur pour le rendez-vous — GWA ne gère pas encore la livraison.
+              </p>
             </div>
           </div>
         </div>
@@ -443,7 +451,7 @@ export default function CartPage() {
 
       {/* Step 3: Payment */}
       {step === 3 && (
-        <div className="mx-auto max-w-md space-y-3 p-4">
+        <div className="mx-auto max-w-3xl space-y-3 p-4">
           <EscrowStepper payment_status="pending" escrow_status="pending" status="pending" />
           <p className="text-sm text-[#4B5563]">Choisis comment payer — ton argent reste protégé jusqu’à la réception.</p>
           <RadioGroup value={paymentMethod} onValueChange={setPaymentMethod}>
@@ -471,7 +479,7 @@ export default function CartPage() {
 
       {/* Fixed Bottom Summary */}
       <div className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] left-0 right-0 z-40 border-t border-[#1F5C2E]/10 bg-white/95 p-4 backdrop-blur-sm lg:bottom-0">
-        <div className="mx-auto max-w-md space-y-3">
+        <div className="mx-auto max-w-3xl space-y-3">
         {checkoutError && (
           <p className="text-center text-sm text-red-600">{checkoutError}</p>
         )}
@@ -479,10 +487,6 @@ export default function CartPage() {
           <div className="flex justify-between">
             <span className="text-[#6B7280]">Articles</span>
             <span>{formatPrice(subtotal)} FCFA</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-[#6B7280]">Livraison</span>
-            <span>{deliveryFee === 0 ? "Offerte" : `${formatPrice(deliveryFee)} FCFA`}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-[#6B7280]">Service GWA</span>

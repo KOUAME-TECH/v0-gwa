@@ -60,8 +60,8 @@ async function registerPlayerId(playerId: string) {
  * Aligné dashboard Typical Site :
  *   Main Filename → OneSignalSDKWorker.js
  *   Updater Filename → OneSignalSDKUpdaterWorker.js
- *   Registration Scope → /
- * (Le worker principal embarque aussi le cache offline GWA.)
+ *   Path / Registration Scope → /
+ * Workers officiels : importScripts CDN v16 uniquement.
  */
 export function OneSignalProvider({ children }: { children: React.ReactNode }) {
   const initialized = useRef(false)

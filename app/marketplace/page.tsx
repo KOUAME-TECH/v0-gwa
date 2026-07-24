@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Search, SlidersHorizontal, MapPin, Heart, X, ChevronLeft, ShoppingCart, Plus, ShoppingBag } from "lucide-react"
+import { Search, SlidersHorizontal, MapPin, Heart, X, ChevronLeft, Plus, ShoppingBag } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
@@ -27,6 +27,8 @@ import {
   loadCatalogCache,
   saveCatalogCache,
 } from "@/lib/offline/catalog-cache"
+import { CartIconButton } from "@/components/cart/cart-icon-button"
+import { addOrIncrementCart } from "@/lib/cart/add"
 import { cn } from "@/lib/utils"
 import { useHideOnScroll } from "@/hooks/use-hide-on-scroll"
 
@@ -342,12 +344,9 @@ function MarketplaceContent() {
   async function addToCart(id: string, e: React.MouseEvent) {
     e.preventDefault(); e.stopPropagation()
     if (!userId) { toast.error("Connecte-toi pour ajouter au panier"); return }
-    const { error } = await supabase.from("cart_items").upsert(
-      { user_id: userId, product_id: id, quantity: 1 },
-      { onConflict: "user_id,product_id" }
-    )
-    if (error) toast.error("Erreur ajout panier")
-    else toast.success("Ajoute au panier")
+    const res = await addOrIncrementCart(supabase, userId, id, 1)
+    if (!res.ok) toast.error("Erreur ajout panier")
+    else toast.success("Ajouté au panier")
   }
 
   const filteredProducts = useMemo(
@@ -554,11 +553,7 @@ function MarketplaceContent() {
             idleLabel="Parcours"
             className="shrink-0"
           />
-          <Link href="/panier">
-            <Button variant="ghost" size="icon" className="rounded-xl h-9 w-9">
-              <ShoppingCart className="h-5 w-5 text-[#4B5563]" />
-            </Button>
-          </Link>
+          <CartIconButton />
         </div>
 
         {/* Search */}

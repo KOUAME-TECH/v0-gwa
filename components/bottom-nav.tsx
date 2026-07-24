@@ -8,6 +8,7 @@ import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { shouldShowBottomNav } from "@/lib/navigation/shell-routes"
 import { useHideOnScroll } from "@/hooks/use-hide-on-scroll"
+import { CART_CHANGED_EVENT } from "@/lib/cart/events"
 
 interface NavItem {
   href: string
@@ -65,7 +66,7 @@ export function BottomNav() {
             .eq("is_read", false),
           supabase
             .from("cart_items")
-            .select("id", { count: "exact", head: true })
+            .select("quantity")
             .eq("user_id", u.id),
         ])
 
@@ -73,7 +74,11 @@ export function BottomNav() {
         if (profileRes.data) setUserType(profileRes.data.user_type)
         setUnreadMessages(msgRes.count || 0)
         setUnreadNotifications(notifRes.count || 0)
-        setCartCount(cartRes.count || 0)
+        const qtySum = (cartRes.data || []).reduce(
+          (s: number, row: { quantity?: number | null }) => s + (Number(row.quantity) || 0),
+          0,
+        )
+        setCartCount(qtySum)
       } catch (err) {
         console.warn("[BottomNav] badges dégradés", err)
       }
@@ -108,6 +113,7 @@ export function BottomNav() {
       void checkUser()
     }
     window.addEventListener("gwa:notifications-updated", onNotifUpdated)
+    window.addEventListener(CART_CHANGED_EVENT, onNotifUpdated)
 
     // Refresh badges périodique soft (moins agressif que double realtime)
     const interval = window.setInterval(() => void checkUser(), 90_000)
@@ -117,6 +123,7 @@ export function BottomNav() {
       subscription.unsubscribe()
       supabase.removeChannel(notificationsChannel)
       window.removeEventListener("gwa:notifications-updated", onNotifUpdated)
+      window.removeEventListener(CART_CHANGED_EVENT, onNotifUpdated)
       window.clearInterval(interval)
     }
   }, [visible])

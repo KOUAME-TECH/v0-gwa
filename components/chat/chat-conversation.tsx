@@ -14,6 +14,7 @@ import {
 } from "@/lib/chat/offer"
 import { buildLocationContent, isLocationMessage } from "@/lib/chat/location"
 import { ChatLocationBubble } from "@/components/chat/chat-location-bubble"
+import { EMOJI_CATEGORIES } from "@/lib/chat/emojis"
 import {
   ArrowLeft, Send, Mic, Smile, Phone, Video, MoreVertical,
   Check, CheckCheck, ImageIcon, FileText, X, Trash2, Copy, Reply,
@@ -70,6 +71,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   const [isRecording, setIsRecording] = useState(false)
   const [recordSec, setRecordSec] = useState(0)
   const [showEmojis, setShowEmojis] = useState(false)
+  const [emojiCat, setEmojiCat] = useState(EMOJI_CATEGORIES[0]?.id ?? "smileys")
   const [audioPreview, setAudioPreview] = useState<{ blob: Blob; url: string; duration: string } | null>(null)
   const [isPlayingPreview, setIsPlayingPreview] = useState(false)
   const [loadingMsgs, setLoadingMsgs] = useState(true)
@@ -1237,15 +1239,6 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
                   label: "Position",
                   action: () => void shareLocation(),
                 },
-                {
-                  icon: Mic,
-                  color: "bg-[#1F5C2E]",
-                  label: "Note vocale",
-                  action: () => {
-                    setShowAttach(false)
-                    void toggleVoice()
-                  },
-                },
               ].map((item) => (
                 <button key={item.label} onClick={item.action} className="flex flex-col items-center gap-2">
                   <div className={`w-14 h-14 ${item.color} rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform`}>
@@ -1324,11 +1317,11 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
         </>
       )}
 
-      {/* INPUT BAR */}
+      {/* INPUT BAR — style WhatsApp : 1 seul micro (bouton vert à droite) */}
       {!isRecording && !audioPreview && (
         <div className="bg-[#f0f2f5] px-2 py-1.5 shrink-0 safe-bottom">
           <form onSubmit={handleSend} className="flex items-end gap-1.5">
-            <div className="flex-1 flex items-center bg-white rounded-[25px] shadow-sm min-h-[48px] px-2">
+            <div className="flex-1 flex items-center bg-white rounded-[25px] shadow-sm min-h-[48px] px-1.5">
               <button type="button" onClick={() => setShowEmojis(!showEmojis)}
                 className={`p-2 shrink-0 ${showEmojis ? "text-[#1F5C2E]" : "text-[#54656f]"} active:text-[#1F5C2E]`} aria-label="Emojis">
                 <Smile className="h-6 w-6" />
@@ -1341,25 +1334,15 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
                   setNewMessage(e.target.value)
                   signalTyping()
                 }}
-                placeholder="Écris un message…"
+                placeholder="Message"
                 className="flex-1 bg-transparent border-0 text-[15px] h-[48px] focus:outline-none placeholder:text-[#8696a0] px-1"
                 enterKeyHint="send"
                 autoComplete="off"
               />
 
               <button type="button" onClick={() => setShowAttach(true)}
-                className="p-2 text-[#54656f] active:text-[#1F5C2E] shrink-0" aria-label="Joindre un fichier">
-                <Paperclip className="h-6 w-6" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => void toggleVoice()}
-                className="p-2 text-[#54656f] active:text-[#1F5C2E] shrink-0"
-                aria-label="Note vocale"
-                title="Note vocale"
-              >
-                <Mic className="h-6 w-6" />
+                className="p-2 text-[#54656f] active:text-[#1F5C2E] shrink-0" aria-label="Joindre">
+                <Paperclip className="h-6 w-6 -rotate-45" />
               </button>
 
               {!newMessage.trim() && (
@@ -1384,7 +1367,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
             ) : (
               <button type="button" onClick={() => void toggleVoice()}
                 className="w-[48px] h-[48px] rounded-full bg-[#1F5C2E] text-white flex items-center justify-center shrink-0 active:scale-90 transition-transform shadow-sm"
-                aria-label="Enregistrement vocal">
+                aria-label="Note vocale">
                 <Mic className="h-5 w-5" />
               </button>
             )}
@@ -1397,13 +1380,35 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
           <input ref={imgRef} type="file" className="hidden" accept="image/*,video/*"
             onChange={e => { const f = e.target.files?.[0]; if (f) void handleFileUpload(f, "image"); e.target.value = "" }} />
 
-          {/* EMOJI PICKER */}
           {showEmojis && (
-            <div className="bg-white border-t border-gray-100 px-2 py-2 max-h-[200px] overflow-y-auto">
-              <div className="grid grid-cols-8 gap-1">
-                {["😀","😂","😍","🥰","😘","😊","🤗","😎","🤔","😏","😭","😢","🥺","😤","🤯","🔥","❤️","💕","👍","👎","🙏","💪","🎉","✨","🌟","⭐","🌍","🌱","🍀","🌸","🍎","🍋","🥑","🌽","🍫","☕","🐔","🐄","🐐","🐟","🚜","🏠","📦","💰","📍","📞","✅","❌","⚡","💡","🎯","📸","🛒","🤝","🎊","👋","🙌","💯","🆗","ℹ️","⏰","🗓️","📝","🔔"].map(emoji => (
-                  <button key={emoji} type="button" onClick={() => { setNewMessage(prev => prev + emoji); setShowEmojis(false); inputRef.current?.focus() }}
-                    className="text-2xl p-1.5 rounded-lg active:bg-gray-100 hover:bg-gray-50 transition-colors">
+            <div className="mt-1.5 overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-sm">
+              <div className="flex gap-1 overflow-x-auto border-b border-[#F3F4F6] px-2 py-1.5 scrollbar-none">
+                {EMOJI_CATEGORIES.map((cat) => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setEmojiCat(cat.id)}
+                    className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                      emojiCat === cat.id
+                        ? "bg-[#E8F0E9] text-[#1F5C2E]"
+                        : "text-[#667781] active:bg-gray-50"
+                    }`}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
+              <div className="grid max-h-[220px] grid-cols-8 gap-0.5 overflow-y-auto p-2">
+                {(EMOJI_CATEGORIES.find((c) => c.id === emojiCat)?.emojis ?? []).map((emoji, idx) => (
+                  <button
+                    key={`${emoji}-${idx}`}
+                    type="button"
+                    onClick={() => {
+                      setNewMessage((prev) => prev + emoji)
+                      inputRef.current?.focus()
+                    }}
+                    className="rounded-lg p-1.5 text-[26px] leading-none transition-colors active:bg-gray-100 hover:bg-gray-50"
+                  >
                     {emoji}
                   </button>
                 ))}
