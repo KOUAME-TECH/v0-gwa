@@ -6,7 +6,7 @@
   "display": "standalone",
   "background_color": "#1F5C2E",
   "theme_color": "#1F5C2E",
-  "orientation": "portrait-primary",
+  "orientation": "any",
   "scope": "/",
   "lang": "fr",
   "id": "/",
@@ -45,21 +45,21 @@
   ],
   "shortcuts": [
     {
-      "name": "Agriculture",
-      "short_name": "Agri",
-      "url": "/agriculture",
+      "name": "Écouter Digest",
+      "short_name": "Digest",
+      "url": "/marketplace?digest=1",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Boutique",
+      "short_name": "Shop",
+      "url": "/marketplace",
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     },
     {
       "name": "Mon Panier",
       "short_name": "Panier",
       "url": "/panier",
-      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
-    },
-    {
-      "name": "Installer",
-      "short_name": "Install",
-      "url": "/download",
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     }
   ],

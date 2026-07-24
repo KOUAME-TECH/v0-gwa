@@ -166,7 +166,7 @@ export default function PostDetailPage() {
   )
 
   return (
-    <div className="min-h-screen bg-[#FFF6E5] pb-20">
+    <div className="min-h-screen bg-[#FFF6E5]">
       <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-[#E5E7EB] bg-white px-4 py-3">
         <button type="button" onClick={() => router.back()} aria-label="Retour">
           <ArrowLeft className="h-5 w-5" />

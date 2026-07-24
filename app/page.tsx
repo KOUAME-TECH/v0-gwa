@@ -681,20 +681,21 @@ export default function HomePage() {
   })
 
   return (
-    <div className="min-h-screen bg-[#FFF6E5] pb-20">
+    <div className="min-h-screen bg-[#FFF6E5]">
       {/* Météo */}
       {userType && ["farmer", "cooperative"].includes(userType) && (
-        <div className="px-4 pt-3">
+        <div className="gwa-shell-feed px-4 pt-3">
           <WeatherWidget />
         </div>
       )}
 
       {/* Header */}
       <header className="sticky top-0 z-40 bg-white border-b border-[#E5E7EB]">
-        <div className="px-4 py-3">
+        <div className="gwa-shell-feed px-4 py-3">
           <div className="flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-2" aria-label="GWA accueil">
-              <GwaMark size={36} showWordmark wordmarkClassName="text-2xl" />
+            <Link href="/" className="flex items-center gap-2 lg:pointer-events-none" aria-label="GWA accueil">
+              <GwaMark size={36} showWordmark wordmarkClassName="text-2xl lg:hidden" />
+              <span className="hidden lg:inline text-lg font-semibold text-[#111827]">Fil d&apos;actualité</span>
             </Link>
             <div className="flex items-center gap-2">
               <ListenRitualBadge streak={listenStreak} />
@@ -724,29 +725,31 @@ export default function HomePage() {
         </div>
         
         {/* Onglets */}
-        <div className="flex border-t border-[#E5E7EB]">
-          {[
-            { key: "tout", label: "Tout" },
-            { key: "produits", label: "Produits" },
-            { key: "publications", label: "Publications" }
-          ].map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key as any)}
-              className={cn(
-                "flex-1 py-3 text-sm font-medium transition-colors",
-                activeTab === tab.key
-                  ? "text-[#2F7D32] border-b-2 border-[#2F7D32]"
-                  : "text-[#4B5563]"
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
+        <div className="border-t border-[#E5E7EB]">
+          <div className="gwa-shell-feed flex">
+            {[
+              { key: "tout", label: "Tout" },
+              { key: "produits", label: "Produits" },
+              { key: "publications", label: "Publications" }
+            ].map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key as any)}
+                className={cn(
+                  "flex-1 py-3 text-sm font-medium transition-colors",
+                  activeTab === tab.key
+                    ? "text-[#2F7D32] border-b-2 border-[#2F7D32]"
+                    : "text-[#4B5563]"
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
         
         {/* Catégories — texte seul, slugs cohérents */}
-        <div className="flex gap-2 overflow-x-auto scrollbar-none px-4 py-3">
+        <div className="gwa-shell-feed flex gap-2 overflow-x-auto scrollbar-none px-4 py-3">
           {categories.map((cat) => (
             <button
               key={cat.id}
@@ -767,7 +770,7 @@ export default function HomePage() {
 
       {/* Feed */}
       <div
-        className="px-3 pt-3 pb-2 space-y-3"
+        className="gwa-shell-feed px-3 pt-3 pb-2 space-y-3 lg:pb-10"
         onTouchStart={(e) => {
           if (typeof window !== "undefined" && window.scrollY <= 0) {
             pullStartY.current = e.touches[0]?.clientY ?? null

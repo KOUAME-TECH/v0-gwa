@@ -21,6 +21,11 @@ import {
   digestModeLabel,
   selectDigestProducts,
 } from "@/lib/products/digest"
+import {
+  catalogCacheAgeLabel,
+  loadCatalogCache,
+  saveCatalogCache,
+} from "@/lib/offline/catalog-cache"
 
 type Product = {
   id: string
@@ -77,7 +82,14 @@ function MarketplaceGridCard({
         style={{ aspectRatio: "4/5" }}
       >
         {p.images?.[0] ? (
-          <Image src={p.images[0]} alt={p.name} fill className="object-cover" sizes="50vw" loading="lazy" />
+          <Image
+            src={p.images[0]}
+            alt={p.name}
+            fill
+            className="object-cover"
+            sizes="(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 25vw"
+            loading="lazy"
+          />
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-[#E8F0E9] via-[#FFF6E5] to-[#E8E4DC] flex items-center justify-center">
             <ShoppingBag className="h-10 w-10 text-[#2F7D32]/40" />
@@ -212,65 +224,92 @@ function MarketplaceContent() {
 
   async function fetchData() {
     setIsLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    setUserId(user?.id || null)
+    const offline = typeof navigator !== "undefined" && !navigator.onLine
+    const cached = loadCatalogCache()
 
-    const profilePromise = user
-      ? supabase.from("profiles").select("city, country, digest_enabled").eq("id", user.id).maybeSingle()
-      : Promise.resolve({ data: null as { city?: string | null; country?: string | null } | null })
+    // Affiche immédiatement le cache hors ligne (ou en secours réseau)
+    if (offline && cached?.products?.length) {
+      setProducts(cached.products as Product[])
+      if (cached.categories?.length) setCategories(cached.categories)
+      setIsLoading(false)
+      toast.message(`Boutique hors ligne · ${catalogCacheAgeLabel(cached.at)}`)
+      return
+    }
 
-    const digestIds = idsParam
-      ? idsParam.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 40)
-      : []
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      setUserId(user?.id || null)
 
-    const catalogQuery = supabase
-      .from("products")
-      .select(`
+      const profilePromise = user
+        ? supabase.from("profiles").select("city, country, digest_enabled").eq("id", user.id).maybeSingle()
+        : Promise.resolve({ data: null as { city?: string | null; country?: string | null } | null })
+
+      const digestIds = idsParam
+        ? idsParam.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 40)
+        : []
+
+      const catalogQuery = supabase
+        .from("products")
+        .select(`
           id, name, price, unit, description, audio_url, audio_lang, created_at, images,
           origin_country, origin_region,
           is_organic, is_fair_trade, product_type, category_id, seller_id,
           profiles:seller_id(full_name, avatar_url, is_verified),
           categories:category_id(name, slug)
         `)
-      .eq("status", "active")
-      .order("created_at", { ascending: false })
-      .limit(60)
+        .eq("status", "active")
+        .order("created_at", { ascending: false })
+        .limit(60)
 
-    const digestIdsQuery =
-      digestIds.length > 0
-        ? supabase
-            .from("products")
-            .select(`
+      const digestIdsQuery =
+        digestIds.length > 0
+          ? supabase
+              .from("products")
+              .select(`
           id, name, price, unit, description, audio_url, audio_lang, created_at, images,
           origin_country, origin_region,
           is_organic, is_fair_trade, product_type, category_id, seller_id,
           profiles:seller_id(full_name, avatar_url, is_verified),
           categories:category_id(name, slug)
         `)
-            .eq("status", "active")
-            .in("id", digestIds)
-        : Promise.resolve({ data: [] as Product[] })
+              .eq("status", "active")
+              .in("id", digestIds)
+          : Promise.resolve({ data: [] as Product[] })
 
-    const [productsRes, digestIdsRes, categoriesRes, favsRes, profileRes] = await Promise.all([
-      catalogQuery,
-      digestIdsQuery,
-      supabase.from("categories").select("id, name, slug, category_type").eq("category_type", "agriculture").is("parent_id", null).order("name"),
-      user ? supabase.from("favorites").select("product_id").eq("user_id", user.id).limit(200) : Promise.resolve({ data: [] as { product_id: string }[] }),
-      profilePromise,
-    ])
+      const [productsRes, digestIdsRes, categoriesRes, favsRes, profileRes] = await Promise.all([
+        catalogQuery,
+        digestIdsQuery,
+        supabase.from("categories").select("id, name, slug, category_type").eq("category_type", "agriculture").is("parent_id", null).order("name"),
+        user ? supabase.from("favorites").select("product_id").eq("user_id", user.id).limit(200) : Promise.resolve({ data: [] as { product_id: string }[] }),
+        profilePromise,
+      ])
 
-    const catalog = (productsRes.data || []) as Product[]
-    const digestExtra = (digestIdsRes.data || []) as Product[]
-    // Fusionner ids digest (hors top 60) + catalogue
-    const byId = new Map<string, Product>()
-    for (const p of [...digestExtra, ...catalog]) byId.set(p.id, p)
-    setProducts([...byId.values()])
-    if (categoriesRes.data) setCategories(categoriesRes.data)
-    if (favsRes.data) setFavorites(new Set((favsRes.data as { product_id: string }[]).map(f => f.product_id)))
-    // Profil = fallback si GPS pas encore autorisé
-    if (!geoCity && profileRes.data?.city) setUserCity(profileRes.data.city)
-    if (!geoCountry && profileRes.data?.country) setUserCountry(profileRes.data.country)
-    setIsLoading(false)
+      const catalog = (productsRes.data || []) as Product[]
+      const digestExtra = (digestIdsRes.data || []) as Product[]
+      const byId = new Map<string, Product>()
+      for (const p of [...digestExtra, ...catalog]) byId.set(p.id, p)
+      const merged = [...byId.values()]
+      setProducts(merged)
+      if (categoriesRes.data) setCategories(categoriesRes.data)
+      if (favsRes.data) setFavorites(new Set((favsRes.data as { product_id: string }[]).map(f => f.product_id)))
+      if (!geoCity && profileRes.data?.city) setUserCity(profileRes.data.city)
+      if (!geoCountry && profileRes.data?.country) setUserCountry(profileRes.data.country)
+
+      if (merged.length > 0) {
+        saveCatalogCache(merged, categoriesRes.data || [])
+      }
+    } catch (err) {
+      console.warn("[marketplace] fetch failed, trying cache", err)
+      if (cached?.products?.length) {
+        setProducts(cached.products as Product[])
+        if (cached.categories?.length) setCategories(cached.categories)
+        toast.message(`Boutique hors ligne · ${catalogCacheAgeLabel(cached.at)}`)
+      } else {
+        toast.error("Impossible de charger la boutique")
+      }
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   async function toggleFavorite(id: string, e: React.MouseEvent) {
@@ -471,10 +510,10 @@ function MarketplaceContent() {
         : null
 
   return (
-    <div className="min-h-screen bg-[#FFF6E5] pb-20">
+    <div className="min-h-screen bg-[#FFF6E5]">
       {/* Header */}
       <header className="sticky top-0 z-40 bg-white border-b border-[#E5E7EB]">
-        <div className="flex items-center gap-3 p-3">
+        <div className="gwa-shell-wide flex items-center gap-3 p-3 md:px-5">
           <Link href="/" className="lg:hidden"><ChevronLeft className="h-6 w-6" /></Link>
           <h1 className="text-lg font-semibold flex-1 text-[#111827]">Boutique</h1>
           <ShopVoiceTourButton
@@ -493,7 +532,7 @@ function MarketplaceContent() {
         </div>
 
         {/* Search */}
-        <div className="flex gap-2 px-3 pb-2">
+        <div className="gwa-shell-wide flex gap-2 px-3 md:px-5 pb-2">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input placeholder="Rechercher..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
@@ -513,7 +552,7 @@ function MarketplaceContent() {
                 )}
               </Button>
             </SheetTrigger>
-            <SheetContent side="bottom" className="h-[60vh] rounded-t-3xl">
+            <SheetContent side="bottom" className="h-[60vh] rounded-t-3xl md:left-1/2 md:max-w-lg md:-translate-x-1/2">
               <SheetHeader className="pb-3"><SheetTitle>Filtres</SheetTitle></SheetHeader>
               <div className="space-y-5">
                 <div>
@@ -546,7 +585,7 @@ function MarketplaceContent() {
         </div>
 
         {/* Quick filters */}
-        <div className="flex gap-1.5 overflow-x-auto gwa-no-scroll px-3 pb-2">
+        <div className="gwa-shell-wide flex gap-1.5 overflow-x-auto gwa-no-scroll px-3 md:px-5 pb-2">
           {[{ value: "all", label: "Tout" }, { value: "agriculture", label: "Agriculture" }].map((t) => (
             <button
               key={t.value}
@@ -568,7 +607,7 @@ function MarketplaceContent() {
       </header>
 
       {/* Content */}
-      <main className="p-4 sm:p-5">
+      <main className="gwa-shell-wide p-4 sm:p-5 md:px-6 lg:pb-10">
         {/* Digest visible dans la boutique (et via ?digest=1) */}
         {digestProducts.length > 0 && (
           <DigestBanner
@@ -616,8 +655,8 @@ function MarketplaceContent() {
           </div>
         )}
         {isLoading ? (
-          <div className="grid grid-cols-2 gap-3">
-            {[...Array(6)].map((_, i) => (
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-4 lg:gap-5">
+            {[...Array(8)].map((_, i) => (
               <div key={i} className="overflow-hidden">
                 <div className="bg-muted gwa-skeleton rounded-2xl aspect-[4/3]" />
                 <div className="pt-2 space-y-1">
@@ -641,7 +680,7 @@ function MarketplaceContent() {
             <p className="text-xs text-muted-foreground mb-2">
               {filteredProducts.length} produit{filteredProducts.length > 1 ? "s" : ""}
             </p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-4 lg:gap-5">
               {filteredProducts.map((p) => (
                 <MarketplaceGridCard
                   key={p.id}

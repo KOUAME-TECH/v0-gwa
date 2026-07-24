@@ -143,7 +143,7 @@ export default function FavorisPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F9FAFB] pb-24">
+    <div className="min-h-screen bg-[#F9FAFB]">
       {/* Header */}
       <div className="sticky top-0 z-40 bg-white border-b px-4 py-3 flex items-center gap-3">
         <Button 

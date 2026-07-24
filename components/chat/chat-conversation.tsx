@@ -915,7 +915,10 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col" style={{ backgroundColor: CHAT_AFRICA_BG.color }}>
+    <div
+      className="fixed inset-0 z-[100] flex flex-col lg:static lg:inset-auto lg:z-0 lg:h-full lg:min-h-[calc(100dvh-3.5rem)] lg:flex-1"
+      style={{ backgroundColor: CHAT_AFRICA_BG.color }}
+    >
       {/* HEADER */}
       <header className="text-white flex items-center gap-1 px-1 py-1.5 shrink-0 safe-top" style={{ backgroundColor: CHAT_THEME.primary }}>
         <button onClick={onBack} className="p-2 rounded-full active:bg-white/20 transition-colors" aria-label="Retour">

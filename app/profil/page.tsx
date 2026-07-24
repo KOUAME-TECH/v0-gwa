@@ -171,7 +171,7 @@ export default function ProfilPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-white p-5 pb-24">
+      <div className="min-h-screen bg-white p-5 gwa-shell-page">
         <div className="animate-pulse space-y-6">
           <div className="flex items-center gap-4">
             <div className="w-20 h-20 rounded-full bg-neutral-100" />
@@ -187,7 +187,7 @@ export default function ProfilPage() {
 
   if (!profile) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center p-5 pb-24">
+      <div className="min-h-screen bg-white flex items-center justify-center p-5 gwa-shell-page">
         <div className="text-center">
           <h2 className="text-xl font-semibold mb-2">Connectez-vous</h2>
           <p className="text-neutral-500 text-sm mb-6">
@@ -302,9 +302,10 @@ export default function ProfilPage() {
   ]
 
   return (
-    <div className="min-h-screen bg-neutral-50 pb-24">
+    <div className="min-h-screen bg-neutral-50">
       <WhatsAppHelpFab context="profil" />
-      <header className="bg-white px-5 pt-4 pb-6">
+      <div className="gwa-shell-page lg:py-6">
+      <header className="bg-white px-5 pt-4 pb-6 lg:rounded-2xl lg:shadow-sm">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-xl font-semibold">Moi</h1>
           <Link
@@ -441,6 +442,7 @@ export default function ProfilPage() {
         <p className="text-center text-xs text-neutral-400 py-4">
           GWA v{APP_VERSION} · Agriculture & Finance · Côte d&apos;Ivoire
         </p>
+      </div>
       </div>
     </div>
   )

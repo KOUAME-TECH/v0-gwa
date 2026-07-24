@@ -209,29 +209,52 @@ function MessagesContent() {
     )
   }
 
-  if (selectedConv && user) {
-    return (
-      <ChatConversation
-        conversation={selectedConv}
-        userId={user.id}
-        onBack={async () => {
-          setSelectedConv(null)
-          if (user) {
-            const convs = await loadConversations(user.id)
-            setConversations(convs)
-          }
-        }}
-      />
-    )
-  }
-
   return (
-    <ChatList
-      conversations={conversations}
-      userId={user?.id || ""}
-      userType={userType}
-      onSelectConversation={setSelectedConv}
-    />
+    <div className="min-h-[100dvh] lg:min-h-[calc(100dvh-3.5rem)] lg:flex lg:bg-[#f0f2f5]">
+      <div
+        className={
+          selectedConv
+            ? "hidden lg:block lg:w-[360px] xl:w-[380px] lg:shrink-0 lg:border-r lg:border-[#E5E7EB] lg:bg-white lg:h-[calc(100dvh-3.5rem)] lg:overflow-hidden"
+            : "w-full lg:w-[360px] xl:w-[380px] lg:shrink-0 lg:border-r lg:border-[#E5E7EB] lg:bg-white lg:h-[calc(100dvh-3.5rem)] lg:overflow-hidden"
+        }
+      >
+        <ChatList
+          conversations={conversations}
+          userId={user?.id || ""}
+          userType={userType}
+          onSelectConversation={setSelectedConv}
+        />
+      </div>
+
+      <div
+        className={
+          selectedConv && user
+            ? "flex-1 min-w-0 min-h-[100dvh] lg:min-h-0 lg:h-[calc(100dvh-3.5rem)]"
+            : "hidden lg:flex flex-1 min-w-0 items-center justify-center bg-[#efeae2]"
+        }
+      >
+        {selectedConv && user ? (
+          <ChatConversation
+            conversation={selectedConv}
+            userId={user.id}
+            onBack={async () => {
+              setSelectedConv(null)
+              if (user) {
+                const convs = await loadConversations(user.id)
+                setConversations(convs)
+              }
+            }}
+          />
+        ) : (
+          <div className="text-center px-8">
+            <p className="text-lg font-semibold text-[#111827] mb-1">GWA Chat</p>
+            <p className="text-sm text-[#667781] max-w-xs mx-auto">
+              Sélectionne une conversation pour discuter, négocier ou envoyer une offre.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 

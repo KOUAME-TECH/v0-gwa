@@ -1,8 +1,17 @@
-/* GWA PWA + OneSignal — v17 résilient (network-first navigations) */
+/* GWA PWA + OneSignal — v18 offline (navigations + shell + fallback) */
 importScripts("https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js")
 
-const CACHE = "gwa-v17-resilient"
-const SHELL = ["/", "/manifest.json", "/icon-192.png", "/icon-512.png", "/icon.svg"]
+const CACHE = "gwa-v18-offline"
+const SHELL = [
+  "/",
+  "/marketplace",
+  "/offline.html",
+  "/manifest.json",
+  "/icon-192.png",
+  "/icon-512.png",
+  "/icon.svg",
+  "/apple-icon.png",
+]
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -22,6 +31,30 @@ self.addEventListener("activate", (event) => {
   self.clients.claim()
 })
 
+async function offlineFallback(request) {
+  const cached = await caches.match(request)
+  if (cached) return cached
+
+  const url = new URL(request.url)
+  if (url.pathname.startsWith("/marketplace") || url.pathname.startsWith("/produit/")) {
+    const shop = await caches.match("/marketplace")
+    if (shop) return shop
+  }
+  if (url.pathname.startsWith("/publier")) {
+    const home = await caches.match("/")
+    if (home) return home
+  }
+
+  return (
+    (await caches.match("/offline.html")) ||
+    (await caches.match("/")) ||
+    new Response("Hors ligne", {
+      status: 503,
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    })
+  )
+}
+
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return
   const url = new URL(event.request.url)
@@ -30,20 +63,23 @@ self.addEventListener("fetch", (event) => {
   if (url.pathname.startsWith("/api/")) return
   if (url.hostname.includes("onesignal.com")) return
 
-  // Navigations HTML : network-first → offline fallback shell
+  // Navigations HTML : network-first → cache page → offline.html
   if (event.request.mode === "navigate") {
     event.respondWith(
       fetch(event.request)
-        .then((response) => response)
-        .catch(async () => {
-          const cached = await caches.match(event.request)
-          return cached || caches.match("/") || Response.error()
-        }),
+        .then((response) => {
+          if (response.ok && url.origin === self.location.origin) {
+            const clone = response.clone()
+            caches.open(CACHE).then((cache) => cache.put(event.request, clone))
+          }
+          return response
+        })
+        .catch(() => offlineFallback(event.request)),
     )
     return
   }
 
-  // Assets shell : cache-first
+  // Assets shell / images locales : cache-first
   const isShellAsset = SHELL.some(
     (p) => url.pathname === p || url.pathname.endsWith(p.replace(/^\//, "")),
   )

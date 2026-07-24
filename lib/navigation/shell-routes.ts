@@ -1,6 +1,6 @@
 /**
- * Bottom nav = shell principal (onglets natifs).
- * Masquée hors parcours principaux.
+ * Bottom nav (mobile) + top nav (desktop) = shell principal.
+ * Masquées hors parcours principaux.
  */
 
 const EXACT = new Set([
@@ -25,9 +25,7 @@ const PREFIXES = [
   "/profil/",
 ] as const
 
-export function shouldShowBottomNav(pathname: string | null | undefined): boolean {
-  if (!pathname) return false
-
+function isShellPath(pathname: string): boolean {
   if (
     pathname.startsWith("/auth") ||
     pathname.startsWith("/admin") ||
@@ -54,4 +52,16 @@ export function shouldShowBottomNav(pathname: string | null | undefined): boolea
 
   if (EXACT.has(pathname)) return true
   return PREFIXES.some((p) => pathname.startsWith(p))
+}
+
+/** Bottom tabs — mobile / tablette portrait. */
+export function shouldShowBottomNav(pathname: string | null | undefined): boolean {
+  if (!pathname) return false
+  return isShellPath(pathname)
+}
+
+/** Top bar — desktop / tablette large (même périmètre shell). */
+export function shouldShowDesktopNav(pathname: string | null | undefined): boolean {
+  if (!pathname) return false
+  return isShellPath(pathname)
 }
