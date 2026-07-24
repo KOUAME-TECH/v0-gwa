@@ -41,3 +41,4 @@ prod-*.png
 *-preview*.png
 /tmp/
 tsconfig.tsbuildinfo
+produit-compact.png
