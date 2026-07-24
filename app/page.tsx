@@ -28,21 +28,22 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import dynamic from "next/dynamic"
 import { GwaMark } from "@/components/brand/gwa-mark"
 import { YellyAideButton } from "@/components/yelly/yelly-aide-button"
-import dynamic from "next/dynamic"
 import { StoriesRail, type StoriesSeedProduct } from "@/components/feed/stories-rail"
 import { useHideOnScroll } from "@/hooks/use-hide-on-scroll"
 import { shouldShowVerifiedBadge } from "@/lib/verification/badge"
-const WeatherWidget = dynamic(
-  () => import("@/components/weather-widget").then((m) => m.WeatherWidget),
-  { ssr: false, loading: () => null },
-)
 import { ClickableListenText, ListenMicButton } from "@/components/media/clickable-listen-text"
 import { isLowQualityPostContent } from "@/lib/feed/content-quality"
 import { ListenRitualBadge } from "@/components/media/listen-ritual-badge"
 import { useListenMode } from "@/hooks/use-listen-mode"
 import { useListenRitual } from "@/hooks/use-listen-ritual"
+
+const WeatherWidget = dynamic(
+  () => import("@/components/weather-widget").then((m) => m.WeatherWidget),
+  { ssr: false, loading: () => null },
+)
 import { CommentComposer } from "@/components/comments/comment-composer"
 import {
   VOICE_COMMENT_PLACEHOLDER,
