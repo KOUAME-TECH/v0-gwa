@@ -17,4 +17,5 @@ https://supabase.com/docs/guides/auth/password-security#password-strength-and-le
 
 ## Revue ponctuelle
 
-Ne pas accumuler des rapports datés dans le repo. Utiliser Advisor + PR reviews.
+Dernier audit full : `docs/audit-complet-2026-07-24.md`.  
+Ne pas accumuler des rapports redondants — Advisor + PR reviews entre deux audits.

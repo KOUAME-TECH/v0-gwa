@@ -42,6 +42,12 @@ export async function POST(request: NextRequest, context: Ctx) {
     if (order.buyer_id !== user.id && order.seller_id !== user.id) {
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 })
     }
+    if (order.payment_status !== "paid") {
+      return NextResponse.json(
+        { error: "Litige possible seulement après paiement", code: "NOT_PAID" },
+        { status: 400 },
+      )
+    }
     if (order.status === "disputed" || order.escrow_status === "frozen") {
       return NextResponse.json({ error: "Litige déjà ouvert" }, { status: 400 })
     }

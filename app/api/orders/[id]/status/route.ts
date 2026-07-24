@@ -50,6 +50,22 @@ export async function PATCH(request: NextRequest, context: Ctx) {
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 })
     }
 
+    // Ne pas annuler une commande déjà payée / fonds en escrow
+    if (
+      nextStatus === "cancelled" &&
+      (order.payment_status === "paid" ||
+        order.escrow_status === "held" ||
+        order.escrow_status === "frozen")
+    ) {
+      return NextResponse.json(
+        {
+          error: "Impossible d’annuler : paiement déjà reçu. Ouvre un litige.",
+          code: "ESCROW_LOCKED",
+        },
+        { status: 400 },
+      )
+    }
+
     const current = normalizeOrderStatus(order.status)
     const allowed = SELLER_TRANSITIONS[current] || []
     if (!allowed.includes(nextStatus)) {

@@ -73,11 +73,13 @@ export async function POST(request: Request) {
     let productId = offer.productId || null
     let sellerId = otherId
     let buyerId = offererId
+    let catalogPrice: number | null = null
+    let stockQty: number | null = null
 
     if (productId) {
       const { data: product } = await supabase
         .from("products")
-        .select("id, seller_id, price, name, status")
+        .select("id, seller_id, price, name, status, stock_quantity")
         .eq("id", productId)
         .maybeSingle()
 
@@ -87,6 +89,9 @@ export async function POST(request: Request) {
       sellerId = product.seller_id
       // L'acheteur est l'autre participant que le vendeur
       buyerId = sellerId === offererId ? otherId : offererId
+      catalogPrice = Math.round(Number(product.price))
+      stockQty =
+        product.stock_quantity == null ? null : Number(product.stock_quantity)
       if (user.id !== buyerId && user.id !== sellerId) {
         return NextResponse.json({ error: "Accès refusé" }, { status: 403 })
       }
@@ -95,7 +100,7 @@ export async function POST(request: Request) {
       // Si l'offreur est vendeur, seller = offerer
       const { data: sellerProducts } = await supabase
         .from("products")
-        .select("id, seller_id, name, status")
+        .select("id, seller_id, name, status, price, stock_quantity")
         .eq("seller_id", otherId)
         .eq("status", "active")
         .limit(1)
@@ -104,10 +109,15 @@ export async function POST(request: Request) {
         productId = sellerProducts[0].id
         sellerId = otherId
         buyerId = offererId
+        catalogPrice = Math.round(Number(sellerProducts[0].price))
+        stockQty =
+          sellerProducts[0].stock_quantity == null
+            ? null
+            : Number(sellerProducts[0].stock_quantity)
       } else {
         const { data: offererProducts } = await supabase
           .from("products")
-          .select("id, seller_id, name, status")
+          .select("id, seller_id, name, status, price, stock_quantity")
           .eq("seller_id", offererId)
           .eq("status", "active")
           .limit(1)
@@ -115,6 +125,11 @@ export async function POST(request: Request) {
           productId = offererProducts[0].id
           sellerId = offererId
           buyerId = otherId
+          catalogPrice = Math.round(Number(offererProducts[0].price))
+          stockQty =
+            offererProducts[0].stock_quantity == null
+              ? null
+              : Number(offererProducts[0].stock_quantity)
         }
       }
     }
@@ -130,14 +145,27 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Acheteur/vendeur invalides" }, { status: 400 })
     }
 
-    // Seul l'acheteur (ou les deux participants après accept) peut finaliser
-    if (user.id !== buyerId && user.id !== sellerId) {
-      return NextResponse.json({ error: "Accès refusé" }, { status: 403 })
+    // Seul l'acheteur finalise la commande négociée
+    if (user.id !== buyerId) {
+      return NextResponse.json(
+        { error: "Seul l'acheteur peut créer la commande" },
+        { status: 403 },
+      )
     }
 
-    const unitPrice = Math.round(Number(offer.amount))
+    let unitPrice = Math.round(Number(offer.amount))
     if (!Number.isFinite(unitPrice) || unitPrice < 1) {
       return NextResponse.json({ error: "Montant négocié invalide" }, { status: 400 })
+    }
+    // Garde anti-inflation : le prix négocié ne peut pas dépasser le catalogue
+    if (catalogPrice != null && Number.isFinite(catalogPrice) && catalogPrice > 0) {
+      unitPrice = Math.min(unitPrice, catalogPrice)
+    }
+    if (stockQty != null && Number.isFinite(stockQty) && quantity > stockQty) {
+      return NextResponse.json(
+        { error: `Stock insuffisant (max ${stockQty})`, code: "OUT_OF_STOCK" },
+        { status: 400 },
+      )
     }
 
     const subtotal = unitPrice * quantity

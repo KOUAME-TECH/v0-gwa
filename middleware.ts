@@ -61,8 +61,17 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(url)
     }
 
-    const { data: isAdmin } = await supabase.rpc("is_admin")
-    if (!isAdmin) {
+    // Own-row SELECT is allowed by RLS (admin_roles_select_own).
+    // Do NOT call rpc("is_admin") — that function does not exist in prod DB
+    // (only is_active_admin / is_super_admin, EXECUTE revoked from authenticated).
+    const { data: adminRole } = await supabase
+      .from("admin_roles")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("is_active", true)
+      .maybeSingle()
+
+    if (!adminRole) {
       if (pathname.startsWith("/api/")) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 })
       }

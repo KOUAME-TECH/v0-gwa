@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     const admin = createAdminClient()
     const { data: order } = await admin
       .from("orders")
-      .select("id, seller_id, order_number")
+      .select("id, seller_id, order_number, total_amount, payment_status")
       .eq("feexpay_ref", ref)
       .maybeSingle()
 
@@ -68,6 +68,29 @@ export async function POST(request: Request) {
       status === "completed"
 
     if (paid) {
+      // Idempotence : déjà payé
+      if (order.payment_status === "paid") {
+        return NextResponse.json({ received: true, matched: true, paid: true, idempotent: true })
+      }
+
+      const paidAmount = Number(
+        payload.amount ?? payload.paid_amount ?? payload.montant ?? NaN,
+      )
+      const expected = Number(order.total_amount)
+      if (
+        Number.isFinite(paidAmount) &&
+        Number.isFinite(expected) &&
+        paidAmount + 1e-6 < expected
+      ) {
+        console.error(
+          `[webhooks/feexpay] montant insuffisant ref=${ref} paid=${paidAmount} expected=${expected}`,
+        )
+        return NextResponse.json(
+          { error: "Montant insuffisant", received: true, matched: true },
+          { status: 422 },
+        )
+      }
+
       await admin
         .from("orders")
         .update({
