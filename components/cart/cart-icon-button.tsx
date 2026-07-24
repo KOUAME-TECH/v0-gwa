@@ -21,7 +21,7 @@ export function CartIconButton({
         "relative inline-flex h-9 w-9 items-center justify-center rounded-xl text-[#4B5563] active:opacity-70",
         className,
       )}
-      aria-label={count > 0 ? `Panier, ${count} articles` : "Panier"}
+      aria-label={count > 0 ? `Panier, ${count} produit${count > 1 ? "s" : ""}` : "Panier"}
     >
       <ShoppingCart className={cn("h-5 w-5", iconClassName)} />
       {count > 0 ? (
