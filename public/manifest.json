@@ -51,6 +51,12 @@
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     },
     {
+      "name": "Aide Yelly",
+      "short_name": "Aide",
+      "url": "/?yelly=1",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
       "name": "Boutique",
       "short_name": "Shop",
       "url": "/marketplace",
@@ -60,6 +66,12 @@
       "name": "Mon Panier",
       "short_name": "Panier",
       "url": "/panier",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Publier",
+      "short_name": "Publier",
+      "url": "/publier",
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     }
   ],

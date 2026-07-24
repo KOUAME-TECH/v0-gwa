@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { assertSameOrigin } from "@/lib/security/csrf"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { sanitizePlainText } from "@/lib/security/validation"
+import { isSupportQuietHours, quietHoursMessage } from "@/lib/yelly/quiet-hours"
 
 export const dynamic = "force-dynamic"
 
@@ -63,7 +64,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    return NextResponse.json({ ok: true })
+    const quiet = isSupportQuietHours()
+    return NextResponse.json({
+      ok: true,
+      quietHours: quiet,
+      message: quiet ? quietHoursMessage() : undefined,
+    })
   } catch (err) {
     console.error("[api/yelly/escalate]", err)
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 })

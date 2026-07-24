@@ -15,6 +15,7 @@ import { ListenMicButton } from "@/components/media/clickable-listen-text"
 import { buildProductListenText } from "@/lib/media/product-listen"
 import { ShopVoiceTourButton } from "@/components/media/shop-voice-tour-button"
 import { DigestBanner } from "@/components/media/digest-banner"
+import { YellyAideButton } from "@/components/yelly/yelly-aide-button"
 import { useShopVoiceTour } from "@/hooks/use-shop-voice-tour"
 import { useRealtimeLocation } from "@/hooks/use-realtime-location"
 import {
@@ -26,6 +27,7 @@ import {
   loadCatalogCache,
   saveCatalogCache,
 } from "@/lib/offline/catalog-cache"
+import { cn } from "@/lib/utils"
 
 type Product = {
   id: string
@@ -105,6 +107,17 @@ function MarketplaceGridCard({
         {p.is_organic && (
           <Badge className="absolute top-2 left-2 bg-[#2F7D32] text-white text-[10px] px-1.5 py-0.5">Bio</Badge>
         )}
+        {p.created_at &&
+          Date.now() - new Date(p.created_at).getTime() < 24 * 60 * 60 * 1000 && (
+            <Badge
+              className={cn(
+                "absolute top-2 text-white text-[10px] px-1.5 py-0.5 bg-[#C27D10]",
+                p.is_organic ? "left-12" : "left-2",
+              )}
+            >
+              Nouveau
+            </Badge>
+          )}
       </div>
       <div className="pt-2.5 px-0.5">
         <div className="flex items-start gap-1">
@@ -523,6 +536,7 @@ function MarketplaceContent() {
               Produits frais près de toi — écoute ou parcours
             </p>
           </div>
+          <YellyAideButton source="marketplace_header" compact className="lg:hidden text-[#1F5C2E]" />
           <ShopVoiceTourButton
             active={parcours.active}
             index={parcours.index}

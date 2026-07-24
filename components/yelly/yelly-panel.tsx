@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react"
 import { usePathname } from "next/navigation"
 import Link from "next/link"
-import { X, Send, LifeBuoy } from "lucide-react"
+import { X, Send, LifeBuoy, Mic } from "lucide-react"
 import { YELLY_NAME, YELLY_SUGGESTIONS, YELLY_TAGLINE } from "@/lib/yelly/prompt"
 import { WHATSAPP_LINK } from "@/lib/contact"
 import { trackYelly } from "@/lib/yelly/analytics"
@@ -98,6 +98,10 @@ export function YellyPanel({
             message,
             page: pathname,
             conversationId,
+            context: (() => {
+              const m = pathname.match(/\/produit\/([0-9a-f-]{36})/i)
+              return m ? { productId: m[1] } : undefined
+            })(),
           }),
         })
         const data = await res.json().catch(() => ({}))
@@ -131,11 +135,26 @@ export function YellyPanel({
           return
         }
         if (data.conversationId) setConversationId(data.conversationId)
-        setLines((prev) => [
-          ...prev,
-          { role: "assistant", content: String(data.reply || "") },
-        ])
+        const reply = String(data.reply || "")
+        setLines((prev) => [...prev, { role: "assistant", content: reply }])
         if (data.resolved) trackYelly("yelly_resolved")
+        // TTS optionnel (Yelly vocale) — discret, pas auto si utilisateur mute
+        try {
+          if (
+            typeof window !== "undefined" &&
+            window.speechSynthesis &&
+            localStorage.getItem("yelly_tts") !== "0" &&
+            reply
+          ) {
+            const u = new SpeechSynthesisUtterance(reply)
+            u.lang = "fr-FR"
+            u.rate = 0.95
+            window.speechSynthesis.cancel()
+            window.speechSynthesis.speak(u)
+          }
+        } catch {
+          /* ignore */
+        }
       } catch {
         setError("Réseau indisponible")
         setLines((prev) => [
@@ -186,7 +205,9 @@ export function YellyPanel({
         {
           role: "assistant",
           content:
-            "C’est noté — un humain GWA va reprendre. Tu peux aussi WhatsApp pendant ce temps.",
+            data.quietHours
+              ? String(data.message || "Ticket noté — équipe dispo 8h–20h Abidjan.")
+              : "C’est noté — un humain GWA va reprendre. Tu peux aussi WhatsApp pendant ce temps.",
         },
       ])
       trackYelly("yelly_resolved", { via: "escalate" })
@@ -318,6 +339,46 @@ export function YellyPanel({
             send(input)
           }}
         >
+          <button
+            type="button"
+            onClick={() => {
+              const SR =
+                typeof window !== "undefined"
+                  ? (window as unknown as {
+                      SpeechRecognition?: new () => {
+                        lang: string
+                        onresult: ((e: { results: { [i: number]: { [j: number]: { transcript: string } } } }) => void) | null
+                        onerror: (() => void) | null
+                        start: () => void
+                      }
+                      webkitSpeechRecognition?: new () => {
+                        lang: string
+                        onresult: ((e: { results: { [i: number]: { [j: number]: { transcript: string } } } }) => void) | null
+                        onerror: (() => void) | null
+                        start: () => void
+                      }
+                    })
+                  : null
+              const Ctor = SR?.SpeechRecognition || SR?.webkitSpeechRecognition
+              if (!Ctor) {
+                setError("Dictée non supportée sur cet appareil")
+                return
+              }
+              const rec = new Ctor()
+              rec.lang = "fr-FR"
+              rec.onresult = (e) => {
+                const t = e.results?.[0]?.[0]?.transcript
+                if (t) send(t)
+              }
+              rec.onerror = () => setError("Micro indisponible")
+              rec.start()
+            }}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#1F5C2E]/20 text-[#1F5C2E]"
+            aria-label="Parler à Yelly"
+            disabled={pending}
+          >
+            <Mic className="h-4 w-4" />
+          </button>
           <input
             ref={inputRef}
             value={input}

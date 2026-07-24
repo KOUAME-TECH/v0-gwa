@@ -29,6 +29,7 @@ import {
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { GwaMark } from "@/components/brand/gwa-mark"
+import { YellyAideButton } from "@/components/yelly/yelly-aide-button"
 import { WeatherWidget } from "@/components/weather-widget"
 import { ClickableListenText, ListenMicButton } from "@/components/media/clickable-listen-text"
 import { isLowQualityPostContent } from "@/lib/feed/content-quality"
@@ -129,7 +130,7 @@ export default function HomePage() {
   const { enabled: listenMode } = useListenMode()
   const { streak: listenStreak } = useListenRitual()
   const [activeCategory, setActiveCategory] = useState("all")
-  const [activeTab, setActiveTab] = useState<"tout" | "produits" | "publications">("tout")
+  const [activeTab, setActiveTab] = useState<"tout" | "suivis" | "produits" | "publications">("tout")
   const [unreadNotifications, setUnreadNotifications] = useState(0)
   
   // États pour les commentaires
@@ -660,6 +661,13 @@ export default function HomePage() {
     // Filtre par onglet
     if (activeTab === "produits" && item.type !== "product") return false
     if (activeTab === "publications" && item.type !== "post") return false
+    if (activeTab === "suivis") {
+      const authorId =
+        item.type === "product"
+          ? (item.data as Product).seller_id
+          : (item.data as Post).author_id
+      if (!authorId || !followingIds.has(authorId)) return false
+    }
 
     // Masquer posts marketing / démo peu utiles
     if (item.type === "post" && isLowQualityPostContent((item.data as Post).content)) {
@@ -698,6 +706,7 @@ export default function HomePage() {
             </Link>
             <div className="flex items-center gap-2">
               <ListenRitualBadge streak={listenStreak} />
+              <YellyAideButton source="mobile_feed_header" compact className="text-[#1F5C2E]" />
               <Link
                 href="/marketplace?digest=1"
                 className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-xl bg-[#1F5C2E]/8 text-[#1F5C2E] text-xs font-semibold active:scale-95 transition-transform"
@@ -726,9 +735,10 @@ export default function HomePage() {
         {/* Onglets */}
         <div className="flex border-t border-[#E5E7EB]">
           {[
-            { key: "tout", label: "Tout" },
+            { key: "tout", label: "Pour vous" },
+            { key: "suivis", label: "Suivis" },
             { key: "produits", label: "Produits" },
-            { key: "publications", label: "Publications" }
+            { key: "publications", label: "Pubs" },
           ].map(tab => (
             <button
               key={tab.key}
@@ -793,7 +803,8 @@ export default function HomePage() {
           </div>
           <div className="mt-6 flex flex-col gap-1 border-t border-[#1F5C2E]/10 pt-4">
             {[
-              { key: "tout", label: "Tout" },
+              { key: "tout", label: "Pour vous" },
+              { key: "suivis", label: "Suivis" },
               { key: "produits", label: "Produits" },
               { key: "publications", label: "Publications" },
             ].map((tab) => (
@@ -865,9 +876,17 @@ export default function HomePage() {
             </div>
             {user ? (
               <>
-                <h3 className="font-semibold text-lg text-[#111827] mb-2">Aucune publication pour le moment</h3>
+                <h3 className="font-semibold text-lg text-[#111827] mb-2">
+                  {activeTab === "suivis"
+                    ? followingIds.size === 0
+                      ? "Suis des producteurs"
+                      : "Rien de nouveau chez tes suivis"
+                    : "Aucune publication pour le moment"}
+                </h3>
                 <p className="text-[#4B5563] text-sm mb-6">
-                  {["producteur", "cooperative", "transformateur", "entreprise", "farmer", "processor"].includes(userType || "")
+                  {activeTab === "suivis"
+                    ? "Appuie sur Suivre sous une publication pour remplir cet onglet."
+                    : ["producteur", "cooperative", "transformateur", "entreprise", "farmer", "processor"].includes(userType || "")
                     ? "Publiez votre premier produit pour commencer a vendre"
                     : userType === "entreprise" || userType === "business"
                     ? "Explorez le marketplace pour trouver des fournisseurs"

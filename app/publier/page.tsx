@@ -88,7 +88,10 @@ export default function PublierPage() {
     stock_quantity: "",
     category_id: "",
     product_type: "agriculture",
+    ville: "",
+    origin_country: "Côte d'Ivoire",
   })
+  const [confirmAnomaly, setConfirmAnomaly] = useState(false)
 
   const [postContent, setPostContent] = useState("")
 
@@ -308,8 +311,14 @@ export default function PublierPage() {
 
   const handleSubmitProduct = async () => {
     if (!user) return
-    if (!productForm.name || !productForm.price || !productForm.category_id) {
-      toast.error("Veuillez remplir tous les champs obligatoires")
+    if (
+      !productForm.name ||
+      !productForm.price ||
+      !productForm.category_id ||
+      !productForm.ville.trim() ||
+      !productForm.origin_country.trim()
+    ) {
+      toast.error("Nom, prix, catégorie, ville et pays sont obligatoires")
       return
     }
 
@@ -331,12 +340,68 @@ export default function PublierPage() {
           stock_quantity: parseInt(productForm.stock_quantity) || 0,
           category_id: productForm.category_id,
           product_type: productForm.product_type,
+          ville: productForm.ville.trim(),
+          origin_country: productForm.origin_country.trim(),
           images: imageUrls.length > 0 ? imageUrls : null,
           video_url: videoUrl,
           audio_url: audioUrl,
+          confirm_price: confirmAnomaly,
         }),
       })
       const payload = await res.json().catch(() => ({}))
+      if (res.status === 409 && payload.code === "PRICE_ANOMALY") {
+        const ok = window.confirm(
+          `${payload.error || "Prix inhabituel."}\n\nPublier quand même ?`,
+        )
+        if (ok) {
+          setConfirmAnomaly(true)
+          setIsSubmitting(false)
+          // Relance avec confirm
+          setTimeout(() => {
+            setConfirmAnomaly(true)
+            void (async () => {
+              setIsSubmitting(true)
+              try {
+                const res2 = await fetch("/api/products", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    name: productForm.name,
+                    description: productForm.description,
+                    price: parseFloat(productForm.price),
+                    unit: productForm.unit,
+                    stock_quantity: parseInt(productForm.stock_quantity) || 0,
+                    category_id: productForm.category_id,
+                    product_type: productForm.product_type,
+                    ville: productForm.ville.trim(),
+                    origin_country: productForm.origin_country.trim(),
+                    images: imageUrls.length > 0 ? imageUrls : null,
+                    video_url: videoUrl,
+                    audio_url: audioUrl,
+                    confirm_price: true,
+                  }),
+                })
+                const p2 = await res2.json().catch(() => ({}))
+                if (!res2.ok) throw new Error(p2.error || "Erreur publication")
+                toast.success("Produit publié avec succès !")
+                if (user) await clearOfflineDraft(user.id, "product")
+                router.push("/profil")
+              } catch (err: unknown) {
+                toast.error(err instanceof Error ? err.message : "Erreur")
+              } finally {
+                setIsSubmitting(false)
+                setUploadProgress(0)
+                setUploadLabel("")
+                setConfirmAnomaly(false)
+              }
+            })()
+          }, 0)
+        }
+        setIsSubmitting(false)
+        setUploadProgress(0)
+        setUploadLabel("")
+        return
+      }
       if (!res.ok) throw new Error(payload.error || "Erreur publication")
 
       toast.success("Produit publié avec succès !")
@@ -886,6 +951,36 @@ export default function PublierPage() {
               <option value="sac">Sac</option>
               <option value="lot">Lot</option>
             </select>
+          </div>
+        </div>
+
+        {/* Ville & Pays — obligatoires Digest local */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="text-sm font-medium text-[#111827] mb-2 block">
+              Ville *
+            </label>
+            <Input
+              value={productForm.ville}
+              onChange={(e) =>
+                setProductForm({ ...productForm, ville: e.target.value })
+              }
+              placeholder="Abidjan"
+              className="h-12 rounded-xl border-[#E5E7EB] bg-white"
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-[#111827] mb-2 block">
+              Pays *
+            </label>
+            <Input
+              value={productForm.origin_country}
+              onChange={(e) =>
+                setProductForm({ ...productForm, origin_country: e.target.value })
+              }
+              placeholder="Côte d'Ivoire"
+              className="h-12 rounded-xl border-[#E5E7EB] bg-white"
+            />
           </div>
         </div>
 

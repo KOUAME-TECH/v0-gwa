@@ -1,23 +1,24 @@
-# Yelly UX + suggestions (PR)
+# Vague suggestions + fix Yelly FAB (PR #10)
 
-## Règle déploiement
-**Aucune implémentation ne va en prod sans PR validée.** Branche → PR → review → merge `main`.
+## Fix critique
+**Plus de bouton Yelly flottant** (surchargeait l’écran). Entrée **Aide** dans :
+- Top nav desktop
+- Header feed mobile
+- Header boutique mobile
+- Deep-link PWA `/?yelly=1`
 
-## Changements UX
-- **Desktop / tablette (`lg+`)** : composition capture (top nav texte + feed 3 col). Yelly via lien **Aide** dans la nav — **plus de FAB terracotta**.
-- **Téléphone** : bottom nav inchangée ; pastille discrète verte **« Y »** (icône seule) au-dessus de la nav.
-
-## Suggestions validées (cette PR)
+## Suggestions livrées
 | # | Item | Statut |
 |---|------|--------|
-| 1 | LLM `YELLY_API_KEY` | déjà branché — à configurer Vercel |
-| 2 | Guest mode 3 messages | ✅ cookie `yelly_guest_n` |
-| 3 | OneSignal origine | ⚠️ dashboard (pas code) — checklist ci-dessous |
-| 4 | CSP nonce | reporté (invasif Next) — doc |
-| 5 | Escalade humaine | ✅ `POST /api/yelly/escalate` → inbox support |
-| 6 | Mémoire session | ✅ `GET /api/yelly/history` |
-| 7 | Analytics | ✅ `yelly_open` / `yelly_resolved` / `yelly_escalate` |
+| 1 | Yelly vocale (micro + TTS) | ✅ |
+| 2 | Contexte auto `/produit/[id]` | ✅ |
+| 3 | Quiet hours escalade 8h–20h | ✅ |
+| 4 | Badge Nouveau Digest (24h) | ✅ |
+| 5 | Fil Suivis / Pour vous | ✅ |
+| 6 | Ville/pays obligatoires publish | ✅ |
+| 7 | Timeline escrow détaillée | ✅ |
+| 8 | Support reply 1 clic (mailto) | ✅ |
+| 9 | Raccourcis PWA Aide/Publier | ✅ |
+| 10 | Alerte prix anormal (409 confirm) | ✅ |
 
-### OneSignal (manuel)
-OneSignal → Settings → Platforms → Web → Add origin :
-`https://v0-gwa-mu.vercel.app` (+ previews `*.vercel.app` si besoin).
+**Règle :** merge PR uniquement après validation — pas de push `main` direct.

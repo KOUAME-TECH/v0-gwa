@@ -76,6 +76,17 @@ export function EscrowStepper({
       <p className="mt-2 text-[11px] text-[#6B7280]">
         Tu paies maintenant ; le vendeur touche l’argent après ta confirmation de livraison.
       </p>
+      {!compact ? (
+        <ul className="mt-3 space-y-1 border-t border-[#E5E7EB] pt-3 text-[11px] text-[#4B5563]">
+          {ESCROW_STEP_LABELS.map((s, i) => (
+            <li key={s.id} className={cn(i <= step ? "text-[#1F5C2E] font-medium" : "")}>
+              {i + 1}. {s.label}
+              {i === step ? " ← tu es ici" : ""}
+              {i < step ? " ✓" : ""}
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   )
 }
