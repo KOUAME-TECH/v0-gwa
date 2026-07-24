@@ -12,6 +12,8 @@ import {
   formatOfferAmount,
   type PriceOfferPayload,
 } from "@/lib/chat/offer"
+import { buildLocationContent, isLocationMessage } from "@/lib/chat/location"
+import { ChatLocationBubble } from "@/components/chat/chat-location-bubble"
 import {
   ArrowLeft, Send, Mic, Smile, Phone, Video, MoreVertical,
   Check, CheckCheck, ImageIcon, FileText, X, Trash2, Copy, Reply,
@@ -440,10 +442,10 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       toast.error("Localisation indisponible")
       return
     }
-    const toastId = toast.loading("Position en cours…")
+    const toastId = toast.loading("On trouve ta position…")
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
-        const { latitude, longitude, accuracy, altitude } = pos.coords
+        const { latitude, longitude, accuracy } = pos.coords
         let addressLine = ""
         try {
           const res = await fetch(
@@ -456,38 +458,44 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
         } catch {
           /* coords suffisent */
         }
-        const acc =
-          Number.isFinite(accuracy) ? ` ±${Math.round(accuracy)} m` : ""
-        const alt =
-          altitude != null && Number.isFinite(altitude)
-            ? ` · alt. ${Math.round(altitude)} m`
-            : ""
-        const maps = `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=18/${latitude}/${longitude}`
-        const content = [
-          "📍 Ma position",
-          addressLine || null,
-          `${latitude.toFixed(6)}, ${longitude.toFixed(6)}${acc}${alt}`,
-          maps,
-        ]
-          .filter(Boolean)
-          .join("\n")
+        const content = buildLocationContent({
+          lat: latitude,
+          lon: longitude,
+          address: addressLine || undefined,
+          accuracyM: Number.isFinite(accuracy) ? accuracy : undefined,
+        })
         const { error } = await supabase.from("messages").insert({
           conversation_id: conversation.id,
           sender_id: userId,
           content,
-          message_type: "text",
+          message_type: "location",
         })
         await supabase
           .from("conversations")
           .update({ last_message_at: new Date().toISOString() })
           .eq("id", conversation.id)
         toast.dismiss(toastId)
-        if (error) toast.error("Envoi impossible")
-        else toast.success("Position envoyée")
+        if (error) {
+          // Fallback si le type location est refusé côté DB
+          const maps = `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=18/${latitude}/${longitude}`
+          const textContent = ["📍 Ma position", addressLine || null, maps]
+            .filter(Boolean)
+            .join("\n")
+          const { error: e2 } = await supabase.from("messages").insert({
+            conversation_id: conversation.id,
+            sender_id: userId,
+            content: textContent,
+            message_type: "text",
+          })
+          if (e2) toast.error("Envoi impossible")
+          else toast.success("Position envoyée")
+          return
+        }
+        toast.success("Position envoyée")
       },
       () => {
         toast.dismiss(toastId)
-        toast.error("Autorisez la localisation")
+        toast.error("Autorise la localisation")
       },
       { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
     )
@@ -555,8 +563,9 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
         setRecordSec(0)
         setAudioPreview(null)
         recInterval.current = setInterval(() => setRecordSec(p => p + 1), 1000)
-      } catch {
-        toast.error("Microphone inaccessible")
+      } catch (err) {
+        console.warn("[chat] mic", err)
+        toast.error("Micro inaccessible — autorise le micro dans le navigateur")
       }
     }
   }
@@ -845,6 +854,9 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   }
 
   function renderContent(msg: Message) {
+    if (msg.message_type === "location" || isLocationMessage(msg.message_type, msg.content)) {
+      return <ChatLocationBubble content={msg.content} messageType={msg.message_type} />
+    }
     if (msg.message_type === "offer") {
       const offer = parseOfferContent(msg.content)
       if (!offer) {
@@ -1225,6 +1237,15 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
                   label: "Position",
                   action: () => void shareLocation(),
                 },
+                {
+                  icon: Mic,
+                  color: "bg-[#1F5C2E]",
+                  label: "Note vocale",
+                  action: () => {
+                    setShowAttach(false)
+                    void toggleVoice()
+                  },
+                },
               ].map((item) => (
                 <button key={item.label} onClick={item.action} className="flex flex-col items-center gap-2">
                   <div className={`w-14 h-14 ${item.color} rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform`}>
@@ -1331,6 +1352,16 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
                 <Paperclip className="h-6 w-6" />
               </button>
 
+              <button
+                type="button"
+                onClick={() => void toggleVoice()}
+                className="p-2 text-[#54656f] active:text-[#1F5C2E] shrink-0"
+                aria-label="Note vocale"
+                title="Note vocale"
+              >
+                <Mic className="h-6 w-6" />
+              </button>
+
               {!newMessage.trim() && (
                 <button
                   type="button"
@@ -1351,7 +1382,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
                 <Send className="h-5 w-5" />
               </button>
             ) : (
-              <button type="button" onClick={toggleVoice}
+              <button type="button" onClick={() => void toggleVoice()}
                 className="w-[48px] h-[48px] rounded-full bg-[#1F5C2E] text-white flex items-center justify-center shrink-0 active:scale-90 transition-transform shadow-sm"
                 aria-label="Enregistrement vocal">
                 <Mic className="h-5 w-5" />

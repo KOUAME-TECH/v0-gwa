@@ -57,7 +57,11 @@ async function registerPlayerId(playerId: string) {
 
 /**
  * OneSignal Web SDK v16 — PWA
- * SW GWA (/sw.js) importe déjà le worker OneSignal (évite double scope).
+ * Aligné dashboard Typical Site :
+ *   Main Filename → OneSignalSDKWorker.js
+ *   Updater Filename → OneSignalSDKUpdaterWorker.js
+ *   Registration Scope → /
+ * (Le worker principal embarque aussi le cache offline GWA.)
  */
 export function OneSignalProvider({ children }: { children: React.ReactNode }) {
   const initialized = useRef(false)
@@ -82,7 +86,8 @@ export function OneSignalProvider({ children }: { children: React.ReactNode }) {
         await OneSignal.init({
           appId,
           allowLocalhostAsSecureOrigin: true,
-          serviceWorkerPath: "/sw.js",
+          serviceWorkerPath: "OneSignalSDKWorker.js",
+          serviceWorkerUpdaterPath: "OneSignalSDKUpdaterWorker.js",
           serviceWorkerParam: { scope: "/" },
           notifyButton: { enable: false },
         })

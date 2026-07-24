@@ -4,7 +4,7 @@ import React, { useState } from "react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   Search, MoreVertical, Plus, MessageCircle,
-  Pin, Check, CheckCheck, Mic, ImageIcon, FileText, Edit
+  Pin, Check, CheckCheck, Mic, ImageIcon, FileText, Edit, MapPin
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
@@ -71,6 +71,7 @@ export function ChatList({ conversations, userId, onSelectConversation }: ChatLi
     if (c.last_message_type === "voice") return "Message vocal"
     if (c.last_message_type === "image") return "Photo"
     if (c.last_message_type === "file") return "Document"
+    if (c.last_message_type === "location") return "Position"
     return c.last_message || "Nouvelle conversation"
   }
 
@@ -78,6 +79,7 @@ export function ChatList({ conversations, userId, onSelectConversation }: ChatLi
     if (t === "voice") return <Mic className="h-3.5 w-3.5 text-[#667781] shrink-0" />
     if (t === "image") return <ImageIcon className="h-3.5 w-3.5 text-[#667781] shrink-0" />
     if (t === "file") return <FileText className="h-3.5 w-3.5 text-[#667781] shrink-0" />
+    if (t === "location") return <MapPin className="h-3.5 w-3.5 text-[#667781] shrink-0" />
     return null
   }
 
