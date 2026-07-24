@@ -8,6 +8,8 @@ import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { shouldShowBottomNav } from "@/lib/navigation/shell-routes"
 import { useHideOnScroll } from "@/hooks/use-hide-on-scroll"
+import { CART_CHANGED_EVENT } from "@/lib/cart/events"
+import { ORDERS_CHANGED } from "@/hooks/use-active-orders-count"
 
 interface NavItem {
   href: string
@@ -26,7 +28,10 @@ export function BottomNav() {
   const [userType, setUserType] = useState<string | null>(null)
   const [unreadMessages, setUnreadMessages] = useState(0)
   const [unreadNotifications, setUnreadNotifications] = useState(0)
+  /** Charette = nb de produits (lignes), pas quantités. */
   const [cartCount, setCartCount] = useState(0)
+  /** Shop = nb de commandes actives. */
+  const [ordersCount, setOrdersCount] = useState(0)
 
   useEffect(() => {
     // Économie ressources : pas de polling / realtime hors shell
@@ -34,6 +39,7 @@ export function BottomNav() {
 
     let cancelled = false
     const supabase = createClient()
+    const activeStatuses = ["pending", "confirmed", "processing", "shipped", "disputed"]
 
     const checkUser = async () => {
       try {
@@ -47,11 +53,12 @@ export function BottomNav() {
           setUnreadMessages(0)
           setUnreadNotifications(0)
           setCartCount(0)
+          setOrdersCount(0)
           setUserType(null)
           return
         }
 
-        const [profileRes, msgRes, notifRes, cartRes] = await Promise.all([
+        const [profileRes, msgRes, notifRes, cartRes, buyRes, sellRes] = await Promise.all([
           supabase.from("profiles").select("user_type").eq("id", u.id).maybeSingle(),
           supabase
             .from("messages")
@@ -67,6 +74,16 @@ export function BottomNav() {
             .from("cart_items")
             .select("id", { count: "exact", head: true })
             .eq("user_id", u.id),
+          supabase
+            .from("orders")
+            .select("id", { count: "exact", head: true })
+            .eq("buyer_id", u.id)
+            .in("status", activeStatuses),
+          supabase
+            .from("orders")
+            .select("id", { count: "exact", head: true })
+            .eq("seller_id", u.id)
+            .in("status", activeStatuses),
         ])
 
         if (cancelled) return
@@ -74,6 +91,7 @@ export function BottomNav() {
         setUnreadMessages(msgRes.count || 0)
         setUnreadNotifications(notifRes.count || 0)
         setCartCount(cartRes.count || 0)
+        setOrdersCount((buyRes.count || 0) + (sellRes.count || 0))
       } catch (err) {
         console.warn("[BottomNav] badges dégradés", err)
       }
@@ -90,6 +108,7 @@ export function BottomNav() {
         setUnreadMessages(0)
         setUnreadNotifications(0)
         setCartCount(0)
+        setOrdersCount(0)
         setUserType(null)
       }
     })
@@ -108,6 +127,8 @@ export function BottomNav() {
       void checkUser()
     }
     window.addEventListener("gwa:notifications-updated", onNotifUpdated)
+    window.addEventListener(CART_CHANGED_EVENT, onNotifUpdated)
+    window.addEventListener(ORDERS_CHANGED, onNotifUpdated)
 
     // Refresh badges périodique soft (moins agressif que double realtime)
     const interval = window.setInterval(() => void checkUser(), 90_000)
@@ -117,6 +138,8 @@ export function BottomNav() {
       subscription.unsubscribe()
       supabase.removeChannel(notificationsChannel)
       window.removeEventListener("gwa:notifications-updated", onNotifUpdated)
+      window.removeEventListener(CART_CHANGED_EVENT, onNotifUpdated)
+      window.removeEventListener(ORDERS_CHANGED, onNotifUpdated)
       window.clearInterval(interval)
     }
   }, [visible])
@@ -162,7 +185,7 @@ export function BottomNav() {
       icon: Store,
       label: "Shop",
       world: "commerce",
-      badge: cartCount > 0 ? cartCount : undefined,
+      badge: ordersCount > 0 ? ordersCount : undefined,
     },
     {
       href: isSeller ? "/publier" : "/recherche",

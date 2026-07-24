@@ -2,12 +2,19 @@
 
 import { useEffect, useRef, useState, useTransition } from "react"
 import { usePathname } from "next/navigation"
-import { X, Send, MessageCircle } from "lucide-react"
-import { YELLY_NAME, YELLY_SUGGESTIONS, YELLY_TAGLINE } from "@/lib/yelly/prompt"
+import Link from "next/link"
+import { X, Send, LifeBuoy, Mic } from "lucide-react"
+import { YELLY_NAME, YELLY_SUGGESTIONS, YELLY_TAGLINE, YELLY_WELCOME } from "@/lib/yelly/prompt"
 import { WHATSAPP_LINK } from "@/lib/contact"
+import { trackYelly } from "@/lib/yelly/analytics"
 import { cn } from "@/lib/utils"
 
 type ChatLine = { role: "user" | "assistant"; content: string }
+
+const WELCOME: ChatLine = {
+  role: "assistant",
+  content: YELLY_WELCOME,
+}
 
 function TypingDots() {
   return (
@@ -27,26 +34,52 @@ export function YellyPanel({
   onClose: () => void
 }) {
   const pathname = usePathname()
-  const [lines, setLines] = useState<ChatLine[]>([
-    {
-      role: "assistant",
-      content:
-        "Salut, je suis Yelly — l'assistante GWA. Boutique, Digest, commandes, vérification… dis-moi ce dont tu as besoin.",
-    },
-  ])
+  const [lines, setLines] = useState<ChatLine[]>([WELCOME])
   const [input, setInput] = useState("")
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [guestLeft, setGuestLeft] = useState<number | null>(null)
+  const [escalating, setEscalating] = useState(false)
   const [pending, startTransition] = useTransition()
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const historyLoaded = useRef(false)
 
   useEffect(() => {
-    if (open) {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-      inputRef.current?.focus()
-    }
+    if (!open) return
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+    inputRef.current?.focus()
   }, [open, lines, pending])
+
+  // Mémoire session — recharge le dernier fil si connecté
+  useEffect(() => {
+    if (!open || historyLoaded.current) return
+    historyLoaded.current = true
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch("/api/yelly/history")
+        if (!res.ok) return
+        const data = await res.json()
+        if (cancelled) return
+        if (data.conversationId) setConversationId(data.conversationId)
+        if (Array.isArray(data.messages) && data.messages.length > 0) {
+          setLines([
+            WELCOME,
+            ...data.messages.map((m: { role: string; content: string }) => ({
+              role: m.role === "user" ? "user" : "assistant",
+              content: String(m.content || ""),
+            })),
+          ] as ChatLine[])
+        }
+      } catch {
+        /* anonyme / hors-ligne OK */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [open])
 
   function send(text: string) {
     const message = text.trim()
@@ -64,18 +97,27 @@ export function YellyPanel({
             message,
             page: pathname,
             conversationId,
+            context: (() => {
+              const m = pathname.match(/\/produit\/([0-9a-f-]{36})/i)
+              return m ? { productId: m[1] } : undefined
+            })(),
           }),
         })
         const data = await res.json().catch(() => ({}))
+        if (typeof data.guestRemaining === "number") {
+          setGuestLeft(data.guestRemaining)
+        }
         if (!res.ok) {
           if (res.status === 401) {
-            setError("Connecte-toi pour parler à Yelly.")
+            trackYelly("yelly_guest_limit")
+            setError(data.error || "Limite invitée atteinte")
             setLines((prev) => [
               ...prev,
               {
                 role: "assistant",
                 content:
-                  "Connecte-toi pour continuer avec moi. Tu peux aussi m'écrire sur WhatsApp en attendant.",
+                  data.reply ||
+                  "Pour continuer avec moi, connecte-toi — ou écris-nous sur WhatsApp.",
               },
             ])
             return
@@ -92,10 +134,26 @@ export function YellyPanel({
           return
         }
         if (data.conversationId) setConversationId(data.conversationId)
-        setLines((prev) => [
-          ...prev,
-          { role: "assistant", content: String(data.reply || "") },
-        ])
+        const reply = String(data.reply || "")
+        setLines((prev) => [...prev, { role: "assistant", content: reply }])
+        if (data.resolved) trackYelly("yelly_resolved")
+        // TTS optionnel (Yelly vocale) — discret, pas auto si utilisateur mute
+        try {
+          if (
+            typeof window !== "undefined" &&
+            window.speechSynthesis &&
+            localStorage.getItem("yelly_tts") !== "0" &&
+            reply
+          ) {
+            const u = new SpeechSynthesisUtterance(reply)
+            u.lang = "fr-FR"
+            u.rate = 0.95
+            window.speechSynthesis.cancel()
+            window.speechSynthesis.speak(u)
+          }
+        } catch {
+          /* ignore */
+        }
       } catch {
         setError("Réseau indisponible")
         setLines((prev) => [
@@ -109,11 +167,59 @@ export function YellyPanel({
     })
   }
 
+  async function escalate() {
+    if (escalating) return
+    setEscalating(true)
+    trackYelly("yelly_escalate")
+    try {
+      const summary = lines
+        .slice(-6)
+        .map((l) => `${l.role === "user" ? "Moi" : "Yelly"}: ${l.content}`)
+        .join("\n")
+        .slice(0, 3500)
+      const res = await fetch("/api/yelly/escalate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          summary,
+          page: pathname,
+          conversationId,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setLines((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content:
+              data.error ||
+              "Impossible de créer le ticket. Utilise WhatsApp +225 07 88 32 60 19.",
+          },
+        ])
+        return
+      }
+      setLines((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content:
+            data.quietHours
+              ? String(data.message || "Ticket noté — équipe dispo 8h–20h Abidjan.")
+              : "C’est noté — un humain GWA va reprendre. Tu peux aussi WhatsApp pendant ce temps.",
+        },
+      ])
+      trackYelly("yelly_resolved", { via: "escalate" })
+    } finally {
+      setEscalating(false)
+    }
+  }
+
   if (!open) return null
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-end justify-end sm:items-end sm:p-4"
+      className="fixed inset-0 z-[60] flex items-end justify-end lg:items-end lg:p-6"
       role="dialog"
       aria-modal="true"
       aria-label="Yelly assistante GWA"
@@ -127,7 +233,7 @@ export function YellyPanel({
       <div
         className={cn(
           "relative z-10 flex h-[min(78dvh,560px)] w-full flex-col overflow-hidden",
-          "rounded-t-2xl sm:rounded-2xl sm:max-w-md",
+          "rounded-t-2xl lg:rounded-2xl lg:max-w-md",
           "border border-[#1F5C2E]/15 bg-[#F7F4EE] shadow-2xl",
           "animate-in slide-in-from-bottom-4 duration-300",
         )}
@@ -161,7 +267,7 @@ export function YellyPanel({
         <div className="flex-1 space-y-3 overflow-y-auto px-3 py-4">
           {lines.map((line, i) => (
             <div
-              key={`${i}-${line.role}`}
+              key={`${i}-${line.role}-${line.content.slice(0, 12)}`}
               className={cn(
                 "max-w-[88%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed",
                 line.role === "user"
@@ -195,6 +301,30 @@ export function YellyPanel({
           </div>
         ) : null}
 
+        <div className="flex items-center gap-2 border-t border-[#1F5C2E]/8 px-3 py-2">
+          <button
+            type="button"
+            onClick={() => void escalate()}
+            disabled={escalating}
+            className="inline-flex items-center gap-1.5 rounded-full border border-[#1F5C2E]/20 bg-white px-3 py-1 text-xs font-medium text-[#1F5C2E] disabled:opacity-50"
+          >
+            <LifeBuoy className="h-3.5 w-3.5" />
+            Passer à quelqu’un
+          </button>
+          {guestLeft != null && guestLeft <= 3 ? (
+            <span className="text-[11px] text-[#6B7280]">
+              {guestLeft > 0
+                ? `${guestLeft} message${guestLeft > 1 ? "s" : ""} restant${guestLeft > 1 ? "s" : ""}`
+                : "Connecte-toi pour continuer"}
+            </span>
+          ) : null}
+          {guestLeft === 0 ? (
+            <Link href="/auth/login" className="text-[11px] font-medium text-[#1F5C2E] underline">
+              Connexion
+            </Link>
+          ) : null}
+        </div>
+
         {error ? (
           <p className="px-3 pb-1 text-xs text-amber-800" role="status">
             {error}
@@ -208,12 +338,52 @@ export function YellyPanel({
             send(input)
           }}
         >
+          <button
+            type="button"
+            onClick={() => {
+              const SR =
+                typeof window !== "undefined"
+                  ? (window as unknown as {
+                      SpeechRecognition?: new () => {
+                        lang: string
+                        onresult: ((e: { results: { [i: number]: { [j: number]: { transcript: string } } } }) => void) | null
+                        onerror: (() => void) | null
+                        start: () => void
+                      }
+                      webkitSpeechRecognition?: new () => {
+                        lang: string
+                        onresult: ((e: { results: { [i: number]: { [j: number]: { transcript: string } } } }) => void) | null
+                        onerror: (() => void) | null
+                        start: () => void
+                      }
+                    })
+                  : null
+              const Ctor = SR?.SpeechRecognition || SR?.webkitSpeechRecognition
+              if (!Ctor) {
+                setError("Dictée non supportée sur cet appareil")
+                return
+              }
+              const rec = new Ctor()
+              rec.lang = "fr-FR"
+              rec.onresult = (e) => {
+                const t = e.results?.[0]?.[0]?.transcript
+                if (t) send(t)
+              }
+              rec.onerror = () => setError("Micro indisponible")
+              rec.start()
+            }}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#1F5C2E]/20 text-[#1F5C2E]"
+            aria-label="Parler à Yelly"
+            disabled={pending}
+          >
+            <Mic className="h-4 w-4" />
+          </button>
           <input
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             maxLength={800}
-            placeholder="Écris à Yelly…"
+            placeholder="Dis-moi ce dont tu as besoin…"
             className="min-w-0 flex-1 rounded-full border border-[#1F5C2E]/15 bg-[#F7F4EE] px-4 py-2.5 text-sm outline-none ring-[#1F5C2E]/30 focus:ring-2"
             disabled={pending}
             autoComplete="off"
@@ -229,40 +399,5 @@ export function YellyPanel({
         </form>
       </div>
     </div>
-  )
-}
-
-export function YellyFab() {
-  const [open, setOpen] = useState(false)
-  const pathname = usePathname()
-
-  // Masquer sur auth / admin (éviter bruit UX)
-  if (
-    pathname.startsWith("/auth") ||
-    pathname.startsWith("/admin") ||
-    pathname.startsWith("/dev")
-  ) {
-    return null
-  }
-
-  return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className={cn(
-          "fixed bottom-24 right-4 z-40 inline-flex items-center gap-2 rounded-full",
-          "bg-[#C45C26] px-4 py-2.5 text-sm font-medium text-white shadow-lg",
-          "transition hover:scale-[1.02] active:scale-95",
-          "lg:bottom-6",
-          open && "pointer-events-none opacity-0",
-        )}
-        aria-label="Ouvrir Yelly, assistante GWA"
-      >
-        <MessageCircle className="h-4 w-4" />
-        Yelly
-      </button>
-      <YellyPanel open={open} onClose={() => setOpen(false)} />
-    </>
   )
 }

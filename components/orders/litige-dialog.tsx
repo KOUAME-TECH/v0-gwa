@@ -65,7 +65,7 @@ export function LitigeDialog({ orderId, open, onOpenChange, onSuccess }: Props) 
         toast.error(data.error || "Litige impossible")
         return
       }
-      toast.success("Litige ouvert — fonds gelés")
+      toast.success("Litige ouvert. Les fonds sont gelés.")
       reset()
       onOpenChange(false)
       onSuccess?.()

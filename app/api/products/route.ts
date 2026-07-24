@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { assertSameOrigin } from "@/lib/security/csrf"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { sanitizeForQuery, sanitizePlainText } from "@/lib/security/validation"
+import { checkPriceAnomaly } from "@/lib/products/price-guard"
 
 /**
  * GET /api/products — catalogue public (filtres)
@@ -112,12 +113,51 @@ export async function POST(request: NextRequest) {
     const name = sanitizePlainText(String(body?.name || ""), 100)
     const price = Number(body?.price)
     const categoryId = body?.category_id || null
+    const ville = body?.ville ? sanitizePlainText(String(body.ville), 80) : ""
+    const originCountry = body?.origin_country
+      ? sanitizePlainText(String(body.origin_country), 80)
+      : ""
 
     if (!name || name.length < 3 || !Number.isFinite(price) || price < 0) {
       return NextResponse.json(
         { error: "Nom et prix valides requis" },
         { status: 400 },
       )
+    }
+
+    if (!ville || !originCountry) {
+      return NextResponse.json(
+        { error: "Ville et pays sont obligatoires pour apparaître dans le Digest local." },
+        { status: 400 },
+      )
+    }
+
+    // Soft warn prix anormal (ne bloque pas si confirm=1)
+    let priceWarning: string | undefined
+    if (categoryId && body?.confirm_price !== true) {
+      const { data: peers } = await supabase
+        .from("products")
+        .select("price")
+        .eq("category_id", categoryId)
+        .eq("status", "active")
+        .eq("unit", body?.unit ? String(body.unit) : "kg")
+        .limit(40)
+      const check = checkPriceAnomaly(
+        price,
+        (peers || []).map((p) => Number(p.price)),
+      )
+      if (!check.ok && check.warning) {
+        priceWarning = check.warning
+        return NextResponse.json(
+          {
+            error: check.warning,
+            code: "PRICE_ANOMALY",
+            median: check.median,
+            requiresConfirm: true,
+          },
+          { status: 409 },
+        )
+      }
     }
 
     const payload = {
@@ -134,16 +174,14 @@ export async function POST(request: NextRequest) {
       images: Array.isArray(body?.images) ? body.images : null,
       video_url: body?.video_url ? String(body.video_url).slice(0, 500) : null,
       audio_url: body?.audio_url ? String(body.audio_url).slice(0, 500) : null,
-      origin_country: body?.origin_country
-        ? sanitizePlainText(String(body.origin_country), 80)
-        : null,
+      origin_country: originCountry,
       origin_region: body?.origin_region
         ? sanitizePlainText(String(body.origin_region), 80)
         : null,
       is_organic: !!body?.is_organic,
       is_fair_trade: !!body?.is_fair_trade,
       region: body?.region ? sanitizePlainText(String(body.region), 80) : null,
-      ville: body?.ville ? sanitizePlainText(String(body.ville), 80) : null,
+      ville,
       audio_lang: body?.audio_lang ? String(body.audio_lang).slice(0, 8) : "fr",
       // Statut imposé serveur — ignore body.status (anti-escalade)
       status: "active",
@@ -161,7 +199,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
 
-    return NextResponse.json({ product: data }, { status: 201 })
+    return NextResponse.json(
+      { product: data, priceWarning: priceWarning || undefined },
+      { status: 201 },
+    )
   } catch (err) {
     console.error("[api/products POST]", err)
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 })

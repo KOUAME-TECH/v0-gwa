@@ -29,9 +29,9 @@ export function EscrowStepper({
   const frozen = escrow_status === "frozen"
 
   return (
-    <div className={cn("rounded-2xl border border-[#E5E7EB] bg-white p-4", className)}>
-      <p className="text-[11px] font-medium uppercase tracking-wide text-[#9CA3AF]">
-        Paiement protégé (Feexpay)
+    <div className={cn("rounded-2xl border border-[#1F5C2E]/12 bg-[#FFF6E5]/80 p-4", className)}>
+      <p className="text-[11px] font-medium uppercase tracking-wide text-[#6B7280]">
+        Suivi de ton argent
       </p>
       <ol className={cn("mt-3 flex items-start justify-between gap-1", compact && "mt-2")}>
         {ESCROW_STEP_LABELS.map((s, i) => {
@@ -74,7 +74,7 @@ export function EscrowStepper({
         {escrowStatusMessage(step, escrow_status)}
       </p>
       <p className="mt-2 text-[11px] text-[#6B7280]">
-        Tu paies maintenant ; le vendeur touche l’argent après ta confirmation de livraison.
+        Tu paies maintenant. Le vendeur touche l’argent après ta confirmation de réception.
       </p>
     </div>
   )

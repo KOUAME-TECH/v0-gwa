@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Search, SlidersHorizontal, MapPin, Heart, X, ChevronLeft, ShoppingCart, Plus, ShoppingBag } from "lucide-react"
+import { Search, SlidersHorizontal, MapPin, Heart, X, ChevronLeft, Plus, ShoppingBag } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
@@ -15,6 +15,7 @@ import { ListenMicButton } from "@/components/media/clickable-listen-text"
 import { buildProductListenText } from "@/lib/media/product-listen"
 import { ShopVoiceTourButton } from "@/components/media/shop-voice-tour-button"
 import { DigestBanner } from "@/components/media/digest-banner"
+import { YellyAideButton } from "@/components/yelly/yelly-aide-button"
 import { useShopVoiceTour } from "@/hooks/use-shop-voice-tour"
 import { useRealtimeLocation } from "@/hooks/use-realtime-location"
 import {
@@ -26,6 +27,10 @@ import {
   loadCatalogCache,
   saveCatalogCache,
 } from "@/lib/offline/catalog-cache"
+import { CartIconButton } from "@/components/cart/cart-icon-button"
+import { addOrIncrementCart } from "@/lib/cart/add"
+import { cn } from "@/lib/utils"
+import { useHideOnScroll } from "@/hooks/use-hide-on-scroll"
 
 type Product = {
   id: string
@@ -105,6 +110,17 @@ function MarketplaceGridCard({
         {p.is_organic && (
           <Badge className="absolute top-2 left-2 bg-[#2F7D32] text-white text-[10px] px-1.5 py-0.5">Bio</Badge>
         )}
+        {p.created_at &&
+          Date.now() - new Date(p.created_at).getTime() < 24 * 60 * 60 * 1000 && (
+            <Badge
+              className={cn(
+                "absolute top-2 text-white text-[10px] px-1.5 py-0.5 bg-[#C27D10]",
+                p.is_organic ? "left-12" : "left-2",
+              )}
+            >
+              Nouveau
+            </Badge>
+          )}
       </div>
       <div className="pt-2.5 px-0.5">
         <div className="flex items-start gap-1">
@@ -167,6 +183,7 @@ function MarketplaceContent() {
     label: geoLabel,
   } = useRealtimeLocation({ auto: true, maximumAge: 0 })
   const supabase = createClient()
+  const headerHidden = useHideOnScroll(true)
 
   useEffect(() => { fetchData() }, [])
 
@@ -314,7 +331,7 @@ function MarketplaceContent() {
 
   async function toggleFavorite(id: string, e: React.MouseEvent) {
     e.preventDefault(); e.stopPropagation()
-    if (!userId) { toast.error("Connectez-vous pour ajouter aux favoris"); return }
+    if (!userId) { toast.error("Connecte-toi pour ajouter aux favoris"); return }
     const isFav = favorites.has(id)
     setFavorites(prev => { const s = new Set(prev); isFav ? s.delete(id) : s.add(id); return s })
     if (isFav) {
@@ -326,13 +343,10 @@ function MarketplaceContent() {
 
   async function addToCart(id: string, e: React.MouseEvent) {
     e.preventDefault(); e.stopPropagation()
-    if (!userId) { toast.error("Connectez-vous pour ajouter au panier"); return }
-    const { error } = await supabase.from("cart_items").upsert(
-      { user_id: userId, product_id: id, quantity: 1 },
-      { onConflict: "user_id,product_id" }
-    )
-    if (error) toast.error("Erreur ajout panier")
-    else toast.success("Ajoute au panier")
+    if (!userId) { toast.error("Connecte-toi pour ajouter au panier"); return }
+    const res = await addOrIncrementCart(supabase, userId, id, 1)
+    if (!res.ok) toast.error("Erreur ajout panier")
+    else toast.success("Ajouté au panier")
   }
 
   const filteredProducts = useMemo(
@@ -512,7 +526,14 @@ function MarketplaceContent() {
   return (
     <div className="min-h-screen bg-[#FFF6E5]">
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-white/95 border-b border-[#E5E7EB] backdrop-blur-sm lg:bg-[#FFF6E5]/90 lg:border-[#1F5C2E]/10">
+      <header
+        className={cn(
+          "sticky top-0 z-40 bg-white/95 border-b border-[#E5E7EB] backdrop-blur-sm lg:bg-[#FFF6E5]/90 lg:border-[#1F5C2E]/10",
+          "transition-transform duration-300 ease-out will-change-transform",
+          headerHidden && "-translate-y-full",
+        )}
+        aria-hidden={headerHidden}
+      >
         <div className="gwa-shell-wide flex items-center gap-3 p-3 md:px-5 lg:py-4">
           <Link href="/" className="lg:hidden"><ChevronLeft className="h-6 w-6" /></Link>
           <div className="flex-1 min-w-0">
@@ -523,6 +544,7 @@ function MarketplaceContent() {
               Produits frais près de toi — écoute ou parcours
             </p>
           </div>
+          <YellyAideButton source="marketplace_header" compact className="lg:hidden text-[#1F5C2E]" />
           <ShopVoiceTourButton
             active={parcours.active}
             index={parcours.index}
@@ -531,11 +553,7 @@ function MarketplaceContent() {
             idleLabel="Parcours"
             className="shrink-0"
           />
-          <Link href="/panier">
-            <Button variant="ghost" size="icon" className="rounded-xl h-9 w-9">
-              <ShoppingCart className="h-5 w-5 text-[#4B5563]" />
-            </Button>
-          </Link>
+          <CartIconButton />
         </div>
 
         {/* Search */}

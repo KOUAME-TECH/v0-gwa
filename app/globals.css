@@ -232,6 +232,10 @@
     font-size: 16px;
     -webkit-text-size-adjust: 100%;
   }
+
+  html.gwa-large-text {
+    font-size: 18.5px;
+  }
   
   body {
     @apply bg-background text-foreground antialiased;

@@ -8,8 +8,9 @@ type Ctx = { params: Promise<{ id: string }> }
 /**
  * POST /api/orders/[id]/confirm
  * Acheteur confirme réception → release escrow (uniquement si payé + held).
+ * Body JSON optionnel : { receptionPhotoUrl?: string }
  */
-export async function POST(_request: NextRequest, context: Ctx) {
+export async function POST(request: NextRequest, context: Ctx) {
   try {
     const { id } = await context.params
     const supabase = await createClient()
@@ -18,6 +19,17 @@ export async function POST(_request: NextRequest, context: Ctx) {
     } = await supabase.auth.getUser()
     if (!user) {
       return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
+    }
+
+    let receptionPhotoUrl: string | null = null
+    try {
+      const body = await request.json()
+      const raw = typeof body?.receptionPhotoUrl === "string" ? body.receptionPhotoUrl.trim() : ""
+      if (raw && /^https?:\/\//i.test(raw) && raw.length < 800) {
+        receptionPhotoUrl = raw
+      }
+    } catch {
+      /* body vide OK */
     }
 
     const { data: order } = await supabase
@@ -49,16 +61,21 @@ export async function POST(_request: NextRequest, context: Ctx) {
     const admin = createAdminClient()
     const now = new Date().toISOString()
 
-    await admin
-      .from("orders")
-      .update({
-        status: "delivered",
-        escrow_status: "released",
-        confirmed_by_buyer_at: now,
-        delivered_at: now,
-        updated_at: now,
-      })
-      .eq("id", id)
+    const orderPatch: Record<string, unknown> = {
+      status: "delivered",
+      escrow_status: "released",
+      confirmed_by_buyer_at: now,
+      delivered_at: now,
+      updated_at: now,
+    }
+    if (receptionPhotoUrl) {
+      orderPatch.notes = [order.notes, `Photo réception: ${receptionPhotoUrl}`]
+        .filter(Boolean)
+        .join("\n")
+        .slice(0, 2000)
+    }
+
+    await admin.from("orders").update(orderPatch).eq("id", id)
 
     await admin
       .from("escrow_transactions")
@@ -71,7 +88,9 @@ export async function POST(_request: NextRequest, context: Ctx) {
       performed_by: user.id,
       action: "buyer_confirmed",
       new_value: "released",
-      notes: "Confirmation réception — release escrow",
+      notes: receptionPhotoUrl
+        ? `Confirmation avec photo: ${receptionPhotoUrl}`
+        : "Confirmation réception — release escrow",
     })
 
     // Facture numérique (lean) — une par commande, idempotent via unique(order_id)
@@ -100,8 +119,8 @@ export async function POST(_request: NextRequest, context: Ctx) {
     })
 
     void sendPushToUser(supabase as never, order.seller_id, {
-      title: "Escrow libéré",
-      body: `${order.order_number} — paiement vendeur`,
+      title: "Argent libéré",
+      body: `${order.order_number} — l’acheteur a confirmé`,
       url: "/wallet",
     })
 

@@ -217,6 +217,22 @@ export default function AdminSupportPage() {
           )}
           <DialogFooter className="flex-wrap gap-2">
             <Button
+              variant="default"
+              className="bg-[#1F5C2E] hover:bg-[#184a25]"
+              disabled={busy || !selected}
+              onClick={() => {
+                if (!selected) return
+                const subject = encodeURIComponent(`Re: ${selected.subject}`)
+                const body = encodeURIComponent(
+                  `Bonjour ${selected.name},\n\nMerci pour votre message concernant « ${selected.subject} ».\n\n\n\nCordialement,\nL'équipe GWA`,
+                )
+                window.open(`mailto:${selected.email}?subject=${subject}&body=${body}`, "_blank")
+                void updateStatus("in_progress")
+              }}
+            >
+              Répondre (e-mail)
+            </Button>
+            <Button
               variant="outline"
               disabled={busy}
               onClick={() => void updateStatus("in_progress")}

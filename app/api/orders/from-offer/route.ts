@@ -141,8 +141,19 @@ export async function POST(request: Request) {
     }
 
     const subtotal = unitPrice * quantity
-    const shipping = subtotal > 100_000 ? 0 : 5_000
-    const serviceFee = Math.round(subtotal * 0.02)
+    // Pas de logistique GWA pour l’instant
+    const shipping = 0
+    const { data: buyerProfile } = await supabase
+      .from("profiles")
+      .select("subscription_tier")
+      .eq("id", buyerId)
+      .maybeSingle()
+    const { computeServiceFee } = await import("@/lib/pricing/service-fee")
+    const feeInfo = computeServiceFee(
+      subtotal,
+      (buyerProfile as { subscription_tier?: string } | null)?.subscription_tier,
+    )
+    const serviceFee = feeInfo.fee
     const totalAmount = subtotal + shipping + serviceFee
     const commissionPct = 5
     const commissionFcfa = Math.round(totalAmount * (commissionPct / 100))
@@ -166,7 +177,7 @@ export async function POST(request: Request) {
         paiement_schema: "100_livraison",
         paiement_type: "mobile_money",
         payment_method: "mobile_money",
-        notes: `Prix négocié chat (offre ${messageId}) — ${offer.note || ""}`.trim(),
+        notes: `Prix négocié chat (offre ${messageId})${offer.note ? `. ${offer.note}` : ""}`.trim(),
         commission_pct: commissionPct,
         commission_fcfa: commissionFcfa,
         vendeur_recoit_fcfa: vendeurRecoit,

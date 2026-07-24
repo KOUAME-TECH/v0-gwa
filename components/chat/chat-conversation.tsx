@@ -12,6 +12,9 @@ import {
   formatOfferAmount,
   type PriceOfferPayload,
 } from "@/lib/chat/offer"
+import { buildLocationContent, isLocationMessage } from "@/lib/chat/location"
+import { ChatLocationBubble } from "@/components/chat/chat-location-bubble"
+import { EMOJI_CATEGORIES } from "@/lib/chat/emojis"
 import {
   ArrowLeft, Send, Mic, Smile, Phone, Video, MoreVertical,
   Check, CheckCheck, ImageIcon, FileText, X, Trash2, Copy, Reply,
@@ -68,6 +71,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   const [isRecording, setIsRecording] = useState(false)
   const [recordSec, setRecordSec] = useState(0)
   const [showEmojis, setShowEmojis] = useState(false)
+  const [emojiCat, setEmojiCat] = useState(EMOJI_CATEGORIES[0]?.id ?? "smileys")
   const [audioPreview, setAudioPreview] = useState<{ blob: Blob; url: string; duration: string } | null>(null)
   const [isPlayingPreview, setIsPlayingPreview] = useState(false)
   const [loadingMsgs, setLoadingMsgs] = useState(true)
@@ -83,8 +87,12 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   const [pinned, setPinned] = useState(false)
   const [liveCameraOpen, setLiveCameraOpen] = useState(false)
   const [cameraBusy, setCameraBusy] = useState(false)
+  const [peerTyping, setPeerTyping] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastTypingSent = useRef(0)
+  const channelRef = useRef<ReturnType<ReturnType<typeof createClient>["channel"]> | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const imgRef = useRef<HTMLInputElement>(null)
@@ -292,10 +300,36 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
           setMessages(prev => prev.map(m => m.id === msg.id ? msg : m))
         }
       )
+      .on("broadcast", { event: "typing" }, (msg: { payload?: { userId?: string } }) => {
+        const p = msg.payload
+        if (p?.userId && p.userId !== userId) {
+          setPeerTyping(true)
+          if (typingTimer.current) clearTimeout(typingTimer.current)
+          typingTimer.current = setTimeout(() => setPeerTyping(false), 2200)
+        }
+      })
       .subscribe()
 
-    return () => { mounted = false; supabase.removeChannel(channel) }
+    channelRef.current = channel
+
+    return () => {
+      mounted = false
+      channelRef.current = null
+      if (typingTimer.current) clearTimeout(typingTimer.current)
+      supabase.removeChannel(channel)
+    }
   }, [conversation.id])
+
+  const signalTyping = () => {
+    const now = Date.now()
+    if (now - lastTypingSent.current < 1200) return
+    lastTypingSent.current = now
+    void channelRef.current?.send({
+      type: "broadcast",
+      event: "typing",
+      payload: { userId },
+    })
+  }
 
   useEffect(() => { scroll() }, [messages.length, scroll])
 
@@ -410,10 +444,10 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       toast.error("Localisation indisponible")
       return
     }
-    const toastId = toast.loading("Position en cours…")
+    const toastId = toast.loading("On trouve ta position…")
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
-        const { latitude, longitude, accuracy, altitude } = pos.coords
+        const { latitude, longitude, accuracy } = pos.coords
         let addressLine = ""
         try {
           const res = await fetch(
@@ -426,38 +460,44 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
         } catch {
           /* coords suffisent */
         }
-        const acc =
-          Number.isFinite(accuracy) ? ` ±${Math.round(accuracy)} m` : ""
-        const alt =
-          altitude != null && Number.isFinite(altitude)
-            ? ` · alt. ${Math.round(altitude)} m`
-            : ""
-        const maps = `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=18/${latitude}/${longitude}`
-        const content = [
-          "📍 Ma position",
-          addressLine || null,
-          `${latitude.toFixed(6)}, ${longitude.toFixed(6)}${acc}${alt}`,
-          maps,
-        ]
-          .filter(Boolean)
-          .join("\n")
+        const content = buildLocationContent({
+          lat: latitude,
+          lon: longitude,
+          address: addressLine || undefined,
+          accuracyM: Number.isFinite(accuracy) ? accuracy : undefined,
+        })
         const { error } = await supabase.from("messages").insert({
           conversation_id: conversation.id,
           sender_id: userId,
           content,
-          message_type: "text",
+          message_type: "location",
         })
         await supabase
           .from("conversations")
           .update({ last_message_at: new Date().toISOString() })
           .eq("id", conversation.id)
         toast.dismiss(toastId)
-        if (error) toast.error("Envoi impossible")
-        else toast.success("Position envoyée")
+        if (error) {
+          // Fallback si le type location est refusé côté DB
+          const maps = `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=18/${latitude}/${longitude}`
+          const textContent = ["📍 Ma position", addressLine || null, maps]
+            .filter(Boolean)
+            .join("\n")
+          const { error: e2 } = await supabase.from("messages").insert({
+            conversation_id: conversation.id,
+            sender_id: userId,
+            content: textContent,
+            message_type: "text",
+          })
+          if (e2) toast.error("Envoi impossible")
+          else toast.success("Position envoyée")
+          return
+        }
+        toast.success("Position envoyée")
       },
       () => {
         toast.dismiss(toastId)
-        toast.error("Autorisez la localisation")
+        toast.error("Autorise la localisation")
       },
       { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
     )
@@ -525,8 +565,9 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
         setRecordSec(0)
         setAudioPreview(null)
         recInterval.current = setInterval(() => setRecordSec(p => p + 1), 1000)
-      } catch {
-        toast.error("Microphone inaccessible")
+      } catch (err) {
+        console.warn("[chat] mic", err)
+        toast.error("Micro inaccessible — autorise le micro dans le navigateur")
       }
     }
   }
@@ -815,6 +856,9 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   }
 
   function renderContent(msg: Message) {
+    if (msg.message_type === "location" || isLocationMessage(msg.message_type, msg.content)) {
+      return <ChatLocationBubble content={msg.content} messageType={msg.message_type} />
+    }
     if (msg.message_type === "offer") {
       const offer = parseOfferContent(msg.content)
       if (!offer) {
@@ -1079,6 +1123,11 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
           })
         )}
         <div ref={messagesEndRef} />
+        {peerTyping ? (
+          <p className="px-4 pb-2 text-xs italic text-[#6B7280]">
+            {other?.full_name?.split(" ")[0] || "L’autre"} écrit…
+          </p>
+        ) : null}
       </div>
 
       {/* REPLY PREVIEW */}
@@ -1268,11 +1317,11 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
         </>
       )}
 
-      {/* INPUT BAR */}
+      {/* INPUT BAR — style WhatsApp : 1 seul micro (bouton vert à droite) */}
       {!isRecording && !audioPreview && (
         <div className="bg-[#f0f2f5] px-2 py-1.5 shrink-0 safe-bottom">
           <form onSubmit={handleSend} className="flex items-end gap-1.5">
-            <div className="flex-1 flex items-center bg-white rounded-[25px] shadow-sm min-h-[48px] px-2">
+            <div className="flex-1 flex items-center bg-white rounded-[25px] shadow-sm min-h-[48px] px-1.5">
               <button type="button" onClick={() => setShowEmojis(!showEmojis)}
                 className={`p-2 shrink-0 ${showEmojis ? "text-[#1F5C2E]" : "text-[#54656f]"} active:text-[#1F5C2E]`} aria-label="Emojis">
                 <Smile className="h-6 w-6" />
@@ -1281,7 +1330,10 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
               <input
                 ref={inputRef}
                 value={newMessage}
-                onChange={e => setNewMessage(e.target.value)}
+                onChange={e => {
+                  setNewMessage(e.target.value)
+                  signalTyping()
+                }}
                 placeholder="Message"
                 className="flex-1 bg-transparent border-0 text-[15px] h-[48px] focus:outline-none placeholder:text-[#8696a0] px-1"
                 enterKeyHint="send"
@@ -1289,8 +1341,8 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
               />
 
               <button type="button" onClick={() => setShowAttach(true)}
-                className="p-2 text-[#54656f] active:text-[#1F5C2E] shrink-0" aria-label="Joindre un fichier">
-                <Paperclip className="h-6 w-6" />
+                className="p-2 text-[#54656f] active:text-[#1F5C2E] shrink-0" aria-label="Joindre">
+                <Paperclip className="h-6 w-6 -rotate-45" />
               </button>
 
               {!newMessage.trim() && (
@@ -1313,9 +1365,9 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
                 <Send className="h-5 w-5" />
               </button>
             ) : (
-              <button type="button" onClick={toggleVoice}
+              <button type="button" onClick={() => void toggleVoice()}
                 className="w-[48px] h-[48px] rounded-full bg-[#1F5C2E] text-white flex items-center justify-center shrink-0 active:scale-90 transition-transform shadow-sm"
-                aria-label="Enregistrement vocal">
+                aria-label="Note vocale">
                 <Mic className="h-5 w-5" />
               </button>
             )}
@@ -1328,13 +1380,35 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
           <input ref={imgRef} type="file" className="hidden" accept="image/*,video/*"
             onChange={e => { const f = e.target.files?.[0]; if (f) void handleFileUpload(f, "image"); e.target.value = "" }} />
 
-          {/* EMOJI PICKER */}
           {showEmojis && (
-            <div className="bg-white border-t border-gray-100 px-2 py-2 max-h-[200px] overflow-y-auto">
-              <div className="grid grid-cols-8 gap-1">
-                {["😀","😂","😍","🥰","😘","😊","🤗","😎","🤔","😏","😭","😢","🥺","😤","🤯","🔥","❤️","💕","👍","👎","🙏","💪","🎉","✨","🌟","⭐","🌍","🌱","🍀","🌸","🍎","🍋","🥑","🌽","🍫","☕","🐔","🐄","🐐","🐟","🚜","🏠","📦","💰","📍","📞","✅","❌","⚡","💡","🎯","📸","🛒","🤝","🎊","👋","🙌","💯","🆗","ℹ️","⏰","🗓️","📝","🔔"].map(emoji => (
-                  <button key={emoji} type="button" onClick={() => { setNewMessage(prev => prev + emoji); setShowEmojis(false); inputRef.current?.focus() }}
-                    className="text-2xl p-1.5 rounded-lg active:bg-gray-100 hover:bg-gray-50 transition-colors">
+            <div className="mt-1.5 overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-sm">
+              <div className="flex gap-1 overflow-x-auto border-b border-[#F3F4F6] px-2 py-1.5 scrollbar-none">
+                {EMOJI_CATEGORIES.map((cat) => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setEmojiCat(cat.id)}
+                    className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                      emojiCat === cat.id
+                        ? "bg-[#E8F0E9] text-[#1F5C2E]"
+                        : "text-[#667781] active:bg-gray-50"
+                    }`}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
+              <div className="grid max-h-[220px] grid-cols-8 gap-0.5 overflow-y-auto p-2">
+                {(EMOJI_CATEGORIES.find((c) => c.id === emojiCat)?.emojis ?? []).map((emoji, idx) => (
+                  <button
+                    key={`${emoji}-${idx}`}
+                    type="button"
+                    onClick={() => {
+                      setNewMessage((prev) => prev + emoji)
+                      inputRef.current?.focus()
+                    }}
+                    className="rounded-lg p-1.5 text-[26px] leading-none transition-colors active:bg-gray-100 hover:bg-gray-50"
+                  >
                     {emoji}
                   </button>
                 ))}

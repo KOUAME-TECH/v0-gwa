@@ -176,25 +176,37 @@ function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
-      <header className="px-5 pt-4">
-        <Link href="/" className="inline-flex p-2 -ml-2 active:opacity-60">
-          <ArrowLeft className="h-5 w-5" />
+    <div className="relative flex min-h-screen flex-col overflow-hidden bg-[#FFF8F0]">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-[0.55]"
+        style={{
+          background:
+            "radial-gradient(ellipse 80% 50% at 10% -10%, #E8F0E9 0%, transparent 55%), radial-gradient(ellipse 60% 40% at 100% 0%, #F5E6C8 0%, transparent 50%)",
+        }}
+      />
+      <header className="relative z-10 flex items-center justify-between px-5 pt-4">
+        <Link href="/" className="inline-flex p-2 -ml-2 active:opacity-60" aria-label="Retour">
+          <ArrowLeft className="h-5 w-5 text-[#1F5C2E]" />
         </Link>
+        <GwaMark size={28} showWordmark wordmarkClassName="text-xl tracking-tight text-[#1F5C2E]" />
+        <span className="w-9" />
       </header>
 
-      <main className="flex-1 px-5 pt-8 pb-10">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight mb-2">Connexion</h1>
-          <p className="text-neutral-500">
-            Téléphone ou email — même si le compte est déjà lié ailleurs.
+      <main className="relative z-10 mx-auto w-full max-w-md flex-1 px-5 pb-10 pt-6">
+        <div className="mb-7">
+          <h1 className="font-display text-[1.75rem] leading-tight text-[#111827]">
+            Content de te revoir
+          </h1>
+          <p className="mt-2 text-[15px] leading-relaxed text-[#4B5563]">
+            Entre avec ton numéro ou ton email — comme d’habitude.
           </p>
         </div>
 
         <HibpPasswordBanner />
 
         {error && (
-          <div className="mb-5 p-4 rounded-xl bg-red-50 text-red-600 text-sm font-medium">
+          <div className="mb-5 rounded-2xl border border-red-100 bg-red-50/90 p-4 text-sm font-medium text-red-700">
             {error}
           </div>
         )}
@@ -208,23 +220,23 @@ function LoginForm() {
           }}
           className="w-full"
         >
-          <TabsList className="w-full h-12 rounded-xl bg-neutral-100 p-1 mb-6">
-            <TabsTrigger value="phone" className="flex-1 rounded-lg gap-2 h-10">
+          <TabsList className="mb-6 h-12 w-full rounded-2xl bg-white/80 p-1 ring-1 ring-[#1F5C2E]/10">
+            <TabsTrigger value="phone" className="h-10 flex-1 gap-2 rounded-xl data-[state=active]:bg-[#1F5C2E] data-[state=active]:text-white">
               <Phone className="h-4 w-4" />
               Téléphone
             </TabsTrigger>
-            <TabsTrigger value="email" className="flex-1 rounded-lg gap-2 h-10">
+            <TabsTrigger value="email" className="h-10 flex-1 gap-2 rounded-xl data-[state=active]:bg-[#1F5C2E] data-[state=active]:text-white">
               <Mail className="h-4 w-4" />
               Email
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="phone" className="space-y-5 mt-0">
+          <TabsContent value="phone" className="mt-0 space-y-5">
             {phoneStep === "input" ? (
               <>
                 <div>
-                  <label className="text-sm font-medium text-neutral-700 mb-2 block">
-                    Numéro mobile
+                  <label className="mb-2 block text-sm font-medium text-[#374151]">
+                    Ton numéro
                   </label>
                   <PhoneInput
                     value={phone}
@@ -233,49 +245,48 @@ function LoginForm() {
                     onCountryChange={setCountryCode}
                     disabled={isLoading}
                   />
-                  <p className="text-xs text-neutral-400 mt-2">
-                    Un code SMS sera envoyé. Le numéro doit être lié à
-                    l&apos;email de votre première inscription.
+                  <p className="mt-2 text-xs leading-relaxed text-[#6B7280]">
+                    On t’envoie un code SMS. Utilise le même numéro qu’à l’inscription.
                   </p>
                 </div>
                 <Button
                   type="button"
-                  className="w-full h-14 rounded-full text-[15px] font-semibold"
+                  className="h-12 w-full rounded-xl bg-[#1F5C2E] text-[15px] font-semibold hover:bg-[#184a25]"
                   disabled={isLoading || phone.replace(/\D/g, "").length < 8}
                   onClick={handleSendOtp}
                 >
-                  {isLoading ? "Envoi SMS..." : "Recevoir le code SMS"}
+                  {isLoading ? "Envoi…" : "Recevoir le code"}
                 </Button>
               </>
             ) : (
               <>
-                <div className="text-center mb-2">
-                  <p className="text-sm text-neutral-500">
-                    Code SMS envoyé au{" "}
-                    <span className="font-medium text-neutral-900">{maskedPhone}</span>
+                <div className="mb-2 text-center">
+                  <p className="text-sm text-[#4B5563]">
+                    Code envoyé au{" "}
+                    <span className="font-semibold text-[#111827]">{maskedPhone}</span>
                   </p>
                   {linkedEmailMasked ? (
-                    <p className="text-xs text-neutral-400 mt-1">
+                    <p className="mt-1 text-xs text-[#6B7280]">
                       Compte lié : {linkedEmailMasked}
                     </p>
                   ) : null}
                   <button
                     type="button"
-                    className="text-sm text-neutral-500 underline mt-1"
+                    className="mt-2 text-sm text-[#1F5C2E] underline underline-offset-2"
                     onClick={() => {
                       setPhoneStep("input")
                       setOtp("")
                       setResendCooldown(0)
                     }}
                   >
-                    Modifier le numéro
+                    Changer de numéro
                   </button>
                 </div>
 
                 <OtpInput value={otp} onChange={setOtp} disabled={isLoading} />
 
                 <div className="text-center text-sm">
-                  <span className="text-neutral-500">Expire dans </span>
+                  <span className="text-[#6B7280]">Expire dans </span>
                   {otpExpiresAt > 0 && (
                     <OtpCountdown expiresAt={otpExpiresAt} />
                   )}
@@ -283,22 +294,22 @@ function LoginForm() {
 
                 <Button
                   type="button"
-                  className="w-full h-14 rounded-full text-[15px] font-semibold"
+                  className="h-12 w-full rounded-xl bg-[#1F5C2E] text-[15px] font-semibold hover:bg-[#184a25]"
                   disabled={isLoading || otp.length !== 6}
                   onClick={handleVerifyOtp}
                 >
-                  {isLoading ? "Vérification..." : "Valider le code"}
+                  {isLoading ? "Vérification…" : "Valider"}
                 </Button>
 
-                <p className="text-center text-sm text-neutral-500">
+                <p className="text-center text-sm text-[#6B7280]">
                   Pas reçu ?{" "}
                   <button
                     type="button"
-                    className="font-medium text-neutral-900 disabled:opacity-40"
+                    className="font-medium text-[#1F5C2E] disabled:opacity-40"
                     disabled={resendCooldown > 0 || isLoading}
                     onClick={handleResendOtp}
                   >
-                    {resendCooldown > 0 ? `Renvoyer (${resendCooldown}s)` : "Renvoyer le code"}
+                    {resendCooldown > 0 ? `Renvoyer (${resendCooldown}s)` : "Renvoyer"}
                   </button>
                 </p>
               </>
@@ -308,14 +319,14 @@ function LoginForm() {
           <TabsContent value="email" className="mt-0">
             <form onSubmit={handleEmailLogin} className="space-y-5">
               <div>
-                <label htmlFor="email" className="text-sm font-medium text-neutral-700 mb-2 block">
+                <label htmlFor="email" className="mb-2 block text-sm font-medium text-[#374151]">
                   Email
                 </label>
                 <Input
                   id="email"
                   type="email"
-                  placeholder="votre@email.com"
-                  className="h-14 rounded-xl border-neutral-200 text-[15px] focus:border-neutral-400 focus:ring-0"
+                  placeholder="ex. ama@email.com"
+                  className="h-12 rounded-xl border-[#E5E7EB] bg-white text-[15px] focus:border-[#1F5C2E] focus:ring-[#1F5C2E]/20"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -324,11 +335,11 @@ function LoginForm() {
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label htmlFor="password" className="text-sm font-medium text-neutral-700">
+                <div className="mb-2 flex items-center justify-between">
+                  <label htmlFor="password" className="text-sm font-medium text-[#374151]">
                     Mot de passe
                   </label>
-                  <Link href="/auth/forgot-password" className="text-sm font-medium text-neutral-500">
+                  <Link href="/auth/forgot-password" className="text-sm font-medium text-[#1F5C2E]">
                     Oublié ?
                   </Link>
                 </div>
@@ -336,8 +347,8 @@ function LoginForm() {
                   <Input
                     id="password"
                     type={showPassword ? "text" : "password"}
-                    placeholder="Mot de passe"
-                    className="h-14 rounded-xl border-neutral-200 text-[15px] pr-12 focus:border-neutral-400 focus:ring-0"
+                    placeholder="Ton mot de passe"
+                    className="h-12 rounded-xl border-[#E5E7EB] bg-white pr-12 text-[15px] focus:border-[#1F5C2E] focus:ring-[#1F5C2E]/20"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
@@ -345,13 +356,14 @@ function LoginForm() {
                   />
                   <button
                     type="button"
-                    className="absolute right-4 top-1/2 -translate-y-1/2 p-1 active:opacity-60"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 active:opacity-60"
                     onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? "Masquer" : "Afficher"}
                   >
                     {showPassword ? (
-                      <EyeOff className="h-5 w-5 text-neutral-400" />
+                      <EyeOff className="h-5 w-5 text-[#9CA3AF]" />
                     ) : (
-                      <Eye className="h-5 w-5 text-neutral-400" />
+                      <Eye className="h-5 w-5 text-[#9CA3AF]" />
                     )}
                   </button>
                 </div>
@@ -359,26 +371,22 @@ function LoginForm() {
 
               <Button
                 type="submit"
-                className="w-full h-14 rounded-full text-[15px] font-semibold mt-4"
+                className="mt-2 h-12 w-full rounded-xl bg-[#1F5C2E] text-[15px] font-semibold hover:bg-[#184a25]"
                 disabled={isLoading}
               >
-                {isLoading ? "Connexion..." : "Se connecter"}
+                {isLoading ? "Connexion…" : "Se connecter"}
               </Button>
             </form>
           </TabsContent>
         </Tabs>
 
         <p className="mt-8 text-center text-[15px]">
-          <span className="text-neutral-500">Pas de compte ? </span>
-          <Link href="/auth/signup" className="font-semibold text-neutral-900">
-            Inscription
+          <span className="text-[#6B7280]">Pas encore sur GWA ? </span>
+          <Link href="/auth/signup" className="font-semibold text-[#1F5C2E]">
+            Créer un compte
           </Link>
         </p>
       </main>
-
-      <div className="py-6 flex justify-center">
-        <GwaMark size={40} showWordmark wordmarkClassName="text-2xl tracking-tight" />
-      </div>
     </div>
   )
 }

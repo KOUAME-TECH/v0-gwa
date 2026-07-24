@@ -23,6 +23,7 @@ import { ArrowLeft, Camera, Loader2, Check, MapPin, BadgeCheck, ShieldCheck } fr
 import { Switch } from "@/components/ui/switch"
 import { toast } from "sonner"
 import { useListenMode } from "@/hooks/use-listen-mode"
+import { useA11yPrefs } from "@/hooks/use-a11y-prefs"
 import { AUDIO_LANGS } from "@/lib/media/audio-langs"
 import {
   shouldPromptIdentityVerification,
@@ -93,6 +94,7 @@ export default function EditProfilPage() {
   } = useRealtimeLocation({ auto: true, maximumAge: 0 })
   const { enabled: listenMode, toggle: toggleListenMode, hydrated: listenHydrated } =
     useListenMode()
+  const { largeText, setLargeText, quietHours, setQuietHours } = useA11yPrefs()
 
   // Auto-enregistrer la position dès qu'elle est captée (pas de saisie manuelle)
   useEffect(() => {
@@ -547,12 +549,34 @@ export default function EditProfilPage() {
           <div className="flex items-center justify-between gap-3 rounded-xl border border-[#E5E7EB] px-3 py-2.5">
             <div className="min-w-0">
               <p className="text-sm text-[#374151]">Digest quotidien</p>
-              <p className="text-[11px] text-[#9CA3AF]">Nouveautés près de chez vous</p>
+              <p className="text-[11px] text-[#9CA3AF]">Nouveautés près de chez toi</p>
             </div>
             <Switch
               checked={formData.digest_enabled}
               onCheckedChange={(checked) => setFormData({ ...formData, digest_enabled: checked })}
               aria-label="Activer Harmattan Digest"
+            />
+          </div>
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-[#E5E7EB] px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="text-sm text-[#374151]">Grand texte</p>
+              <p className="text-[11px] text-[#9CA3AF]">Plus confortable à lire</p>
+            </div>
+            <Switch
+              checked={largeText}
+              onCheckedChange={setLargeText}
+              aria-label="Grand texte"
+            />
+          </div>
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-[#E5E7EB] px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="text-sm text-[#374151]">Silence la nuit</p>
+              <p className="text-[11px] text-[#9CA3AF]">Moins de notifs entre 22h et 6h</p>
+            </div>
+            <Switch
+              checked={quietHours}
+              onCheckedChange={setQuietHours}
+              aria-label="Quiet hours"
             />
           </div>
         </div>

@@ -7,15 +7,20 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { 
-  ShoppingCart, Trash2, Plus, Minus, MapPin, Truck, 
-  CreditCard, Smartphone, Building2, ArrowRight, ChevronLeft,
-  Package, Clock, X, CheckCircle2
+  ShoppingCart, Trash2, Plus, Minus, MapPin, 
+  Smartphone, Building2, ArrowRight, ChevronLeft,
+  Package, X
 } from "lucide-react"
 import Link from "next/link"
 import { EscrowStepper } from "@/components/orders/escrow-stepper"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import {
+  computeServiceFee,
+  TIER_LABELS_FR,
+  type SubscriptionTier,
+} from "@/lib/pricing/service-fee"
 
 interface CartItem {
   id: string
@@ -53,6 +58,7 @@ export default function CartPage() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [checkoutError, setCheckoutError] = useState("")
   const [user, setUser] = useState<any>(null)
+  const [subscriptionTier, setSubscriptionTier] = useState<string>("free")
   const [deliveryAddress, setDeliveryAddress] = useState({
     name: "", phone: "", address: "", city: "", country: "ci"
   })
@@ -74,7 +80,7 @@ export default function CartPage() {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("full_name, phone, city, country")
+      .select("full_name, phone, city, country, subscription_tier")
       .eq("id", user.id)
       .single()
 
@@ -86,6 +92,7 @@ export default function CartPage() {
         city: profile.city || "",
         country: profile.country || "ci"
       })
+      setSubscriptionTier((profile as { subscription_tier?: string }).subscription_tier || "free")
     }
 
     const { data: cartItems } = await supabase
@@ -111,6 +118,8 @@ export default function CartPage() {
     
     await supabase.from("cart_items").update({ quantity: newQuantity }).eq("id", itemId)
     setCart(cart.map(c => c.id === itemId ? { ...c, quantity: newQuantity } : c))
+    const { notifyCartChanged } = await import("@/lib/cart/events")
+    notifyCartChanged()
   }
 
   const setQuantityExact = async (itemId: string, raw: string) => {
@@ -121,17 +130,22 @@ export default function CartPage() {
     const newQuantity = Math.min(999_999, Math.max(1, parsed))
     await supabase.from("cart_items").update({ quantity: newQuantity }).eq("id", itemId)
     setCart(cart.map((c) => (c.id === itemId ? { ...c, quantity: newQuantity } : c)))
+    const { notifyCartChanged } = await import("@/lib/cart/events")
+    notifyCartChanged()
   }
 
   const removeItem = async (itemId: string) => {
     await supabase.from("cart_items").delete().eq("id", itemId)
     setCart(cart.filter(c => c.id !== itemId))
+    const { notifyCartChanged } = await import("@/lib/cart/events")
+    notifyCartChanged()
   }
 
   const subtotal = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0)
-  const deliveryFee = subtotal > 100000 ? 0 : 5000
-  const serviceFee = Math.round(subtotal * 0.02)
-  const total = subtotal + deliveryFee + serviceFee
+  const feeInfo = computeServiceFee(subtotal, subscriptionTier)
+  const serviceFee = feeInfo.fee
+  const total = subtotal + serviceFee
+  const tierLabel = TIER_LABELS_FR[feeInfo.tier as SubscriptionTier] || "Gratuit"
 
   const formatPrice = (price: number) => new Intl.NumberFormat("fr-FR").format(price)
 
@@ -206,6 +220,10 @@ export default function CartPage() {
 
       // Vider le panier une fois toutes les commandes creees
       await supabase.from("cart_items").delete().eq("user_id", user.id)
+      const { notifyCartChanged } = await import("@/lib/cart/events")
+      notifyCartChanged()
+      const { notifyOrdersChanged } = await import("@/hooks/use-active-orders-count")
+      notifyOrdersChanged()
 
       router.push(`/commandes/confirmation?order=${createdOrderIds[0]}`)
     } catch (err) {
@@ -277,37 +295,37 @@ export default function CartPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-32">
+    <div className="min-h-screen bg-[#FFF6E5] pb-[calc(7.5rem+env(safe-area-inset-bottom))] lg:pb-28">
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-background border-b border-border">
-        <div className="flex items-center gap-3 px-4 py-3">
+      <header className="sticky top-0 z-40 border-b border-[#1F5C2E]/10 bg-[#FFF6E5]/95 backdrop-blur-sm">
+        <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-3">
           {step > 1 ? (
-            <button onClick={() => setStep(step - 1)}>
+            <button type="button" onClick={() => setStep(step - 1)} aria-label="Retour">
               <ChevronLeft className="h-6 w-6" />
             </button>
           ) : (
-            <Link href="/">
+            <Link href="/marketplace" aria-label="Retour">
               <ChevronLeft className="h-6 w-6" />
             </Link>
           )}
-          <h1 className="text-lg font-semibold flex-1">
-            {step === 1 && `Panier (${cart.length})`}
-            {step === 2 && "Livraison"}
-            {step === 3 && "Paiement"}
+          <h1 className="flex-1 font-display text-lg text-[#1F5C2E]">
+            {step === 1 && `Ton panier (${cart.length})`}
+            {step === 2 && "Tes coordonnées"}
+            {step === 3 && "Payer en sécurité"}
           </h1>
         </div>
         
         {/* Progress */}
-        <div className="flex gap-1 px-4 pb-3">
+        <div className="mx-auto flex max-w-3xl gap-1.5 px-4 pb-3">
           {[1, 2, 3].map(s => (
-            <div key={s} className={`h-1 flex-1 rounded-full transition-colors ${step >= s ? "bg-primary" : "bg-muted"}`} />
+            <div key={s} className={`h-1.5 flex-1 rounded-full transition-colors ${step >= s ? "bg-[#1F5C2E]" : "bg-[#E5E7EB]"}`} />
           ))}
         </div>
       </header>
 
       {/* Step 1: Cart Items */}
       {step === 1 && (
-        <div className="p-4 space-y-3">
+        <div className="mx-auto max-w-3xl space-y-3 p-4">
           {cart.map(item => (
             <div key={item.id} className="flex gap-3 bg-card rounded-2xl p-3 border border-border">
               <div className="w-20 h-20 relative rounded-xl overflow-hidden bg-muted shrink-0">
@@ -369,12 +387,33 @@ export default function CartPage() {
               </div>
             </div>
           ))}
+
+          {/* Détail prix dans le flux (ne cache rien) */}
+          <div className="rounded-2xl border border-[#1F5C2E]/10 bg-white p-4 space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-[#6B7280]">Articles</span>
+              <span>{formatPrice(subtotal)} FCFA</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span className="text-[#6B7280]">
+                Service GWA ({feeInfo.pctLabel}, abo {tierLabel})
+              </span>
+              <span className="shrink-0">{formatPrice(serviceFee)} FCFA</span>
+            </div>
+            <div className="flex justify-between border-t border-[#E5E7EB] pt-2 text-base font-bold">
+              <span>Total</span>
+              <span className="text-[#1F5C2E]">{formatPrice(total)} FCFA</span>
+            </div>
+            <p className="text-[11px] leading-relaxed text-[#6B7280]">
+              Les frais de service dépendent de ton abonnement. Plus ton abo monte, plus tu paies moins.
+            </p>
+          </div>
         </div>
       )}
 
       {/* Step 2: Delivery */}
       {step === 2 && (
-        <div className="p-4 space-y-4">
+        <div className="mx-auto max-w-3xl space-y-4 p-4">
           <div className="space-y-4">
             <div>
               <Label className="text-sm">Nom complet</Label>
@@ -431,11 +470,28 @@ export default function CartPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3 p-4 bg-muted rounded-2xl">
-            <Clock className="h-5 w-5 text-primary shrink-0" />
+          <div className="flex items-center gap-3 rounded-2xl bg-[#E8F0E9] p-4">
+            <Package className="h-5 w-5 shrink-0 text-[#1F5C2E]" />
             <div>
-              <p className="font-medium text-sm">Delai estime</p>
-              <p className="text-xs text-muted-foreground">3-7 jours ouvrables</p>
+              <p className="text-sm font-medium text-[#111827]">Remise en main propre</p>
+              <p className="text-xs text-[#4B5563]">
+                Tu t’arranges avec le vendeur pour le rendez-vous. Pour l’instant GWA ne gère pas la livraison.
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-[#1F5C2E]/10 bg-white p-4 space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-[#6B7280]">Articles</span>
+              <span>{formatPrice(subtotal)} FCFA</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span className="text-[#6B7280]">Service GWA ({feeInfo.pctLabel})</span>
+              <span>{formatPrice(serviceFee)} FCFA</span>
+            </div>
+            <div className="flex justify-between border-t border-[#E5E7EB] pt-2 font-bold">
+              <span>Total</span>
+              <span className="text-[#1F5C2E]">{formatPrice(total)} FCFA</span>
             </div>
           </div>
         </div>
@@ -443,8 +499,27 @@ export default function CartPage() {
 
       {/* Step 3: Payment */}
       {step === 3 && (
-        <div className="p-4 space-y-3">
+        <div className="mx-auto max-w-3xl space-y-3 p-4">
           <EscrowStepper payment_status="pending" escrow_status="pending" status="pending" />
+          <p className="text-sm text-[#4B5563]">
+            Choisis comment payer. Ton argent reste protégé jusqu’à la réception.
+          </p>
+          <div className="rounded-2xl border border-[#1F5C2E]/10 bg-white p-4 space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-[#6B7280]">Articles</span>
+              <span>{formatPrice(subtotal)} FCFA</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span className="text-[#6B7280]">
+                Service GWA ({feeInfo.pctLabel}, abo {tierLabel})
+              </span>
+              <span>{formatPrice(serviceFee)} FCFA</span>
+            </div>
+            <div className="flex justify-between border-t border-[#E5E7EB] pt-2 font-bold">
+              <span>Total</span>
+              <span className="text-[#1F5C2E]">{formatPrice(total)} FCFA</span>
+            </div>
+          </div>
           <RadioGroup value={paymentMethod} onValueChange={setPaymentMethod}>
             {paymentMethods.map(method => (
               <div 
@@ -468,44 +543,34 @@ export default function CartPage() {
         </div>
       )}
 
-      {/* Fixed Bottom Summary */}
-      <div className="fixed bottom-[76px] left-0 right-0 bg-background border-t border-border p-4 pb-4 space-y-3 z-40">
-        {checkoutError && (
-          <p className="text-sm text-destructive text-center">{checkoutError}</p>
-        )}
-        <div className="space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Sous-total</span>
-            <span>{formatPrice(subtotal)} FCFA</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Livraison</span>
-            <span>{deliveryFee === 0 ? "Gratuit" : `${formatPrice(deliveryFee)} FCFA`}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Frais service (2%)</span>
-            <span>{formatPrice(serviceFee)} FCFA</span>
-          </div>
-          <div className="flex justify-between text-lg font-bold pt-2 border-t">
-            <span>Total</span>
-            <span className="text-primary">{formatPrice(total)} FCFA</span>
-          </div>
-        </div>
-        
-        <Button 
-          onClick={handleCheckout}
-          disabled={!canProceed() || isProcessing}
-          className="w-full h-14 rounded-2xl text-base font-semibold"
-        >
-          {isProcessing ? (
-            <div className="w-5 h-5 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+      {/* Barre CTA compacte : total + bouton, sans masquer le détail */}
+      <div className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] left-0 right-0 z-40 border-t border-[#1F5C2E]/10 bg-white/95 px-4 py-3 backdrop-blur-sm lg:bottom-0">
+        <div className="mx-auto flex max-w-3xl items-center gap-3">
+          {checkoutError ? (
+            <p className="flex-1 text-sm text-red-600">{checkoutError}</p>
           ) : (
-            <>
-              {step < 3 ? "Continuer" : "Payer maintenant"}
-              <ArrowRight className="ml-2 h-5 w-5" />
-            </>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] text-[#6B7280]">À payer</p>
+              <p className="truncate text-lg font-bold tabular-nums text-[#1F5C2E]">
+                {formatPrice(total)} FCFA
+              </p>
+            </div>
           )}
-        </Button>
+          <Button
+            onClick={handleCheckout}
+            disabled={!canProceed() || isProcessing}
+            className="h-12 shrink-0 rounded-xl bg-[#1F5C2E] px-5 text-[15px] font-semibold hover:bg-[#184a25]"
+          >
+            {isProcessing ? (
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+            ) : (
+              <>
+                {step < 3 ? "Continuer" : "Payer"}
+                <ArrowRight className="ml-1.5 h-4 w-4" />
+              </>
+            )}
+          </Button>
+        </div>
       </div>
     </div>
   )
