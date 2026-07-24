@@ -159,7 +159,7 @@
 }
 
 @theme inline {
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-sans: var(--font-outfit), "Outfit", ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'SF Mono', 'Monaco', monospace;
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
@@ -378,23 +378,20 @@
 .gwa-no-scroll::-webkit-scrollbar { display: none; }
 .gwa-no-scroll { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* Largeurs shell — tablette / desktop (évite étirement téléphone) */
+/* Largeurs shell — tablette / desktop (composition, pas cage téléphone) */
 .gwa-shell-feed {
   width: 100%;
   margin-inline: auto;
-  max-width: 36rem; /* ~max-w-xl */
+  max-width: 40rem;
 }
 @media (min-width: 1024px) {
-  .gwa-shell-feed { max-width: 42rem; }
-}
-@media (min-width: 1280px) {
-  .gwa-shell-feed { max-width: 48rem; }
+  .gwa-shell-feed { max-width: 36rem; }
 }
 
 .gwa-shell-wide {
   width: 100%;
   margin-inline: auto;
-  max-width: 72rem; /* ~max-w-6xl */
+  max-width: 72rem;
 }
 
 .gwa-shell-page {
@@ -403,18 +400,57 @@
   max-width: 40rem;
 }
 @media (min-width: 768px) {
-  .gwa-shell-page { max-width: 48rem; }
+  .gwa-shell-page { max-width: 44rem; }
 }
 @media (min-width: 1024px) {
-  .gwa-shell-page { max-width: 56rem; }
+  .gwa-shell-page { max-width: 52rem; }
 }
 
-/* Atmosphère légère desktop — pas de fond plat unique */
+.font-display {
+  font-family: var(--font-outfit), "Outfit", ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.03em;
+  font-weight: 700;
+}
+
+/* Feed desktop : 3 colonnes (catégories | fil | Digest) */
+.gwa-feed-desktop {
+  width: 100%;
+}
+@media (min-width: 1024px) {
+  .gwa-feed-desktop {
+    display: grid;
+    grid-template-columns: 200px minmax(0, 36rem) 240px;
+    gap: 1.75rem;
+    align-items: start;
+    max-width: 72rem;
+    margin-inline: auto;
+    padding-inline: 1.5rem;
+    padding-top: 1.25rem;
+    padding-bottom: 2.5rem;
+  }
+}
+@media (min-width: 1280px) {
+  .gwa-feed-desktop {
+    grid-template-columns: 220px minmax(0, 40rem) 260px;
+    gap: 2rem;
+  }
+}
+
+/* Boutique desktop : densite catalogue */
+@media (min-width: 1024px) {
+  .gwa-product-media {
+    aspect-ratio: 1 / 1 !important;
+  }
+}
+
+/* Atmosphère Harmattan — grain + dégradé chaud, pas blobs AI */
 @media (min-width: 1024px) {
   .gwa-desktop-atmosphere {
+    background-color: #fff6e5;
     background-image:
-      radial-gradient(900px 420px at 8% -8%, rgba(31, 92, 46, 0.08), transparent 55%),
-      radial-gradient(700px 380px at 96% 0%, rgba(194, 125, 16, 0.1), transparent 50%);
+      linear-gradient(180deg, rgba(255, 246, 229, 0.2) 0%, transparent 28%),
+      radial-gradient(ellipse 80% 50% at 50% -20%, rgba(31, 92, 46, 0.07), transparent 60%),
+      url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
     background-attachment: fixed;
   }
 }

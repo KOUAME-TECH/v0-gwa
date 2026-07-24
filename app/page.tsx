@@ -682,26 +682,25 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-[#FFF6E5]">
-      {/* Météo */}
+      {/* Météo — mobile / tablette */}
       {userType && ["farmer", "cooperative"].includes(userType) && (
-        <div className="gwa-shell-feed px-4 pt-3">
+        <div className="gwa-shell-feed px-4 pt-3 lg:hidden">
           <WeatherWidget />
         </div>
       )}
 
-      {/* Header */}
-      <header className="sticky top-0 z-40 bg-white border-b border-[#E5E7EB]">
-        <div className="gwa-shell-feed px-4 py-3">
+      {/* Header mobile */}
+      <header className="sticky top-0 z-40 bg-white border-b border-[#E5E7EB] lg:hidden">
+        <div className="px-4 py-3">
           <div className="flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-2 lg:pointer-events-none" aria-label="GWA accueil">
-              <GwaMark size={36} showWordmark wordmarkClassName="text-2xl lg:hidden" />
-              <span className="hidden lg:inline text-lg font-semibold text-[#111827]">Fil d&apos;actualité</span>
+            <Link href="/" className="flex items-center gap-2" aria-label="GWA accueil">
+              <GwaMark size={36} showWordmark wordmarkClassName="font-display text-2xl" />
             </Link>
             <div className="flex items-center gap-2">
               <ListenRitualBadge streak={listenStreak} />
               <Link
                 href="/marketplace?digest=1"
-                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full bg-[#1F5C2E]/8 text-[#1F5C2E] text-xs font-semibold active:scale-95 transition-transform"
+                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-xl bg-[#1F5C2E]/8 text-[#1F5C2E] text-xs font-semibold active:scale-95 transition-transform"
                 aria-label="Écouter les nouveautés — Harmattan Digest"
                 title="Écouter les nouveautés près de chez vous"
               >
@@ -725,38 +724,36 @@ export default function HomePage() {
         </div>
         
         {/* Onglets */}
-        <div className="border-t border-[#E5E7EB]">
-          <div className="gwa-shell-feed flex">
-            {[
-              { key: "tout", label: "Tout" },
-              { key: "produits", label: "Produits" },
-              { key: "publications", label: "Publications" }
-            ].map(tab => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key as any)}
-                className={cn(
-                  "flex-1 py-3 text-sm font-medium transition-colors",
-                  activeTab === tab.key
-                    ? "text-[#2F7D32] border-b-2 border-[#2F7D32]"
-                    : "text-[#4B5563]"
-                )}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
+        <div className="flex border-t border-[#E5E7EB]">
+          {[
+            { key: "tout", label: "Tout" },
+            { key: "produits", label: "Produits" },
+            { key: "publications", label: "Publications" }
+          ].map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key as any)}
+              className={cn(
+                "flex-1 py-3 text-sm font-medium transition-colors",
+                activeTab === tab.key
+                  ? "text-[#2F7D32] border-b-2 border-[#2F7D32]"
+                  : "text-[#4B5563]"
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
         
-        {/* Catégories — texte seul, slugs cohérents */}
-        <div className="gwa-shell-feed flex gap-2 overflow-x-auto scrollbar-none px-4 py-3">
+        {/* Catégories */}
+        <div className="flex gap-2 overflow-x-auto scrollbar-none px-4 py-3">
           {categories.map((cat) => (
             <button
               key={cat.id}
               type="button"
               onClick={() => setActiveCategory(cat.id)}
               className={cn(
-                "px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors",
+                "px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-colors",
                 activeCategory === cat.id
                   ? "bg-[#2F7D32] text-white"
                   : "bg-white text-[#4B5563] border border-[#E5E7EB]"
@@ -768,9 +765,55 @@ export default function HomePage() {
         </div>
       </header>
 
-      {/* Feed */}
-      <div
-        className="gwa-shell-feed px-3 pt-3 pb-2 space-y-3 lg:pb-10"
+      {/* Desktop composition */}
+      <div className="gwa-feed-desktop">
+        <aside className="hidden lg:block sticky top-20">
+          {userType && ["farmer", "cooperative"].includes(userType) && (
+            <div className="mb-4">
+              <WeatherWidget />
+            </div>
+          )}
+          <p className="font-display text-sm text-[#1F5C2E] mb-3">Catégories</p>
+          <div className="flex flex-col gap-1">
+            {categories.map((cat) => (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setActiveCategory(cat.id)}
+                className={cn(
+                  "text-left px-3 py-2 rounded-xl text-sm font-medium transition-colors",
+                  activeCategory === cat.id
+                    ? "bg-[#1F5C2E] text-white"
+                    : "text-[#4B5563] hover:bg-white/80",
+                )}
+              >
+                {cat.name}
+              </button>
+            ))}
+          </div>
+          <div className="mt-6 flex flex-col gap-1 border-t border-[#1F5C2E]/10 pt-4">
+            {[
+              { key: "tout", label: "Tout" },
+              { key: "produits", label: "Produits" },
+              { key: "publications", label: "Publications" },
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveTab(tab.key as any)}
+                className={cn(
+                  "text-left px-3 py-2 rounded-xl text-sm font-medium",
+                  activeTab === tab.key ? "text-[#1F5C2E] font-semibold" : "text-[#4B5563]",
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </aside>
+
+        <div
+          className="px-3 pt-3 pb-2 space-y-3 lg:px-0 lg:pt-0 lg:pb-0"
         onTouchStart={(e) => {
           if (typeof window !== "undefined" && window.scrollY <= 0) {
             pullStartY.current = e.touches[0]?.clientY ?? null
@@ -915,6 +958,35 @@ export default function HomePage() {
             />
           ))
         )}
+      </div>
+
+        <aside className="hidden lg:block sticky top-20 space-y-4">
+          <div className="rounded-2xl border border-[#1F5C2E]/10 bg-white/80 p-4">
+            <p className="font-display text-base text-[#1F5C2E] mb-1">Harmattan Digest</p>
+            <p className="text-sm text-[#4B5563] mb-4 leading-relaxed">
+              Écoute les nouveautés près de chez toi — parcours audio des produits du jour.
+            </p>
+            <Link
+              href="/marketplace?digest=1"
+              className="inline-flex w-full items-center justify-center rounded-xl bg-[#1F5C2E] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#184a25]"
+            >
+              Écouter le Digest
+            </Link>
+          </div>
+          <Link
+            href="/recherche"
+            className="block rounded-2xl border border-[#E5E7EB] bg-white/70 px-4 py-3 text-sm font-medium text-[#4B5563] hover:text-[#111827]"
+          >
+            Rechercher un produit ou un producteur →
+          </Link>
+          <Link
+            href="/notifications"
+            className="block rounded-2xl border border-[#E5E7EB] bg-white/70 px-4 py-3 text-sm font-medium text-[#4B5563] hover:text-[#111827]"
+          >
+            Notifications
+            {unreadNotifications > 0 ? ` · ${unreadNotifications}` : ""}
+          </Link>
+        </aside>
       </div>
 
       {/* Sheet commentaires */}
@@ -1268,7 +1340,7 @@ function FeedCard({
         <div className="relative mx-2 mb-1">
           <button
             type="button"
-            className="relative aspect-[4/5] max-h-[70vh] bg-gradient-to-b from-[#E8F0E9] to-[#E8E4DC] overflow-hidden w-full block rounded-xl active:opacity-95"
+            className="relative aspect-[4/5] lg:aspect-[5/4] max-h-[70vh] lg:max-h-[420px] bg-gradient-to-b from-[#E8F0E9] to-[#E8E4DC] overflow-hidden w-full block rounded-xl active:opacity-95"
             onClick={() => {
               const now = Date.now()
               if (now - lastTapRef.current < 280) {

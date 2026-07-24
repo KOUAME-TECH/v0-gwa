@@ -76,7 +76,7 @@ function MarketplaceGridCard({
   return (
     <Link href={`/produit/${p.id}`} className="block active:scale-[0.98] transition-transform">
       <div
-        className={`relative w-full overflow-hidden rounded-2xl bg-gradient-to-b from-[#F3F4F6] to-[#E8E4DC] ring-1 ${
+        className={`relative w-full overflow-hidden rounded-2xl bg-gradient-to-b from-[#F3F4F6] to-[#E8E4DC] ring-1 gwa-product-media ${
           listening ? "ring-2 ring-[#C27D10] shadow-md" : "ring-black/[0.04]"
         }`}
         style={{ aspectRatio: "4/5" }}
@@ -512,10 +512,17 @@ function MarketplaceContent() {
   return (
     <div className="min-h-screen bg-[#FFF6E5]">
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-white border-b border-[#E5E7EB]">
-        <div className="gwa-shell-wide flex items-center gap-3 p-3 md:px-5">
+      <header className="sticky top-0 z-40 bg-white/95 border-b border-[#E5E7EB] backdrop-blur-sm lg:bg-[#FFF6E5]/90 lg:border-[#1F5C2E]/10">
+        <div className="gwa-shell-wide flex items-center gap-3 p-3 md:px-5 lg:py-4">
           <Link href="/" className="lg:hidden"><ChevronLeft className="h-6 w-6" /></Link>
-          <h1 className="text-lg font-semibold flex-1 text-[#111827]">Boutique</h1>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-lg font-semibold text-[#111827] lg:font-display lg:text-2xl lg:text-[#1F5C2E]">
+              Boutique
+            </h1>
+            <p className="hidden lg:block text-sm text-[#4B5563] mt-0.5">
+              Produits frais près de toi — écoute ou parcours
+            </p>
+          </div>
           <ShopVoiceTourButton
             active={parcours.active}
             index={parcours.index}
@@ -525,7 +532,7 @@ function MarketplaceContent() {
             className="shrink-0"
           />
           <Link href="/panier">
-            <Button variant="ghost" size="icon" className="rounded-full h-9 w-9">
+            <Button variant="ghost" size="icon" className="rounded-xl h-9 w-9">
               <ShoppingCart className="h-5 w-5 text-[#4B5563]" />
             </Button>
           </Link>
@@ -655,8 +662,8 @@ function MarketplaceContent() {
           </div>
         )}
         {isLoading ? (
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-4 lg:gap-5">
-            {[...Array(8)].map((_, i) => (
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-4 lg:gap-5 xl:grid-cols-5">
+            {[...Array(10)].map((_, i) => (
               <div key={i} className="overflow-hidden">
                 <div className="bg-muted gwa-skeleton rounded-2xl aspect-[4/3]" />
                 <div className="pt-2 space-y-1">
@@ -680,7 +687,7 @@ function MarketplaceContent() {
             <p className="text-xs text-muted-foreground mb-2">
               {filteredProducts.length} produit{filteredProducts.length > 1 ? "s" : ""}
             </p>
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-4 lg:gap-5">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-4 lg:gap-5 xl:grid-cols-5">
               {filteredProducts.map((p) => (
                 <MarketplaceGridCard
                   key={p.id}

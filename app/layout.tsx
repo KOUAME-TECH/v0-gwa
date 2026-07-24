@@ -1,15 +1,14 @@
-import React from "react"
 import type { Metadata, Viewport } from "next"
-import { Inter } from "next/font/google"
+import { Outfit } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { OneSignalProvider } from "@/components/pwa/onesignal-provider"
 import { ServiceWorkerRegister } from "@/components/pwa/service-worker-register"
 import { AppShell } from "@/components/layout/app-shell"
 import "./globals.css"
 
-const inter = Inter({
+const outfit = Outfit({
   subsets: ["latin"],
-  variable: "--font-sans",
+  variable: "--font-outfit",
   display: "swap",
 })
 
@@ -41,7 +40,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="fr" className={inter.variable}>
+    <html lang="fr" className={outfit.variable}>
       <head>
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -49,7 +48,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://frorfexbcyfbydkiwxqv.supabase.co" />
         <link rel="dns-prefetch" href="https://cdn.onesignal.com" />
       </head>
-      <body className="font-sans antialiased min-h-dvh bg-background">
+      <body className="font-sans antialiased min-h-dvh bg-background text-foreground">
         <OneSignalProvider>
           <ServiceWorkerRegister />
           <AppShell>{children}</AppShell>

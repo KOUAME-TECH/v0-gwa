@@ -70,7 +70,7 @@ export function OfflineBanner({ offsetForDesktopNav = false }: { offsetForDeskto
     <div
       className={cn(
         "fixed left-0 right-0 z-[100] flex flex-wrap items-center justify-center gap-x-3 gap-y-1 px-4 py-2 text-xs font-semibold shadow-sm animate-slideUp",
-        offsetForDesktopNav ? "top-0 lg:top-14" : "top-0",
+        offsetForDesktopNav ? "top-0 lg:top-16" : "top-0",
         status === "offline" ? "bg-amber-500 text-white" : "bg-green-600 text-white",
       )}
       role="status"
