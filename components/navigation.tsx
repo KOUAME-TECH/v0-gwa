@@ -4,6 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Plus } from "lucide-react"
 import { GwaMark } from "@/components/brand/gwa-mark"
+import { useYellyOptional } from "@/components/yelly/yelly-provider"
 import { shouldShowDesktopNav } from "@/lib/navigation/shell-routes"
 import { cn } from "@/lib/utils"
 
@@ -34,9 +35,11 @@ const LINKS = [
 
 /**
  * Barre desktop Harmattan — texte + marque, sans pastilles style mobile.
+ * Yelly s'ouvre via « Aide » (pas de FAB flottant sur ordi/tablette).
  */
 export function Navigation() {
   const pathname = usePathname() || "/"
+  const yelly = useYellyOptional()
   if (!shouldShowDesktopNav(pathname)) return null
 
   return (
@@ -78,6 +81,13 @@ export function Navigation() {
         </nav>
 
         <div className="flex shrink-0 items-center gap-3">
+          <button
+            type="button"
+            onClick={() => yelly?.openYelly("desktop_nav")}
+            className="text-sm font-medium text-[#4B5563] transition hover:text-[#1F5C2E]"
+          >
+            Aide
+          </button>
           <Link
             href="/marketplace?digest=1"
             className="text-sm font-semibold text-[#1F5C2E] underline-offset-4 hover:underline"

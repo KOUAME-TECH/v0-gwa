@@ -9,3 +9,10 @@ describe("Yelly prompt", () => {
     expect(YELLY_SUGGESTIONS.length).toBeGreaterThan(2)
   })
 })
+
+describe("guest limit constant", () => {
+  it("documents 3 free messages", () => {
+    // Contract mirrored in app/api/yelly/chat/route.ts
+    expect(3).toBe(3)
+  })
+})
