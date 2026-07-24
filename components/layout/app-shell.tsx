@@ -6,6 +6,7 @@ import { Navigation } from "@/components/navigation"
 import { OfflineBanner } from "@/components/layout/offline-banner"
 import { IncompleteRouteBanner } from "@/components/dev/incomplete-route-banner"
 import { AppErrorBoundary } from "@/components/layout/app-error-boundary"
+import { YellyFab } from "@/components/yelly/yelly-panel"
 import { Toaster } from "@/components/ui/sonner"
 import { shouldShowBottomNav, shouldShowDesktopNav } from "@/lib/navigation/shell-routes"
 import { cn } from "@/lib/utils"
@@ -36,6 +37,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </main>
       </AppErrorBoundary>
       <BottomNav />
+      <YellyFab />
       <Toaster position="top-center" />
     </div>
   )

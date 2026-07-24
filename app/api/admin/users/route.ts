@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/auth/require-admin"
 import { isAdminRole, type AdminRole } from "@/lib/auth/admin-permissions"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
+import { sanitizeForQuery } from "@/lib/security/validation"
 import type { createAdminClient } from "@/lib/supabase/admin"
 
 type AdminClient = ReturnType<typeof createAdminClient>
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest) {
     }
 
     const sp = request.nextUrl.searchParams
-    const q = (sp.get("q") || "").trim()
+    const q = sanitizeForQuery((sp.get("q") || "").trim())
     const filterType = sp.get("type") || "all"
     const filterStatus = sp.get("status") || "all"
     const page = Math.max(0, Number(sp.get("page") || 0))

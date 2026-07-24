@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { sendContactEmail } from "@/lib/email/agentmail"
+import { assertSameOrigin } from "@/lib/security/csrf"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
+import { sanitizePlainText } from "@/lib/security/validation"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 
@@ -10,6 +12,9 @@ import { createClient } from "@/lib/supabase/server"
  */
 export async function POST(request: Request) {
   try {
+    const csrf = assertSameOrigin(request)
+    if (csrf) return csrf
+
     const rate = await checkRateLimit("API_CREATE")
     if (!rate.success) {
       return NextResponse.json(
@@ -19,10 +24,10 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const name = String(body?.name || "").trim()
-    const email = String(body?.email || "").trim()
-    const subject = String(body?.subject || "").trim()
-    const message = String(body?.message || "").trim()
+    const name = sanitizePlainText(String(body?.name || ""), 100)
+    const email = String(body?.email || "").trim().toLowerCase().slice(0, 255)
+    const subject = sanitizePlainText(String(body?.subject || ""), 200)
+    const message = sanitizePlainText(String(body?.message || ""), 4000)
 
     if (!name || !email || !subject || !message) {
       return NextResponse.json(

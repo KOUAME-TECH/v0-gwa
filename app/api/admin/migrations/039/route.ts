@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { requireSuperAdmin } from "@/lib/auth/require-admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
+import { assertSameOrigin } from "@/lib/security/csrf"
 import {
   applyMigration039,
   checkMigration039Status,
@@ -10,58 +11,28 @@ export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
 /**
- * GET /api/admin/migrations/039
- * - ?apply=1 : applique la migration si absente (idempotent, rate-limit)
- * - sinon : statut uniquement
+ * GET /api/admin/migrations/039 — statut uniquement (super_admin).
+ * Apply uniquement via POST.
  */
-export async function GET(request: Request) {
+export async function GET() {
   try {
     const rate = await checkRateLimit("API_CREATE")
     if (!rate.success) {
       return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })
     }
 
-    const url = new URL(request.url)
-    const shouldApply = url.searchParams.get("apply") === "1"
-
-    const status = await checkMigration039Status()
-
-    if (!shouldApply) {
-      return NextResponse.json({
-        migration: "039_comment_voice_listen",
-        ...status,
-      })
-    }
-
-    if (status.applied) {
-      return NextResponse.json({
-        migration: "039_comment_voice_listen",
-        ok: true,
-        alreadyApplied: true,
-        ...status,
-      })
-    }
-
-    if (!status.postgresConfigured) {
+    const gate = await requireSuperAdmin()
+    if (!gate.isAdmin) {
       return NextResponse.json(
-        {
-          error:
-            "Connexion Postgres non configurée sur Vercel (POSTGRES_URL_NON_POOLING). Appliquez le SQL manuellement dans Supabase.",
-          ...status,
-        },
-        { status: 503 },
+        { error: gate.error || "Accès refusé" },
+        { status: gate.user ? 403 : 401 },
       )
     }
 
-    await applyMigration039()
-    const after = await checkMigration039Status()
-
+    const status = await checkMigration039Status()
     return NextResponse.json({
       migration: "039_comment_voice_listen",
-      ok: true,
-      applied: true,
-      before: status,
-      after,
+      ...status,
     })
   } catch (err) {
     console.error("[migrations/039 GET]", err)
@@ -72,9 +43,12 @@ export async function GET(request: Request) {
   }
 }
 
-/** POST — super admin uniquement (application forcée). */
-export async function POST() {
+/** POST — super admin uniquement (application). */
+export async function POST(request: Request) {
   try {
+    const csrf = assertSameOrigin(request)
+    if (csrf) return csrf
+
     const gate = await requireSuperAdmin()
     if (!gate.isAdmin) {
       return NextResponse.json({ error: gate.error || "Accès refusé" }, { status: 403 })

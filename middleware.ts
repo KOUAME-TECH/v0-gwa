@@ -1,90 +1,84 @@
-import { updateSession } from '@/lib/supabase/middleware'
-import { type NextRequest, NextResponse } from 'next/server'
+import { createServerClient } from "@supabase/ssr"
+import { NextResponse, type NextRequest } from "next/server"
+import { updateSession } from "@/lib/supabase/middleware"
+import { assertSameOrigin } from "@/lib/security/csrf"
 
-// Security: Threat detection patterns
-const THREAT_PATTERNS = [
-  /(\.\.|%2e%2e|%252e)/i,
-  /(union\s+select|drop\s+table|insert\s+into)/i,
-  /(<script|javascript:|data:text\/html)/i,
-  /(\/etc\/passwd|\/proc\/self)/i,
+const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"])
+
+/** Routes that intentionally allow cross-origin or non-browser callers. */
+const CSRF_EXEMPT_PREFIXES = [
+  "/api/webhooks/",
+  "/api/cron/",
+  "/api/auth/callback",
 ]
 
-const MALICIOUS_UA = ['sqlmap', 'nikto', 'nmap', 'masscan', 'zgrab', 'dirbuster', 'gobuster']
-
-// Security: Rate limiting (in-memory)
-const RL_MAP = new Map<string, { count: number; ts: number }>()
-const RL_LIMITS: Record<string, number> = {
-  auth: 60,
-  admin: 40,
-  api: 120,
-  default: 480,
-}
-
-function getClientIP(req: NextRequest): string {
-  return (
-    req.headers.get('x-vercel-forwarded-for')?.split(',')[0].trim() ||
-    req.headers.get('x-forwarded-for')?.split(',')[0].trim() ||
-    '127.0.0.1'
-  )
+function isCsrfExempt(pathname: string): boolean {
+  return CSRF_EXEMPT_PREFIXES.some((p) => pathname.startsWith(p))
 }
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
-  const ip = getClientIP(request)
+  const method = request.method.toUpperCase()
 
-  // Layer 1: Threat detection
-  try {
-    const url = decodeURIComponent(request.url)
-    const ua = (request.headers.get('user-agent') || '').toLowerCase()
-    if (MALICIOUS_UA.some(b => ua.includes(b)) || THREAT_PATTERNS.some(p => p.test(url))) {
-      return new NextResponse('Forbidden', { status: 403 })
-    }
-  } catch { /* malformed URL */ }
-
-  // Layer 2: Rate limiting — pages GET publiques hors compteur (RSC prefetch).
-  // Compte uniquement API + mutations auth pour éviter 429 navigation normale.
-  const isApi = pathname.startsWith('/api')
-  const isAuthMutation =
-    pathname.startsWith('/auth') && request.method !== 'GET' && request.method !== 'HEAD'
-  if (isApi || isAuthMutation) {
-    const rlKey = pathname.startsWith('/api/admin')
-      ? 'admin'
-      : pathname.startsWith('/api/auth') || isAuthMutation
-        ? 'auth'
-        : pathname.startsWith('/api')
-          ? 'api'
-          : 'default'
-    const limit = RL_LIMITS[rlKey]
-    const mapKey = `${ip}:${rlKey}`
-    const now = Date.now()
-    const entry = RL_MAP.get(mapKey)
-    if (entry && now - entry.ts < 60_000) {
-      entry.count++
-      if (entry.count > limit) {
-        return NextResponse.json(
-          { error: 'Trop de requetes. Reessayez dans 1 minute.' },
-          { status: 429, headers: { 'Retry-After': '60' } }
-        )
-      }
-    } else {
-      RL_MAP.set(mapKey, { count: 1, ts: now })
-    }
+  // CSRF / Same-Origin for API mutations (defense in depth with cookie auth)
+  if (pathname.startsWith("/api/") && MUTATING_METHODS.has(method) && !isCsrfExempt(pathname)) {
+    const csrf = assertSameOrigin(request)
+    if (csrf) return csrf
   }
 
-  // Continue with existing auth session logic
+  // Protect admin routes
+  if (pathname.startsWith("/admin") || pathname.startsWith("/api/admin")) {
+    const response = NextResponse.next({
+      request: { headers: request.headers },
+    })
+
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll()
+          },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
+            cookiesToSet.forEach(({ name, value, options }) =>
+              response.cookies.set(name, value, options),
+            )
+          },
+        },
+      },
+    )
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      const url = request.nextUrl.clone()
+      url.pathname = "/auth/login"
+      url.searchParams.set("redirect", pathname)
+      return NextResponse.redirect(url)
+    }
+
+    const { data: isAdmin } = await supabase.rpc("is_admin")
+    if (!isAdmin) {
+      if (pathname.startsWith("/api/")) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+      }
+      const url = request.nextUrl.clone()
+      url.pathname = "/"
+      return NextResponse.redirect(url)
+    }
+
+    return response
+  }
+
   return await updateSession(request)
 }
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - images - .svg, .png, .jpg, .jpeg, .gif, .webp
-     * Feel free to modify this pattern to include more paths.
-     */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 }

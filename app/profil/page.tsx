@@ -27,8 +27,6 @@ import {
   ShieldCheck,
 } from "lucide-react"
 import { shouldShowVerifiedBadge } from "@/lib/verification/badge"
-import { WhatsAppHelpFab } from "@/components/support/whatsapp-help-fab"
-
 type Profile = {
   id: string
   full_name: string
@@ -303,7 +301,6 @@ export default function ProfilPage() {
 
   return (
     <div className="min-h-screen bg-neutral-50">
-      <WhatsAppHelpFab context="profil" />
       <div className="gwa-shell-page lg:py-6">
       <header className="bg-white px-5 pt-4 pb-6 lg:rounded-2xl lg:shadow-sm">
         <div className="flex items-center justify-between mb-6">

@@ -291,7 +291,11 @@ export default function EditProfilPage() {
 
       const updateData = {
         full_name: formData.full_name,
-        bio: formData.bio || null,
+        bio: (formData.bio || "")
+          .replace(/<\/?[a-z][^>]*>/gi, "")
+          .replace(/[<>]/g, "")
+          .trim()
+          .slice(0, 2000) || null,
         user_type: formData.user_type || null,
         city: formData.city || null,
         country: formData.country || null,

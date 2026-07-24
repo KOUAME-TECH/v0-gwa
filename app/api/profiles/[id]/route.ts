@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { computeProfileCompletion, USER_TYPE_MAP } from "@/lib/auth/post-auth"
-import { sanitizeHtml } from "@/lib/security/validation"
+import { assertSameOrigin } from "@/lib/security/csrf"
+import { checkRateLimit } from "@/lib/security/rate-limiter"
+import { sanitizeHtml, sanitizePlainText } from "@/lib/security/validation"
 
 const PUBLIC_FIELDS =
   "id, full_name, avatar_url, bio, user_type, sub_type, country, city, is_verified, rating, total_reviews, scg_score, scg_badge, scg_bancable, created_at"
@@ -63,6 +65,14 @@ export async function GET(_request: Request, { params }: RouteParams) {
 
 export async function PATCH(request: Request, { params }: RouteParams) {
   try {
+    const csrf = assertSameOrigin(request)
+    if (csrf) return csrf
+
+    const rate = await checkRateLimit("API_CREATE")
+    if (!rate.success) {
+      return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })
+    }
+
     const { id } = await params
     const supabase = await createClient()
     const {
@@ -108,7 +118,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       }
 
       if (typeof value === "string") {
-        updates[field] = value.slice(0, 500)
+        updates[field] = sanitizePlainText(value, 500)
       } else if (typeof value === "number" || typeof value === "boolean") {
         updates[field] = value
       }

@@ -179,6 +179,12 @@ export const RATE_LIMITS = {
   },
   KYC_UPLOAD: { maxRequests: 5, windowMs: 60 * 60 * 1000 },
   MESSAGE_SEND: { maxRequests: 60, windowMs: 60 * 1000 },
+  /** Yelly assistant — anti-abus coût LLM */
+  YELLY_CHAT: {
+    maxRequests: 20,
+    windowMs: 60 * 1000,
+    blockDurationMs: 5 * 60 * 1000,
+  },
 } as const
 
 export async function checkRateLimit(
