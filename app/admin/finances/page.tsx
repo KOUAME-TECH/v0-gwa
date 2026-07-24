@@ -1,16 +1,14 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { 
-  DollarSign, TrendingUp, TrendingDown, CreditCard, Wallet, 
-  Download, RefreshCw, AlertCircle, CheckCircle, Clock,
-  ArrowUpRight, ArrowDownRight, Building2
+  DollarSign, TrendingUp, Wallet, 
+  Download, RefreshCw, Clock,
+  ArrowUpRight, Building2
 } from "lucide-react"
 
 interface FinanceStats {
@@ -51,37 +49,36 @@ export default function AdminFinancesPage() {
 
   const fetchData = async () => {
     setLoading(true)
-    const supabase = createClient()
-    
-    const daysAgo = new Date()
-    daysAgo.setDate(daysAgo.getDate() - parseInt(period))
-
-    const { data: orders } = await supabase
-      .from("orders")
-      .select("id, total_amount, status, created_at")
-      .gte("created_at", daysAgo.toISOString())
-      .order("created_at", { ascending: false })
-
-    const completed = orders?.filter(o => o.status === "delivered") || []
-    const pending = orders?.filter(o => ["pending", "processing", "shipped"].includes(o.status)) || []
-
-    setStats({
-      totalRevenue: completed.reduce((sum, o) => sum + (o.total_amount || 0), 0),
-      totalCommissions: completed.reduce((sum, o) => sum + ((o.total_amount || 0) * 0.05), 0),
-      pendingPayouts: pending.reduce((sum, o) => sum + (o.total_amount || 0), 0),
-      completedPayouts: completed.length,
-      walletBalance: 0,
-      escrowBalance: pending.reduce((sum, o) => sum + (o.total_amount || 0), 0),
-    })
-
-    setTransactions(orders?.slice(0, 20).map(o => ({
-      id: o.id,
-      type: "order",
-      amount: o.total_amount || 0,
-      status: o.status,
-      created_at: o.created_at,
-    })) || [])
-
+    try {
+      const res = await fetch(`/api/admin/finances?period=${encodeURIComponent(period)}`, {
+        credentials: "include",
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setStats({
+          totalRevenue: 0,
+          totalCommissions: 0,
+          pendingPayouts: 0,
+          completedPayouts: 0,
+          walletBalance: 0,
+          escrowBalance: 0,
+        })
+        setTransactions([])
+        setLoading(false)
+        return
+      }
+      setStats({
+        totalRevenue: data.stats?.totalRevenue || 0,
+        totalCommissions: data.stats?.totalCommissions || 0,
+        pendingPayouts: data.stats?.pendingPayouts || 0,
+        completedPayouts: data.stats?.completedPayouts || 0,
+        walletBalance: data.stats?.walletBalance || 0,
+        escrowBalance: data.stats?.escrowBalance || 0,
+      })
+      setTransactions(data.transactions || [])
+    } catch {
+      setTransactions([])
+    }
     setLoading(false)
   }
 

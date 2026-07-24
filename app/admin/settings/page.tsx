@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -44,27 +43,14 @@ export default function AdminSettingsPage() {
 
   const fetchSettings = async () => {
     setLoading(true)
-    const supabase = createClient()
-
-    const { data, error } = await supabase
-      .from("platform_settings")
-      .select("key, value")
-
-    if (!error && data) {
-      const settingsMap: Record<string, unknown> = {}
-      for (const item of data) {
-        settingsMap[item.key] = item.value
+    try {
+      const res = await fetch("/api/admin/settings", { credentials: "include" })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && data.settings) {
+        setSettings(data.settings as PlatformSettings)
       }
-      setSettings({
-        commission_rate: (settingsMap.commission_rate as PlatformSettings["commission_rate"]) || { agriculture: 5, default: 6 },
-        min_withdrawal: (settingsMap.min_withdrawal as PlatformSettings["min_withdrawal"]) || { XOF: 5000, EUR: 10, USD: 10 },
-        max_images_per_product: Number(settingsMap.max_images_per_product) || 10,
-        auto_approve_verified_sellers: settingsMap.auto_approve_verified_sellers === true || settingsMap.auto_approve_verified_sellers === "true",
-        maintenance_mode: settingsMap.maintenance_mode === true || settingsMap.maintenance_mode === "true",
-        supported_countries: (settingsMap.supported_countries as string[]) || [],
-        supported_currencies: (settingsMap.supported_currencies as string[]) || [],
-        payment_methods: (settingsMap.payment_methods as string[]) || [],
-      })
+    } catch {
+      /* keep null → loader / empty */
     }
     setLoading(false)
   }
@@ -74,38 +60,34 @@ export default function AdminSettingsPage() {
     setSaving(true)
     setSuccess(false)
 
-    const supabase = createClient()
-    const { data: { user: adminUser } } = await supabase.auth.getUser()
-
-    const updates = [
-      { key: "commission_rate", value: settings.commission_rate },
-      { key: "min_withdrawal", value: settings.min_withdrawal },
-      { key: "max_images_per_product", value: settings.max_images_per_product },
-      { key: "auto_approve_verified_sellers", value: settings.auto_approve_verified_sellers },
-      { key: "maintenance_mode", value: settings.maintenance_mode },
-    ]
-
-    for (const update of updates) {
-      await supabase
-        .from("platform_settings")
-        .update({ 
-          value: update.value,
-          updated_by: adminUser?.id,
-          updated_at: new Date().toISOString()
-        })
-        .eq("key", update.key)
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          commission_rate: settings.commission_rate,
+          min_withdrawal: settings.min_withdrawal,
+          max_images_per_product: settings.max_images_per_product,
+          auto_approve_verified_sellers: settings.auto_approve_verified_sellers,
+          maintenance_mode: settings.maintenance_mode,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        alert(data.error || "Enregistrement impossible")
+        setSaving(false)
+        return
+      }
+      if (data.settings) {
+        setSettings(data.settings as PlatformSettings)
+      }
+      setSuccess(true)
+      setTimeout(() => setSuccess(false), 3000)
+    } catch {
+      alert("Erreur réseau")
     }
-
-    await supabase.from("admin_logs").insert({
-      admin_id: adminUser?.id,
-      action: "update_settings",
-      entity_type: "platform_settings",
-      new_data: settings,
-    })
-
     setSaving(false)
-    setSuccess(true)
-    setTimeout(() => setSuccess(false), 3000)
   }
 
   if (loading || !settings) {

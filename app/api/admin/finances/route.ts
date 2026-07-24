@@ -1,0 +1,132 @@
+import { NextResponse, type NextRequest } from "next/server"
+import { requireAdmin } from "@/lib/auth/require-admin"
+import { checkRateLimit } from "@/lib/security/rate-limiter"
+
+const PENDING_STATUSES = ["pending", "confirmed", "processing", "shipped"]
+const ALLOWED_PERIODS = new Set([7, 30, 90, 365])
+const COMMISSION_RATE = 0.05
+
+/**
+ * GET /api/admin/finances
+ * Agrégats commandes (service role) — revenus, escrow, paiements.
+ * Query: period (jours, défaut 30)
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const rate = await checkRateLimit("API_CREATE")
+    if (!rate.success) {
+      return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })
+    }
+
+    const gate = await requireAdmin()
+    if (!gate.isAdmin || !gate.admin) {
+      return NextResponse.json(
+        { error: gate.error || "Accès refusé" },
+        { status: gate.user ? 403 : 401 },
+      )
+    }
+
+    const periodRaw = Number(request.nextUrl.searchParams.get("period") || 30)
+    const periodDays = ALLOWED_PERIODS.has(periodRaw) ? periodRaw : 30
+
+    const daysAgo = new Date()
+    daysAgo.setDate(daysAgo.getDate() - periodDays)
+
+    const admin = gate.admin
+
+    const { data: orders, error } = await admin
+      .from("orders")
+      .select(
+        "id, order_number, total_amount, status, payment_status, escrow_status, created_at",
+      )
+      .gte("created_at", daysAgo.toISOString())
+      .order("created_at", { ascending: false })
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
+
+    const rows = orders || []
+
+    const byPaymentStatus: Record<string, { count: number; total: number }> = {}
+    const byEscrowStatus: Record<string, { count: number; total: number }> = {}
+
+    let totalRevenue = 0
+    let escrowBalance = 0
+    let pendingPayouts = 0
+    let completedCount = 0
+
+    for (const o of rows) {
+      const amount = Number(o.total_amount) || 0
+      const pay = o.payment_status || "pending"
+      const esc = o.escrow_status || "pending"
+
+      if (!byPaymentStatus[pay]) byPaymentStatus[pay] = { count: 0, total: 0 }
+      byPaymentStatus[pay].count += 1
+      byPaymentStatus[pay].total += amount
+
+      if (!byEscrowStatus[esc]) byEscrowStatus[esc] = { count: 0, total: 0 }
+      byEscrowStatus[esc].count += 1
+      byEscrowStatus[esc].total += amount
+
+      if (pay === "paid") {
+        totalRevenue += amount
+      }
+
+      if (esc === "held") {
+        escrowBalance += amount
+        pendingPayouts += amount
+      }
+
+      if (o.status === "delivered" || esc === "released") {
+        completedCount += 1
+      }
+    }
+
+    // Fallback UI-aligned: si pas d'escrow renseigné, pending = statuts en cours
+    if (escrowBalance === 0 && pendingPayouts === 0) {
+      const pending = rows.filter((o) => PENDING_STATUSES.includes(o.status || ""))
+      pendingPayouts = pending.reduce((s, o) => s + (Number(o.total_amount) || 0), 0)
+      escrowBalance = pendingPayouts
+    }
+
+    // Fallback revenu: commandes livrées si aucun paid
+    if (totalRevenue === 0) {
+      totalRevenue = rows
+        .filter((o) => o.status === "delivered")
+        .reduce((s, o) => s + (Number(o.total_amount) || 0), 0)
+    }
+
+    const totalCommissions = totalRevenue * COMMISSION_RATE
+
+    const transactions = rows.slice(0, 20).map((o) => ({
+      id: o.id,
+      order_number: o.order_number,
+      type: "order",
+      amount: Number(o.total_amount) || 0,
+      status: o.status,
+      payment_status: o.payment_status,
+      escrow_status: o.escrow_status,
+      created_at: o.created_at,
+    }))
+
+    return NextResponse.json({
+      period: periodDays,
+      stats: {
+        totalRevenue,
+        totalCommissions,
+        pendingPayouts,
+        completedPayouts: completedCount,
+        walletBalance: 0,
+        escrowBalance,
+        ordersCount: rows.length,
+      },
+      byPaymentStatus,
+      byEscrowStatus,
+      transactions,
+    })
+  } catch (err) {
+    console.error("[api/admin/finances]", err)
+    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 })
+  }
+}
