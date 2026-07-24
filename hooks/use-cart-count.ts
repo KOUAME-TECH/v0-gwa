@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { CART_CHANGED_EVENT } from "@/lib/cart/events"
+import { guestCartProductCount } from "@/lib/cart/guest"
 
 /**
  * Badge charette = nombre de produits distincts (lignes panier),
@@ -18,7 +19,7 @@ export function useCartCount() {
         data: { user },
       } = await supabase.auth.getUser()
       if (!user) {
-        setCount(0)
+        setCount(guestCartProductCount())
         return
       }
       const { count: n, error } = await supabase

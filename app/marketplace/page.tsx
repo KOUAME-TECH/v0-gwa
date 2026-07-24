@@ -281,7 +281,7 @@ function MarketplaceContent() {
         `)
         .eq("status", "active")
         .order("created_at", { ascending: false })
-        .limit(60)
+        .limit(24)
 
       const digestIdsQuery =
         digestIds.length > 0
@@ -348,7 +348,12 @@ function MarketplaceContent() {
 
   async function addToCart(id: string, e: React.MouseEvent) {
     e.preventDefault(); e.stopPropagation()
-    if (!userId) { toast.error("Connecte-toi pour ajouter au panier"); return }
+    if (!userId) {
+      const { addGuestCartItem } = await import("@/lib/cart/guest")
+      addGuestCartItem(id, 1)
+      toast.success("Ajouté à la charette — connecte-toi pour commander")
+      return
+    }
     const res = await addOrIncrementCart(supabase, userId, id, 1)
     if (!res.ok) toast.error("Erreur ajout panier")
     else toast.success("Ajouté au panier")

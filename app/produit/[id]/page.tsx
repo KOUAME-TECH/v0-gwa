@@ -132,12 +132,16 @@ export default function ProduitPage() {
   }
 
   const handleAddToCart = async (goCheckout: boolean) => {
-    if (!user) {
-      router.push("/auth/login")
-      return
-    }
     if (!product) return
     setAdding(true)
+    if (!user) {
+      const { addGuestCartItem } = await import("@/lib/cart/guest")
+      addGuestCartItem(product.id, quantity)
+      setAdding(false)
+      toast.success(goCheckout ? "Dans ta charette (hors ligne)" : "Ajouté à la charette")
+      if (goCheckout) router.push("/panier")
+      return
+    }
     const res = await addOrIncrementCart(supabase, user.id, product.id, quantity)
     setAdding(false)
     if (!res.ok) {
@@ -162,12 +166,20 @@ export default function ProduitPage() {
   }
 
   const handleShare = async () => {
+    const url = typeof window !== "undefined" ? window.location.href : ""
+    const text = product?.name
+      ? `Regarde ${product.name} sur GWA`
+      : "Découvre GWA"
+    const wa = `https://wa.me/?text=${encodeURIComponent(`${text}\n${url}`)}`
     if (navigator.share) {
-      await navigator.share({ title: product?.name, url: window.location.href })
-    } else {
-      await navigator.clipboard.writeText(window.location.href)
-      toast.success("Lien copié")
+      try {
+        await navigator.share({ title: product?.name, text, url })
+        return
+      } catch {
+        /* fall through */
+      }
     }
+    window.open(wa, "_blank", "noopener,noreferrer")
   }
 
   if (isLoading) {

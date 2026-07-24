@@ -152,15 +152,8 @@ export function OneSignalProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (!OneSignal.User.PushSubscription.optedIn) {
-        try {
-          await OneSignal.Notifications.requestPermission()
-          if (OneSignal.User.PushSubscription.optIn) {
-            await OneSignal.User.PushSubscription.optIn()
-          }
-          await sync()
-        } catch {
-          // permission refusée
-        }
+        // Permission uniquement après geste utilisateur (ex. /notifications → Activer)
+        await sync()
       } else {
         await sync()
       }

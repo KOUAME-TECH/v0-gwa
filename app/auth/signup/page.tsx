@@ -29,6 +29,7 @@ import {
   computeProfileCompletion,
   USER_TYPE_MAP,
 } from "@/lib/auth/post-auth"
+import { mergeGuestCartToUser } from "@/lib/cart/guest"
 import { cn } from "@/lib/utils"
 import { HibpPasswordBanner } from "@/components/auth/hibp-password-banner"
 import { useRealtimeLocation, formatCoords } from "@/hooks/use-realtime-location"
@@ -183,6 +184,15 @@ function SignupForm() {
       setPhoneVerified(true)
       setPhoneOtpStep("verified")
       if (data.resumed_login || data.is_new_user === false) {
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          try {
+            await mergeGuestCartToUser(supabase, user.id)
+          } catch {
+            /* non bloquant */
+          }
+        }
         router.refresh()
         router.push(data.redirect_to || "/profil")
         return

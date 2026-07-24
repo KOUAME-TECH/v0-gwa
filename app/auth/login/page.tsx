@@ -14,6 +14,7 @@ import { OtpInput, OtpCountdown } from "@/components/auth/otp-input"
 import { maskPhone } from "@/lib/auth/phone"
 import { HibpPasswordBanner } from "@/components/auth/hibp-password-banner"
 import { GwaMark } from "@/components/brand/gwa-mark"
+import { mergeGuestCartToUser } from "@/lib/cart/guest"
 
 function LoginForm() {
   const router = useRouter()
@@ -45,6 +46,15 @@ function LoginForm() {
       if (!user) {
         router.push(redirectTo || fallbackPath || "/profil")
         return
+      }
+
+      try {
+        const { merged } = await mergeGuestCartToUser(supabase, user.id)
+        if (merged > 0) {
+          /* panier invité fusionné silencieusement */
+        }
+      } catch {
+        /* non bloquant */
       }
 
       // Prefer server gate (service role) — reliable even if RLS regresses

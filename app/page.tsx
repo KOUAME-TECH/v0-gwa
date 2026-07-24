@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback, useRef } from "react"
+import { useEffect, useState, useCallback, useRef, memo } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
@@ -41,11 +41,6 @@ import { useListenMode } from "@/hooks/use-listen-mode"
 import { useListenRitual } from "@/hooks/use-listen-ritual"
 import { useNavBadges } from "@/hooks/use-nav-badges"
 import { useDataSaver } from "@/hooks/use-data-saver"
-
-const WeatherWidget = dynamic(
-  () => import("@/components/weather-widget").then((m) => m.WeatherWidget),
-  { ssr: false, loading: () => null },
-)
 import { CommentComposer } from "@/components/comments/comment-composer"
 import {
   VOICE_COMMENT_PLACEHOLDER,
@@ -60,6 +55,14 @@ import {
   FEED_FILTER_CHIPS,
   productMatchesFeedFilter,
 } from "@/lib/catalog/feed-filters"
+import { saveFeedCache, loadFeedCache, feedCacheAgeLabel } from "@/lib/offline/feed-cache"
+
+const FEED_PAGE_SIZE = 12
+
+const WeatherWidget = dynamic(
+  () => import("@/components/weather-widget").then((m) => m.WeatherWidget),
+  { ssr: false, loading: () => null },
+)
 
 type Product = {
   id: string
@@ -164,6 +167,9 @@ export default function HomePage() {
   const [pullY, setPullY] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [hasMoreFeed, setHasMoreFeed] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [offlineMode, setOfflineMode] = useState(false)
   const pullStartY = useRef<number | null>(null)
   const headerHidden = useHideOnScroll(true)
 
@@ -193,9 +199,22 @@ export default function HomePage() {
     }
   }
 
-  // Charger l'utilisateur et le feed (parallèle : auth + catalogue)
+  // Charger l'utilisateur et le feed (parallèle : auth + catalogue + offline)
   useEffect(() => {
     const loadData = async () => {
+      const offline = typeof navigator !== "undefined" && !navigator.onLine
+      const cached = loadFeedCache()
+
+      if (offline && cached?.items?.length) {
+        setFeed(cached.items as FeedItem[])
+        setOfflineMode(true)
+        setHasMoreFeed(false)
+        setIsLoading(false)
+        setRefreshing(false)
+        toast.message(`Feed hors ligne · ${feedCacheAgeLabel(cached.at)}`)
+        return
+      }
+
       const productsQuery = supabase
         .from("products")
         .select(`
@@ -206,99 +225,214 @@ export default function HomePage() {
         `)
         .eq("status", "active")
         .order("created_at", { ascending: false })
-        .limit(20)
+        .limit(FEED_PAGE_SIZE)
 
       const postsQuery = supabase
         .from("posts")
         .select("id, content, media_urls, video_url, audio_url, likes_count, comments_count, shares_count, created_at, author_id")
         .eq("visibility", "public")
         .order("created_at", { ascending: false })
-        .limit(20)
+        .limit(FEED_PAGE_SIZE)
 
-      const [
-        {
-          data: { user: currentUser },
-        },
-        { data: products },
-        { data: rawPosts },
-      ] = await Promise.all([supabase.auth.getUser(), productsQuery, postsQuery])
+      try {
+        const [
+          {
+            data: { user: currentUser },
+          },
+          { data: products },
+          { data: rawPosts },
+        ] = await Promise.all([supabase.auth.getUser(), productsQuery, postsQuery])
 
-      setUser(currentUser)
+        setUser(currentUser)
+        setOfflineMode(false)
 
-      let userLikes: string[] = []
-      let userFavorites: string[] = []
+        let userLikes: string[] = []
+        let userFavorites: string[] = []
 
-      const authorIds = [...new Set((rawPosts || []).map((p) => p.author_id).filter(Boolean))]
+        const authorIds = [...new Set((rawPosts || []).map((p) => p.author_id).filter(Boolean))]
 
-      const metaPromise = currentUser
-        ? Promise.all([
-            supabase.from("post_likes").select("post_id").eq("user_id", currentUser.id).limit(200),
-            supabase.from("favorites").select("product_id").eq("user_id", currentUser.id).limit(200),
-            supabase.from("profiles").select("user_type").eq("id", currentUser.id).maybeSingle(),
-            supabase.from("followers").select("following_id").eq("follower_id", currentUser.id).limit(200),
-          ])
-        : Promise.resolve(null)
+        const metaPromise = currentUser
+          ? Promise.all([
+              supabase.from("post_likes").select("post_id").eq("user_id", currentUser.id).limit(200),
+              supabase.from("favorites").select("product_id").eq("user_id", currentUser.id).limit(200),
+              supabase.from("profiles").select("user_type").eq("id", currentUser.id).maybeSingle(),
+              supabase.from("followers").select("following_id").eq("follower_id", currentUser.id).limit(200),
+            ])
+          : Promise.resolve(null)
 
-      const authorsPromise =
-        authorIds.length > 0
-          ? supabase
-              .from("profiles")
-              .select("id, full_name, avatar_url, is_verified, user_type")
-              .in("id", authorIds)
-          : Promise.resolve({ data: [] as { id: string; full_name: string | null; avatar_url: string | null; is_verified: boolean | null; user_type: string | null }[] })
+        const authorsPromise =
+          authorIds.length > 0
+            ? supabase
+                .from("profiles")
+                .select("id, full_name, avatar_url, is_verified, user_type")
+                .in("id", authorIds)
+            : Promise.resolve({ data: [] as { id: string; full_name: string | null; avatar_url: string | null; is_verified: boolean | null; user_type: string | null }[] })
 
-      const [metaRes, authorsRes] = await Promise.all([metaPromise, authorsPromise])
+        const [metaRes, authorsRes] = await Promise.all([metaPromise, authorsPromise])
 
-      if (metaRes) {
-        const [likesRes, favsRes, profileRes, followsRes] = metaRes
-        if (profileRes.data) {
-          setUserType(profileRes.data.user_type)
+        if (metaRes) {
+          const [likesRes, favsRes, profileRes, followsRes] = metaRes
+          if (profileRes.data) {
+            setUserType(profileRes.data.user_type)
+          }
+          if (followsRes.data) {
+            setFollowingIds(new Set(followsRes.data.map((f) => f.following_id)))
+          }
+          userLikes = likesRes.data?.map((l) => l.post_id) || []
+          userFavorites = favsRes.data?.map((f) => f.product_id) || []
         }
-        if (followsRes.data) {
-          setFollowingIds(new Set(followsRes.data.map((f) => f.following_id)))
+
+        const profileMap = new Map(
+          (authorsRes.data || []).map((p) => [p.id, p]),
+        )
+        const posts = (rawPosts || []).map((post) => ({
+          ...post,
+          profiles: profileMap.get(post.author_id) || null,
+        }))
+
+        const feedItems: FeedItem[] = []
+        const maxLen = Math.max(products?.length || 0, posts.length)
+
+        for (let i = 0; i < maxLen; i++) {
+          if (products?.[i]) {
+            feedItems.push({
+              type: "product",
+              data: products[i] as Product,
+              isLiked: userFavorites.includes(products[i].id),
+              isSaved: userFavorites.includes(products[i].id),
+            })
+          }
+          if (posts[i]) {
+            feedItems.push({
+              type: "post",
+              data: posts[i] as Post,
+              isLiked: userLikes.includes(posts[i].id),
+              isSaved: false,
+            })
+          }
         }
-        userLikes = likesRes.data?.map((l) => l.post_id) || []
-        userFavorites = favsRes.data?.map((f) => f.product_id) || []
+
+        setFeed(feedItems)
+        setHasMoreFeed(
+          (products?.length || 0) >= FEED_PAGE_SIZE || posts.length >= FEED_PAGE_SIZE,
+        )
+        if (feedItems.length) {
+          saveFeedCache(
+            feedItems.map((item) => ({
+              type: item.type,
+              data: item.data as unknown as Record<string, unknown>,
+              isLiked: item.isLiked,
+              isSaved: item.isSaved,
+            })),
+          )
+        }
+        setIsLoading(false)
+        setRefreshing(false)
+      } catch (err) {
+        console.warn("[feed] load failed", err)
+        if (cached?.items?.length) {
+          setFeed(cached.items as FeedItem[])
+          setOfflineMode(true)
+          setHasMoreFeed(false)
+          toast.message(`Feed hors ligne · ${feedCacheAgeLabel(cached.at)}`)
+        }
+        setIsLoading(false)
+        setRefreshing(false)
       }
+    }
+    loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supabase, refreshKey])
 
-      const profileMap = new Map(
-        (authorsRes.data || []).map((p) => [p.id, p]),
-      )
+  const loadMoreFeed = async () => {
+    if (loadingMore || !hasMoreFeed || offlineMode) return
+    setLoadingMore(true)
+    try {
+      const productItems = feed.filter((f) => f.type === "product")
+      const postItems = feed.filter((f) => f.type === "post")
+      const oldestProduct = productItems[productItems.length - 1]?.data.created_at
+      const oldestPost = postItems[postItems.length - 1]?.data.created_at
+
+      let productsQuery = supabase
+        .from("products")
+        .select(`
+          id, name, description, price, unit, images, audio_url, origin_region, origin_country, product_type, seller_id,
+          likes_count, comments_count, shares_count, created_at, is_organic, is_fair_trade,
+          profiles:seller_id(id, full_name, avatar_url, is_verified, city),
+          categories:category_id(name, slug)
+        `)
+        .eq("status", "active")
+        .order("created_at", { ascending: false })
+        .limit(FEED_PAGE_SIZE)
+      if (oldestProduct) productsQuery = productsQuery.lt("created_at", oldestProduct)
+
+      let postsQuery = supabase
+        .from("posts")
+        .select("id, content, media_urls, video_url, audio_url, likes_count, comments_count, shares_count, created_at, author_id")
+        .eq("visibility", "public")
+        .order("created_at", { ascending: false })
+        .limit(FEED_PAGE_SIZE)
+      if (oldestPost) postsQuery = postsQuery.lt("created_at", oldestPost)
+
+      const [{ data: products }, { data: rawPosts }] = await Promise.all([productsQuery, postsQuery])
+      const authorIds = [...new Set((rawPosts || []).map((p) => p.author_id).filter(Boolean))]
+      const { data: postProfiles } = authorIds.length
+        ? await supabase.from("profiles").select("id, full_name, avatar_url, is_verified, user_type").in("id", authorIds)
+        : { data: [] as { id: string }[] }
+      const profileMap = new Map((postProfiles || []).map((p) => [p.id, p]))
       const posts = (rawPosts || []).map((post) => ({
         ...post,
         profiles: profileMap.get(post.author_id) || null,
       }))
 
-      // Melanger produits et posts dans le feed
-      const feedItems: FeedItem[] = []
+      const more: FeedItem[] = []
       const maxLen = Math.max(products?.length || 0, posts.length)
-
       for (let i = 0; i < maxLen; i++) {
         if (products?.[i]) {
-          feedItems.push({
+          more.push({
             type: "product",
             data: products[i] as Product,
-            isLiked: userFavorites.includes(products[i].id),
-            isSaved: userFavorites.includes(products[i].id),
+            isLiked: false,
+            isSaved: false,
           })
         }
         if (posts[i]) {
-          feedItems.push({
+          more.push({
             type: "post",
             data: posts[i] as Post,
-            isLiked: userLikes.includes(posts[i].id),
+            isLiked: false,
             isSaved: false,
           })
         }
       }
-
-      setFeed(feedItems)
-      setIsLoading(false)
-      setRefreshing(false)
+      if (!more.length) {
+        setHasMoreFeed(false)
+      } else {
+        setFeed((prev) => {
+          const ids = new Set(prev.map((p) => p.data.id))
+          const appended = more.filter((m) => !ids.has(m.data.id))
+          const next = [...prev, ...appended]
+          saveFeedCache(
+            next.map((item) => ({
+              type: item.type,
+              data: item.data as unknown as Record<string, unknown>,
+              isLiked: item.isLiked,
+              isSaved: item.isSaved,
+            })),
+          )
+          return next
+        })
+        setHasMoreFeed(
+          (products?.length || 0) >= FEED_PAGE_SIZE || posts.length >= FEED_PAGE_SIZE,
+        )
+      }
+    } catch (err) {
+      console.warn("[feed] loadMore", err)
+      toast.error("Impossible de charger plus")
+    } finally {
+      setLoadingMore(false)
     }
-    loadData()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [supabase, refreshKey])
+  }
 
   const formatPrice = (price: number) => new Intl.NumberFormat("fr-FR").format(price)
   
@@ -994,6 +1128,24 @@ export default function HomePage() {
               listenModeHighlight={listenMode}
             />
           ))}
+          {hasMoreFeed && !offlineMode ? (
+            <div className="px-3 pb-4 pt-1">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full rounded-full border-[#1F5C2E]/25 bg-white text-[#1F5C2E]"
+                disabled={loadingMore}
+                onClick={() => void loadMoreFeed()}
+              >
+                {loadingMore ? "Chargement…" : "Charger plus"}
+              </Button>
+            </div>
+          ) : null}
+          {offlineMode ? (
+            <p className="px-4 pb-4 text-center text-xs text-amber-700">
+              Mode hors ligne — contenu en cache
+            </p>
+          ) : null}
           </>
         )}
       </div>
@@ -1201,7 +1353,7 @@ export default function HomePage() {
 }
 
 // Composant FeedCard
-function FeedCard({ 
+const FeedCard = memo(function FeedCard({ 
   item, 
   onLike, 
   onComment, 
@@ -1216,7 +1368,7 @@ function FeedCard({
   formatPrice,
   formatTimeAgo,
   listenModeHighlight,
-}: { 
+}): { 
   item: FeedItem
   onLike: () => void
   onComment: () => void
@@ -1632,7 +1784,7 @@ function FeedCard({
       </div>
     </article>
   )
-}
+})
 
 function CommentThread({
   comment,

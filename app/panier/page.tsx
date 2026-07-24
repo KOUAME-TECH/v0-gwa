@@ -72,6 +72,63 @@ export default function CartPage() {
     const { data: { user } } = await supabase.auth.getUser()
     
     if (!user) {
+      // Panier invité (localStorage) — visible hors connexion / avant login
+      const { loadGuestCart } = await import("@/lib/cart/guest")
+      const { loadCatalogCache } = await import("@/lib/offline/catalog-cache")
+      const guest = loadGuestCart()
+      if (!guest.length) {
+        setCart([])
+        setLoading(false)
+        return
+      }
+      const ids = guest.map((g) => g.productId)
+      let products: CartItem["product"][] = []
+      try {
+        const { data } = await supabase
+          .from("products")
+          .select(`
+            id, name, price, unit, images, product_type, seller_id,
+            profiles:seller_id(full_name, city, country)
+          `)
+          .in("id", ids)
+        products = (data || []) as CartItem["product"][]
+      } catch {
+        /* offline */
+      }
+      if (!products.length) {
+        const cached = loadCatalogCache()
+        products = (cached?.products || [])
+          .filter((p) => ids.includes(p.id))
+          .map((p) => ({
+            id: p.id,
+            name: p.name,
+            price: p.price,
+            unit: p.unit,
+            images: p.images || [],
+            product_type: p.product_type,
+            seller_id: p.seller_id,
+            profiles: p.profiles
+              ? {
+                  full_name: p.profiles.full_name,
+                  city: "",
+                  country: "",
+                }
+              : null,
+          }))
+      }
+      const byId = new Map(products.map((p) => [p.id, p]))
+      const items: CartItem[] = guest
+        .map((g) => {
+          const p = byId.get(g.productId)
+          if (!p) return null
+          return {
+            id: `guest-${g.productId}`,
+            quantity: g.quantity,
+            product: p,
+          }
+        })
+        .filter(Boolean) as CartItem[]
+      setCart(items)
       setLoading(false)
       return
     }

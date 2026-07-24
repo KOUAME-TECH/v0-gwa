@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/client"
 import { CART_CHANGED_EVENT } from "@/lib/cart/events"
 import { ORDERS_CHANGED } from "@/hooks/use-active-orders-count"
+import { guestCartProductCount } from "@/lib/cart/guest"
 
 export type NavBadgesState = {
   userId: string | null
@@ -108,7 +109,15 @@ export async function refreshNavBadges(): Promise<void> {
       const u = await getUserDeduped()
 
       if (!u) {
-        clearBadges(false)
+        setState({
+          userId: null,
+          userType: null,
+          unreadNotifs: 0,
+          unreadMessages: 0,
+          cartCount: guestCartProductCount(),
+          activeOrders: 0,
+          loading: false,
+        })
         return
       }
 
@@ -197,7 +206,15 @@ function ensureStarted() {
       setState({ userId: session.user.id })
       void refreshNavBadges()
     } else {
-      clearBadges(false)
+      setState({
+        userId: null,
+        userType: null,
+        unreadNotifs: 0,
+        unreadMessages: 0,
+        cartCount: guestCartProductCount(),
+        activeOrders: 0,
+        loading: false,
+      })
     }
   })
   authUnsub = () => subscription.unsubscribe()

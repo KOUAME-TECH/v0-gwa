@@ -91,6 +91,12 @@ export function OfflineBanner({ offsetForDesktopNav = false }: { offsetForDeskto
               Boutique en cache
             </Link>
           )}
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-0.5 underline-offset-2 hover:underline"
+          >
+            Feed en cache
+          </Link>
           {draftHint && (
             <Link
               href="/publier"
