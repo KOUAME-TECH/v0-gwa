@@ -18,6 +18,7 @@ yarn-error.log*
 
 # env files
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -25,20 +26,18 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-.env*.local
 
 # debug agent logs
 debug-*.log
 .cursor/debug-*.log
 
-# agent / QA screenshots & local browser dumps (not for prod)
+# agent / QA screenshots & local browser dumps (not for repo)
 .playwright-mcp/
-desktop-*.png
-home-preview-*.png
-login-*.png
-preview-*.png
-prod-*.png
-*-preview*.png
 /tmp/
-tsconfig.tsbuildinfo
-produit-compact.png
+*.png
+!public/**/*.png
+!docs/**/*.png
+
+# OS / editor
+.DS_Store
+Thumbs.db

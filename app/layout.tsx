@@ -22,7 +22,6 @@ export const metadata: Metadata = {
     statusBarStyle: "default",
     title: "GWA",
   },
-  generator: "v0.app",
 }
 
 export const viewport: Viewport = {
