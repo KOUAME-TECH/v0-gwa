@@ -71,6 +71,7 @@ app/api/admin/         ↔  lib/supabase/admin + checks rôle
 - Pas de second serveur Node séparé (tout passe par Next API Routes).
 - Pas de microservices tant que le monolithe reste clair par domaine.
 - Pas de seed démo en prod (`scripts/demo/` = optionnel).
+- **Pas de positionnement concurrent aux banques/IMF** — partenaires uniquement (`docs/positionnement-partenaires-bancaires.md`).
 
 ## Fichiers de vérité
 
@@ -78,6 +79,7 @@ app/api/admin/         ↔  lib/supabase/admin + checks rôle
 |-------|---------|
 | Statut des routes | `lib/routes/inventory.ts` |
 | Scope produit | `docs/scope-beta.md` |
+| Banques / IMF | `docs/positionnement-partenaires-bancaires.md` |
 | Logo / marque | `docs/brand.md` |
 | Ops Auth / OTP | `docs/ops-auth.md` |
 | Advisor DB | `scripts/schema/048_advisor_hardening.sql` |
