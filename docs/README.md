@@ -15,5 +15,6 @@
 | [`scg-v2-fastapi-contract.md`](./scg-v2-fastapi-contract.md) | Contrat SCG post-bêta |
 | [`audit-complet-2026-07-24.md`](./audit-complet-2026-07-24.md) | Audit full (code + prod + MCP) |
 | [`suggestions-optimisation.md`](./suggestions-optimisation.md) | Optimisations livrées + roadmap |
+| [`analyse-business-plan-2026-07-27.md`](./analyse-business-plan-2026-07-27.md) | Analyse BP détaillé + état des lieux + P0/P1/P2 |
 
 Agents Cursor locaux : `.cursor/agents/` (pas de doublon dans `docs/`).
