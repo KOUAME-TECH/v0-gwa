@@ -20,5 +20,6 @@
 | [`analyse-business-plan-2026-07-27.md`](./analyse-business-plan-2026-07-27.md) | Analyse BP détaillé + état des lieux + P0/P1/P2 |
 | [`analyse-reunion-fixpay-2026-07-27.md`](./analyse-reunion-fixpay-2026-07-27.md) | Réunion Fixpay 27/07 — escrow, tarifs, suggestions |
 | [`analyse-dossier-feexpay-2026-07.md`](./analyse-dossier-feexpay-2026-07.md) | Dossier mail+CR+grille FeexPay (12–27 juil.) — comparatif complet |
+| [`aide-decision-gwa-2026-07-27.md`](./aide-decision-gwa-2026-07-27.md) | **Synthèse décisionnelle** — 7 arbitrages + plan août |
 
 Agents Cursor locaux : `.cursor/agents/` (pas de doublon dans `docs/`).
