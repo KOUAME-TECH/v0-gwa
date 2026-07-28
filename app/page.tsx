@@ -34,6 +34,7 @@ import { YellyAideButton } from "@/components/yelly/yelly-aide-button"
 import { StoriesRail, type StoriesSeedProduct } from "@/components/feed/stories-rail"
 import { useHideOnScroll } from "@/hooks/use-hide-on-scroll"
 import { shouldShowVerifiedBadge } from "@/lib/verification/badge"
+import { feedPriorityForTier } from "@/lib/pricing/entitlements"
 import { ClickableListenText, ListenMicButton } from "@/components/media/clickable-listen-text"
 import { isLowQualityPostContent } from "@/lib/feed/content-quality"
 import { ListenRitualBadge } from "@/components/media/listen-ritual-badge"
@@ -93,6 +94,7 @@ type Product = {
     avatar_url: string | null
     is_verified: boolean
     city: string
+    subscription_tier?: string | null
   } | null
 }
 
@@ -238,7 +240,7 @@ export default function HomePage() {
         .select(`
           id, name, description, price, unit, images, audio_url, origin_region, origin_country, product_type, seller_id,
           likes_count, comments_count, shares_count, created_at, is_organic,
-          profiles:seller_id(id, full_name, avatar_url, is_verified, city),
+          profiles:seller_id(id, full_name, avatar_url, is_verified, city, subscription_tier),
           categories:category_id(name, slug)
         `)
         .eq("status", "active")
@@ -309,15 +311,21 @@ export default function HomePage() {
         }))
 
         const feedItems: FeedItem[] = []
-        const maxLen = Math.max(products?.length || 0, posts.length)
+        const rankedProducts = ([...(products || [])] as Product[]).sort((a, b) => {
+          const pa = feedPriorityForTier(a.profiles?.subscription_tier)
+          const pb = feedPriorityForTier(b.profiles?.subscription_tier)
+          if (pb !== pa) return pb - pa
+          return Date.parse(b.created_at || "0") - Date.parse(a.created_at || "0")
+        })
+        const maxLen = Math.max(rankedProducts.length, posts.length)
 
         for (let i = 0; i < maxLen; i++) {
-          if (products?.[i]) {
+          if (rankedProducts[i]) {
             feedItems.push({
               type: "product",
-              data: products[i] as Product,
-              isLiked: userFavorites.includes(products[i].id),
-              isSaved: userFavorites.includes(products[i].id),
+              data: rankedProducts[i],
+              isLiked: userFavorites.includes(rankedProducts[i].id),
+              isSaved: userFavorites.includes(rankedProducts[i].id),
             })
           }
           if (posts[i]) {

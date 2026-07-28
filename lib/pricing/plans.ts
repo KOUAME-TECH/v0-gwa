@@ -1,8 +1,8 @@
 /**
- * Plans abo vendeur GWA — décision DG 28/07/2026.
+ * Plans abo vendeur — bénéfices = entitlements réellement délivrés.
  */
+import { entitlementsForTier } from "@/lib/pricing/entitlements"
 import {
-  FREE_MAX_ACTIVE_LISTINGS,
   SELLER_COMMISSION_RATES,
   SUBSCRIPTION_PRICES_FCFA,
   TIER_LABELS_FR,
@@ -25,6 +25,29 @@ function pctLabel(rate: number): string {
   return `${pct % 1 === 0 ? pct.toFixed(0) : pct.toFixed(1)} %`
 }
 
+function benefitsFor(tier: SubscriptionTier): string[] {
+  const e = entitlementsForTier(tier)
+  const lines: string[] = []
+  if (e.maxActiveListings != null) {
+    lines.push(`Jusqu’à ${e.maxActiveListings} annonces actives`)
+  } else {
+    lines.push("Annonces illimitées")
+  }
+  lines.push(`Commission ${pctLabel(e.commissionRate)}`)
+  if (e.digestLocal) lines.push("Digest local")
+  if (e.scgBasic && !e.scgAdvanced) lines.push("SCG de base")
+  if (e.scgAdvanced) lines.push("SCG avancé")
+  if (e.boostScore > 0 && e.feedPriority < 50) lines.push("Boost léger catalogue")
+  if (e.feedPriority >= 50) lines.push("Priorité feed / boutique")
+  if (e.simpleStats) lines.push("Stats vendeur")
+  if (e.factoringPriority >= 100) lines.push("Priorité file affacturage")
+  if (e.proBadge) lines.push("Badge Pro GWA")
+  if (e.reporting) lines.push("Reporting ventes")
+  if (e.multiManagers) lines.push("Multi-gestionnaires")
+  if (e.accountManager) lines.push("Account manager (ops)")
+  return lines
+}
+
 export const SELLER_PLANS: SellerPlan[] = [
   {
     tier: "free",
@@ -33,11 +56,7 @@ export const SELLER_PLANS: SellerPlan[] = [
     commissionPct: SELLER_COMMISSION_RATES.free * 100,
     commissionLabel: pctLabel(SELLER_COMMISSION_RATES.free),
     headline: "Pour démarrer",
-    benefits: [
-      `Jusqu’à ${FREE_MAX_ACTIVE_LISTINGS} annonces actives`,
-      `Commission ${pctLabel(SELLER_COMMISSION_RATES.free)}`,
-      "Digest local + SCG de base",
-    ],
+    benefits: benefitsFor("free"),
     cta: "Plan actuel",
   },
   {
@@ -47,11 +66,7 @@ export const SELLER_PLANS: SellerPlan[] = [
     commissionPct: SELLER_COMMISSION_RATES.starter * 100,
     commissionLabel: pctLabel(SELLER_COMMISSION_RATES.starter),
     headline: "Producteur actif",
-    benefits: [
-      "Annonces illimitées",
-      `Commission ${pctLabel(SELLER_COMMISSION_RATES.starter)}`,
-      "Boost léger + stats simples",
-    ],
+    benefits: benefitsFor("starter"),
     cta: "Passer Starter",
   },
   {
@@ -61,11 +76,7 @@ export const SELLER_PLANS: SellerPlan[] = [
     commissionPct: SELLER_COMMISSION_RATES.pro * 100,
     commissionLabel: pctLabel(SELLER_COMMISSION_RATES.pro),
     headline: "Gros volumes",
-    benefits: [
-      `Commission ${pctLabel(SELLER_COMMISSION_RATES.pro)}`,
-      "Priorité feed / boutique",
-      "Priorité file affacturage",
-    ],
+    benefits: benefitsFor("pro"),
     cta: "Passer Pro",
   },
   {
@@ -75,11 +86,7 @@ export const SELLER_PLANS: SellerPlan[] = [
     commissionPct: SELLER_COMMISSION_RATES.enterprise * 100,
     commissionLabel: `≤ ${pctLabel(SELLER_COMMISSION_RATES.enterprise)}`,
     headline: "Coopératives & réseaux",
-    benefits: [
-      "Multi-gestionnaires",
-      "Reporting + account manager",
-      "Commission négociée",
-    ],
+    benefits: benefitsFor("enterprise"),
     cta: "Demander un devis",
   },
 ]

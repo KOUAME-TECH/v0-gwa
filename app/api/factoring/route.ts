@@ -7,6 +7,13 @@ import {
   isFactoringEligible,
   roleCanRequestFactoring,
 } from "@/lib/factoring/eligibility"
+import { factoringQueuePriority } from "@/lib/pricing/entitlements"
+import {
+  canUseAdvancedCoopFeatures,
+  evaluateCoopQualification,
+  countActiveMembers,
+  hasLegalDocuments,
+} from "@/lib/cooperatives/validation-policy"
 
 /** Seuil d'éligibilité affacturage (aligné sur bancable du moteur SCG) */
 const SCG_SEUIL_ELIGIBILITE = FACTORING_MIN_SCORE
@@ -38,14 +45,22 @@ export async function GET(request: NextRequest) {
       const { data, error: qErr } = await admin
         .from("factoring_requests")
         .select(
-          "*, requester:requester_id (id, full_name, phone, city, user_type, scg_score, scg_badge, scg_bancable)",
+          "*, requester:requester_id (id, full_name, phone, city, user_type, scg_score, scg_badge, scg_bancable, subscription_tier)",
         )
         .order("created_at", { ascending: false })
         .limit(200)
       if (qErr) {
         return NextResponse.json({ error: qErr.message }, { status: 500 })
       }
-      return NextResponse.json({ requests: data ?? [], is_admin: true })
+      const sorted = [...(data ?? [])].sort((a, b) => {
+        const pa = Number((a as { queue_priority?: number }).queue_priority) || 0
+        const pb = Number((b as { queue_priority?: number }).queue_priority) || 0
+        if (pb !== pa) return pb - pa
+        return (
+          Date.parse(String(a.created_at)) - Date.parse(String(b.created_at))
+        )
+      })
+      return NextResponse.json({ requests: sorted, is_admin: true })
     }
 
     const { data, error: qErr } = await admin
@@ -93,7 +108,9 @@ export async function POST(request: NextRequest) {
     // Profil + snapshot SCG au moment de la demande
     const { data: profile } = await admin
       .from("profiles")
-      .select("id, user_type, scg_score, scg_badge, scg_bancable")
+      .select(
+        "id, user_type, scg_score, scg_badge, scg_bancable, subscription_tier, coop_id",
+      )
       .eq("id", user.id)
       .maybeSingle()
 
@@ -107,6 +124,41 @@ export async function POST(request: NextRequest) {
         },
         { status: 403 },
       )
+    }
+
+    // Coop restricted → pas d'affacturage (feature avancée)
+    if (profile?.user_type === "cooperative" && profile.coop_id) {
+      const { data: coop } = await admin
+        .from("cooperatives")
+        .select("id, created_at, legal_documents, registration_number, validation_status")
+        .eq("id", profile.coop_id)
+        .maybeSingle()
+      if (coop) {
+        const { data: members } = await admin
+          .from("cooperative_members")
+          .select("is_active")
+          .eq("cooperative_id", coop.id)
+        const access = evaluateCoopQualification({
+          createdAt: coop.created_at,
+          activeMemberCount: countActiveMembers(members),
+          hasLegalDocs: hasLegalDocuments(
+            coop.legal_documents,
+            coop.registration_number,
+          ),
+          adminStatus: coop.validation_status,
+        }).access
+        if (!canUseAdvancedCoopFeatures(access)) {
+          return NextResponse.json(
+            {
+              error:
+                "Affacturage réservé aux coopératives qualifiées (membres + docs). Fonctions de base restent ouvertes.",
+              code: "COOP_ADVANCED_RESTRICTED",
+              access,
+            },
+            { status: 403 },
+          )
+        }
+      }
     }
 
     const score = profile?.scg_score ?? 0
@@ -128,6 +180,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const queuePriority = factoringQueuePriority(profile?.subscription_tier)
+
     // order_id optionnel : doit appartenir au demandeur (vendeur ou acheteur)
     if (orderId) {
       const { data: order } = await admin
@@ -143,18 +197,32 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const { data: created, error: insErr } = await admin
+    const insertBase: Record<string, unknown> = {
+      requester_id: user.id,
+      order_id: orderId,
+      amount_fcfa: amount,
+      status: "pending",
+      scg_score_snapshot: score,
+      scg_badge_snapshot: profile?.scg_badge ?? null,
+      queue_priority: queuePriority,
+    }
+
+    let { data: created, error: insErr } = await admin
       .from("factoring_requests")
-      .insert({
-        requester_id: user.id,
-        order_id: orderId,
-        amount_fcfa: amount,
-        status: "pending",
-        scg_score_snapshot: score,
-        scg_badge_snapshot: profile?.scg_badge ?? null,
-      })
+      .insert(insertBase)
       .select()
       .single()
+
+    if (insErr && /queue_priority|column/i.test(insErr.message)) {
+      const { queue_priority: _qp, ...withoutPriority } = insertBase
+      const fallback = await admin
+        .from("factoring_requests")
+        .insert(withoutPriority)
+        .select()
+        .single()
+      created = fallback.data
+      insErr = fallback.error
+    }
 
     if (insErr || !created) {
       console.error("[api/factoring POST]", insErr?.message)

@@ -55,6 +55,12 @@ export default function FarmerDashboard() {
   const [coachDims, setCoachDims] = useState<SCGDimensions | null>(null)
   const [coachScore, setCoachScore] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
+  const [sellerStats, setSellerStats] = useState<{
+    gmv_fcfa: number
+    net_fcfa: number
+    product_views: number
+  } | null>(null)
+  const [statsLocked, setStatsLocked] = useState(false)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -143,6 +149,24 @@ export default function FarmerDashboard() {
         })
       }
 
+      try {
+        const statsRes = await fetch("/api/seller/stats")
+        const statsJson = await statsRes.json().catch(() => ({}))
+        if (statsRes.ok && statsJson.stats) {
+          setSellerStats({
+            gmv_fcfa: statsJson.stats.gmv_fcfa || 0,
+            net_fcfa: statsJson.stats.net_fcfa || 0,
+            product_views: statsJson.stats.product_views || 0,
+          })
+          setStatsLocked(false)
+        } else if (statsRes.status === 403) {
+          setStatsLocked(true)
+          setSellerStats(null)
+        }
+      } catch {
+        /* ignore */
+      }
+
       setIsLoading(false)
     }
     fetchData()
@@ -214,9 +238,17 @@ export default function FarmerDashboard() {
                 <TrendingUp className="h-4 w-4 text-green-500" />
               </div>
               <p className="text-2xl font-bold text-[#111827]">
-                {stats.totalRevenue > 0 ? `${(stats.totalRevenue / 1000).toFixed(0)}K` : "0"}
+                {sellerStats
+                  ? sellerStats.net_fcfa > 0
+                    ? `${(sellerStats.net_fcfa / 1000).toFixed(0)}K`
+                    : "0"
+                  : stats.totalRevenue > 0
+                    ? `${(stats.totalRevenue / 1000).toFixed(0)}K`
+                    : "0"}
               </p>
-              <p className="text-xs text-[#4B5563]">Revenus (FCFA)</p>
+              <p className="text-xs text-[#4B5563]">
+                {sellerStats ? "Net perçu (FCFA)" : "Revenus (FCFA)"}
+              </p>
             </CardContent>
           </Card>
 
@@ -247,12 +279,23 @@ export default function FarmerDashboard() {
           <Card className="bg-white border-0 shadow-sm">
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-2">
-                <Users className="h-8 w-8 text-purple-500 bg-purple-500/10 p-1.5 rounded-lg" />
+                <BarChart3 className="h-8 w-8 text-[#C27D10] bg-[#C27D10]/10 p-1.5 rounded-lg" />
               </div>
-              <p className="text-2xl font-bold text-[#111827]">
-                {new Set(orders.map(o => o.profiles?.full_name).filter(Boolean)).size}
-              </p>
-              <p className="text-xs text-[#4B5563]">Clients</p>
+              {statsLocked ? (
+                <>
+                  <p className="text-sm font-semibold text-[#111827]">Stats Starter+</p>
+                  <Link href="/abonnement" className="text-xs text-[#2F7D32] underline">
+                    Débloquer
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <p className="text-2xl font-bold text-[#111827]">
+                    {sellerStats?.product_views ?? 0}
+                  </p>
+                  <p className="text-xs text-[#4B5563]">Vues boutique</p>
+                </>
+              )}
             </CardContent>
           </Card>
         </div>

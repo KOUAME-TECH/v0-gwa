@@ -35,6 +35,9 @@ export async function GET() {
   const atKey = hasAfricasTalkingProvider()
   const atLive = isAfricasTalkingLiveUsername()
   const atSender = hasAfricasTalkingSenderId()
+  const feexpayKey = envSet('FEEXPAY_API_KEY')
+  const feexpayShop = envSet('FEEXPAY_SHOP_ID')
+  const feexpayMode = (process.env.FEEXPAY_MODE || 'sandbox').toLowerCase()
   let geminiReady =
     envSet('GEMINI_API_KEY') ||
     envSet('GOOGLE_GENERATIVE_AI_API_KEY') ||
@@ -74,6 +77,16 @@ export async function GET() {
       ONESIGNAL_APP_ID: onesignalApp,
       ONESIGNAL_REST_API_KEY: onesignalRest,
       GEMINI_API_KEY: geminiReady,
+      FEEXPAY_API_KEY: feexpayKey,
+      FEEXPAY_SHOP_ID: feexpayShop,
+    },
+    feexpay: {
+      configured: feexpayKey && feexpayShop,
+      mode: feexpayMode === 'live' || feexpayMode === 'prod' || feexpayMode === 'production'
+        ? 'live'
+        : 'sandbox',
+      payin_ready: feexpayKey && feexpayShop,
+      payout_ready: feexpayKey && feexpayShop,
     },
     sms_delivery_ready: atKey && atLive && atSender,
     resilience: {

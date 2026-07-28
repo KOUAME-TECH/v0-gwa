@@ -274,15 +274,28 @@ export default function CartPage() {
         if (!orderId) throw new Error("Réponse commande invalide")
         createdOrderIds.push(orderId)
 
-        // Paiement : live Feexpay ou simulation hors prod uniquement
+        // Paiement : FeexPay pay-in (payment_url) ou simulation hors prod
         const payRes = await fetch(`/api/orders/${orderId}/pay`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ payment_method: paymentMethod }),
+          body: JSON.stringify({
+            payment_method: paymentMethod,
+            phone: deliveryAddress.phone,
+          }),
         })
+        const payPayload = await payRes.json().catch(() => ({}))
+        if (payRes.ok && typeof payPayload?.payment_url === "string" && payPayload.payment_url) {
+          await supabase.from("cart_items").delete().eq("user_id", user.id)
+          const { notifyCartChanged } = await import("@/lib/cart/events")
+          notifyCartChanged()
+          window.location.href = payPayload.payment_url
+          return
+        }
         if (!payRes.ok && payRes.status !== 503) {
-          const payErr = await payRes.json().catch(() => ({}))
-          console.error("[panier] pay", payErr)
+          console.error("[panier] pay", payPayload)
+          if (payPayload?.code === "PHONE_REQUIRED" || payPayload?.code === "INVALID_PHONE") {
+            throw new Error(payPayload?.error || "Numéro Mobile Money requis")
+          }
         }
       }
 

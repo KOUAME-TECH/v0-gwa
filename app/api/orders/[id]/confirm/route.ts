@@ -2,13 +2,17 @@ import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { sendPushToUser } from "@/lib/notifications/push"
+import {
+  createFeexPayPayout,
+  getFeexPayCredentials,
+  mapPaymentMethodToNetwork,
+} from "@/lib/feexpay/client"
 
 type Ctx = { params: Promise<{ id: string }> }
 
 /**
  * POST /api/orders/[id]/confirm
- * Acheteur confirme réception → release escrow (uniquement si payé + held).
- * Body JSON optionnel : { receptionPhotoUrl?: string }
+ * Acheteur confirme réception → payout vendeur (net commission) + release escrow.
  */
 export async function POST(request: NextRequest, context: Ctx) {
   try {
@@ -24,7 +28,8 @@ export async function POST(request: NextRequest, context: Ctx) {
     let receptionPhotoUrl: string | null = null
     try {
       const body = await request.json()
-      const raw = typeof body?.receptionPhotoUrl === "string" ? body.receptionPhotoUrl.trim() : ""
+      const raw =
+        typeof body?.receptionPhotoUrl === "string" ? body.receptionPhotoUrl.trim() : ""
       if (raw && /^https?:\/\//i.test(raw) && raw.length < 800) {
         receptionPhotoUrl = raw
       }
@@ -61,12 +66,71 @@ export async function POST(request: NextRequest, context: Ctx) {
     const admin = createAdminClient()
     const now = new Date().toISOString()
 
+    const { data: sellerProfile } = await admin
+      .from("profiles")
+      .select("phone, full_name")
+      .eq("id", order.seller_id)
+      .maybeSingle()
+
+    const payoutAmount =
+      order.vendeur_recoit_fcfa != null
+        ? Math.round(Number(order.vendeur_recoit_fcfa))
+        : Math.max(
+            0,
+            Math.round(Number(order.total_amount) || 0) -
+              Math.round(Number(order.commission_fcfa) || 0) -
+              Math.round(Number(order.service_fee) || 0),
+          )
+
+    let payoutStatus = "skipped_no_provider"
+    let payoutRef: string | null = null
+    let payoutNetwork: string | null = null
+    let payoutError: string | null = null
+
+    const creds = getFeexPayCredentials()
+    const sellerPhone = String(sellerProfile?.phone || "").trim()
+    const network = mapPaymentMethodToNetwork(
+      order.payment_method || order.payout_network || "orange",
+    )
+
+    if (creds && payoutAmount > 0) {
+      if (!sellerPhone) {
+        payoutStatus = "failed"
+        payoutError = "SELLER_PHONE_MISSING"
+      } else {
+        payoutStatus = "processing"
+        payoutNetwork = network
+        const payout = await createFeexPayPayout({
+          amountFcfa: payoutAmount,
+          phone: sellerPhone,
+          network,
+          description: `GWA release ${order.order_number}`,
+        })
+        if (payout.ok) {
+          payoutStatus = "paid"
+          payoutRef = payout.reference
+        } else {
+          payoutStatus = "failed"
+          payoutError = payout.error || "PAYOUT_FAILED"
+          console.error("[api/orders/confirm] payout", payout.error, payout.raw)
+        }
+      }
+    } else if (!creds && process.env.ALLOW_PAYMENT_SIMULATION === "true") {
+      payoutStatus = "skipped_sim"
+      payoutRef = `SIM-OUT-${Date.now().toString(36).toUpperCase()}`
+    }
+
     const orderPatch: Record<string, unknown> = {
       status: "delivered",
       escrow_status: "released",
       confirmed_by_buyer_at: now,
       delivered_at: now,
       updated_at: now,
+      payout_status: payoutStatus,
+      payout_ref: payoutRef,
+      payout_network: payoutNetwork,
+      payout_at: now,
+      payout_error: payoutError,
     }
     if (receptionPhotoUrl) {
       orderPatch.notes = [order.notes, `Photo réception: ${receptionPhotoUrl}`]
@@ -75,7 +139,21 @@ export async function POST(request: NextRequest, context: Ctx) {
         .slice(0, 2000)
     }
 
-    await admin.from("orders").update(orderPatch).eq("id", id)
+    const { error: updErr } = await admin.from("orders").update(orderPatch).eq("id", id)
+    if (updErr) {
+      // Colonnes payout absentes (migration 053 non appliquée) → release minimale
+      console.warn("[api/orders/confirm] payout cols?", updErr.message)
+      await admin
+        .from("orders")
+        .update({
+          status: "delivered",
+          escrow_status: "released",
+          confirmed_by_buyer_at: now,
+          delivered_at: now,
+          updated_at: now,
+        })
+        .eq("id", id)
+    }
 
     await admin
       .from("escrow_transactions")
@@ -88,12 +166,17 @@ export async function POST(request: NextRequest, context: Ctx) {
       performed_by: user.id,
       action: "buyer_confirmed",
       new_value: "released",
-      notes: receptionPhotoUrl
-        ? `Confirmation avec photo: ${receptionPhotoUrl}`
-        : "Confirmation réception — release escrow",
+      notes: [
+        receptionPhotoUrl ? `Photo: ${receptionPhotoUrl}` : null,
+        `payout=${payoutStatus}`,
+        payoutRef ? `ref=${payoutRef}` : null,
+        payoutError ? `err=${payoutError}` : null,
+        `amount=${payoutAmount}`,
+      ]
+        .filter(Boolean)
+        .join(" | "),
     })
 
-    // Facture numérique (lean) — une par commande, idempotent via unique(order_id)
     const invoiceNumber = `FA-${order.order_number}`
     await admin.from("invoices").upsert(
       {
@@ -107,26 +190,37 @@ export async function POST(request: NextRequest, context: Ctx) {
       { onConflict: "order_id", ignoreDuplicates: true },
     )
 
+    const sellerMsg =
+      payoutStatus === "paid"
+        ? `Fonds versés (${payoutAmount} FCFA) — ${order.order_number}`
+        : payoutStatus === "failed"
+          ? `Livraison confirmée — payout en file ops (${order.order_number})`
+          : `L'acheteur a confirmé ${order.order_number}`
+
     await admin.from("notifications").insert({
       user_id: order.seller_id,
       type: "order",
-      title: "Fonds libérés",
-      message: `L'acheteur a confirmé ${order.order_number}`,
-      body: `Fonds libérés pour ${order.order_number}`,
+      title: payoutStatus === "paid" ? "Paiement reçu" : "Fonds libérés",
+      message: sellerMsg,
+      body: sellerMsg,
       link: `/wallet`,
       is_read: false,
       read: false,
     })
 
     void sendPushToUser(supabase as never, order.seller_id, {
-      title: "Argent libéré",
-      body: `${order.order_number} — l’acheteur a confirmé`,
+      title: payoutStatus === "paid" ? "Argent versé" : "Argent libéré",
+      body: sellerMsg,
       url: "/wallet",
     })
 
     return NextResponse.json({
       success: true,
       escrow_status: "released",
+      payout_status: payoutStatus,
+      payout_ref: payoutRef,
+      payout_amount_fcfa: payoutAmount,
+      payout_error: payoutError,
     })
   } catch (err) {
     console.error("[api/orders/confirm]", err)

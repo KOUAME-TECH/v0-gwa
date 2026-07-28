@@ -160,33 +160,31 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // FREE : max 5 annonces actives (décision DG)
+    // Entitlements abo : Free = max 5 actives ; Starter+ = illimité
     const { data: sellerProfile } = await supabase
       .from("profiles")
       .select("subscription_tier")
       .eq("id", user.id)
       .maybeSingle()
-    const { FREE_MAX_ACTIVE_LISTINGS, normalizeSubscriptionTier } = await import(
-      "@/lib/pricing/service-fee"
-    )
-    const tier = normalizeSubscriptionTier(
+    const { canPublishAnotherListing } = await import("@/lib/pricing/entitlements")
+    const { count } = await supabase
+      .from("products")
+      .select("id", { count: "exact", head: true })
+      .eq("seller_id", user.id)
+      .eq("status", "active")
+    const listingGate = canPublishAnotherListing(
       (sellerProfile as { subscription_tier?: string } | null)?.subscription_tier,
+      count || 0,
     )
-    if (tier === "free") {
-      const { count } = await supabase
-        .from("products")
-        .select("id", { count: "exact", head: true })
-        .eq("seller_id", user.id)
-        .eq("status", "active")
-      if ((count || 0) >= FREE_MAX_ACTIVE_LISTINGS) {
-        return NextResponse.json(
-          {
-            error: `Palier Gratuit : maximum ${FREE_MAX_ACTIVE_LISTINGS} annonces actives. Passe en Starter pour en publier plus.`,
-            code: "FREE_LISTING_LIMIT",
-          },
-          { status: 403 },
-        )
-      }
+    if (!listingGate.ok) {
+      return NextResponse.json(
+        {
+          error: listingGate.message,
+          code: listingGate.code,
+          upgrade_path: "/abonnement",
+        },
+        { status: 403 },
+      )
     }
 
     const payload = {

@@ -4,7 +4,6 @@ import { checkRateLimit } from "@/lib/security/rate-limiter"
 
 const PENDING_STATUSES = ["pending", "confirmed", "processing", "shipped"]
 const ALLOWED_PERIODS = new Set([7, 30, 90, 365])
-const COMMISSION_RATE = 0.05
 
 /**
  * GET /api/admin/finances
@@ -37,7 +36,7 @@ export async function GET(request: NextRequest) {
     const { data: orders, error } = await admin
       .from("orders")
       .select(
-        "id, order_number, total_amount, status, payment_status, escrow_status, created_at",
+        "id, order_number, total_amount, commission_fcfa, status, payment_status, escrow_status, created_at",
       )
       .gte("created_at", daysAgo.toISOString())
       .order("created_at", { ascending: false })
@@ -55,9 +54,11 @@ export async function GET(request: NextRequest) {
     let escrowBalance = 0
     let pendingPayouts = 0
     let completedCount = 0
+    let totalCommissions = 0
 
     for (const o of rows) {
       const amount = Number(o.total_amount) || 0
+      const commission = Number(o.commission_fcfa) || 0
       const pay = o.payment_status || "pending"
       const esc = o.escrow_status || "pending"
 
@@ -71,6 +72,7 @@ export async function GET(request: NextRequest) {
 
       if (pay === "paid") {
         totalRevenue += amount
+        totalCommissions += commission
       }
 
       if (esc === "held") {
@@ -95,9 +97,12 @@ export async function GET(request: NextRequest) {
       totalRevenue = rows
         .filter((o) => o.status === "delivered")
         .reduce((s, o) => s + (Number(o.total_amount) || 0), 0)
+      if (totalCommissions === 0) {
+        totalCommissions = rows
+          .filter((o) => o.status === "delivered")
+          .reduce((s, o) => s + (Number(o.commission_fcfa) || 0), 0)
+      }
     }
-
-    const totalCommissions = totalRevenue * COMMISSION_RATE
 
     const transactions = rows.slice(0, 20).map((o) => ({
       id: o.id,

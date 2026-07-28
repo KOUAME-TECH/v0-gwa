@@ -33,6 +33,11 @@ import { addOrIncrementCart } from "@/lib/cart/add"
 import { prefetchProduct } from "@/lib/products/prefetch"
 import { cn } from "@/lib/utils"
 import { useHideOnScroll } from "@/hooks/use-hide-on-scroll"
+import {
+  feedPriorityForTier,
+  hasProBadge,
+  sortByFeedPriority,
+} from "@/lib/pricing/entitlements"
 
 type Product = {
   id: string
@@ -51,7 +56,13 @@ type Product = {
   product_type: string
   category_id: string | null
   seller_id: string
-  profiles: { full_name: string; avatar_url: string | null; is_verified: boolean } | null
+  feedPriority?: number
+  profiles: {
+    full_name: string
+    avatar_url: string | null
+    is_verified: boolean
+    subscription_tier?: string | null
+  } | null
   categories: { name: string; slug: string } | null
 }
 
@@ -148,6 +159,9 @@ function MarketplaceGridCard({
           <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
             {p.profiles.full_name}
             {p.profiles.is_verified && <span className="text-[#2F7D32]">{"✓"}</span>}
+            {hasProBadge(p.profiles.subscription_tier) && (
+              <Badge className="bg-[#C27D10]/15 text-[#8B5A00] text-[9px] px-1 py-0 h-4">Pro</Badge>
+            )}
           </p>
         )}
         <div className="flex items-center justify-between mt-1.5">
@@ -302,12 +316,12 @@ function MarketplaceContent() {
           id, name, price, unit, description, audio_url, audio_lang, created_at, images,
           origin_country, origin_region,
           is_organic, is_fair_trade, product_type, category_id, seller_id,
-          profiles:seller_id(full_name, avatar_url, is_verified),
+          profiles:seller_id(full_name, avatar_url, is_verified, subscription_tier),
           categories:category_id(name, slug)
         `)
         .eq("status", "active")
         .order("created_at", { ascending: false })
-        .limit(24)
+        .limit(48)
 
       const digestIdsQuery =
         digestIds.length > 0
@@ -335,8 +349,14 @@ function MarketplaceContent() {
       const catalog = (productsRes.data || []) as Product[]
       const digestExtra = (digestIdsRes.data || []) as Product[]
       const byId = new Map<string, Product>()
-      for (const p of [...digestExtra, ...catalog]) byId.set(p.id, p)
-      const merged = [...byId.values()]
+      for (const p of [...digestExtra, ...catalog]) {
+        const tier = p.profiles?.subscription_tier
+        byId.set(p.id, {
+          ...p,
+          feedPriority: feedPriorityForTier(tier),
+        })
+      }
+      const merged = sortByFeedPriority([...byId.values()]).slice(0, 24)
       setProducts(merged)
       if (categoriesRes.data) setCategories(categoriesRes.data)
       if (favsRes.data) setFavorites(new Set((favsRes.data as { product_id: string }[]).map(f => f.product_id)))

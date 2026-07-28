@@ -90,12 +90,14 @@ export default function WalletPage() {
       .eq('status', 'delivered')
       .eq('payment_status', 'paid')
 
-    const sellerNet = (order: {
+    type OrderMoney = {
       total_amount?: number | null
       service_fee?: number | null
       vendeur_recoit_fcfa?: number | null
       commission_fcfa?: number | null
-    }) => {
+    }
+
+    const sellerNet = (order: OrderMoney) => {
       if (order.vendeur_recoit_fcfa != null) return Number(order.vendeur_recoit_fcfa) || 0
       const total = Number(order.total_amount) || 0
       const commission = Number(order.commission_fcfa) || 0
@@ -103,9 +105,10 @@ export default function WalletPage() {
       return Math.max(0, total - (Number(order.service_fee) || 0))
     }
 
-    const totalEarned = completedOrders?.reduce((sum, order) => {
-      return sum + sellerNet(order)
-    }, 0) || 0
+    const totalEarned =
+      (completedOrders as OrderMoney[] | null)?.reduce((sum: number, order: OrderMoney) => {
+        return sum + sellerNet(order)
+      }, 0) || 0
 
     // Calculate pending balance (orders not yet delivered)
     const { data: pendingOrders } = await supabase
@@ -115,24 +118,56 @@ export default function WalletPage() {
       .in('status', ['confirmed', 'preparing', 'shipping'])
       .eq('payment_status', 'paid')
 
-    const pendingBalance = pendingOrders?.reduce((sum, order) => {
-      return sum + sellerNet(order)
-    }, 0) || 0
+    const pendingBalance =
+      (pendingOrders as OrderMoney[] | null)?.reduce((sum: number, order: OrderMoney) => {
+        return sum + sellerNet(order)
+      }, 0) || 0
 
-    // For now, simulate withdrawal history (would be in a wallet_transactions table)
-    // In production, you'd have a proper wallet table
-    const totalWithdrawn = 0 // Would come from wallet_transactions table
+    let totalWithdrawn = 0
+    const withdrawTxns: Transaction[] = []
+    try {
+      const wRes = await fetch("/api/wallet/withdraw")
+      const wData = await wRes.json().catch(() => ({}))
+      const rows = (wData.withdrawals || []) as {
+        id: string
+        amount_fcfa: number
+        status: string
+        feexpay_ref?: string | null
+        created_at: string
+      }[]
+      totalWithdrawn = rows
+        .filter((w) => ["pending", "processing", "paid"].includes(w.status))
+        .reduce((s, w) => s + (Number(w.amount_fcfa) || 0), 0)
+      for (const w of rows) {
+        withdrawTxns.push({
+          id: w.id,
+          type: "withdrawal",
+          amount: Number(w.amount_fcfa) || 0,
+          status:
+            w.status === "paid"
+              ? "completed"
+              : w.status === "failed"
+                ? "failed"
+                : "pending",
+          description: "Retrait Mobile Money",
+          reference: w.feexpay_ref || null,
+          created_at: w.created_at,
+        })
+      }
+    } catch {
+      /* API absente / migration */
+    }
     
     setWallet({
-      balance: totalEarned - totalWithdrawn,
+      balance: Math.max(0, totalEarned - totalWithdrawn),
       pending_balance: pendingBalance,
       total_earned: totalEarned,
       total_withdrawn: totalWithdrawn
     })
 
-    // Simulate transaction history from orders
-    const mockTransactions: Transaction[] = completedOrders?.map((order, i) => ({
-      id: `txn-${i}`,
+    const creditTxns: Transaction[] =
+      completedOrders?.map((order, i: number) => ({
+      id: `credit-${i}`,
       type: 'credit' as const,
       amount: sellerNet(order),
       status: 'completed' as const,
@@ -141,7 +176,7 @@ export default function WalletPage() {
       created_at: new Date(Date.now() - i * 86400000).toISOString()
     })) || []
 
-    setTransactions(mockTransactions)
+    setTransactions([...withdrawTxns, ...creditTxns])
     setLoading(false)
   }
 
@@ -172,21 +207,33 @@ export default function WalletPage() {
     setWithdrawing(true)
     setError(null)
 
-    // In production, this would:
-    // 1. Create a withdrawal request in the database
-    // 2. Call the Mobile Money API
-    // 3. Update wallet balance on success
-
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 2000))
-
-    // For demo, show success
-    setShowWithdrawDialog(false)
-    setWithdrawAmount("")
-    
-    // Refresh data
-    await loadWalletData()
-    setWithdrawing(false)
+    try {
+      const res = await fetch("/api/wallet/withdraw", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount_fcfa: amount,
+          phone: withdrawPhone,
+          network: "orange",
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(data.error || "Retrait impossible")
+        setWithdrawing(false)
+        return
+      }
+      setShowWithdrawDialog(false)
+      setWithdrawAmount("")
+      await loadWalletData()
+      if (data.status === "paid") {
+        // ok
+      }
+    } catch {
+      setError("Erreur réseau")
+    } finally {
+      setWithdrawing(false)
+    }
   }
 
   const formatAmount = (amount: number) => {

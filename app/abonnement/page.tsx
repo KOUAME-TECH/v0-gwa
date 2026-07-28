@@ -216,7 +216,8 @@ export default function AbonnementPage() {
         </div>
 
         <p className="text-[11px] text-[#9CA3AF] text-center pb-4">
-          Paiement Mobile Money via WhatsApp support. Activation sous 24 h après confirmation.
+          Chaque palier débloque des services réels (annonces, commission, boost, stats,
+          priorité feed / affacturage). Paiement Mobile Money via WhatsApp — activation sous 24 h.
         </p>
       </main>
     </div>
