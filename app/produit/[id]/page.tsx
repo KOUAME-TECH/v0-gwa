@@ -30,6 +30,7 @@ import {
   cacheProductPreview,
   readProductPreview,
 } from "@/lib/products/prefetch"
+import { loadCatalogCache } from "@/lib/offline/catalog-cache"
 
 type Product = {
   id: string
@@ -79,6 +80,49 @@ export default function ProduitPage() {
         setProduct(cached)
         setQuantity(cached.min_order_quantity || 1)
         setIsLoading(false)
+      } else {
+        // Fallback catalogue offline
+        const catalog = loadCatalogCache()
+        const fromCatalog = catalog?.products?.find((p) => p.id === String(params.id))
+        if (fromCatalog) {
+          const mapped: Product = {
+            id: fromCatalog.id,
+            name: fromCatalog.name,
+            description: fromCatalog.description,
+            price: fromCatalog.price,
+            unit: fromCatalog.unit,
+            stock_quantity: 99,
+            min_order_quantity: 1,
+            images: fromCatalog.images,
+            video_url: null,
+            audio_url: fromCatalog.audio_url,
+            origin_region: fromCatalog.origin_region,
+            product_type: fromCatalog.product_type,
+            is_organic: fromCatalog.is_organic,
+            seller_id: fromCatalog.seller_id,
+            profiles: fromCatalog.profiles
+              ? {
+                  id: fromCatalog.seller_id,
+                  full_name: fromCatalog.profiles.full_name,
+                  avatar_url: fromCatalog.profiles.avatar_url,
+                  is_verified: fromCatalog.profiles.is_verified,
+                  city: null,
+                  country: fromCatalog.origin_country,
+                  rating: null,
+                }
+              : undefined,
+            categories: fromCatalog.categories
+              ? { name: fromCatalog.categories.name }
+              : undefined,
+          }
+          setProduct(mapped)
+          setIsLoading(false)
+        }
+      }
+
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        setIsLoading(false)
+        return
       }
 
       const {
@@ -86,35 +130,39 @@ export default function ProduitPage() {
       } = await supabase.auth.getUser()
       setUser(currentUser)
 
-      const { data, error } = await supabase
-        .from("products")
-        .select(
-          `
+      try {
+        const { data, error } = await supabase
+          .from("products")
+          .select(
+            `
           id, name, price, unit, images, video_url, audio_url, description, origin_country, origin_region,
           is_organic, is_fair_trade, product_type, stock_quantity, min_order_quantity,
           seller_id, category_id, status, created_at, updated_at,
           profiles!products_seller_id_fkey(id, full_name, avatar_url, is_verified, city, country, rating),
           categories(name)
         `,
-        )
-        .eq("id", params.id)
-        .maybeSingle()
+          )
+          .eq("id", params.id)
+          .maybeSingle()
 
-      if (error) console.error("[produit/[id]] load error:", error.message)
+        if (error) console.error("[produit/[id]] load error:", error.message)
 
-      if (data) {
-        setProduct(data as Product)
-        setQuantity(data.min_order_quantity || 1)
-        cacheProductPreview(data as Product & Record<string, unknown>)
-        if (currentUser) {
-          const { data: fav } = await supabase
-            .from("favorites")
-            .select("id")
-            .eq("product_id", params.id)
-            .eq("user_id", currentUser.id)
-            .maybeSingle()
-          setIsFavorite(!!fav)
+        if (data) {
+          setProduct(data as Product)
+          setQuantity(data.min_order_quantity || 1)
+          cacheProductPreview(data as Product & Record<string, unknown>)
+          if (currentUser) {
+            const { data: fav } = await supabase
+              .from("favorites")
+              .select("id")
+              .eq("product_id", params.id)
+              .eq("user_id", currentUser.id)
+              .maybeSingle()
+            setIsFavorite(!!fav)
+          }
         }
+      } catch (err) {
+        console.error("[produit/[id]] network", err)
       }
       setIsLoading(false)
     }

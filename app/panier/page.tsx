@@ -16,6 +16,12 @@ import { EscrowStepper } from "@/components/orders/escrow-stepper"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import {
+  loadCartSnapshot,
+  saveCartSnapshot,
+  type CartSnapshotLine,
+} from "@/lib/offline/cart-snapshot"
+import { toast } from "sonner"
 
 interface CartItem {
   id: string
@@ -156,7 +162,23 @@ export default function CartPage() {
       `)
       .eq("user_id", user.id)
 
-    if (cartItems) setCart(cartItems as any)
+    if (cartItems?.length) {
+      setCart(cartItems as any)
+      saveCartSnapshot(
+        user.id,
+        (cartItems as CartSnapshotLine[]).filter((c) => c?.product?.id),
+      )
+    } else if (typeof navigator !== "undefined" && !navigator.onLine) {
+      const snap = loadCartSnapshot(user.id)
+      if (snap?.lines?.length) {
+        setCart(snap.lines as any)
+        toast.message("Panier hors ligne (dernière synchro)")
+      }
+    } else if (!cartItems) {
+      // réseau KO
+      const snap = loadCartSnapshot(user.id)
+      if (snap?.lines?.length) setCart(snap.lines as any)
+    }
     setLoading(false)
   }
 

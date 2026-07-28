@@ -88,6 +88,19 @@ export function YellyPanel({
     setInput("")
     setLines((prev) => [...prev, { role: "user", content: message }])
 
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setError("Réseau indisponible")
+      setLines((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content:
+            "Hors ligne. Pour vendre : Publier. Pour acheter : Boutique (cache). WhatsApp +225 07 88 32 60 19.",
+        },
+      ])
+      return
+    }
+
     startTransition(async () => {
       try {
         const res = await fetch("/api/yelly/chat", {

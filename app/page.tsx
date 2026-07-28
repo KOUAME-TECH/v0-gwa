@@ -362,6 +362,20 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase, refreshKey])
 
+  useEffect(() => {
+    const onOnline = () => {
+      setOfflineMode(false)
+      setRefreshing(true)
+      setRefreshKey((k) => k + 1)
+    }
+    window.addEventListener("online", onOnline)
+    window.addEventListener("gwa:online-sync", onOnline as EventListener)
+    return () => {
+      window.removeEventListener("online", onOnline)
+      window.removeEventListener("gwa:online-sync", onOnline as EventListener)
+    }
+  }, [])
+
   const loadMoreFeed = async () => {
     if (loadingMore || !hasMoreFeed || offlineMode) return
     setLoadingMore(true)

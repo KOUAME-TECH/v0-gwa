@@ -14,7 +14,7 @@ URL de contrôle :
 - `https://<ton-domaine>/OneSignalSDKWorker.js`
 - `https://<ton-domaine>/OneSignalSDKUpdaterWorker.js`
 
-Contenu des workers (v19) : `importScripts` OneSignal **puis** cache offline GWA (`gwa-v19-offline`) — shell, navigations network-first, fallback `/offline.html`.
+Contenu des workers (v21) : `importScripts` OneSignal **puis** cache offline GWA (`gwa-v21-offline`) — shell (`/`, `/marketplace`, `/publier`), navigations network-first, fallback `/offline.html`.
 
 Le SDK client (`components/pwa/onesignal-provider.tsx`) utilise :
 

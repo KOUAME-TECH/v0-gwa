@@ -206,6 +206,18 @@ function MarketplaceContent() {
 
   useEffect(() => { fetchData() }, [])
 
+  useEffect(() => {
+    const onSync = () => {
+      if (navigator.onLine) void fetchData()
+    }
+    window.addEventListener("online", onSync)
+    window.addEventListener("gwa:online-sync", onSync as EventListener)
+    return () => {
+      window.removeEventListener("online", onSync)
+      window.removeEventListener("gwa:online-sync", onSync as EventListener)
+    }
+  }, [])
+
   // GPS temps réel prioritaire pour Digest (avec permission)
   useEffect(() => {
     if (geoCity) setUserCity(geoCity)

@@ -38,6 +38,8 @@ import {
 } from "@/lib/media/compress"
 import { filterBetaCategories } from "@/lib/catalog/categories"
 import { saveOfflineDraft, loadOfflineDraft, clearOfflineDraft } from "@/lib/offline/drafts"
+import { enqueuePublish, listPublishQueue } from "@/lib/offline/publish-queue"
+import { flushPublishQueue } from "@/lib/offline/sync"
 
 type PublishType = "product" | "post" | null
 
@@ -94,6 +96,7 @@ export default function PublierPage() {
   const [confirmAnomaly, setConfirmAnomaly] = useState(false)
 
   const [postContent, setPostContent] = useState("")
+  const [pendingQueue, setPendingQueue] = useState(0)
 
   useEffect(() => {
     const init = async () => {
@@ -104,14 +107,25 @@ export default function PublierPage() {
       setIsLoading(false)
 
       if (currentUser) {
-        const [productDraft, postDraft] = await Promise.all([
+        const [productDraft, postDraft, queue] = await Promise.all([
           loadOfflineDraft<typeof productForm>(currentUser.id, "product"),
           loadOfflineDraft<{ content: string }>(currentUser.id, "post"),
+          listPublishQueue(currentUser.id),
         ])
         if (productDraft?.payload) setProductForm((prev) => ({ ...prev, ...productDraft.payload }))
         if (postDraft?.payload?.content) setPostContent(postDraft.payload.content)
+        setPendingQueue(queue.length)
         if (productDraft || postDraft) {
           toast.message("Brouillon offline restauré")
+        }
+        if (queue.length && typeof navigator !== "undefined" && navigator.onLine) {
+          const result = await flushPublishQueue(currentUser.id)
+          setPendingQueue(result.remaining)
+          if (result.flushed > 0) {
+            toast.success(`${result.flushed} publication(s) synchronisée(s)`)
+          }
+        } else if (queue.length) {
+          toast.message(`${queue.length} en attente de sync`)
         }
       }
 
@@ -322,6 +336,41 @@ export default function PublierPage() {
       return
     }
 
+    const offline = typeof navigator !== "undefined" && !navigator.onLine
+    const hasMedia = images.length > 0 || !!video || !!audio
+    if (offline) {
+      if (hasMedia) {
+        toast.error("Hors ligne : retire les médias ou reconnecte-toi pour publier avec photos.")
+        return
+      }
+      setIsSubmitting(true)
+      try {
+        await enqueuePublish(user.id, "product", {
+          name: productForm.name,
+          description: productForm.description,
+          price: parseFloat(productForm.price),
+          unit: productForm.unit,
+          stock_quantity: parseInt(productForm.stock_quantity) || 0,
+          category_id: productForm.category_id,
+          product_type: productForm.product_type,
+          ville: productForm.ville.trim(),
+          origin_country: productForm.origin_country.trim(),
+          images: null,
+          video_url: null,
+          audio_url: null,
+        })
+        await clearOfflineDraft(user.id, "product")
+        setPendingQueue((n) => n + 1)
+        toast.success("Produit mis en file — sync automatique à la reconnexion")
+        router.push("/profil")
+      } catch (err: unknown) {
+        toast.error(err instanceof Error ? err.message : "Erreur file offline")
+      } finally {
+        setIsSubmitting(false)
+      }
+      return
+    }
+
     setIsSubmitting(true)
     setUploadProgress(0)
 
@@ -409,6 +458,30 @@ export default function PublierPage() {
       router.push("/profil")
     } catch (error: any) {
       console.error("Error:", error)
+      // File de secours si réseau tombe en cours d’envoi (texte seul)
+      if (!hasMedia && /fetch|network|Failed/i.test(String(error?.message || error))) {
+        try {
+          await enqueuePublish(user.id, "product", {
+            name: productForm.name,
+            description: productForm.description,
+            price: parseFloat(productForm.price),
+            unit: productForm.unit,
+            stock_quantity: parseInt(productForm.stock_quantity) || 0,
+            category_id: productForm.category_id,
+            product_type: productForm.product_type,
+            ville: productForm.ville.trim(),
+            origin_country: productForm.origin_country.trim(),
+            images: null,
+            video_url: null,
+            audio_url: null,
+          })
+          setPendingQueue((n) => n + 1)
+          toast.message("Réseau coupé — produit mis en file offline")
+          return
+        } catch {
+          /* fall through */
+        }
+      }
       toast.error(error.message || "Erreur lors de la publication")
     } finally {
       setIsSubmitting(false)
@@ -423,6 +496,27 @@ export default function PublierPage() {
     // La légende devient optionnelle si un média (dont note vocale) est présent
     if (!postContent.trim() && !hasMedia) {
       toast.error("Ajoutez du texte, une photo ou une note vocale")
+      return
+    }
+
+    const offline = typeof navigator !== "undefined" && !navigator.onLine
+    if (offline) {
+      if (hasMedia || !postContent.trim()) {
+        toast.error("Hors ligne : publie un texte seul, sans média.")
+        return
+      }
+      setIsSubmitting(true)
+      try {
+        await enqueuePublish(user.id, "post", { content: postContent.trim() })
+        await clearOfflineDraft(user.id, "post")
+        setPendingQueue((n) => n + 1)
+        toast.success("Post mis en file — sync à la reconnexion")
+        router.push("/")
+      } catch (err: unknown) {
+        toast.error(err instanceof Error ? err.message : "Erreur file offline")
+      } finally {
+        setIsSubmitting(false)
+      }
       return
     }
 
@@ -639,6 +733,11 @@ export default function PublierPage() {
         </header>
 
         <div className="p-4 space-y-4 max-w-lg mx-auto">
+          {pendingQueue > 0 && (
+            <p className="text-center text-sm text-[#2F7D32] font-medium">
+              {pendingQueue} publication(s) en file — sync à la reconnexion
+            </p>
+          )}
           <p className="text-[#4B5563] text-center mb-2">
             Que souhaitez-vous publier ?
           </p>

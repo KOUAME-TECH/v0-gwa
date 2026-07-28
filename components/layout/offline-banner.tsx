@@ -3,8 +3,11 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { WifiOff, Wifi, FilePenLine, ShoppingBag } from "lucide-react"
+import { toast } from "sonner"
 import { loadOfflineDraft } from "@/lib/offline/drafts"
 import { loadCatalogCache } from "@/lib/offline/catalog-cache"
+import { listPublishQueue } from "@/lib/offline/publish-queue"
+import { flushPublishQueue } from "@/lib/offline/sync"
 import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
 
@@ -14,6 +17,7 @@ export function OfflineBanner({ offsetForDesktopNav = false }: { offsetForDeskto
   const [status, setStatus] = useState<Status>("online")
   const [draftHint, setDraftHint] = useState(false)
   const [catalogHint, setCatalogHint] = useState(false)
+  const [queueCount, setQueueCount] = useState(0)
 
   useEffect(() => {
     const refreshHints = async () => {
@@ -27,11 +31,16 @@ export function OfflineBanner({ offsetForDesktopNav = false }: { offsetForDeskto
         } = await supabase.auth.getUser()
         if (!user) {
           setDraftHint(false)
+          setQueueCount(0)
           return
         }
-        const product = await loadOfflineDraft(user.id, "product")
-        const post = await loadOfflineDraft(user.id, "post")
+        const [product, post, queue] = await Promise.all([
+          loadOfflineDraft(user.id, "product"),
+          loadOfflineDraft(user.id, "post"),
+          listPublishQueue(user.id),
+        ])
         setDraftHint(!!(product || post))
+        setQueueCount(queue.length)
       } catch {
         // ignore
       }
@@ -49,7 +58,12 @@ export function OfflineBanner({ offsetForDesktopNav = false }: { offsetForDeskto
 
     const goOn = async () => {
       setStatus("restored")
+      const result = await flushPublishQueue()
       await refreshHints()
+      if (result.flushed > 0) {
+        toast.success(`${result.flushed} publication(s) synchronisée(s)`)
+      }
+      window.dispatchEvent(new CustomEvent("gwa:online-sync", { detail: result }))
       window.setTimeout(() => {
         setStatus("online")
         setDraftHint(false)
@@ -80,7 +94,8 @@ export function OfflineBanner({ offsetForDesktopNav = false }: { offsetForDeskto
         <>
           <span className="inline-flex items-center gap-1.5">
             <WifiOff className="h-3.5 w-3.5" />
-            Hors ligne — mode limité
+            Hors ligne
+            {queueCount > 0 ? ` · ${queueCount} en file` : ""}
           </span>
           {catalogHint && (
             <Link
@@ -88,30 +103,30 @@ export function OfflineBanner({ offsetForDesktopNav = false }: { offsetForDeskto
               className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-0.5 underline-offset-2 hover:underline"
             >
               <ShoppingBag className="h-3 w-3" />
-              Boutique en cache
+              Boutique
             </Link>
           )}
           <Link
             href="/"
             className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-0.5 underline-offset-2 hover:underline"
           >
-            Feed en cache
+            Feed
           </Link>
-          {draftHint && (
+          {(draftHint || queueCount > 0) && (
             <Link
               href="/publier"
               className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-0.5 underline-offset-2 hover:underline"
             >
               <FilePenLine className="h-3 w-3" />
-              Reprendre brouillon
+              Publier
             </Link>
           )}
         </>
       ) : (
         <span className="inline-flex items-center gap-1.5">
           <Wifi className="h-3.5 w-3.5" />
-          {draftHint
-            ? "Connexion rétablie — ouvre Publier pour reprendre ton brouillon"
+          {queueCount > 0
+            ? `Sync… ${queueCount} restante(s)`
             : "Connexion rétablie"}
         </span>
       )}

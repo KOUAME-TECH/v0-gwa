@@ -11,6 +11,7 @@ import { Toaster } from "@/components/ui/sonner"
 import { shouldShowBottomNav, shouldShowDesktopNav } from "@/lib/navigation/shell-routes"
 import { cn } from "@/lib/utils"
 import { useEffect } from "react"
+import { startOfflineSyncListener } from "@/lib/offline/sync"
 
 function hydrateA11yPrefs() {
   try {
@@ -34,6 +35,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     hydrateA11yPrefs()
+    startOfflineSyncListener()
   }, [])
 
   return (

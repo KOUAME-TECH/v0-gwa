@@ -15,16 +15,31 @@ Objectif : meilleure marketplace agri mobile d’Afrique de l’Ouest — confia
 | Multi-gestion coop | Rôles admin/manager |
 | Lock type de compte | UI + API + trigger |
 | UX moins bavarde | Escrow, SCG, profil, coop, Yelly, push |
+| **Offline-first** | Outbox publish texte, sync reconnexion, panier snapshot, PDP cache, SW v21 |
+
+---
+
+## Offline (implémenté)
+
+1. **Publish outbox** — produit/post texte hors ligne → IndexedDB → flush auto à `online`  
+2. **Reconnect sync** — banner + `startOfflineSyncListener` + refresh feed/boutique  
+3. **PDP offline** — fallback `catalog-cache`  
+4. **Panier connecté** — snapshot localStorage 48h  
+5. **Yelly offline** — réponse locale immédiate sans fetch  
+6. **SW `gwa-v21-offline`** — shell + `/publier`
+
+Médias (photos/vidéo/audio) restent **en ligne** pour l’instant (v2 IDB blobs).
 
 ---
 
 ## Propositions P0 (qualité « meilleure au monde »)
 
 1. **Paiement live FeexPay** — `payment_url` réel + pay-out à confirmation. Sans ça, la promesse escrow BP n’est pas tenue côté argent.
-2. **Dupliquer `GEMINI_API_KEY` sur Vercel** (en plus de `platform_secrets`) + **rotation** de la clé exposée.
+2. **Dupliquer `GEMINI_API_KEY` sur Vercel** — voir `docs/vercel-gemini-env.md` + **rotation** de la clé exposée.
 3. **Page Abonnement vendeur** — upgrade Starter 7 500 / Pro 18 000 avec Mobile Money (sinon la grille reste théorique).
 4. **Sender ID Africa’s Talking** — `sms_delivery_ready` encore false en health.
 5. **Upload docs coop** + gate features avancées selon `evaluateCoopQualification`.
+6. **Outbox médias** — Blobs IDB pour publish photos hors ligne.
 
 ## Propositions P1 (différence concurrentielle)
 
