@@ -88,6 +88,28 @@ Cette politique vise à garantir que les comptes coopératifs correspondent à d
 
 Le type de compte (producteur, acheteur, coopérative) est choisi à l’entrée sur GWA. Il n’est pas modifiable depuis les paramètres du profil. Les demandes exceptionnelles passent par le canal support et une validation humaine.
 
+**RI-COOP-02 — Multi-gestion**
+
+1. Une coopérative peut être gérée par **plusieurs personnes habilitées**.  
+2. Rôles : **Administrateur**, **Gestionnaire**, **Membre**.  
+3. Les administrateurs et gestionnaires peuvent inviter et piloter l’activité.  
+4. Seuls les administrateurs attribuent / retirent les habilitations.  
+5. Il doit toujours rester **au moins un administrateur**.
+
+---
+
+## 6) Multi-gestion (règle produit)
+
+Une coopérative GWA n’est **pas** un compte mono-utilisateur. Elle représente une organisation : plusieurs personnes habilitées (administrateurs et gestionnaires) peuvent la piloter simultanément.
+
+| Rôle | Peut faire |
+|------|------------|
+| **Administrateur** | Tout + habiliter / retirer gestionnaires et admins |
+| **Gestionnaire** | Inviter, piloter vitrine / membres / opérations courantes |
+| **Membre** | Participer (catalogue perso, messagerie, commandes) |
+
+Le champ `admin_id` désigne le **titulaire principal** (créateur ou admin de référence). Il ne limite pas la multi-gestion : les autres admins / managers agissent via `cooperative_members`.
+
 ---
 
 ## Implémentation technique (repo)
@@ -95,8 +117,11 @@ Le type de compte (producteur, acheteur, coopérative) est choisi à l’entrée
 | Élément | Emplacement |
 |---------|-------------|
 | Règles calculatoires | `lib/cooperatives/validation-policy.ts` |
+| Rôles multi-gestion | `lib/cooperatives/roles.ts` |
 | Migration colonnes + gel `user_type` | `scripts/schema/049_coop_validation_account_lock.sql` |
+| Migration RLS multi-managers | `scripts/schema/050_coop_multi_managers.sql` |
 | Création coop contrôlée | `POST /api/cooperatives` |
+| Habilitation rôles | `PATCH /api/cooperatives/members` |
 | Profil : type en lecture seule | `app/profil/edit/page.tsx` |
 | API profil : `user_type` retiré du PATCH | `app/api/profiles/[id]/route.ts` |
 

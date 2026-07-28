@@ -17,6 +17,17 @@ import { DashboardNav } from "@/components/dashboard-nav"
 import { toast } from "sonner"
 import { isFactoringEligible } from "@/lib/factoring/eligibility"
 import { Banknote } from "lucide-react"
+import {
+  canAssignCoopRoles,
+  canInviteMembers,
+  isCoopManagerRole,
+  roleBadgeLabel,
+  type CoopMemberRole,
+} from "@/lib/cooperatives/roles"
+import {
+  COOP_MIN_ACTIVE_MEMBERS,
+  evaluateCoopQualification,
+} from "@/lib/cooperatives/validation-policy"
 
 interface Member {
   id: string
@@ -36,6 +47,10 @@ interface Coop {
   country: string | null
   logo_url: string | null
   is_verified: boolean
+  created_at?: string | null
+  validation_status?: string | null
+  legal_documents?: unknown
+  registration_number?: string | null
 }
 
 export default function CooperativeDashboard() {
@@ -43,7 +58,15 @@ export default function CooperativeDashboard() {
   const [profile, setProfile] = useState<any>(null)
   const [coop, setCoop] = useState<Coop | null>(null)
   const [members, setMembers] = useState<Member[]>([])
-  const [stats, setStats] = useState({ totalMembers: 0, totalProducts: 0, farmers: 0 })
+  const [myRole, setMyRole] = useState<string | null>(null)
+  const [stats, setStats] = useState({
+    totalMembers: 0,
+    totalProducts: 0,
+    farmers: 0,
+    managers: 0,
+  })
+  const [qualificationBanner, setQualificationBanner] = useState<string | null>(null)
+  const [roleUpdating, setRoleUpdating] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   const inviteLink = coop
@@ -52,13 +75,56 @@ export default function CooperativeDashboard() {
 
   const handleInvite = useCallback(async () => {
     if (!inviteLink) return
+    if (!canInviteMembers(myRole)) {
+      toast.error("Seuls les administrateurs et gestionnaires peuvent inviter")
+      return
+    }
     try {
       await navigator.clipboard.writeText(inviteLink)
       toast.success("Lien d'invitation copié — partagez-le avec vos producteurs")
     } catch {
       toast.info(inviteLink)
     }
-  }, [inviteLink])
+  }, [inviteLink, myRole])
+
+  const handleRoleChange = useCallback(
+    async (memberId: string, role: CoopMemberRole) => {
+      if (!coop || !canAssignCoopRoles(myRole)) return
+      setRoleUpdating(memberId)
+      try {
+        const res = await fetch("/api/cooperatives/members", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            cooperative_id: coop.id,
+            user_id: memberId,
+            role,
+          }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          toast.error(data.error || "Changement de rôle impossible")
+          return
+        }
+        setMembers((prev) =>
+          prev.map((m) => (m.id === memberId ? { ...m, role } : m)),
+        )
+        setStats((s) => ({
+          ...s,
+          managers: [
+            ...members.filter((m) => m.id !== memberId),
+            { role } as Member,
+          ].filter((m) => isCoopManagerRole(m.role)).length,
+        }))
+        toast.success(`Rôle mis à jour : ${roleBadgeLabel(role)}`)
+      } catch {
+        toast.error("Erreur réseau")
+      } finally {
+        setRoleUpdating(null)
+      }
+    },
+    [coop, myRole, members],
+  )
 
   useEffect(() => {
     const fetchData = async () => {
@@ -77,28 +143,64 @@ export default function CooperativeDashboard() {
         .single()
       setProfile(profileData)
 
-      // Coopérative administrée par l'utilisateur (sinon celle à laquelle il est rattaché)
+      // Résolution multi-gestion : membership d’abord (admin/manager/member), puis admin_id, puis coop_id
       let coopData: Coop | null = null
-      const { data: adminCoop } = await supabase
-        .from('cooperatives')
-        .select('id, name, city, country, logo_url, is_verified')
-        .eq('admin_id', authUser.id)
-        .maybeSingle()
+      let resolvedRole: string | null = null
 
-      if (adminCoop) {
-        coopData = adminCoop
-      } else if (profileData?.coop_id) {
+      const { data: membership } = await supabase
+        .from("cooperative_members")
+        .select("role, cooperative_id")
+        .eq("user_id", authUser.id)
+        .neq("is_active", false)
+        .order("joined_at", { ascending: false })
+        .limit(5)
+
+      const preferred =
+        membership?.find((m) => m.role === "admin") ||
+        membership?.find((m) => m.role === "manager") ||
+        membership?.[0]
+
+      if (preferred?.cooperative_id) {
         const { data: memberCoop } = await supabase
-          .from('cooperatives')
-          .select('id, name, city, country, logo_url, is_verified')
-          .eq('id', profileData.coop_id)
+          .from("cooperatives")
+          .select(
+            "id, name, city, country, logo_url, is_verified, created_at, validation_status, legal_documents, registration_number",
+          )
+          .eq("id", preferred.cooperative_id)
           .maybeSingle()
         coopData = memberCoop
+        resolvedRole = preferred.role
       }
+
+      if (!coopData) {
+        const { data: adminCoop } = await supabase
+          .from("cooperatives")
+          .select(
+            "id, name, city, country, logo_url, is_verified, created_at, validation_status, legal_documents, registration_number",
+          )
+          .eq("admin_id", authUser.id)
+          .maybeSingle()
+        if (adminCoop) {
+          coopData = adminCoop
+          resolvedRole = "admin"
+        }
+      }
+
+      if (!coopData && profileData?.coop_id) {
+        const { data: linkedCoop } = await supabase
+          .from("cooperatives")
+          .select(
+            "id, name, city, country, logo_url, is_verified, created_at, validation_status, legal_documents, registration_number",
+          )
+          .eq("id", profileData.coop_id)
+          .maybeSingle()
+        coopData = linkedCoop
+      }
+
       setCoop(coopData)
+      setMyRole(resolvedRole)
 
       if (coopData) {
-        // Membres réels via cooperative_members -> profiles
         const { data: memberRows } = await supabase
           .from('cooperative_members')
           .select('role, user_id, profiles:user_id(id, full_name, user_type, city, is_verified, avatar_url)')
@@ -121,6 +223,14 @@ export default function CooperativeDashboard() {
           })
           .filter(Boolean) as Member[]
 
+        if (!resolvedRole) {
+          const mine = baseMembers.find((m) => m.id === authUser.id)
+          if (mine?.role) {
+            resolvedRole = mine.role
+            setMyRole(mine.role)
+          }
+        }
+
         const membersWithProducts = await Promise.all(
           baseMembers.map(async (member) => {
             const { count } = await supabase
@@ -134,8 +244,28 @@ export default function CooperativeDashboard() {
         setMembers(membersWithProducts)
 
         const farmers = membersWithProducts.filter(m => m.user_type === 'producteur').length
+        const managers = membersWithProducts.filter((m) => isCoopManagerRole(m.role)).length
         const totalProducts = membersWithProducts.reduce((s, m) => s + (m.products_count || 0), 0)
-        setStats({ totalMembers: membersWithProducts.length, totalProducts, farmers })
+        setStats({
+          totalMembers: membersWithProducts.length,
+          totalProducts,
+          farmers,
+          managers,
+        })
+
+        if (coopData.created_at) {
+          const q = evaluateCoopQualification({
+            createdAt: coopData.created_at,
+            activeMemberCount: membersWithProducts.length,
+            hasLegalDocs: Boolean(
+              (Array.isArray(coopData.legal_documents) &&
+                coopData.legal_documents.length > 0) ||
+                coopData.registration_number,
+            ),
+            adminStatus: (coopData.validation_status as any) || null,
+          })
+          setQualificationBanner(q.bannerMessage)
+        }
       }
 
       setIsLoading(false)
@@ -229,8 +359,8 @@ export default function CooperativeDashboard() {
           </div>
           <div className="bg-white/10 rounded-xl p-3 text-center">
             <Sprout className="h-6 w-6 mx-auto mb-1" />
-            <p className="text-2xl font-bold">{stats.farmers}</p>
-            <p className="text-xs text-white/70">Producteurs</p>
+            <p className="text-2xl font-bold">{stats.managers}</p>
+            <p className="text-xs text-white/70">Habilités</p>
           </div>
           <div className="bg-white/10 rounded-xl p-3 text-center">
             <Package className="h-6 w-6 mx-auto mb-1" />
@@ -241,11 +371,29 @@ export default function CooperativeDashboard() {
       </header>
 
       <main className="px-4 -mt-4">
+        {qualificationBanner && (
+          <Card className="bg-white border-0 shadow-lg mb-4">
+            <CardContent className="p-4 text-sm text-[#4B5563]">
+              <p className="font-semibold text-[#111827] mb-1">Qualification coopérative</p>
+              <p>
+                {qualificationBanner}
+                {stats.totalMembers < COOP_MIN_ACTIVE_MEMBERS
+                  ? ` (${stats.totalMembers}/${COOP_MIN_ACTIVE_MEMBERS})`
+                  : ""}
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Actions rapides */}
         <Card className="bg-white border-0 shadow-lg mb-6">
           <CardContent className="p-4">
             <div className="grid grid-cols-3 gap-2">
-              <button onClick={handleInvite} className="text-center">
+              <button
+                onClick={handleInvite}
+                className="text-center disabled:opacity-40"
+                disabled={!canInviteMembers(myRole)}
+              >
                 <div className="w-12 h-12 rounded-xl bg-[#059669]/10 flex items-center justify-center mx-auto mb-1">
                   <UserPlus className="h-6 w-6 text-[#059669]" />
                 </div>
@@ -305,7 +453,8 @@ export default function CooperativeDashboard() {
               Inviter des producteurs
             </h3>
             <p className="text-sm text-[#4B5563] mb-3">
-              Partagez ce lien : chaque producteur qui l'ouvre pourra rejoindre la coopérative.
+              Une coopérative se gère à plusieurs : partagez ce lien, puis habilitez des
+              gestionnaires depuis la liste des membres.
             </p>
             <div className="flex items-center gap-2">
               <input
@@ -370,15 +519,38 @@ export default function CooperativeDashboard() {
                             <CheckCircle2 className="h-4 w-4 text-[#059669]" />
                           )}
                         </div>
-                        <div className="flex items-center gap-3 mt-1">
+                        <div className="flex items-center gap-3 mt-1 flex-wrap">
                           <Badge className="bg-[#2F7D32]/10 text-[#2F7D32]">
-                            {member.role === "admin" ? "Admin" : "Producteur"}
+                            {roleBadgeLabel(member.role)}
                           </Badge>
                           <span className="text-xs text-[#4B5563] flex items-center gap-1">
                             <MapPin className="h-3 w-3" />
                             {member.city || "N/A"}
                           </span>
                         </div>
+                        {canAssignCoopRoles(myRole) && (
+                          <select
+                            className="mt-2 h-8 text-xs rounded-lg border border-gray-200 bg-white px-2 text-[#4B5563]"
+                            value={
+                              member.role === "admin" ||
+                              member.role === "manager" ||
+                              member.role === "member"
+                                ? member.role
+                                : "member"
+                            }
+                            disabled={roleUpdating === member.id}
+                            onChange={(e) =>
+                              handleRoleChange(
+                                member.id,
+                                e.target.value as CoopMemberRole,
+                              )
+                            }
+                          >
+                            <option value="member">Membre</option>
+                            <option value="manager">Gestionnaire</option>
+                            <option value="admin">Administrateur</option>
+                          </select>
+                        )}
                       </div>
                       <div className="text-right">
                         <p className="text-lg font-bold text-[#111827]">{member.products_count || 0}</p>
@@ -400,11 +572,20 @@ export default function CooperativeDashboard() {
               <div>
                 <h4 className="font-semibold text-[#111827] mb-1">À faire</h4>
                 <ul className="text-sm text-[#4B5563] space-y-1">
+                  {stats.totalMembers < COOP_MIN_ACTIVE_MEMBERS && (
+                    <li>
+                      • Objectif qualification : {COOP_MIN_ACTIVE_MEMBERS} membres actifs (
+                      {stats.totalMembers}/{COOP_MIN_ACTIVE_MEMBERS})
+                    </li>
+                  )}
+                  {stats.managers < 2 && canAssignCoopRoles(myRole) && (
+                    <li>• Habilitez au moins un second gestionnaire pour sécuriser la gouvernance</li>
+                  )}
                   {members.filter(m => !m.is_verified).length > 0 && (
                     <li>• {members.filter(m => !m.is_verified).length} membre(s) en attente de vérification</li>
                   )}
                   {members.length === 0 && <li>• Invitez vos premiers producteurs</li>}
-                  {!coop.is_verified && <li>• Faites certifier votre coopérative</li>}
+                  {!coop.is_verified && <li>• Déposez les documents légaux pour la certification</li>}
                 </ul>
               </div>
             </div>
