@@ -62,32 +62,31 @@ export default function CreateCooperativePage() {
         .slice(0, 48) || "coop"
       const slug = `${baseSlug}-${Date.now().toString(36)}`
 
-      const { data: coop, error } = await supabase.from("cooperatives").insert({
-        name: form.name,
-        slug,
-        description: form.description || null,
-        sector: form.cooperative_type,
-        country: form.country,
-        city: form.city,
-        address: form.address || null,
-        phone: form.phone || null,
-        email: form.email || null,
-        registration_number: form.registration_number || null,
-        founded_year: parseInt(form.founded_year) || null,
-        logo_url: logoUrl,
-        admin_id: user.id,
-        is_verified: false,
-      }).select("id").single()
+      // Upload logo éventuel côté client, puis création via API (statut validation + lock user_type)
+      const res = await fetch("/api/cooperatives", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name,
+          description: form.description,
+          cooperative_type: form.cooperative_type,
+          country: form.country,
+          city: form.city,
+          address: form.address,
+          phone: form.phone,
+          email: form.email,
+          registration_number: form.registration_number,
+          founded_year: form.founded_year,
+          logo_url: logoUrl,
+          slug,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || "Création impossible")
 
-      if (error) throw error
-
-      // Rattache le créateur : membre admin + coop_id + type cooperative
-      if (coop) {
-        await supabase.from("cooperative_members").insert({ cooperative_id: coop.id, user_id: user.id, role: "admin" })
-        await supabase.from("profiles").update({ coop_id: coop.id, user_type: "cooperative" }).eq("id", user.id)
-      }
-
-      toast.success("Cooperative creee avec succes !")
+      toast.success(
+        "Coopérative créée — statut « en validation ». Ajoute 15 membres en 14 jours.",
+      )
       router.push("/dashboard/cooperative")
     } catch (err: any) {
       console.error(err)

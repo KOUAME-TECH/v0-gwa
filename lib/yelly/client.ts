@@ -34,12 +34,130 @@ function keywordFallback(message: string, page?: string): string {
     return "Pour parler à une vraie personne : WhatsApp +225 07 88 32 60 19. Moi je reste là pour les questions rapides."
   }
   if (/coopérat|cooperative/.test(m)) {
-    return "Les coopératives ont leur vitrine sur GWA. Cherche « Coopératives » ou demande à ton admin de t’ajouter. Simple."
+    return "Les coopératives commencent en validation : ajoute tes membres, puis les docs légaux. Cherche « Coopératives » ou demande à ton admin. Simple."
   }
   if (page?.includes("profil")) {
-    return "Sur Profil tu changes ta photo, ta bio, tes lieux… Dis-moi ce que tu veux régler, je te guide."
+    return "Sur Profil tu changes ta photo, ta bio, tes lieux… Le type de compte, lui, se fixe à l’inscription — pour le changer, contacte le support. Dis-moi ce que tu veux régler."
   }
   return "Dis-moi juste ce dont tu as besoin — vendre, acheter, une commande, ou parler à quelqu’un. On avance ensemble."
+}
+
+function resolveGeminiKey(): string {
+  return (
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
+    process.env.YELLY_API_KEY ||
+    ""
+  ).trim()
+}
+
+function resolveModel(): string {
+  return (
+    process.env.YELLY_MODEL ||
+    process.env.GEMINI_MODEL ||
+    "gemini-flash-latest"
+  ).trim()
+}
+
+/** Convertit l’historique chat OpenAI-like → contents Gemini. */
+function toGeminiContents(
+  history: YellyMessage[],
+  userMsg: string,
+): { role: string; parts: { text: string }[] }[] {
+  const contents: { role: string; parts: { text: string }[] }[] = []
+  for (const m of history) {
+    if (m.role === "system") continue
+    contents.push({
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [{ text: m.content }],
+    })
+  }
+  contents.push({ role: "user", parts: [{ text: userMsg }] })
+  return contents
+}
+
+async function askGemini(opts: {
+  system: string
+  history: YellyMessage[]
+  userMsg: string
+  apiKey: string
+  model: string
+}): Promise<YellyChatResult | null> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(opts.model)}:generateContent`
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-goog-api-key": opts.apiKey,
+    },
+    body: JSON.stringify({
+      system_instruction: { parts: [{ text: opts.system }] },
+      contents: toGeminiContents(opts.history, opts.userMsg),
+      generationConfig: {
+        temperature: 0.85,
+        maxOutputTokens: 280,
+      },
+    }),
+    signal: AbortSignal.timeout(20_000),
+  })
+
+  if (!res.ok) {
+    console.error("[yelly] Gemini HTTP", res.status, await res.text().catch(() => ""))
+    return null
+  }
+
+  const data = (await res.json()) as {
+    candidates?: { content?: { parts?: { text?: string }[] } }[]
+  }
+  const raw = data.candidates?.[0]?.content?.parts
+    ?.map((p) => p.text || "")
+    .join("")
+    .trim()
+  if (!raw) return null
+
+  return {
+    reply: sanitizePlainText(raw, 1200),
+    source: "llm",
+    model: opts.model,
+  }
+}
+
+/** Fallback OpenAI-compatible si YELLY_BASE_URL + clé dédiée (hors Gemini). */
+async function askOpenAICompat(opts: {
+  system: string
+  messages: YellyMessage[]
+  apiKey: string
+  model: string
+  baseUrl: string
+}): Promise<YellyChatResult | null> {
+  const res = await fetch(`${opts.baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${opts.apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: opts.model,
+      messages: opts.messages,
+      temperature: 0.85,
+      max_tokens: 220,
+    }),
+    signal: AbortSignal.timeout(20_000),
+  })
+  if (!res.ok) {
+    console.error("[yelly] OpenAI HTTP", res.status, await res.text().catch(() => ""))
+    return null
+  }
+  const data = (await res.json()) as {
+    choices?: { message?: { content?: string } }[]
+  }
+  const raw = data.choices?.[0]?.message?.content?.trim()
+  if (!raw) return null
+  return {
+    reply: sanitizePlainText(raw, 1200),
+    source: "llm",
+    model: opts.model,
+  }
 }
 
 export async function askYelly(opts: {
@@ -49,58 +167,54 @@ export async function askYelly(opts: {
   history?: YellyMessage[]
 }): Promise<YellyChatResult> {
   const userMsg = sanitizePlainText(opts.message, 800)
-  const apiKey = process.env.YELLY_API_KEY || process.env.OPENAI_API_KEY
-  const model = process.env.YELLY_MODEL || "gpt-4o-mini"
-  const baseUrl = (process.env.YELLY_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "")
-
-  if (!apiKey) {
-    return { reply: keywordFallback(userMsg, opts.page), source: "fallback" }
-  }
+  const geminiKey = resolveGeminiKey()
+  const model = resolveModel()
+  const openAiKey = process.env.OPENAI_API_KEY || ""
+  const baseUrl = (process.env.YELLY_BASE_URL || "https://api.openai.com/v1").replace(
+    /\/$/,
+    "",
+  )
 
   const systemParts = [YELLY_SYSTEM_PROMPT]
   if (opts.page) systemParts.push(`Page actuelle : ${opts.page}`)
   if (opts.contextHint) systemParts.push(`Contexte : ${opts.contextHint}`)
+  const system = systemParts.join("\n\n")
+  const history = opts.history || []
 
-  const messages: YellyMessage[] = [
-    { role: "system", content: systemParts.join("\n\n") },
-    ...(opts.history || []).slice(-6),
-    { role: "user", content: userMsg },
-  ]
+  if (!geminiKey && !openAiKey) {
+    return { reply: keywordFallback(userMsg, opts.page), source: "fallback" }
+  }
 
   try {
-    const res = await fetch(`${baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
+    // Priorité Gemini (GWA)
+    if (geminiKey) {
+      const gemini = await askGemini({
+        system,
+        history,
+        userMsg,
+        apiKey: geminiKey,
+        model: model.includes("gpt") ? "gemini-flash-latest" : model,
+      })
+      if (gemini) return gemini
+    }
+
+    if (openAiKey) {
+      const messages: YellyMessage[] = [
+        { role: "system", content: system },
+        ...history.slice(-6),
+        { role: "user", content: userMsg },
+      ]
+      const openai = await askOpenAICompat({
+        system,
         messages,
-        temperature: 0.85,
-        max_tokens: 220,
-      }),
-      signal: AbortSignal.timeout(20_000),
-    })
-
-    if (!res.ok) {
-      console.error("[yelly] LLM HTTP", res.status, await res.text().catch(() => ""))
-      return { reply: keywordFallback(userMsg, opts.page), source: "fallback" }
+        apiKey: openAiKey,
+        model: process.env.YELLY_OPENAI_MODEL || "gpt-4o-mini",
+        baseUrl,
+      })
+      if (openai) return openai
     }
 
-    const data = (await res.json()) as {
-      choices?: { message?: { content?: string } }[]
-    }
-    const raw = data.choices?.[0]?.message?.content?.trim()
-    if (!raw) {
-      return { reply: keywordFallback(userMsg, opts.page), source: "fallback" }
-    }
-
-    return {
-      reply: sanitizePlainText(raw, 1200),
-      source: "llm",
-      model,
-    }
+    return { reply: keywordFallback(userMsg, opts.page), source: "fallback" }
   } catch (err) {
     console.error("[yelly] LLM error", err)
     return { reply: keywordFallback(userMsg, opts.page), source: "fallback" }

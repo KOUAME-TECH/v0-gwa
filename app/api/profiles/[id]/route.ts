@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { computeProfileCompletion, USER_TYPE_MAP } from "@/lib/auth/post-auth"
+import { computeProfileCompletion } from "@/lib/auth/post-auth"
 import { assertSameOrigin } from "@/lib/security/csrf"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { sanitizeHtml, sanitizePlainText } from "@/lib/security/validation"
@@ -18,8 +18,7 @@ const PATCHABLE_FIELDS = [
   "city",
   "address",
   "avatar_url",
-  "user_type",
-  "sub_type",
+  // user_type / sub_type : interdits en self-service (voir 049 + admin)
   "preferred_language",
   "digest_enabled",
   "production_type",
@@ -98,19 +97,6 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       if (!(field in body)) continue
       const value = body[field]
       if (value === null || value === undefined) continue
-
-      if (field === "user_type" && typeof value === "string") {
-        updates.user_type = USER_TYPE_MAP[value] || value
-        continue
-      }
-
-      if (field === "sub_type" && typeof value === "string") {
-        if (!["producteur_individuel", "cooperative"].includes(value)) {
-          return NextResponse.json({ error: "Sous-type invalide" }, { status: 400 })
-        }
-        updates.sub_type = value
-        continue
-      }
 
       if (field === "bio" && typeof value === "string") {
         updates.bio = sanitizeHtml(value).slice(0, 2000)

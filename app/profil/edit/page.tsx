@@ -12,20 +12,12 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { ArrowLeft, Camera, Loader2, Check, MapPin, BadgeCheck, ShieldCheck } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import { toast } from "sonner"
 import { useListenMode } from "@/hooks/use-listen-mode"
 import { useA11yPrefs } from "@/hooks/use-a11y-prefs"
 import { useDataSaver } from "@/hooks/use-data-saver"
-import { AUDIO_LANGS } from "@/lib/media/audio-langs"
 import {
   shouldPromptIdentityVerification,
   type KycStatus,
@@ -304,12 +296,12 @@ export default function EditProfilPage() {
           .replace(/[<>]/g, "")
           .trim()
           .slice(0, 2000) || null,
-        user_type: formData.user_type || null,
         city: formData.city || null,
         country: formData.country || null,
         address: formData.address || null,
         updated_at: new Date().toISOString(),
       }
+      // user_type : verrouillé (trigger 049 + support)
       // phone : jamais écrit ici sans OTP (trigger 028 + flow sécurisé)
       const { error } = await supabase
         .from("profiles")
@@ -509,22 +501,19 @@ export default function EditProfilPage() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="user_type" className="text-sm text-[#4B5563]">Type de compte</Label>
-            <Select
-              value={formData.user_type}
-              onValueChange={(value) => setFormData({ ...formData, user_type: value })}
-            >
-              <SelectTrigger className="h-12 rounded-xl border-[#E5E7EB] bg-[#FFF6E5]/50">
-                <SelectValue placeholder="Sélectionnez votre profil" />
-              </SelectTrigger>
-              <SelectContent>
-                {userTypes.map((type) => (
-                  <SelectItem key={type.value} value={type.value}>
-                    {type.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label className="text-sm text-[#4B5563]">Type de compte</Label>
+            <div className="rounded-xl border border-[#E5E7EB] bg-[#FFF6E5]/50 px-3 py-3">
+              <p className="text-sm font-medium text-[#111827]">
+                {userTypes.find((t) => t.value === formData.user_type)?.label ||
+                  formData.user_type ||
+                  "Non défini"}
+              </p>
+              <p className="text-[11px] text-[#9CA3AF] mt-1 leading-snug">
+                Le type de compte est fixé à l’inscription. Pour un changement
+                (ex. devenir coopérative), contacte le support GWA — validation
+                interne obligatoire.
+              </p>
+            </div>
           </div>
 
           <div className="space-y-2">

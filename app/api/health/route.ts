@@ -58,6 +58,10 @@ export async function GET() {
       SMS_TERMII: envSet('TERMII_API_KEY'),
       ONESIGNAL_APP_ID: onesignalApp,
       ONESIGNAL_REST_API_KEY: onesignalRest,
+      GEMINI_API_KEY:
+        envSet('GEMINI_API_KEY') ||
+        envSet('GOOGLE_GENERATIVE_AI_API_KEY') ||
+        envSet('YELLY_API_KEY'),
     },
     sms_delivery_ready: atKey && atLive && atSender,
     resilience: {
