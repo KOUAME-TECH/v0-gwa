@@ -94,7 +94,7 @@ async function askGemini(opts: {
       contents: toGeminiContents(opts.history, opts.userMsg),
       generationConfig: {
         temperature: 0.7,
-        maxOutputTokens: 220,
+        maxOutputTokens: 512,
       },
     }),
     signal: AbortSignal.timeout(20_000),
@@ -106,13 +106,15 @@ async function askGemini(opts: {
   }
 
   const data = (await res.json()) as {
-    candidates?: { content?: { parts?: { text?: string }[] } }[]
+    candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] } }[]
   }
   const raw = data.candidates?.[0]?.content?.parts
-    ?.map((p) => p.text || "")
+    ?.filter((p) => p.text && !p.thought)
+    .map((p) => p.text || "")
     .join("")
+    .replace(/\*\*/g, "")
     .trim()
-  if (!raw) return null
+  if (!raw || raw.length < 8) return null
 
   return {
     reply: sanitizePlainText(raw, 1200),
@@ -190,7 +192,7 @@ export async function askYelly(opts: {
         history,
         userMsg,
         apiKey: geminiKey,
-        model: model.includes("gpt") ? "gemini-flash-latest" : model,
+        model: model.includes("gpt") ? "gemini-3.1-flash-lite" : model,
       })
       if (gemini) return gemini
     }
