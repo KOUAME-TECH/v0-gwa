@@ -34,6 +34,7 @@ export const PAGE_ROUTES: RouteEntry[] = [
   { path: "/profile", status: "redirect", note: "next.config → /profil" },
   { path: "/scg", status: "complete", note: "Moteur lib/scg + /api/scg/calculate branché" },
   { path: "/wallet", status: "complete", note: "Transactions + lien affacturage" },
+  { path: "/abonnement", status: "complete", note: "Abo vendeur Free/Starter 7.5k/Pro 18k ; WhatsApp + activation admin" },
   { path: "/affacturage", status: "complete", note: "F3 demande + statut ; /api/factoring" },
   { path: "/facture/[id]", status: "complete", note: "Facture numérique imprimable ; /api/invoices/[id]" },
   { path: "/download", status: "complete", note: "PWA install" },

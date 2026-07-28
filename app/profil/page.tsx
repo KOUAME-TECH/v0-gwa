@@ -25,6 +25,7 @@ import {
   TrendingUp,
   FileText,
   ShieldCheck,
+  Crown,
 } from "lucide-react"
 import { shouldShowVerifiedBadge } from "@/lib/verification/badge"
 type Profile = {
@@ -225,6 +226,7 @@ export default function ProfilPage() {
           count: stats.orders,
         },
         { icon: Wallet, label: "Portefeuille", href: "/wallet" },
+        { icon: Crown, label: "Abonnement", href: "/abonnement" },
         { icon: Star, label: "Mes avis", href: "/dashboard/reviews" },
       ]
     }

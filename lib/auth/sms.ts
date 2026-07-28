@@ -43,6 +43,7 @@ export function isAfricasTalkingLiveUsername(): boolean {
 export function hasAfricasTalkingSenderId(): boolean {
   return !!(
     env("AT_SENDER_ID") ||
+    env("SMS_AT_SENDER_ID") ||
     env("AFRICASTALKING_FROM") ||
     env("AFRICASTALKING_SENDER_ID")
   )
@@ -108,6 +109,7 @@ async function sendViaAfricasTalking(
     env("AT_USERNAME") || env("AFRICASTALKING_USERNAME") || "sandbox"
   const from =
     env("AT_SENDER_ID") ||
+    env("SMS_AT_SENDER_ID") ||
     env("AFRICASTALKING_FROM") ||
     env("AFRICASTALKING_SENDER_ID")
 

@@ -24,6 +24,7 @@
 | [`decision-revenus-freemium-2026-07-28.md`](./decision-revenus-freemium-2026-07-28.md) | Brouillon freemium (supersédé) |
 | [`decision-strategique-pricing-gwa-2026-07-28.md`](./decision-strategique-pricing-gwa-2026-07-28.md) | **DÉCISION DG** pricing 7,5k/18k + OTP diagnostic |
 | [`politique-cooperatives-types-compte.md`](./politique-cooperatives-types-compte.md) | **Politique coop** validation + lock type de compte |
-| [`yelly-gemini.md`](./yelly-gemini.md) | Ops : `GEMINI_API_KEY` pour Yelly |
+| [`ops-sms-sender-id.md`](./ops-sms-sender-id.md) | Vérif Sender ID Africa’s Talking + vars Vercel |
+| [`vercel-gemini-env.md`](./vercel-gemini-env.md) | Vars Gemini à coller sur Vercel |
 
 Agents Cursor locaux : `.cursor/agents/` (pas de doublon dans `docs/`).
