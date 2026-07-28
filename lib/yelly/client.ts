@@ -54,7 +54,8 @@ function resolveModel(): string {
   return (
     process.env.YELLY_MODEL ||
     process.env.GEMINI_MODEL ||
-    "gemini-flash-latest"
+    // flash-lite : réponses complètes sans « thinking » qui mange le budget tokens
+    "gemini-3.1-flash-lite"
   ).trim()
 }
 
