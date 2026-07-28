@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { hasSmsProvider } from '@/lib/auth/sms'
+import {
+  hasAfricasTalkingProvider,
+  hasAfricasTalkingSenderId,
+  hasSmsProvider,
+  isAfricasTalkingLiveUsername,
+} from '@/lib/auth/sms'
 import {
   getOneSignalAppId,
   getOneSignalRestApiKey,
@@ -27,6 +32,9 @@ export async function GET() {
   const cronSecret = envSet('CRON_SECRET')
   const onesignalApp = !!getOneSignalAppId()
   const onesignalRest = !!getOneSignalRestApiKey()
+  const atKey = hasAfricasTalkingProvider()
+  const atLive = isAfricasTalkingLiveUsername()
+  const atSender = hasAfricasTalkingSenderId()
   return NextResponse.json({
     status: healthy ? 'healthy' : 'degraded',
     app: 'GWA Platform',
@@ -40,7 +48,9 @@ export async function GET() {
       OTP_PEPPER: otpPepper,
       CRON_SECRET: cronSecret,
       SMS_PROVIDER: smsConfigured,
-      SMS_AT: envSet('AT_API_KEY') || envSet('AFRICASTALKING_API_KEY'),
+      SMS_AT: atKey,
+      SMS_AT_USERNAME_LIVE: atLive,
+      SMS_AT_SENDER_ID: atSender,
       SMS_TWILIO:
         envSet('TWILIO_ACCOUNT_SID') &&
         envSet('TWILIO_AUTH_TOKEN') &&
@@ -49,6 +59,7 @@ export async function GET() {
       ONESIGNAL_APP_ID: onesignalApp,
       ONESIGNAL_REST_API_KEY: onesignalRest,
     },
+    sms_delivery_ready: atKey && atLive && atSender,
     resilience: {
       onesignal_app_id_fallback: true,
       cron_auth: ['bearer', 'x-vercel-cron', 'digest_internal_key'],

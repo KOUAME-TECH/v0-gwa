@@ -54,11 +54,16 @@ Hard invariants:
 - [ ] `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - [ ] `SUPABASE_SERVICE_ROLE_KEY` (mints sessions via `generateLink`) — server only
 - [ ] `AT_USERNAME` (real, not `sandbox`) + `AT_API_KEY` (live) → **no 401**
-- [ ] `AT_SENDER_ID` approved (required for delivery in CI and most WA countries)
+- [ ] `AT_SENDER_ID` approved for Côte d'Ivoire (alphanumeric, e.g. `GWA`) — **required for delivery**
+- [ ] Verify `/api/health` → `SMS_AT_USERNAME_LIVE: true`, `SMS_AT_SENDER_ID: true`, `sms_delivery_ready: true`
 - [ ] `OTP_PEPPER` set to a long random secret
 - [ ] `KV_REST_API_URL` + `KV_REST_API_TOKEN` (Upstash) — otherwise OTP store is per-instance
       memory and breaks on serverless
-- [ ] `NEXT_PUBLIC_APP_URL` matches the deployed domain
+
+**Si l’API dit « Code SMS envoyé » mais le téléphone ne reçoit rien :**
+1. `AT_USERNAME` encore `sandbox` → passer en username live
+2. `AT_SENDER_ID` manquant / non approuvé opérateurs CI → demandes Sender ID chez Africa’s Talking
+3. Consulter le dashboard AT (Delivery Reports) pour le `messageId`- [ ] `NEXT_PUBLIC_APP_URL` matches the deployed domain
 
 ### 2. Supabase project settings
 - [ ] Auth → Email provider enabled (magiclink) — required for the default OTP→session path

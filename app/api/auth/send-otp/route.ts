@@ -14,7 +14,12 @@ import {
   canSendOtp,
   clearOtp,
 } from "@/lib/auth/otp-store"
-import { hasSmsProvider, hasTwilioProvider, sendSmsOtp } from "@/lib/auth/sms"
+import {
+  hasAfricasTalkingProvider,
+  hasSmsProvider,
+  hasTwilioProvider,
+  sendSmsOtp,
+} from "@/lib/auth/sms"
 
 /**
  * POST /api/auth/send-otp
@@ -152,8 +157,14 @@ export async function POST(request: Request) {
 
     const linkedEmail = otpEmail
 
+    // Si Africa's Talking est configuré, on n'utilise PAS Supabase Phone en premier :
+    // Supabase peut répondre OK sans SMS réel (crédits AT jamais débités).
     let supabasePhoneError: string | null = null
-    if (mode === "login" && !hasTwilioProvider()) {
+    if (
+      mode === "login" &&
+      !hasTwilioProvider() &&
+      !hasAfricasTalkingProvider()
+    ) {
       const { error: smsError } = await supabase.auth.signInWithOtp({
         phone: formatted,
         options: { shouldCreateUser: false },
@@ -237,7 +248,9 @@ export async function POST(request: Request) {
     const sms = await sendSmsOtp(formatted, code)
     if (!sms.success) {
       console.error("[auth/send-otp] sms", sms.error)
-      if (mode === "login") {
+      // Pas de fallback Supabase Phone si AT est le provider choisi :
+      // sinon l'UI dit « envoyé » alors que le SMS n'arrive jamais.
+      if (mode === "login" && !hasAfricasTalkingProvider()) {
         const { error: smsError } = await supabase.auth.signInWithOtp({
           phone: formatted,
           options: { shouldCreateUser: false },
@@ -264,7 +277,7 @@ export async function POST(request: Request) {
       }
       const hintParts = [
         sms.provider
-          ? `${sms.provider}:${(sms.error || "fail").slice(0, 80)}`
+          ? `${sms.provider}:${(sms.error || "fail").slice(0, 120)}`
           : null,
         supabasePhoneError
           ? `supabase:${supabasePhoneError.slice(0, 80)}`
@@ -295,6 +308,7 @@ export async function POST(request: Request) {
       otp_mode: mode,
       account_hint: accountHint,
       phone_verified: profileByPhone?.phone_verified === true,
+      ...(sms.warning ? { delivery_warning: sms.warning } : {}),
     })
   } catch (err) {
     console.error("[auth/send-otp]", err)

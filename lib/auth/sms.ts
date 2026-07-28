@@ -13,6 +13,8 @@ export type SmsResult = {
   provider?: "africastalking" | "twilio" | "termii"
   sid?: string
   error?: string
+  /** Ops hint (sandbox / sender manquant) — jamais de secret */
+  warning?: string
 }
 
 function env(name: string): string {
@@ -27,10 +29,28 @@ export function hasTwilioProvider(): boolean {
   )
 }
 
+export function hasAfricasTalkingProvider(): boolean {
+  return !!(env("AT_API_KEY") || env("AFRICASTALKING_API_KEY"))
+}
+
+/** Username AT live (pas sandbox) — requis pour livrer vers des mobiles réels. */
+export function isAfricasTalkingLiveUsername(): boolean {
+  const username =
+    env("AT_USERNAME") || env("AFRICASTALKING_USERNAME") || "sandbox"
+  return username.length > 0 && username.toLowerCase() !== "sandbox"
+}
+
+export function hasAfricasTalkingSenderId(): boolean {
+  return !!(
+    env("AT_SENDER_ID") ||
+    env("AFRICASTALKING_FROM") ||
+    env("AFRICASTALKING_SENDER_ID")
+  )
+}
+
 export function hasSmsProvider(): boolean {
-  const at = !!(env("AT_API_KEY") || env("AFRICASTALKING_API_KEY"))
   const termii = !!env("TERMII_API_KEY")
-  return hasTwilioProvider() || at || termii
+  return hasTwilioProvider() || hasAfricasTalkingProvider() || termii
 }
 
 export async function sendSmsOtp(
@@ -39,27 +59,43 @@ export async function sendSmsOtp(
 ): Promise<SmsResult> {
   const body = `GWA: votre code est ${code}. Valable 10 min. Ne le partagez pas.`
 
-  // Twilio en premier (validé prod), puis Africa's Talking, puis Termii
+  // Africa's Talking en priorité si clé présente (crédits GWA), puis Twilio, puis Termii.
+  // (Avant : Twilio d'abord — or Twilio est souvent absent en CI.)
+  if (hasAfricasTalkingProvider()) {
+    const at = await sendViaAfricasTalking(phoneE164, body)
+    if (at.success) return at
+    // Ne pas masquer l'erreur AT derrière un autre provider silencieux
+    if (at.error?.includes("sandbox") || at.error?.includes("AT_USERNAME")) {
+      return at
+    }
+    const twilio = await sendViaTwilio(phoneE164, body)
+    if (twilio.success) return twilio
+    const termii = await sendViaTermii(phoneE164, body)
+    if (termii.success) return termii
+    return {
+      success: false,
+      provider: at.provider || twilio.provider || termii.provider,
+      error:
+        at.error ||
+        twilio.error ||
+        termii.error ||
+        "Échec envoi SMS (AT / Twilio / Termii)",
+    }
+  }
+
   const twilio = await sendViaTwilio(phoneE164, body)
   if (twilio.success) return twilio
-
-  const at = await sendViaAfricasTalking(phoneE164, body)
-  if (at.success) return at
 
   const termii = await sendViaTermii(phoneE164, body)
   if (termii.success) return termii
 
   return {
     success: false,
-    provider: twilio.provider || at.provider || termii.provider,
+    provider: twilio.provider || termii.provider,
     error:
-      (twilio.provider ? twilio.error : null) ||
-      (at.provider ? at.error : null) ||
-      (termii.provider ? termii.error : null) ||
       twilio.error ||
-      at.error ||
       termii.error ||
-      "Aucun fournisseur SMS (TWILIO_* / AT_API_KEY / TERMII_API_KEY)",
+      "Aucun fournisseur SMS (AT_API_KEY / TWILIO_* / TERMII_API_KEY)",
   }
 }
 
@@ -82,7 +118,24 @@ async function sendViaAfricasTalking(
   const useSandbox =
     env("AT_SANDBOX") === "true" ||
     env("AT_SANDBOX") === "1" ||
-    username === "sandbox"
+    username.toLowerCase() === "sandbox"
+
+  // En prod Vercel, sandbox = crédits live inutilisables vers un mobile réel.
+  if (
+    useSandbox &&
+    (process.env.VERCEL_ENV === "production" ||
+      process.env.NODE_ENV === "production")
+  ) {
+    console.error(
+      "[sms/africastalking] AT_USERNAME=sandbox (ou AT_SANDBOX) en production — SMS non livrés",
+    )
+    return {
+      success: false,
+      provider: "africastalking",
+      error:
+        "AT_USERNAME encore en sandbox — définissez le username live Africa's Talking sur Vercel",
+    }
+  }
 
   const endpoint = useSandbox
     ? "https://api.sandbox.africastalking.com/version1/messaging"
@@ -150,10 +203,29 @@ async function sendViaAfricasTalking(
     }
   }
 
+  // Queued ≠ livré : sans Sender ID approuvé CI, les opérateurs bloquent souvent.
+  const warning = !from
+    ? "AT_SENDER_ID manquant — en CI un Sender ID alphanumérique approuvé est souvent requis pour la livraison"
+    : undefined
+  if (warning) {
+    console.warn("[sms/africastalking]", warning, {
+      to: to.slice(0, 6) + "…",
+      status: first.status,
+      statusCode: first.statusCode,
+    })
+  } else {
+    console.info("[sms/africastalking] queued", {
+      status: first.status,
+      statusCode: first.statusCode,
+      sid: first.messageId,
+    })
+  }
+
   return {
     success: true,
     provider: "africastalking",
     sid: first.messageId,
+    warning,
   }
 }
 
