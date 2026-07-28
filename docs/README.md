@@ -21,5 +21,6 @@
 | [`analyse-reunion-fixpay-2026-07-27.md`](./analyse-reunion-fixpay-2026-07-27.md) | Réunion Fixpay 27/07 — escrow, tarifs, suggestions |
 | [`analyse-dossier-feexpay-2026-07.md`](./analyse-dossier-feexpay-2026-07.md) | Dossier mail+CR+grille FeexPay (12–27 juil.) — comparatif complet |
 | [`aide-decision-gwa-2026-07-27.md`](./aide-decision-gwa-2026-07-27.md) | **Synthèse décisionnelle** — 7 arbitrages + plan août |
+| [`decision-revenus-freemium-2026-07-28.md`](./decision-revenus-freemium-2026-07-28.md) | **Grille abo 0/6k/15k + commission 8/6/5 % vendeur** |
 
 Agents Cursor locaux : `.cursor/agents/` (pas de doublon dans `docs/`).

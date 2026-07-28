@@ -61,20 +61,18 @@ Cette semaine : mail court sandbox + grille écrite (pas un nouvel essai de forf
 
 ### Décision C — Grille de revenus GWA (interne)
 
-Aujourd’hui trois vérités se contredisent. Il faut **en choisir une**.
+**Tranché le 28/07** → voir `docs/decision-revenus-freemium-2026-07-28.md` :
 
-| Option | Modèle | Pour | Contre |
-|--------|--------|------|--------|
-| C1 | Commission canal (BP 0–8 %) | Simple à pitcher | ≠ code |
-| C2 | Frais selon abo acheteur (code 2,5→0,3 %) | Déjà codé | Trop bas vs 5 % visés + FeexPay |
-| C3 | **Empilement clair** (recommandé) : FeexPay (users) + marge GWA fixe ~5 % (ou 3–5 selon abo) | Aligné contre-offre 15/07 + réunion | À implémenter / documenter |
+- Abo vendeur : Free / Starter **6 000** / Pro **15 000** / Entreprise devis  
+- Commission **vendeur** : **8 % / 6 % / 5 %** selon palier  
+- Acheteurs particuliers : pas d’abo payant  
+- Ne plus empiler frais acheteur + commission vendeur  
 
-**Recommandation : C3** pour la bêta CI.
-1. Users paient FeexPay (in/out) — transparent à l’écran  
-2. GWA prélève **commission plateforme** (ex. 5 % free, 4 % coop vérifiée / PRO)  
-3. Abonnements = levier rétention / baisse de commission, **pas** seul revenu An.1  
-4. Mettre à jour `lib/pricing` + BP + admin settings = **même chiffres**
-
+| Option | Modèle | Statut |
+|--------|--------|--------|
+| C1 | Commission canal (BP 0–8 %) | Remplacé |
+| C2 | Frais selon abo acheteur (ancien code) | À retirer |
+| C3 | Empilement FeexPay users + marge GWA | Affiné en **C3bis** (grille ci-dessus) |
 ---
 
 ### Décision D — Date go-live 1er septembre
