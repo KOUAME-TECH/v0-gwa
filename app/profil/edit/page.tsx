@@ -509,9 +509,7 @@ export default function EditProfilPage() {
                   "Non défini"}
               </p>
               <p className="text-[11px] text-[#9CA3AF] mt-1 leading-snug">
-                Le type de compte est fixé à l’inscription. Pour un changement
-                (ex. devenir coopérative), contacte le support GWA — validation
-                interne obligatoire.
+                Type de compte fixé. Changement via support GWA.
               </p>
             </div>
           </div>
@@ -533,7 +531,6 @@ export default function EditProfilPage() {
           <div className="flex items-center justify-between gap-3 rounded-xl border border-[#E5E7EB] px-3 py-2.5">
             <div className="min-w-0">
               <p className="text-sm text-[#374151]">Mode écoute (feed)</p>
-              <p className="text-[11px] text-[#9CA3AF]">Lit les posts en scrollant</p>
             </div>
             <Switch
               checked={listenHydrated ? listenMode : false}
@@ -544,7 +541,6 @@ export default function EditProfilPage() {
           <div className="flex items-center justify-between gap-3 rounded-xl border border-[#E5E7EB] px-3 py-2.5">
             <div className="min-w-0">
               <p className="text-sm text-[#374151]">Digest quotidien</p>
-              <p className="text-[11px] text-[#9CA3AF]">Nouveautés près de chez toi</p>
             </div>
             <Switch
               checked={formData.digest_enabled}
@@ -555,7 +551,6 @@ export default function EditProfilPage() {
           <div className="flex items-center justify-between gap-3 rounded-xl border border-[#E5E7EB] px-3 py-2.5">
             <div className="min-w-0">
               <p className="text-sm text-[#374151]">Grand texte</p>
-              <p className="text-[11px] text-[#9CA3AF]">Plus confortable à lire</p>
             </div>
             <Switch
               checked={largeText}
@@ -566,7 +561,6 @@ export default function EditProfilPage() {
           <div className="flex items-center justify-between gap-3 rounded-xl border border-[#E5E7EB] px-3 py-2.5">
             <div className="min-w-0">
               <p className="text-sm text-[#374151]">Silence la nuit</p>
-              <p className="text-[11px] text-[#9CA3AF]">Moins de notifs entre 22h et 6h</p>
             </div>
             <Switch
               checked={quietHours}
@@ -577,9 +571,6 @@ export default function EditProfilPage() {
           <div className="flex items-center justify-between gap-3 rounded-xl border border-[#E5E7EB] px-3 py-2.5">
             <div className="min-w-0">
               <p className="text-sm text-[#374151]">Économie de données</p>
-              <p className="text-[11px] text-[#9CA3AF]">
-                Images plus légères, pas d&apos;autoplay (idéal en 2G/3G)
-              </p>
             </div>
             <Switch
               checked={dataSaverHydrated ? dataSaver : false}

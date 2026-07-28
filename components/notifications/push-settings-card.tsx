@@ -115,25 +115,13 @@ export function PushSettingsCard() {
           <p className="text-sm font-semibold text-[#111827]">Notifications push</p>
           <p className="text-xs text-[#6B7280] mt-0.5">
             {!appId
-              ? "OneSignal non configuré sur ce déploiement."
+              ? "Notifications indisponibles."
               : status?.permission === "granted"
                 ? status.playerRegistered
-                  ? "Activées — tu peux recevoir les alertes GWA."
-                  : "Permission OK — enregistrement en cours."
-                : "Active les alertes commandes, litiges et messages."}
+                  ? "Activées."
+                  : "Enregistrement…"
+                : "Alertes commandes et messages."}
           </p>
-          {typeof window !== "undefined" &&
-            window.__GWA_ONESIGNAL_STATUS &&
-            !window.__GWA_ONESIGNAL_STATUS.ok && (
-              <p className="text-[11px] text-amber-700 mt-1.5 leading-relaxed">
-                Push indisponible sur {window.__GWA_ONESIGNAL_STATUS.origin}.{" "}
-                {/not configured for web push/i.test(
-                  window.__GWA_ONESIGNAL_STATUS.error || "",
-                )
-                  ? "Ajoutez cette URL dans OneSignal → Settings → Platforms → Web (Site URL + Allowed origins)."
-                  : window.__GWA_ONESIGNAL_STATUS.error}
-              </p>
-            )}
         </div>
       </div>
       <div className="flex flex-wrap gap-2">

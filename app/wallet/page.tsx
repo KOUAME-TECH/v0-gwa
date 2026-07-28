@@ -85,27 +85,38 @@ export default function WalletPage() {
     // Calculate wallet balance from completed orders (seller)
     const { data: completedOrders } = await supabase
       .from('orders')
-      .select('total_amount, service_fee')
+      .select('total_amount, service_fee, vendeur_recoit_fcfa, commission_fcfa')
       .eq('seller_id', user.id)
       .eq('status', 'delivered')
       .eq('payment_status', 'paid')
 
+    const sellerNet = (order: {
+      total_amount?: number | null
+      service_fee?: number | null
+      vendeur_recoit_fcfa?: number | null
+      commission_fcfa?: number | null
+    }) => {
+      if (order.vendeur_recoit_fcfa != null) return Number(order.vendeur_recoit_fcfa) || 0
+      const total = Number(order.total_amount) || 0
+      const commission = Number(order.commission_fcfa) || 0
+      if (commission > 0) return Math.max(0, total - commission)
+      return Math.max(0, total - (Number(order.service_fee) || 0))
+    }
+
     const totalEarned = completedOrders?.reduce((sum, order) => {
-      const amount = order.total_amount - (order.service_fee || 0)
-      return sum + amount
+      return sum + sellerNet(order)
     }, 0) || 0
 
     // Calculate pending balance (orders not yet delivered)
     const { data: pendingOrders } = await supabase
       .from('orders')
-      .select('total_amount, service_fee')
+      .select('total_amount, service_fee, vendeur_recoit_fcfa, commission_fcfa')
       .eq('seller_id', user.id)
       .in('status', ['confirmed', 'preparing', 'shipping'])
       .eq('payment_status', 'paid')
 
     const pendingBalance = pendingOrders?.reduce((sum, order) => {
-      const amount = order.total_amount - (order.service_fee || 0)
-      return sum + amount
+      return sum + sellerNet(order)
     }, 0) || 0
 
     // For now, simulate withdrawal history (would be in a wallet_transactions table)
@@ -123,7 +134,7 @@ export default function WalletPage() {
     const mockTransactions: Transaction[] = completedOrders?.map((order, i) => ({
       id: `txn-${i}`,
       type: 'credit' as const,
-      amount: order.total_amount - (order.service_fee || 0),
+      amount: sellerNet(order),
       status: 'completed' as const,
       description: 'Vente livrée',
       reference: null,

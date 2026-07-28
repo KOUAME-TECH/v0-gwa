@@ -1,6 +1,7 @@
 import "server-only"
 import { YELLY_SYSTEM_PROMPT } from "@/lib/yelly/prompt"
 import { sanitizePlainText } from "@/lib/security/validation"
+import { resolvePlatformSecret } from "@/lib/ops/platform-secrets"
 
 export type YellyMessage = { role: "system" | "user" | "assistant"; content: string }
 
@@ -13,42 +14,40 @@ export type YellyChatResult = {
 function keywordFallback(message: string, page?: string): string {
   const m = message.toLowerCase()
   if (/digest|harmattan|écouter|parcours/.test(m)) {
-    return "Le Digest, c’est l’écoute des nouveautés près de chez toi. Va dans Boutique, appuie sur Écouter — et laisse tourner. Si ça coupe, vérifie juste le son du téléphone."
+    return "Le Digest : Boutique → Écouter. Les nouveautés près de chez toi."
   }
   if (/kyc|vérif|identit|badge|document/.test(m)) {
-    return "Pour le badge vérifié : ouvre Profil, puis Vérification. Envoie une photo nette de ta pièce — l’équipe regarde et te dit oui. Tranquille, ça prend souvent moins d’un jour."
+    return "Badge vérifié : Profil → Vérification. Photo nette de ta pièce."
   }
   if (/scg|score|confiance|bancable/.test(m)) {
-    return "Ton score de confiance, c’est la confiance des autres sur toi. Remplis bien ton profil, livre correctement, reste cool dans les messages — ça monte tout seul."
+    return "Ton score de confiance monte avec un profil complet et des livraisons correctes."
   }
   if (/commande|escrow|paiement|payer|feex|argent/.test(m)) {
-    return "Quand tu paies, l’argent est gardé en sécurité jusqu’à ce que tu confirmes la réception. Tu suis tout dans Mes commandes. Souci ? Ouvre un litige ou WhatsApp."
+    return "Tu paies, l’argent est protégé jusqu’à confirmation de réception. Suivi dans Mes commandes."
   }
   if (/publier|offre|vendre|produit/.test(m)) {
-    return "Pour vendre : Publier → mets le nom, le prix, des photos claires, ta ville et ton pays. Comme ça tu sors dans le Digest local. On gère."
+    return "Pour vendre : Publier → nom, prix, photos, ville."
   }
   if (/panier|acheter|marketplace|boutique/.test(m)) {
-    return "Pour acheter : Boutique, choisis, ajoute au panier, et valide. Tu peux d’abord écrire au vendeur dans Messages si tu veux négocier."
+    return "Boutique → choisis → panier → valide. Tu peux aussi écrire au vendeur."
   }
   if (/whatsapp|contact|aide|humain|support|quelqu.?un/.test(m)) {
-    return "Pour parler à une vraie personne : WhatsApp +225 07 88 32 60 19. Moi je reste là pour les questions rapides."
+    return "WhatsApp support : +225 07 88 32 60 19."
   }
   if (/coopérat|cooperative/.test(m)) {
-    return "Les coopératives commencent en validation : ajoute tes membres, puis les docs légaux. Cherche « Coopératives » ou demande à ton admin. Simple."
+    return "Coopérative : ajoute tes membres, puis les documents. Espace Coopérative dans le menu."
   }
   if (page?.includes("profil")) {
-    return "Sur Profil tu changes ta photo, ta bio, tes lieux… Le type de compte, lui, se fixe à l’inscription — pour le changer, contacte le support. Dis-moi ce que tu veux régler."
+    return "Sur Profil : photo, bio, lieux. Type de compte : contacte le support pour le changer."
   }
-  return "Dis-moi juste ce dont tu as besoin — vendre, acheter, une commande, ou parler à quelqu’un. On avance ensemble."
+  return "Dis-moi : vendre, acheter, une commande, ou parler à quelqu’un ?"
 }
 
-function resolveGeminiKey(): string {
-  return (
-    process.env.GEMINI_API_KEY ||
-    process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
-    process.env.YELLY_API_KEY ||
-    ""
-  ).trim()
+async function resolveGeminiKey(): Promise<string> {
+  return resolvePlatformSecret("GEMINI_API_KEY", [
+    "GOOGLE_GENERATIVE_AI_API_KEY",
+    "YELLY_API_KEY",
+  ])
 }
 
 function resolveModel(): string {
@@ -59,7 +58,6 @@ function resolveModel(): string {
   ).trim()
 }
 
-/** Convertit l’historique chat OpenAI-like → contents Gemini. */
 function toGeminiContents(
   history: YellyMessage[],
   userMsg: string,
@@ -94,8 +92,8 @@ async function askGemini(opts: {
       system_instruction: { parts: [{ text: opts.system }] },
       contents: toGeminiContents(opts.history, opts.userMsg),
       generationConfig: {
-        temperature: 0.85,
-        maxOutputTokens: 280,
+        temperature: 0.7,
+        maxOutputTokens: 220,
       },
     }),
     signal: AbortSignal.timeout(20_000),
@@ -122,7 +120,6 @@ async function askGemini(opts: {
   }
 }
 
-/** Fallback OpenAI-compatible si YELLY_BASE_URL + clé dédiée (hors Gemini). */
 async function askOpenAICompat(opts: {
   system: string
   messages: YellyMessage[]
@@ -139,8 +136,8 @@ async function askOpenAICompat(opts: {
     body: JSON.stringify({
       model: opts.model,
       messages: opts.messages,
-      temperature: 0.85,
-      max_tokens: 220,
+      temperature: 0.7,
+      max_tokens: 200,
     }),
     signal: AbortSignal.timeout(20_000),
   })
@@ -167,7 +164,7 @@ export async function askYelly(opts: {
   history?: YellyMessage[]
 }): Promise<YellyChatResult> {
   const userMsg = sanitizePlainText(opts.message, 800)
-  const geminiKey = resolveGeminiKey()
+  const geminiKey = await resolveGeminiKey()
   const model = resolveModel()
   const openAiKey = process.env.OPENAI_API_KEY || ""
   const baseUrl = (process.env.YELLY_BASE_URL || "https://api.openai.com/v1").replace(
@@ -186,7 +183,6 @@ export async function askYelly(opts: {
   }
 
   try {
-    // Priorité Gemini (GWA)
     if (geminiKey) {
       const gemini = await askGemini({
         system,

@@ -35,6 +35,21 @@ export async function GET() {
   const atKey = hasAfricasTalkingProvider()
   const atLive = isAfricasTalkingLiveUsername()
   const atSender = hasAfricasTalkingSenderId()
+  let geminiReady =
+    envSet('GEMINI_API_KEY') ||
+    envSet('GOOGLE_GENERATIVE_AI_API_KEY') ||
+    envSet('YELLY_API_KEY')
+  if (!geminiReady) {
+    try {
+      const { hasPlatformSecret } = await import('@/lib/ops/platform-secrets')
+      geminiReady = await hasPlatformSecret('GEMINI_API_KEY', [
+        'GOOGLE_GENERATIVE_AI_API_KEY',
+        'YELLY_API_KEY',
+      ])
+    } catch {
+      geminiReady = false
+    }
+  }
   return NextResponse.json({
     status: healthy ? 'healthy' : 'degraded',
     app: 'GWA Platform',
@@ -58,10 +73,7 @@ export async function GET() {
       SMS_TERMII: envSet('TERMII_API_KEY'),
       ONESIGNAL_APP_ID: onesignalApp,
       ONESIGNAL_REST_API_KEY: onesignalRest,
-      GEMINI_API_KEY:
-        envSet('GEMINI_API_KEY') ||
-        envSet('GOOGLE_GENERATIVE_AI_API_KEY') ||
-        envSet('YELLY_API_KEY'),
+      GEMINI_API_KEY: geminiReady,
     },
     sms_delivery_ready: atKey && atLive && atSender,
     resilience: {

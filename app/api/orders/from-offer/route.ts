@@ -169,23 +169,22 @@ export async function POST(request: Request) {
     }
 
     const subtotal = unitPrice * quantity
-    // Pas de logistique GWA pour l’instant
     const shipping = 0
-    const { data: buyerProfile } = await supabase
+    const { data: sellerProfile } = await supabase
       .from("profiles")
       .select("subscription_tier")
-      .eq("id", buyerId)
+      .eq("id", sellerId)
       .maybeSingle()
-    const { computeServiceFee } = await import("@/lib/pricing/service-fee")
-    const feeInfo = computeServiceFee(
+    const { computeSellerCommission } = await import("@/lib/pricing/service-fee")
+    const commission = computeSellerCommission(
       subtotal,
-      (buyerProfile as { subscription_tier?: string } | null)?.subscription_tier,
+      (sellerProfile as { subscription_tier?: string } | null)?.subscription_tier,
     )
-    const serviceFee = feeInfo.fee
-    const totalAmount = subtotal + shipping + serviceFee
-    const commissionPct = 5
-    const commissionFcfa = Math.round(totalAmount * (commissionPct / 100))
-    const vendeurRecoit = totalAmount - commissionFcfa
+    const serviceFee = 0
+    const totalAmount = subtotal + shipping
+    const commissionPct = commission.pct
+    const commissionFcfa = commission.commissionFcfa
+    const vendeurRecoit = commission.vendeurRecoitFcfa
     const orderNumber = `GWA-N-${Date.now().toString(36).toUpperCase()}`
 
     const admin = createAdminClient()

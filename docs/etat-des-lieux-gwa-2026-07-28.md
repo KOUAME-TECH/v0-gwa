@@ -12,11 +12,11 @@
 |--------|------|-------------|
 | Produit PWA | **Fort** | Live, healthy, escrow métier en code, feed, panier, admin, SCG v1 |
 | OTP / SMS | **OK ops** | OTP reçoit désormais ; AT live à confirmer Sender ID |
-| Yelly | **Code prêt** | Gemini branché ; **clé absente sur Vercel** (`GEMINI_API_KEY: false`) |
+| Yelly | **Opérationnel après redeploy** | Gemini via `platform_secrets` (+ env Vercel recommandé) |
 | Types de compte | **Verrouillé** | Plus de self-service ; admin / service_role seulement |
 | Coops — qualification | **Règle + code** | 15 membres / 14 j · docs 6 mois · restrictions M3+ |
-| Coops — multi-gestion | **Livré (cette itération)** | admin + manager + member ; habilitation UI/API |
-| Pricing | **Décidé, pas codé** | Grille DG 28/07 ≠ code `service-fee` / commission |
+| Coops — multi-gestion | **Livré** | admin + manager + member |
+| Pricing | **Codé** | Commission vendeur 8/6,5/5 % ; 0 frais acheteur ; FREE ≤5 annonces |
 | FeexPay | **Bloquant go-live** | Pas d’escrow natif ; `payment_url` encore à finaliser ; sandbox |
 | Banques | **Clair** | Partenaires, jamais concurrents |
 | Seed / BP | **Draft** | Investissable après P0 chiffres + traction + grille unique |

@@ -80,14 +80,7 @@ export default function SignUpSuccessPage() {
           <Alert className="text-left">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription className="text-sm">
-              <strong>Important :</strong> L'email peut mettre quelques minutes a arriver. Verifiez votre dossier <strong>spam</strong> ou <strong>courrier indesirable</strong>. Si vous ne recevez toujours pas l'email, demandez a l'administrateur de desactiver la confirmation email.
-            </AlertDescription>
-          </Alert>
-
-          <Alert className="text-left border-orange-200 bg-orange-50">
-            <AlertTriangle className="h-4 w-4 text-orange-600" />
-            <AlertDescription className="text-sm text-orange-800">
-              <strong>Mode developpement :</strong> Si les emails ne fonctionnent pas, l'administrateur peut desactiver la confirmation email dans Supabase Dashboard : <strong>Authentication &gt; Providers &gt; Email &gt; Confirm email = OFF</strong>
+              Vérifiez aussi vos spams si l’email n’arrive pas.
             </AlertDescription>
           </Alert>
 

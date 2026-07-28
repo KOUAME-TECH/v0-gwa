@@ -135,24 +135,23 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Frais serveur uniquement (ignore body.shipping_cost / service_fee clients)
-    // Pas de logistique GWA pour l’instant → shipping = 0
+    // Décision DG : 0 frais GWA acheteur ; commission vendeur selon palier vendeur
     const shipping = 0
-    const { data: buyerProfile } = await supabase
+    const { data: sellerProfile } = await supabase
       .from("profiles")
       .select("subscription_tier")
-      .eq("id", user.id)
+      .eq("id", sellerId)
       .maybeSingle()
-    const { computeServiceFee } = await import("@/lib/pricing/service-fee")
-    const feeInfo = computeServiceFee(
+    const { computeSellerCommission } = await import("@/lib/pricing/service-fee")
+    const commission = computeSellerCommission(
       subtotal,
-      (buyerProfile as { subscription_tier?: string } | null)?.subscription_tier,
+      (sellerProfile as { subscription_tier?: string } | null)?.subscription_tier,
     )
-    const serviceFee = feeInfo.fee
-    const totalAmount = subtotal + shipping + serviceFee
-    const commissionPct = 5
-    const commissionFcfa = Math.round(totalAmount * (commissionPct / 100))
-    const vendeurRecoit = totalAmount - commissionFcfa
+    const serviceFee = 0
+    const totalAmount = subtotal + shipping
+    const commissionPct = commission.pct
+    const commissionFcfa = commission.commissionFcfa
+    const vendeurRecoit = commission.vendeurRecoitFcfa
 
     const orderNumber = `GWA-${Date.now().toString(36).toUpperCase()}`
 

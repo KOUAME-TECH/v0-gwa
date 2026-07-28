@@ -161,8 +161,7 @@ export default function ScgPage() {
             </div>
             <h2 className="text-lg font-semibold text-[#1A1A1A] mb-1">Calculez votre SCG</h2>
             <p className="text-sm text-[#6B7280] mb-4 text-pretty">
-              Le Score de Confiance GWA évalue votre fiabilité sur 5 dimensions. Il permet aux acheteurs et aux
-              banques de vous faire confiance.
+              Score de fiabilité sur 5 dimensions.
             </p>
             <Button onClick={() => recalculate(false)} disabled={calculating} className="bg-[#2F7D32] hover:bg-[#1B5E20]">
               {calculating ? <Spinner className="h-4 w-4 mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
@@ -246,8 +245,7 @@ export default function ScgPage() {
             <div className="flex items-start gap-2 px-1">
               <Info className="h-4 w-4 text-[#9CA3AF] mt-0.5 shrink-0" />
               <p className="text-xs text-[#9CA3AF] text-pretty">
-                Le SCG est calculé sur 5 dimensions pondérées : Fiabilité (25%), Qualité (20%), Engagement (20%),
-                Volumes (20%) et Stabilité (15%). Effectuez plus de transactions pour améliorer votre score.
+                Fiabilité 25% · Qualité 20% · Engagement 20% · Volumes 20% · Stabilité 15%.
               </p>
             </div>
           </>

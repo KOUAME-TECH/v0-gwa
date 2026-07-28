@@ -113,19 +113,19 @@ export function orderFlowIndex(status: string): number {
 
 export function escrowStatusMessage(step: number, escrow?: EscrowStatus): string {
   if (escrow === "frozen") {
-    return "On a mis l’argent de côté le temps que l’équipe GWA regarde le litige. Tu n’es pas seul."
+    return "Paiement gelé — litige en cours."
   }
   switch (step) {
     case 0:
-      return "Le paiement n’est pas encore terminé. Dès que c’est bon, ton argent est protégé."
+      return "Paiement en attente."
     case 1:
-      return "Ton argent est en sécurité. Le vendeur le touche seulement quand tu confirmes que tout est arrivé."
+      return "Argent protégé jusqu’à confirmation de réception."
     case 2:
-      return "C’est en route. Quand tu reçois le colis, confirme. Sinon dis-nous s’il y a un souci."
+      return "En livraison — confirme à réception."
     case 3:
-      return "Merci d’avoir confirmé. On envoie l’argent au vendeur maintenant."
+      return "Réception confirmée — paiement vendeur en cours."
     case 4:
-      return "Tout est réglé. Le vendeur a reçu son argent. Merci d’avoir choisi GWA."
+      return "Commande terminée."
     default:
       return ""
   }

@@ -453,8 +453,7 @@ export default function CooperativeDashboard() {
               Inviter des producteurs
             </h3>
             <p className="text-sm text-[#4B5563] mb-3">
-              Une coopérative se gère à plusieurs : partagez ce lien, puis habilitez des
-              gestionnaires depuis la liste des membres.
+              Partage ce lien pour ajouter des membres.
             </p>
             <div className="flex items-center gap-2">
               <input
@@ -564,33 +563,19 @@ export default function CooperativeDashboard() {
           )}
         </div>
 
-        {/* Alertes */}
-        <Card className="bg-white border-0 shadow-sm border-l-4 border-l-yellow-500 mb-6">
-          <CardContent className="p-4">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-yellow-500 flex-shrink-0 mt-0.5" />
-              <div>
-                <h4 className="font-semibold text-[#111827] mb-1">À faire</h4>
-                <ul className="text-sm text-[#4B5563] space-y-1">
-                  {stats.totalMembers < COOP_MIN_ACTIVE_MEMBERS && (
-                    <li>
-                      • Objectif qualification : {COOP_MIN_ACTIVE_MEMBERS} membres actifs (
-                      {stats.totalMembers}/{COOP_MIN_ACTIVE_MEMBERS})
-                    </li>
-                  )}
-                  {stats.managers < 2 && canAssignCoopRoles(myRole) && (
-                    <li>• Habilitez au moins un second gestionnaire pour sécuriser la gouvernance</li>
-                  )}
-                  {members.filter(m => !m.is_verified).length > 0 && (
-                    <li>• {members.filter(m => !m.is_verified).length} membre(s) en attente de vérification</li>
-                  )}
-                  {members.length === 0 && <li>• Invitez vos premiers producteurs</li>}
-                  {!coop.is_verified && <li>• Déposez les documents légaux pour la certification</li>}
-                </ul>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Alertes qualification — seulement si action requise */}
+        {(stats.totalMembers < COOP_MIN_ACTIVE_MEMBERS || !coop.is_verified) && (
+          <Card className="bg-white border-0 shadow-sm border-l-4 border-l-yellow-500 mb-6">
+            <CardContent className="p-4 text-sm text-[#4B5563] space-y-1">
+              {stats.totalMembers < COOP_MIN_ACTIVE_MEMBERS && (
+                <p>
+                  Membres : {stats.totalMembers}/{COOP_MIN_ACTIVE_MEMBERS}
+                </p>
+              )}
+              {!coop.is_verified && <p>Documents légaux à déposer.</p>}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Paramètres */}
         <Link href="/profil/edit">
@@ -601,7 +586,6 @@ export default function CooperativeDashboard() {
                   <Settings className="h-6 w-6 text-[#059669]" />
                   <div>
                     <h4 className="font-semibold text-[#111827]">Paramètres</h4>
-                    <p className="text-sm text-[#4B5563]">Gérez votre coopérative</p>
                   </div>
                 </div>
                 <ChevronRight className="h-5 w-5 text-[#4B5563]" />

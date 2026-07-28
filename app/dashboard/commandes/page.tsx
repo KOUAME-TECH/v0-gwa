@@ -298,7 +298,7 @@ export default function OrdersPage() {
           <div>
             <h1 className="font-display text-2xl md:text-3xl text-[#1F5C2E]">Mes commandes</h1>
             <p className="text-[#4B5563] mt-1 text-sm md:text-base">
-              Suis tes achats et ventes. L’argent reste protégé jusqu’à la réception.
+              Suivi des achats et ventes.
             </p>
           </div>
           <Link href="/marketplace">

@@ -113,7 +113,7 @@ export function evaluateCoopQualification(input: {
       docsDeadlinePassed,
       restrictionWindow,
       bannerMessage:
-        "Compte coopérative suspendu. Contacte le support GWA pour la suite.",
+        "Compte suspendu. Contacte le support GWA.",
     }
   }
   if (input.adminStatus === "qualified" || (membersOk && docsOk)) {
@@ -127,7 +127,7 @@ export function evaluateCoopQualification(input: {
       membersDeadlinePassed,
       docsDeadlinePassed,
       restrictionWindow,
-      bannerMessage: "Coopérative qualifiée — accès complet.",
+      bannerMessage: "Coopérative qualifiée.",
     }
   }
 
@@ -145,10 +145,10 @@ export function evaluateCoopQualification(input: {
       docsDeadlinePassed,
       restrictionWindow,
       bannerMessage: docsDeadlinePassed
-        ? "Documents légaux en retard — fonctionnalités avancées limitées. Dépose tes pièces pour retrouver l’accès complet."
+        ? "Documents légaux en retard — fonctions avancées limitées."
         : restrictionWindow
-          ? "Depuis le 3ᵉ mois, les fonctions avancées sont limitées tant que les documents légaux ne sont pas déposés. Les fonctions de base restent ouvertes."
-          : `Seuil des ${COOP_MIN_ACTIVE_MEMBERS} membres atteint. Dépose les documents légaux dans les ${COOP_DOCS_DEADLINE_MONTHS} mois suivant l’inscription.`,
+          ? "Documents légaux manquants — fonctions avancées limitées depuis le 3ᵉ mois."
+          : `Membres OK. Documents légaux avant ${COOP_DOCS_DEADLINE_MONTHS} mois.`,
     }
   }
 
@@ -164,7 +164,7 @@ export function evaluateCoopQualification(input: {
       membersDeadlinePassed,
       docsDeadlinePassed,
       restrictionWindow,
-      bannerMessage: `Coopérative en validation : ajoute au moins ${COOP_MIN_ACTIVE_MEMBERS} membres actifs. Les fonctions avancées sont limitées ; les fonctions de base restent disponibles.`,
+      bannerMessage: `Ajoute ${COOP_MIN_ACTIVE_MEMBERS} membres — fonctions avancées limitées.`,
     }
   }
 
@@ -178,7 +178,7 @@ export function evaluateCoopQualification(input: {
     membersDeadlinePassed,
     docsDeadlinePassed,
     restrictionWindow,
-    bannerMessage: `Coopérative en validation — ajoute ${COOP_MIN_ACTIVE_MEMBERS} membres actifs dans les ${COOP_MEMBERS_DEADLINE_DAYS} premiers jours, puis les documents légaux sous ${COOP_DOCS_DEADLINE_MONTHS} mois. Les fonctions de base sont déjà ouvertes.`,
+    bannerMessage: `En validation — ${COOP_MIN_ACTIVE_MEMBERS} membres sous ${COOP_MEMBERS_DEADLINE_DAYS} jours.`,
   }
 }
 

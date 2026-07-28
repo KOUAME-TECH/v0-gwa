@@ -451,22 +451,6 @@ export default function FarmerDashboard() {
           )}
         </div>
 
-        {/* Conseils */}
-        <Card className="bg-gradient-to-r from-[#2F7D32]/10 to-[#F39A1F]/10 border-0">
-          <CardContent className="p-4">
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-full bg-[#2F7D32] flex items-center justify-center flex-shrink-0">
-                <BarChart3 className="h-5 w-5 text-white" />
-              </div>
-              <div>
-                <h4 className="font-semibold text-[#111827] mb-1">Conseil du jour</h4>
-                <p className="text-sm text-[#4B5563]">
-                  Ajoutez des photos de qualité pour augmenter vos ventes de 40%
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </main>
 
       <DashboardNav userType={profile?.user_type} />

@@ -16,11 +16,6 @@ import { EscrowStepper } from "@/components/orders/escrow-stepper"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
-import {
-  computeServiceFee,
-  TIER_LABELS_FR,
-  type SubscriptionTier,
-} from "@/lib/pricing/service-fee"
 
 interface CartItem {
   id: string
@@ -58,7 +53,6 @@ export default function CartPage() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [checkoutError, setCheckoutError] = useState("")
   const [user, setUser] = useState<any>(null)
-  const [subscriptionTier, setSubscriptionTier] = useState<string>("free")
   const [deliveryAddress, setDeliveryAddress] = useState({
     name: "", phone: "", address: "", city: "", country: "ci"
   })
@@ -149,7 +143,6 @@ export default function CartPage() {
         city: profile.city || "",
         country: profile.country || "ci"
       })
-      setSubscriptionTier((profile as { subscription_tier?: string }).subscription_tier || "free")
     }
 
     const { data: cartItems } = await supabase
@@ -199,11 +192,7 @@ export default function CartPage() {
   }
 
   const subtotal = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0)
-  const feeInfo = computeServiceFee(subtotal, subscriptionTier)
-  const serviceFee = feeInfo.fee
-  const total = subtotal + serviceFee
-  const tierLabel = TIER_LABELS_FR[feeInfo.tier as SubscriptionTier] || "Gratuit"
-
+  const total = subtotal
   const formatPrice = (price: number) => new Intl.NumberFormat("fr-FR").format(price)
 
   const handleCheckout = async () => {
@@ -445,25 +434,15 @@ export default function CartPage() {
             </div>
           ))}
 
-          {/* Détail prix dans le flux (ne cache rien) */}
           <div className="rounded-2xl border border-[#1F5C2E]/10 bg-white p-4 space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-[#6B7280]">Articles</span>
               <span>{formatPrice(subtotal)} FCFA</span>
             </div>
-            <div className="flex justify-between gap-3">
-              <span className="text-[#6B7280]">
-                Service GWA ({feeInfo.pctLabel}, abo {tierLabel})
-              </span>
-              <span className="shrink-0">{formatPrice(serviceFee)} FCFA</span>
-            </div>
             <div className="flex justify-between border-t border-[#E5E7EB] pt-2 text-base font-bold">
               <span>Total</span>
               <span className="text-[#1F5C2E]">{formatPrice(total)} FCFA</span>
             </div>
-            <p className="text-[11px] leading-relaxed text-[#6B7280]">
-              Les frais de service dépendent de ton abonnement. Plus ton abo monte, plus tu paies moins.
-            </p>
           </div>
         </div>
       )}
@@ -542,10 +521,6 @@ export default function CartPage() {
               <span className="text-[#6B7280]">Articles</span>
               <span>{formatPrice(subtotal)} FCFA</span>
             </div>
-            <div className="flex justify-between gap-3">
-              <span className="text-[#6B7280]">Service GWA ({feeInfo.pctLabel})</span>
-              <span>{formatPrice(serviceFee)} FCFA</span>
-            </div>
             <div className="flex justify-between border-t border-[#E5E7EB] pt-2 font-bold">
               <span>Total</span>
               <span className="text-[#1F5C2E]">{formatPrice(total)} FCFA</span>
@@ -559,18 +534,12 @@ export default function CartPage() {
         <div className="mx-auto max-w-3xl space-y-3 p-4">
           <EscrowStepper payment_status="pending" escrow_status="pending" status="pending" />
           <p className="text-sm text-[#4B5563]">
-            Choisis comment payer. Ton argent reste protégé jusqu’à la réception.
+            Paiement sécurisé — argent protégé jusqu’à réception.
           </p>
           <div className="rounded-2xl border border-[#1F5C2E]/10 bg-white p-4 space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-[#6B7280]">Articles</span>
               <span>{formatPrice(subtotal)} FCFA</span>
-            </div>
-            <div className="flex justify-between gap-3">
-              <span className="text-[#6B7280]">
-                Service GWA ({feeInfo.pctLabel}, abo {tierLabel})
-              </span>
-              <span>{formatPrice(serviceFee)} FCFA</span>
             </div>
             <div className="flex justify-between border-t border-[#E5E7EB] pt-2 font-bold">
               <span>Total</span>
