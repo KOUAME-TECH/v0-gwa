@@ -166,7 +166,7 @@ export default function WalletPage() {
     })
 
     const creditTxns: Transaction[] =
-      completedOrders?.map((order, i: number) => ({
+      (completedOrders as OrderMoney[] | null)?.map((order: OrderMoney, i: number) => ({
       id: `credit-${i}`,
       type: 'credit' as const,
       amount: sellerNet(order),
