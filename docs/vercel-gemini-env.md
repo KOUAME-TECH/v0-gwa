@@ -1,32 +1,19 @@
-# Vercel — variables Gemini / Yelly (à coller)
+# Variables Vercel — Gemini (Yelly)
 
-Copie ces variables dans **Vercel → Project `v0-gwa` → Settings → Environment Variables**.  
-Coche **Production** + **Preview** (+ Development si tu veux). Puis **Redeploy**.
+Coller dans **Vercel → Project → Settings → Environment Variables**.
 
-| Name | Value |
-|------|--------|
-| `GEMINI_API_KEY` | `AIzaSyAoFvQtF_AdTLBG96zKv7VZy0yGDyqQOSI` |
-| `YELLY_MODEL` | `gemini-3.1-flash-lite` |
+Cible recommandée : **Production** + **Preview** + **Development**.
 
-Optionnel (alias accepté par le code) :
+| Name | Value | Notes |
+|------|-------|--------|
+| `GEMINI_API_KEY` | *(clé Google AI Studio — ne jamais committer)* | Obligatoire pour Yelly LLM |
+| `GEMINI_MODEL` | `gemini-3.1-flash-lite` | Stable ; éviter `gemini-flash-latest` (thinking tokens) |
+| `YELLY_LLM_PROVIDER` | `gemini` | Force Gemini en priorité |
 
-| Name | Value |
-|------|--------|
-| `GOOGLE_GENERATIVE_AI_API_KEY` | *(même clé que ci-dessus, seulement si tu préfères ce nom)* |
+Après enregistrement : **Deployments → … → Redeploy**.
 
-## Référence projet Google (info, pas à coller dans Vercel)
+Vérifier : `GET /api/health` → `checks.gemini_api_key: true`, puis un message Yelly avec `source: "llm"`.
 
-| Champ | Valeur |
-|-------|--------|
-| Nom clé | `gwa` |
-| Nom du projet | `projects/771227788476` |
-| Numéro du projet | `771227788476` |
+Fallback runtime : secret `gemini_api_key` dans `platform_secrets` (service_role only) si l’env Vercel est absente.
 
-## Vérification
-
-Après redeploy : `https://v0-gwa-mu.vercel.app/api/health` → `secrets.GEMINI_API_KEY: true`.  
-Test Yelly dans l’app : une réponse avec `source: llm`.
-
-## Sécurité
-
-Cette clé a été partagée en clair (chat). **Régénère-la** dans Google AI Studio dès que possible, puis mets à jour Vercel **et** la ligne `GEMINI_API_KEY` dans `platform_secrets` (Supabase).
+**Sécurité :** ne jamais coller la clé dans le chat, un commit, ou un fichier du dépôt. Si une clé a fuité, la régénérer dans Google AI Studio et mettre à jour Vercel + `platform_secrets`.
