@@ -1,5 +1,7 @@
 # Backend HTTP — `app/api`
 
+**Nouveau dans l’équipe ?** → [`docs/onboarding-equipe.md`](../../docs/onboarding-equipe.md)
+
 Chaque dossier = un **domaine** aligné sur `lib/<domaine>/`.
 
 | Dossier | Responsabilité |
