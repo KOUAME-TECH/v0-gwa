@@ -110,16 +110,12 @@ Détail : [`docs/architecture.md`](./architecture.md)
 | Rôle | Lire ensuite |
 |------|----------------|
 | **Backend / paiements** | `abonnements-services-alignes-2026-07-28.md`, `avis-cinetpay-vs-feexpay-2026-07-28.md`, `ops-go-live.md` |
-| **Produit / BP** | `politique-cooperatives-types-compte.md`, `positionnement-partenaires-bancaires.md`, `aide-decision-gwa-2026-07-27.md` |
-| **Ops / support** | `ops-auth.md`, `ops-sms-sender-id.md`, `ops-support-backoffice.md`, `vercel-gemini-env.md` |
-| **Frontend / UX** | `brand.md`, `onesignal-service-workers.md` |
+| **Produit / BP** | `politique-cooperatives-types-compte.md`, `positionnement-partenaires-bancaires.md` |
+| **Ops / support** | `ops-auth.md`, `ops-support-backoffice.md`, `ops-notifications.md`, `yelly-gemini.md` |
+| **Frontend / UX** | `brand.md`, `ops-notifications.md` |
 
-### Docs à ne PAS prendre pour vérité absolue
-
-Certaines analyses datées (audit du matin, anciens prix 6k/15k) sont **supersédées**.  
-**Priorité :** fichiers « DÉCISION DG », CdC actuel, et le **code** (`lib/pricing/entitlements.ts`).
-
-Index complet : [`docs/README.md`](./README.md)
+**Priorité vérité :** CdC + décision pricing + **code** (`lib/pricing/entitlements.ts`).  
+Index : [`docs/README.md`](./README.md)
 
 ---
 

@@ -17,8 +17,8 @@ Tout langage de « remplacement », « désintermédiation bancaire » ou « con
 
 ## Où c’est écrit
 
-- Cahier des charges 12/24 mois (`docs/GWA_Cahier_des_Charges_12_24_Mois_Complet.docx`) — doctrine §2 + objectif + module D
-- Cible « Banque / IMF partenaire (pas concurrent) » dans le tableau des profils
+- Cahier des charges : `docs/cahier-des-charges-actuel-evolution-6-12-24.md`
+- Doctrine : banques / IMF = partenaires, jamais concurrents
 
 ## Produit
 

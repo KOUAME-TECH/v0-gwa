@@ -90,7 +90,7 @@ export async function GET() {
       engine: "scg-v1",
       dimensions_meta: DIMENSION_META,
       thresholds: { bancable: 500, credit: 600, elite: 800 },
-      note: "SCG v2 5C (FastAPI) = post-bêta — voir docs/scg-v2-fastapi-contract.md",
+      note: "SCG v2 5C = post-bêta (roadmap CdC 12 mois)",
       users: rows,
     })
   } catch (err) {

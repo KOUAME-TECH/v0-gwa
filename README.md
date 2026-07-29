@@ -24,10 +24,8 @@ Frontend  →  app/**/page.tsx  ·  components/  ·  hooks/  ·  public/
 Backend   →  app/api/**       ·  lib/**       ·  middleware.ts  ·  scripts/schema/
 ```
 
-- Architecture : [`docs/architecture.md`](docs/architecture.md)  
-- Cahier des charges + roadmap 6/12/24 : [`docs/cahier-des-charges-actuel-evolution-6-12-24.md`](docs/cahier-des-charges-actuel-evolution-6-12-24.md)  
-- Index docs : [`docs/README.md`](docs/README.md)  
-- Logo : [`docs/brand.md`](docs/brand.md)
+- Cahier des charges : [`docs/cahier-des-charges-actuel-evolution-6-12-24.md`](docs/cahier-des-charges-actuel-evolution-6-12-24.md)  
+- Index docs (liste courte) : [`docs/README.md`](docs/README.md)
 
 ## Démarrage local
 

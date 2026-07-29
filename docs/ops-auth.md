@@ -94,3 +94,22 @@ Hard invariants:
 - Exact E.164 match only (no fuzzy last-9); phone change requires OTP proof (`link-email`).
 - `logout` clears the Supabase session; `me` returns profile + linked identity.
 - Fixed: removed stray `"use server"` from `app/auth/callback/route.ts` (invalid on a route handler).
+
+---
+
+## Sender ID Africa’s Talking (Vercel)
+
+| Flag `/api/health` | Signification |
+|--------------------|---------------|
+| `SMS_AT` | Clé AT présente |
+| `SMS_AT_USERNAME_LIVE` | Username live (pas sandbox) |
+| `SMS_AT_SENDER_ID` | Variable Sender ID présente |
+| `sms_delivery_ready` | AT + live + Sender ID OK |
+
+| Name Vercel | Notes |
+|-------------|--------|
+| `AT_SENDER_ID` | **Recommandé** — Sender ID approuvé (ex. `GWA`) |
+| `SMS_AT_SENDER_ID` | Alias accepté |
+
+Autres aliases code : `AFRICASTALKING_FROM`, `AFRICASTALKING_SENDER_ID`.  
+Après ajout → Redeploy → `sms_delivery_ready: true`.

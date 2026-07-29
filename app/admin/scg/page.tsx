@@ -89,10 +89,9 @@ export default function AdminSCGPage() {
           <div>
             <p className="font-medium">Bêta lean — SCG v2 5C reporté post-bêta</p>
             <p className="text-[#4B5563] mt-1">
-              Le modèle bancaire Character / Capacity / Capital / Collateral / Conditions
-              et le service FastAPI sont documentés dans{" "}
-              <code className="text-xs">docs/scg-v2-fastapi-contract.md</code>. En bêta :
-              score 0–1000, <strong>bancable ≥ 500</strong>, snapshot sur demandes d&apos;affacturage.
+              Le modèle bancaire 5C (SCG v2) est prévu post-bêta — voir roadmap CdC.
+              En bêta : score 0–1000, <strong>bancable ≥ 500</strong>, snapshot sur
+              demandes d&apos;affacturage.
             </p>
           </div>
         </CardContent>

@@ -230,7 +230,7 @@ Horizon zéro = **août 2026** (post-bêta technique actuelle).
 | `docs/positionnement-partenaires-bancaires.md` | Banques |
 | `docs/scope-beta.md` | Hors scope |
 | `docs/architecture.md` | Front / back |
-| `docs/audit-complet-2026-07-28.md` | Snapshot audit (à resynchroniser post-FeexPay) |
+| `docs/onboarding-equipe.md` | Orientation nouveaux membres |
 | `lib/pricing/entitlements.ts` | Entitlements runtime |
 
 ---
