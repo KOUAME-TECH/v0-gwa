@@ -19,15 +19,13 @@ https://supabase.com/docs/guides/auth/password-security#password-strength-and-le
 
 ## Advisor (31/07/2026)
 
-Corrigé en SQL (`scripts/schema/054_advisor_hardening_jul31.sql`) :
-- `platform_secrets` : policy deny anon/authenticated
-- Auth RLS InitPlan sur coops / abo / withdrawals (`(select auth.uid())`)
-- REVOKE EXECUTE `is_coop_*` pour `PUBLIC` / `anon`
-- Index FK `subscription_requests.activated_by`
+Corrigé en SQL :
+- `054_advisor_hardening_jul31.sql` — `platform_secrets` deny, RLS InitPlan, index FK
+- `054b_coop_helpers_private_schema.sql` — helpers coop en schéma `private` (plus d’RPC public SECURITY DEFINER)
 
-**Accepté (pas un bug)** : `authenticated` peut exécuter `is_coop_manager` / `is_coop_admin_member` — requis par les policies RLS ; les fonctions ne renvoient qu’un booléen lié à `auth.uid()`.
+**À faire dans le Dashboard (manuel)** : activer Leaked Password Protection (HIBP).
 
-**Ignorer en bêta** : avalanche « Unused Index » — ne pas DROP massif (risque régression perfs plus tard).
+**Ignorer en bêta** : avalanche « Unused Index » — ne pas DROP massif.
 
 ## Intégrations
 
