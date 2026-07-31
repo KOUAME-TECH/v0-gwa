@@ -45,6 +45,11 @@ function benefitsFor(tier: SubscriptionTier): string[] {
   if (e.reporting) lines.push("Reporting ventes")
   if (e.multiManagers) lines.push("Multi-gestionnaires")
   if (e.accountManager) lines.push("Account manager (ops)")
+  if (e.yellyRequestsPerDay == null) {
+    lines.push("Yelly illimité (anti-abus)")
+  } else {
+    lines.push(`Yelly : ${e.yellyRequestsPerDay} requêtes / jour`)
+  }
   return lines
 }
 

@@ -2,6 +2,21 @@
 
 Yelly appelle Google Gemini (`gemini-3.1-flash-lite` par défaut).
 
+## Quotas par palier d’abonnement
+
+Chaque abo a ses avantages **et** un plafond de requêtes Yelly (messages user / jour) :
+
+| Profil | Limite / jour | Où c’est codé |
+|--------|---------------|---------------|
+| Invité | 3 / 24h | cookie `yelly_guest_n` |
+| Free (+ acheteur retail) | 10 | `entitlements.yellyRequestsPerDay` |
+| Starter | 40 | idem |
+| Pro | 120 | idem |
+| Enterprise | illimité | `null` + rate-limit IP `YELLY_CHAT` |
+
+Réponse API utile UX : `yellyLimit`, `yellyRemaining` (ou `guestRemaining`).  
+UI : afficher le reste dans le panneau Yelly + CTA upgrade si 429 `YELLY_DAILY_LIMIT`.
+
 ## Variables Vercel
 
 Coller dans **Settings → Environment Variables** (Production + Preview + Development) :

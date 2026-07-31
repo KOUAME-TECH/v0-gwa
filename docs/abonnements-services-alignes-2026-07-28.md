@@ -2,12 +2,16 @@
 
 **Règle :** tout bénéfice listé sur `/abonnement` est délivré par `lib/pricing/entitlements.ts`.
 
-| Palier | Prix | Commission | Services code |
-|--------|------|------------|---------------|
-| Free | 0 | 8 % | Max 5 annonces, digest, SCG base |
-| Starter | 7 500 | 6,5 % | Illimité, boost catalogue, stats `/api/seller/stats` |
-| Pro | 18 000 | 5 % | Priorité feed/boutique, badge Pro, SCG avancé, priorité affacturage, reporting |
-| Enterprise | devis | ≤ 5 % | + multi-gestionnaires, account manager ops |
+| Palier | Prix | Commission | Services code | Yelly (req / jour) |
+|--------|------|------------|---------------|--------------------|
+| Free | 0 | 8 % | Max 5 annonces, digest, SCG base | **10** |
+| Starter | 7 500 | 6,5 % | Illimité, boost catalogue, stats `/api/seller/stats` | **40** |
+| Pro | 18 000 | 5 % | Priorité feed/boutique, badge Pro, SCG avancé, priorité affacturage, reporting | **120** |
+| Enterprise | devis | ≤ 5 % | + multi-gestionnaires, account manager ops | **illimité** (anti-abus IP) |
+| Invité (non connecté) | — | — | — | **3** / 24h (cookie) |
+
+Source unique : `yellyRequestsPerDay` dans `lib/pricing/entitlements.ts` · enforcement `POST /api/yelly/chat`.  
+Acheteur retail (pas d’abo) → palier profil `free` → **10** / jour.
 
 ## Paiement / escrow (promesse BP)
 

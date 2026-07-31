@@ -25,6 +25,7 @@
 | **B3** | Parcours litige simple (freeze payout + status `frozen`) | Confiance acheteur |
 | **B4** | Seed démo : 1 coop + 15–20 produits + 1 commande guidée | Pitch / formation équipe |
 | **B5** | Badge + filtre « vendeurs Pro » dans marketplace | Valorise l’abo déjà codé |
+| **B6** | Afficher avantages **+** quotas Yelly (10/40/120/∞) sur `/abonnement` et panneau Yelly | Promesse abo honnête ; coût Gemini maîtrisé |
 
 ---
 

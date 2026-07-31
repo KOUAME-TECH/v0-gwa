@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest"
 import {
   canAccessSellerStats,
   canPublishAnotherListing,
+  canUseYellyToday,
   entitlementsForTier,
   factoringQueuePriority,
   feedPriorityForTier,
   hasProBadge,
   sortByFeedPriority,
+  YELLY_GUEST_MAX_PER_DAY,
+  yellyDailyLimitForTier,
 } from "@/lib/pricing/entitlements"
 import { SELLER_PLANS } from "@/lib/pricing/plans"
 
@@ -55,10 +58,22 @@ describe("seller entitlements ↔ services rendus", () => {
     expect(e.feedPriority).toBeGreaterThan(feedPriorityForTier("pro"))
   })
 
+  it("Yelly quotas montent avec le palier", () => {
+    expect(YELLY_GUEST_MAX_PER_DAY).toBe(3)
+    expect(yellyDailyLimitForTier("free")).toBe(10)
+    expect(yellyDailyLimitForTier("starter")).toBe(40)
+    expect(yellyDailyLimitForTier("pro")).toBe(120)
+    expect(yellyDailyLimitForTier("enterprise")).toBeNull()
+    expect(canUseYellyToday("free", 10).ok).toBe(false)
+    expect(canUseYellyToday("starter", 39).remaining).toBe(1)
+    expect(canUseYellyToday("enterprise", 9999).ok).toBe(true)
+  })
+
   it("plans benefits stay honest with entitlements", () => {
     for (const plan of SELLER_PLANS) {
       expect(plan.benefits.length).toBeGreaterThanOrEqual(2)
       expect(plan.benefits.some((b) => /Commission/i.test(b))).toBe(true)
+      expect(plan.benefits.some((b) => /Yelly/i.test(b))).toBe(true)
     }
     expect(SELLER_PLANS.find((p) => p.tier === "free")?.benefits.join(" ")).toMatch(
       /5 annonces/i,
@@ -68,6 +83,12 @@ describe("seller entitlements ↔ services rendus", () => {
     )
     expect(SELLER_PLANS.find((p) => p.tier === "pro")?.benefits.join(" ")).toMatch(
       /Priorité feed|Badge Pro|affacturage/i,
+    )
+    expect(SELLER_PLANS.find((p) => p.tier === "free")?.benefits.join(" ")).toMatch(
+      /10 requêtes/i,
+    )
+    expect(SELLER_PLANS.find((p) => p.tier === "enterprise")?.benefits.join(" ")).toMatch(
+      /Yelly illimité/i,
     )
   })
 

@@ -73,6 +73,7 @@
 | **P1** | **Réduire le fold :** garder header + 1 bandeau (météo *ou* SCG coach, pas les deux) + 2 stats + 2 CTA |
 | **P2** | CTA primaires fixes : **Publier** · **Commandes à traiter** (badge pending) |
 | **P3** | Stats : Free = produits + commandes ; Starter+ = net + vues (déjà partiel — clarifier le paywall) |
+| **P3b** | Bloc abo compact : palier + **Yelly X/limite** + lien `/abonnement` (avantages du palier suivant) |
 | **P4** | Empty commandes : CTA « Partager mon annonce » / « Voir ma boutique » |
 | **P5** | Affacturage : carte compacte seulement si SCG proche du seuil ou déjà éligible |
 | **P6** | Raccourci Wallet + Abonnement dans le header (icônes), pas 4 cartes financières |
@@ -126,6 +127,7 @@ Marque/prénom · 1 phrase · [Publier] [Commandes] · 2 stats · liste « À tr
 | **Litiges** | Timeline + freeze payout visible |
 | **Affacturage** | Trier par `queue_priority` (déjà API) + badge palier abo |
 | **Abo** | Écran dédié `subscription_requests` (activer / rejeter) — manque aujourd’hui |
+| **Yelly** | Métrique usage / jour par palier (détection abus + coût Gemini) |
 | **Analytics** | Couper RFQ/courses hors scope ; garder agri + escrow + abo |
 
 ### UX shell admin
@@ -144,7 +146,8 @@ Marque/prénom · 1 phrase · [Publier] [Commandes] · 2 stats · liste « À tr
 |----------|-------------|
 | **Escrow acheteur** | Dashboard buyer → carte « Confirmer réception » en 1 tap |
 | **Escrow vendeur** | Farmer → « Fonds en séquestre / libérés » statut clair |
-| **Abonnement** | Après upgrade : retour dashboard avec badge palier + bénéfices débloqués |
+| **Abonnement** | Après upgrade : retour dashboard avec badge palier + **bénéfices débloqués** (commission, stats, boost…) **et nouveau plafond Yelly** |
+| **Yelly** | Compteur « X / limite restant aujourd’hui » dans le panneau ; à 0 → CTA upgrade palier (pas seulement WhatsApp) |
 | **OTP / 1ʳᵉ pub** | Onboarding : 3 étapes max (type → profil → publier) |
 | **Offline** | Bandeau « En attente d’envoi (N) » sur Publier + dashboard |
 
@@ -155,11 +158,26 @@ Marque/prénom · 1 phrase · [Publier] [Commandes] · 2 stats · liste « À tr
 ### Sprint UI-1 (navigation & cohérence)
 G1 · G2 · G3 · G4 · A6 (wallet acheteur)
 
-### Sprint UI-2 (homes rôles)
-P1–P4 · A1–A4 · C1–C3
+### Sprint UI-2 (homes rôles + Yelly / abo)
+P1–P4 · P3b · A1–A4 · C1–C3 · compteur Yelly + page `/abonnement` (avantages **et** limites Yelly par palier)
 
 ### Sprint UI-3 (admin actionnable)
-B1 · B2 · écran abo admin · commandes stuck · coops validation
+B1 · B2 · écran abo admin · commandes stuck · coops validation · usage Yelly
+
+---
+
+## Annexe — Avantages & plafonds Yelly (ne pas oublier)
+
+| Palier | Avantages clés | Yelly / jour |
+|--------|----------------|--------------|
+| Invité | Découverte | 3 |
+| Free | 5 annonces, SCG base, digest | 10 |
+| Starter | Illimité, boost, stats | 40 |
+| Pro | Priorité feed, badge, SCG avancé, affacturage, reporting | 120 |
+| Enterprise | Multi-managers, AM, reporting | illimité |
+
+Toute carte pricing / dashboard / empty-state upgrade doit citer **les deux** : bénéfices **et** quota Yelly.  
+Source : `lib/pricing/entitlements.ts` · détail ops : `docs/yelly-gemini.md`.
 
 ---
 

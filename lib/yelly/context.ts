@@ -2,6 +2,41 @@ import "server-only"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { sanitizePlainText } from "@/lib/security/validation"
 
+/** Début du jour civil (UTC = Africa/Abidjan, sans DST). */
+export function yellyDayStartIso(now = new Date()): string {
+  const d = new Date(now)
+  d.setUTCHours(0, 0, 0, 0)
+  return d.toISOString()
+}
+
+/** Compte les messages user Yelly depuis le début du jour (quota abo). */
+export async function countYellyUserMessagesToday(
+  supabase: SupabaseClient,
+  userId: string,
+  now = new Date(),
+): Promise<number> {
+  const since = yellyDayStartIso(now)
+  const { data: convs, error: convErr } = await supabase
+    .from("yelly_conversations")
+    .select("id")
+    .eq("user_id", userId)
+  if (convErr || !convs?.length) return 0
+
+  const ids = convs.map((c) => c.id)
+  const { count, error } = await supabase
+    .from("yelly_messages")
+    .select("id", { count: "exact", head: true })
+    .eq("role", "user")
+    .gte("created_at", since)
+    .in("conversation_id", ids)
+
+  if (error) {
+    console.warn("[yelly] count today", error.message)
+    return 0
+  }
+  return count ?? 0
+}
+
 /** Contexte léger produit pour Yelly (pas de PII vendeur). */
 export async function loadYellyProductHint(
   supabase: SupabaseClient,

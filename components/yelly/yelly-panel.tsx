@@ -39,6 +39,8 @@ export function YellyPanel({
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [guestLeft, setGuestLeft] = useState<number | null>(null)
+  const [yellyLeft, setYellyLeft] = useState<number | null>(null)
+  const [yellyLimit, setYellyLimit] = useState<number | null>(null)
   const [escalating, setEscalating] = useState(false)
   const [pending, startTransition] = useTransition()
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -120,6 +122,14 @@ export function YellyPanel({
         if (typeof data.guestRemaining === "number") {
           setGuestLeft(data.guestRemaining)
         }
+        if (typeof data.yellyRemaining === "number") {
+          setYellyLeft(data.yellyRemaining)
+        }
+        if (typeof data.yellyLimit === "number") {
+          setYellyLimit(data.yellyLimit)
+        } else if (data.yellyLimit === null) {
+          setYellyLimit(null)
+        }
         if (!res.ok) {
           if (res.status === 401) {
             trackYelly("yelly_guest_limit")
@@ -131,6 +141,20 @@ export function YellyPanel({
                 content:
                   data.reply ||
                   "Pour continuer avec moi, connecte-toi — ou écris-nous sur WhatsApp.",
+              },
+            ])
+            return
+          }
+          if (data.code === "YELLY_DAILY_LIMIT") {
+            setError(data.error || "Limite Yelly du jour")
+            setYellyLeft(0)
+            setLines((prev) => [
+              ...prev,
+              {
+                role: "assistant",
+                content:
+                  data.reply ||
+                  "Tu as atteint ta limite Yelly du jour. Reviens demain, ou upgrade ton abo pour plus de questions.",
               },
             ])
             return
@@ -324,6 +348,19 @@ export function YellyPanel({
             <LifeBuoy className="h-3.5 w-3.5" />
             Passer à quelqu’un
           </button>
+          {yellyLimit != null && yellyLeft != null ? (
+            <span className="text-[11px] text-[#6B7280]">
+              Yelly {yellyLeft}/{yellyLimit}
+              {yellyLeft === 0 ? (
+                <>
+                  {" · "}
+                  <Link href="/abonnement" className="font-medium text-[#1F5C2E] underline">
+                    Upgrade
+                  </Link>
+                </>
+              ) : null}
+            </span>
+          ) : null}
           {guestLeft != null && guestLeft <= 3 ? (
             <span className="text-[11px] text-[#6B7280]">
               {guestLeft > 0

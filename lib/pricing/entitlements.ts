@@ -36,7 +36,16 @@ export type SellerEntitlements = {
   reporting: boolean
   /** Account manager humain (process ops WhatsApp) */
   accountManager: boolean
+  /**
+   * Plafond requêtes Yelly (messages user) / jour calendaire (Africa/Abidjan).
+   * null = illimité (rate-limit anti-abus IP reste actif).
+   * Invité non connecté : 3 / 24h (hors entitlements — voir `/api/yelly/chat`).
+   */
+  yellyRequestsPerDay: number | null
 }
+
+/** Invité non connecté — cookie 24h, pas un palier abo */
+export const YELLY_GUEST_MAX_PER_DAY = 3
 
 const ENTITLEMENTS: Record<SubscriptionTier, Omit<SellerEntitlements, "tier" | "commissionRate">> = {
   free: {
@@ -52,6 +61,7 @@ const ENTITLEMENTS: Record<SubscriptionTier, Omit<SellerEntitlements, "tier" | "
     multiManagers: false,
     reporting: false,
     accountManager: false,
+    yellyRequestsPerDay: 10,
   },
   starter: {
     maxActiveListings: null,
@@ -66,6 +76,7 @@ const ENTITLEMENTS: Record<SubscriptionTier, Omit<SellerEntitlements, "tier" | "
     multiManagers: false,
     reporting: false,
     accountManager: false,
+    yellyRequestsPerDay: 40,
   },
   pro: {
     maxActiveListings: null,
@@ -80,6 +91,7 @@ const ENTITLEMENTS: Record<SubscriptionTier, Omit<SellerEntitlements, "tier" | "
     multiManagers: false,
     reporting: true,
     accountManager: false,
+    yellyRequestsPerDay: 120,
   },
   enterprise: {
     maxActiveListings: null,
@@ -94,6 +106,7 @@ const ENTITLEMENTS: Record<SubscriptionTier, Omit<SellerEntitlements, "tier" | "
     multiManagers: true,
     reporting: true,
     accountManager: true,
+    yellyRequestsPerDay: null,
   },
 }
 
@@ -147,6 +160,44 @@ export function factoringQueuePriority(tier: string | null | undefined): number 
 
 export function feedPriorityForTier(tier: string | null | undefined): number {
   return entitlementsForTier(tier).feedPriority
+}
+
+/** null = illimité */
+export function yellyDailyLimitForTier(
+  tier: string | null | undefined,
+): number | null {
+  return entitlementsForTier(tier).yellyRequestsPerDay
+}
+
+/**
+ * Vérifie le quota journalier Yelly pour un palier.
+ * `usedToday` = nb de messages rôle user déjà comptés aujourd’hui.
+ */
+export function canUseYellyToday(
+  tier: string | null | undefined,
+  usedToday: number,
+): {
+  ok: boolean
+  limit: number | null
+  remaining: number | null
+  code?: string
+  message?: string
+} {
+  const limit = yellyDailyLimitForTier(tier)
+  if (limit == null) {
+    return { ok: true, limit: null, remaining: null }
+  }
+  const used = Math.max(0, Math.floor(usedToday))
+  if (used >= limit) {
+    return {
+      ok: false,
+      limit,
+      remaining: 0,
+      code: "YELLY_DAILY_LIMIT",
+      message: `Limite Yelly atteinte (${limit}/jour pour ton palier). Reviens demain, ou passe à un abo supérieur.`,
+    }
+  }
+  return { ok: true, limit, remaining: limit - used }
 }
 
 /**

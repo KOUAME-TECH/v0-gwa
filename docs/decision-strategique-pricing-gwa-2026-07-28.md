@@ -74,7 +74,8 @@
 | **Type client** | Offre | Offre | Offre | Offre (+ option acheteur B2B) |
 | **Commission GWA** | **8 %** | **6,5 %** | **5 %** | **≤ 5 %** (négo, plancher 3,5 %) |
 | **Bénéfices** | Publier, vendre, SCG de base, Digest | Annonces illimitées, boost léger, stats simples | Priorité feed/shop, SCG avancé, priorité file affacturage, badge | Multi-rôles coop, multi-users, reporting, API, SLA, account manager |
-| **Limitations** | Max **5** annonces actives ; pas de boost | Pas multi-comptes | 1 compte principal (+1 assistant plus tard) | Selon contrat |
+| **Yelly (req / jour)** | **10** | **40** | **120** | **Illimité** (anti-abus) |
+| **Limitations** | Max **5** annonces actives ; pas de boost ; Yelly 10/j | Pas multi-comptes ; Yelly 40/j | 1 compte principal (+1 assistant plus tard) ; Yelly 120/j | Selon contrat ; Yelly illimité |
 | **Justification** | Acquisition | Seuil psychologique < 10 k ; break-even ~GMV 500 k/mois | Prix « sérieux » pour gros volumes | Prix B2B défendable investisseur |
 
 **Exception terrain :** pendant le pilote SIDONOBIEL (≤ 90 jours), PRO offert ou 50 % aux membres désignés par la coop — **écrit, daté, non renouvelable auto**.
