@@ -4,17 +4,13 @@ import { useEffect, useRef, useState, useTransition } from "react"
 import { usePathname } from "next/navigation"
 import Link from "next/link"
 import { X, Send, LifeBuoy, Mic } from "lucide-react"
-import { YELLY_NAME, YELLY_SUGGESTIONS, YELLY_TAGLINE, YELLY_WELCOME } from "@/lib/yelly/prompt"
+import { YELLY_NAME, YELLY_TAGLINE, yellySuggestionsForRole, yellyWelcomeForRole } from "@/lib/yelly/prompt"
 import { WHATSAPP_LINK } from "@/lib/contact"
 import { trackYelly } from "@/lib/yelly/analytics"
 import { cn } from "@/lib/utils"
+import { createClient } from "@/lib/supabase/client"
 
 type ChatLine = { role: "user" | "assistant"; content: string }
-
-const WELCOME: ChatLine = {
-  role: "assistant",
-  content: YELLY_WELCOME,
-}
 
 function TypingDots() {
   return (
@@ -34,7 +30,10 @@ export function YellyPanel({
   onClose: () => void
 }) {
   const pathname = usePathname()
-  const [lines, setLines] = useState<ChatLine[]>([WELCOME])
+  const [userType, setUserType] = useState<string | null>(null)
+  const [lines, setLines] = useState<ChatLine[]>([
+    { role: "assistant", content: yellyWelcomeForRole(null) },
+  ])
   const [input, setInput] = useState("")
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -46,6 +45,39 @@ export function YellyPanel({
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const historyLoaded = useRef(false)
+  const suggestions = yellySuggestionsForRole(userType)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const supabase = createClient()
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+        if (!user || cancelled) return
+        const { data } = await supabase
+          .from("profiles")
+          .select("user_type")
+          .eq("id", user.id)
+          .maybeSingle()
+        if (cancelled) return
+        const ut = data?.user_type || null
+        setUserType(ut)
+        setLines((prev) => {
+          if (prev.length === 1 && prev[0].role === "assistant") {
+            return [{ role: "assistant", content: yellyWelcomeForRole(ut) }]
+          }
+          return prev
+        })
+      } catch {
+        /* guest */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -67,7 +99,7 @@ export function YellyPanel({
         if (data.conversationId) setConversationId(data.conversationId)
         if (Array.isArray(data.messages) && data.messages.length > 0) {
           setLines([
-            WELCOME,
+            { role: "assistant", content: yellyWelcomeForRole(userType) },
             ...data.messages.map((m: { role: string; content: string }) => ({
               role: m.role === "user" ? "user" : "assistant",
               content: String(m.content || ""),
@@ -325,7 +357,7 @@ export function YellyPanel({
 
         {!pending && lines.length < 4 ? (
           <div className="flex flex-wrap gap-2 border-t border-[#1F5C2E]/8 px-3 py-2">
-            {YELLY_SUGGESTIONS.map((s) => (
+            {suggestions.map((s) => (
               <button
                 key={s}
                 type="button"

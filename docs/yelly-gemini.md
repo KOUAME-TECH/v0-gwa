@@ -2,6 +2,19 @@
 
 Yelly appelle Google Gemini (`gemini-3.1-flash-lite` par défaut).
 
+## Quotas IA backoffice (Yelly Ops)
+
+Indépendants des quotas vendeur. Rôle → plafond / jour :
+
+| Rôle | Req / jour | Tâches |
+|------|-----------|--------|
+| moderator | 40 | modération, support |
+| support | 60 | support, litiges |
+| admin | 120 | tout |
+| super_admin | illimité | tout |
+
+UI : `/admin/ai` · API : `POST/GET /api/admin/ai/assist` · code : `lib/admin/ai-entitlements.ts`.
+
 ## Quotas par palier d’abonnement
 
 Chaque abo a ses avantages **et** un plafond de requêtes Yelly (messages user / jour) :

@@ -20,6 +20,7 @@ import {
   Crown,
   ShieldCheck,
   Activity,
+  Sparkles,
 } from "lucide-react"
 
 interface DashboardStats {
@@ -255,14 +256,48 @@ export default function AdminDashboardPage() {
               </Link>
             )
           })}
+          <Link href="/admin/ai">
+            <Card className="hover:border-[#1F5C2E]/40 transition-colors h-full border-dashed">
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#C27D10]/15">
+                  <Sparkles className="h-5 w-5 text-[#C27D10]" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-semibold">Yelly Ops</p>
+                  <p className="text-xs text-muted-foreground">
+                    IA backoffice (quota / rôle)
+                  </p>
+                </div>
+                <ArrowRight className="h-4 w-4 text-muted-foreground" />
+              </CardContent>
+            </Card>
+          </Link>
         </div>
       ) : (
-        <Card>
-          <CardContent className="p-6 text-sm text-muted-foreground flex items-center gap-2">
-            <Clock className="h-4 w-4" />
-            Aucune file active. Les KPIs ci-dessous restent cliquables.
-          </CardContent>
-        </Card>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <Card>
+            <CardContent className="p-6 text-sm text-muted-foreground flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              Aucune file active.
+            </CardContent>
+          </Card>
+          <Link href="/admin/ai">
+            <Card className="hover:border-[#1F5C2E]/40 transition-colors h-full border-dashed">
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#C27D10]/15">
+                  <Sparkles className="h-5 w-5 text-[#C27D10]" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-semibold">Yelly Ops</p>
+                  <p className="text-xs text-muted-foreground">
+                    IA backoffice (quota / rôle)
+                  </p>
+                </div>
+                <ArrowRight className="h-4 w-4 text-muted-foreground" />
+              </CardContent>
+            </Card>
+          </Link>
+        </div>
       )}
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

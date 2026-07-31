@@ -9,17 +9,22 @@ export function yellyDayStartIso(now = new Date()): string {
   return d.toISOString()
 }
 
-/** Compte les messages user Yelly depuis le début du jour (quota abo). */
+/** Compte les messages user Yelly depuis le début du jour (quota abo / admin IA). */
 export async function countYellyUserMessagesToday(
   supabase: SupabaseClient,
   userId: string,
   now = new Date(),
+  opts?: { pageEq?: string; pageNeq?: string },
 ): Promise<number> {
   const since = yellyDayStartIso(now)
-  const { data: convs, error: convErr } = await supabase
+  let convQuery = supabase
     .from("yelly_conversations")
     .select("id")
     .eq("user_id", userId)
+  if (opts?.pageEq) convQuery = convQuery.eq("page", opts.pageEq)
+  if (opts?.pageNeq) convQuery = convQuery.neq("page", opts.pageNeq)
+
+  const { data: convs, error: convErr } = await convQuery
   if (convErr || !convs?.length) return 0
 
   const ids = convs.map((c) => c.id)

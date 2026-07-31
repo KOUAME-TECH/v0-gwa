@@ -165,6 +165,8 @@ export async function askYelly(opts: {
   page?: string
   contextHint?: string
   history?: YellyMessage[]
+  /** Remplace le prompt Yelly mobile (ex. Yelly Ops backoffice) */
+  systemPrompt?: string
 }): Promise<YellyChatResult> {
   const userMsg = sanitizePlainText(opts.message, 800)
   const geminiKey = await resolveGeminiKey()
@@ -175,7 +177,7 @@ export async function askYelly(opts: {
     "",
   )
 
-  const systemParts = [YELLY_SYSTEM_PROMPT]
+  const systemParts = [opts.systemPrompt || YELLY_SYSTEM_PROMPT]
   if (opts.page) systemParts.push(`Page actuelle : ${opts.page}`)
   if (opts.contextHint) systemParts.push(`Contexte : ${opts.contextHint}`)
   const system = systemParts.join("\n\n")

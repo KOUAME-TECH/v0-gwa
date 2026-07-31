@@ -38,6 +38,7 @@ import {
   Banknote,
   MessageSquare,
   Crown,
+  Sparkles,
 } from "lucide-react"
 import {
   ADMIN_ROLE_LABELS,
@@ -63,6 +64,7 @@ const NAV_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   Finances: TrendingUp,
   Affacturage: Banknote,
   Abonnements: Crown,
+  "Yelly Ops": Sparkles,
   Statistiques: TrendingUp,
   Parametres: Settings,
 }

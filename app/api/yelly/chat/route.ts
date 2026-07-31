@@ -72,7 +72,9 @@ export async function POST(request: NextRequest) {
         .eq("id", user.id)
         .maybeSingle()
       tier = profile?.subscription_tier ?? "free"
-      const usedToday = await countYellyUserMessagesToday(supabase, user.id)
+      const usedToday = await countYellyUserMessagesToday(supabase, user.id, new Date(), {
+        pageNeq: "admin-assist",
+      })
       const quota = canUseYellyToday(tier, usedToday)
       yellyLimit = quota.limit
       yellyRemaining = quota.remaining

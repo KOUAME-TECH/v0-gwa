@@ -16,6 +16,7 @@ export type AdminSection =
   | "finances"
   | "factoring"
   | "subscriptions"
+  | "ai"
   | "analytics"
   | "settings"
   | "support"
@@ -42,6 +43,7 @@ export const ADMIN_NAV: { name: string; href: string; section: AdminSection }[] 
   { name: "Finances", href: "/admin/finances", section: "finances" },
   { name: "Affacturage", href: "/admin/factoring", section: "factoring" },
   { name: "Abonnements", href: "/admin/subscriptions", section: "subscriptions" },
+  { name: "Yelly Ops", href: "/admin/ai", section: "ai" },
   { name: "Statistiques", href: "/admin/analytics", section: "analytics" },
   { name: "Parametres", href: "/admin/settings", section: "settings" },
 ]
@@ -61,8 +63,9 @@ const ROLE_SECTIONS: Record<AdminRole, AdminSection[]> = {
     "verifications",
     "factoring",
     "subscriptions",
+    "ai",
   ],
-  moderator: ["dashboard", "products", "reports", "support"],
+  moderator: ["dashboard", "products", "reports", "support", "ai"],
 }
 
 export type AdminAction =
