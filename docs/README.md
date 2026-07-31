@@ -7,6 +7,7 @@
 | [`onboarding-equipe.md`](./onboarding-equipe.md) | **Orientation repo** — lire en premier |
 | [`etat-des-lieux-prochaines-etapes.md`](./etat-des-lieux-prochaines-etapes.md) | **État actuel + prochaines étapes** |
 | [`propositions-ameliorations-optimisations.md`](./propositions-ameliorations-optimisations.md) | Améliorations / optimisations proposées |
+| [`propositions-ui-ux-dashboards.md`](./propositions-ui-ux-dashboards.md) | UI/UX dashboards + backoffice par rôle |
 | [`cahier-des-charges-actuel-evolution-6-12-24.md`](./cahier-des-charges-actuel-evolution-6-12-24.md) | CdC + roadmap 6 / 12 / 24 mois |
 | [`architecture.md`](./architecture.md) | Front / back |
 | [`scope-beta.md`](./scope-beta.md) | Périmètre (hors scope) |
