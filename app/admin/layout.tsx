@@ -37,6 +37,7 @@ import {
   Home,
   Banknote,
   MessageSquare,
+  Crown,
 } from "lucide-react"
 import {
   ADMIN_ROLE_LABELS,
@@ -61,6 +62,7 @@ const NAV_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   "SCG Config": Shield,
   Finances: TrendingUp,
   Affacturage: Banknote,
+  Abonnements: Crown,
   Statistiques: TrendingUp,
   Parametres: Settings,
 }

@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { RefreshCw, Building2, ExternalLink } from "lucide-react"
+import { RefreshCw, Building2, ExternalLink, Check } from "lucide-react"
+import { toast } from "sonner"
 
 interface CoopRow {
   id: string
@@ -19,6 +20,7 @@ interface CoopRow {
   phone: string | null
   email: string | null
   created_at: string
+  validation_status?: string | null
 }
 
 export default function AdminCooperativesPage() {
@@ -26,6 +28,7 @@ export default function AdminCooperativesPage() {
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
 
   const load = async () => {
     setLoading(true)
@@ -33,7 +36,9 @@ export default function AdminCooperativesPage() {
     const supabase = createClient()
     const { data, error: err } = await supabase
       .from("cooperatives")
-      .select("id, name, sector, city, country, is_verified, phone, email, created_at")
+      .select(
+        "id, name, sector, city, country, is_verified, phone, email, created_at, validation_status",
+      )
       .order("created_at", { ascending: false })
       .limit(200)
 
@@ -49,6 +54,27 @@ export default function AdminCooperativesPage() {
   useEffect(() => {
     void load()
   }, [])
+
+  async function qualify(id: string) {
+    if (!window.confirm("Marquer cette coopérative comme vérifiée / qualifiée ?")) return
+    setBusy(id)
+    const supabase = createClient()
+    const { error: err } = await supabase
+      .from("cooperatives")
+      .update({
+        is_verified: true,
+        validation_status: "qualified",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+    if (err) {
+      toast.error(err.message)
+    } else {
+      toast.success("Coopérative qualifiée")
+      void load()
+    }
+    setBusy(null)
+  }
 
   const filtered = rows.filter((r) => {
     const s = q.trim().toLowerCase()
@@ -67,7 +93,7 @@ export default function AdminCooperativesPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Coopératives</h1>
           <p className="text-sm text-muted-foreground">
-            Liste des coopératives agricoles (lecture + suivi)
+            Liste + validation qualification
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
@@ -111,6 +137,9 @@ export default function AdminCooperativesPage() {
                     ) : (
                       <Badge variant="secondary">Non vérifiée</Badge>
                     )}
+                    {c.validation_status ? (
+                      <Badge variant="outline">{c.validation_status}</Badge>
+                    ) : null}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
                     {[c.sector, c.city, c.country].filter(Boolean).join(" · ") || "—"}
@@ -121,12 +150,25 @@ export default function AdminCooperativesPage() {
                     </p>
                   )}
                 </div>
-                <Button asChild variant="ghost" size="sm">
-                  <Link href={`/cooperatives`}>
-                    Voir côté public
-                    <ExternalLink className="ml-1 h-3.5 w-3.5" />
-                  </Link>
-                </Button>
+                <div className="flex gap-2">
+                  {!c.is_verified ? (
+                    <Button
+                      size="sm"
+                      className="bg-[#1F5C2E] hover:bg-[#174824]"
+                      disabled={busy === c.id}
+                      onClick={() => void qualify(c.id)}
+                    >
+                      <Check className="mr-1 h-3.5 w-3.5" />
+                      Qualifier
+                    </Button>
+                  ) : null}
+                  <Button asChild variant="ghost" size="sm">
+                    <Link href={`/cooperatives`}>
+                      Voir
+                      <ExternalLink className="ml-1 h-3.5 w-3.5" />
+                    </Link>
+                  </Button>
+                </div>
               </div>
             ))
           )}

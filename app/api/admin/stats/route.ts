@@ -36,6 +36,9 @@ export async function GET() {
       recentOrders,
       recentUsers,
       pendingProducts,
+      supportResult,
+      factoringResult,
+      subscriptionResult,
     ] = await Promise.all([
       admin.from("profiles").select("*", { count: "exact", head: true }),
       admin.from("products").select("*", { count: "exact", head: true }),
@@ -87,6 +90,18 @@ export async function GET() {
         .eq("moderation_status", "pending")
         .order("created_at", { ascending: false })
         .limit(5),
+      admin
+        .from("contact_messages")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "open"),
+      admin
+        .from("factoring_requests")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "pending"),
+      admin
+        .from("subscription_requests")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "pending"),
     ])
 
     const totalRevenue =
@@ -94,6 +109,16 @@ export async function GET() {
         (sum, order) => sum + (order.total_amount || 0),
         0,
       ) || 0
+
+    const opsHealth = {
+      feexpay: Boolean(
+        process.env.FEEXPAY_API_KEY && process.env.FEEXPAY_SHOP_ID,
+      ),
+      sms: Boolean(process.env.AT_SENDER_ID || process.env.SMS_AT_SENDER_ID),
+      gemini: Boolean(
+        process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+      ),
+    }
 
     return NextResponse.json({
       stats: {
@@ -107,7 +132,11 @@ export async function GET() {
         openReports: reportsResult.count || 0,
         openDisputes: disputesResult.count || 0,
         pendingVerifications: verificationsResult.count || 0,
+        openSupport: supportResult.count || 0,
+        pendingFactoring: factoringResult.count || 0,
+        pendingSubscriptions: subscriptionResult.count || 0,
       },
+      opsHealth,
       recentOrders: (recentOrders.data || []).map((o) => ({
         ...o,
         buyer: Array.isArray(o.buyer) ? o.buyer[0] : o.buyer,

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -11,14 +11,15 @@ import {
   Package,
   ShoppingCart,
   TrendingUp,
-  TrendingDown,
   AlertTriangle,
-  CheckCircle,
   Clock,
   Flag,
-  Building2,
   ArrowRight,
-  Eye,
+  LifeBuoy,
+  Banknote,
+  Crown,
+  ShieldCheck,
+  Activity,
 } from "lucide-react"
 
 interface DashboardStats {
@@ -32,6 +33,15 @@ interface DashboardStats {
   openReports: number
   openDisputes: number
   pendingVerifications: number
+  openSupport: number
+  pendingFactoring: number
+  pendingSubscriptions: number
+}
+
+interface OpsHealth {
+  feexpay: boolean
+  sms: boolean
+  gemini: boolean
 }
 
 interface RecentOrder {
@@ -58,7 +68,6 @@ interface PendingProduct {
   price: number
   seller: { full_name: string }
   created_at: string
-  images?: string[]
 }
 
 export default function AdminDashboardPage() {
@@ -73,6 +82,14 @@ export default function AdminDashboardPage() {
     openReports: 0,
     openDisputes: 0,
     pendingVerifications: 0,
+    openSupport: 0,
+    pendingFactoring: 0,
+    pendingSubscriptions: 0,
+  })
+  const [opsHealth, setOpsHealth] = useState<OpsHealth>({
+    feexpay: false,
+    sms: false,
+    gemini: false,
   })
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([])
   const [recentUsers, setRecentUsers] = useState<RecentUser[]>([])
@@ -80,7 +97,7 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetchDashboardData()
+    void fetchDashboardData()
   }, [])
 
   const fetchDashboardData = async () => {
@@ -92,6 +109,7 @@ export default function AdminDashboardPage() {
         return
       }
       if (data.stats) setStats(data.stats)
+      if (data.opsHealth) setOpsHealth(data.opsHealth)
       if (data.recentOrders) setRecentOrders(data.recentOrders)
       if (data.recentUsers) setRecentUsers(data.recentUsers)
       if (data.pendingProducts) setPendingProducts(data.pendingProducts)
@@ -101,35 +119,74 @@ export default function AdminDashboardPage() {
     setLoading(false)
   }
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("fr-FR", {
+  const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat("fr-FR", {
       style: "currency",
       currency: "XOF",
       maximumFractionDigits: 0,
     }).format(amount)
-  }
 
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString("fr-FR", {
+  const formatDate = (date: string) =>
+    new Date(date).toLocaleDateString("fr-FR", {
       day: "numeric",
       month: "short",
       hour: "2-digit",
       minute: "2-digit",
     })
-  }
 
-  const getStatusBadge = (status: string) => {
-    const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-      pending: { label: "En attente", variant: "secondary" },
-      confirmed: { label: "Confirmée", variant: "default" },
-      processing: { label: "En préparation", variant: "default" },
-      shipped: { label: "Expédiée", variant: "default" },
-      delivered: { label: "Livrée", variant: "outline" },
-      cancelled: { label: "Annulée", variant: "destructive" },
-    }
-    const config = statusConfig[status] || { label: status, variant: "secondary" as const }
-    return <Badge variant={config.variant}>{config.label}</Badge>
-  }
+  const queue = [
+    {
+      key: "products",
+      count: stats.pendingProducts,
+      label: "Produits",
+      href: "/admin/products?status=pending",
+      icon: Package,
+    },
+    {
+      key: "verifications",
+      count: stats.pendingVerifications,
+      label: "Vérifications",
+      href: "/admin/verifications",
+      icon: ShieldCheck,
+    },
+    {
+      key: "disputes",
+      count: stats.openDisputes,
+      label: "Litiges",
+      href: "/admin/disputes",
+      icon: AlertTriangle,
+    },
+    {
+      key: "support",
+      count: stats.openSupport,
+      label: "Support",
+      href: "/admin/support",
+      icon: LifeBuoy,
+    },
+    {
+      key: "factoring",
+      count: stats.pendingFactoring,
+      label: "Affacturage",
+      href: "/admin/factoring",
+      icon: Banknote,
+    },
+    {
+      key: "subscriptions",
+      count: stats.pendingSubscriptions,
+      label: "Abonnements",
+      href: "/admin/subscriptions",
+      icon: Crown,
+    },
+    {
+      key: "reports",
+      count: stats.openReports,
+      label: "Signalements",
+      href: "/admin/reports",
+      icon: Flag,
+    },
+  ].filter((q) => q.count > 0)
+
+  const toTreatTotal = queue.reduce((s, q) => s + q.count, 0)
 
   if (loading) {
     return (
@@ -138,8 +195,8 @@ export default function AdminDashboardPage() {
           {[...Array(4)].map((_, i) => (
             <Card key={i}>
               <CardHeader className="animate-pulse">
-                <div className="h-4 bg-muted rounded w-24"></div>
-                <div className="h-8 bg-muted rounded w-16 mt-2"></div>
+                <div className="h-4 bg-muted rounded w-24" />
+                <div className="h-8 bg-muted rounded w-16 mt-2" />
               </CardHeader>
             </Card>
           ))}
@@ -151,257 +208,210 @@ export default function AdminDashboardPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl md:text-3xl font-bold">Tableau de bord</h1>
-        <p className="text-muted-foreground">Vue d'ensemble de la plateforme GWA</p>
+        <h1 className="text-2xl md:text-3xl font-bold">À traiter aujourd’hui</h1>
+        <p className="text-muted-foreground">
+          {toTreatTotal > 0
+            ? `${toTreatTotal} élément${toTreatTotal > 1 ? "s" : ""} en file`
+            : "Rien en attente — bonne journée"}
+        </p>
       </div>
 
-      {/* Alerts */}
-      {(stats.pendingProducts > 0 || stats.openReports > 0 || stats.openDisputes > 0) && (
-        <div className="grid gap-4 md:grid-cols-3">
-          {stats.pendingProducts > 0 && (
-            <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/20">
-              <CardContent className="p-4 flex items-center gap-4">
-                <div className="h-10 w-10 rounded-full bg-amber-100 dark:bg-amber-900 flex items-center justify-center">
-                  <Clock className="h-5 w-5 text-amber-600" />
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium">{stats.pendingProducts} produit(s) en attente</p>
-                  <p className="text-sm text-muted-foreground">Modération requise</p>
-                </div>
-                <Link href="/admin/products?status=pending">
-                  <Button variant="outline" size="sm" className="bg-transparent">
-                    Voir
-                  </Button>
-                </Link>
-              </CardContent>
-            </Card>
-          )}
-          {stats.openReports > 0 && (
-            <Card className="border-red-200 bg-red-50 dark:bg-red-950/20">
-              <CardContent className="p-4 flex items-center gap-4">
-                <div className="h-10 w-10 rounded-full bg-red-100 dark:bg-red-900 flex items-center justify-center">
-                  <Flag className="h-5 w-5 text-red-600" />
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium">{stats.openReports} signalement(s)</p>
-                  <p className="text-sm text-muted-foreground">À traiter</p>
-                </div>
-                <Link href="/admin/reports">
-                  <Button variant="outline" size="sm" className="bg-transparent">
-                    Voir
-                  </Button>
-                </Link>
-              </CardContent>
-            </Card>
-          )}
-          {stats.openDisputes > 0 && (
-            <Card className="border-orange-200 bg-orange-50 dark:bg-orange-950/20">
-              <CardContent className="p-4 flex items-center gap-4">
-                <div className="h-10 w-10 rounded-full bg-orange-100 dark:bg-orange-900 flex items-center justify-center">
-                  <AlertTriangle className="h-5 w-5 text-orange-600" />
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium">{stats.openDisputes} litige(s) ouvert(s)</p>
-                  <p className="text-sm text-muted-foreground">Résolution requise</p>
-                </div>
-                <Link href="/admin/disputes">
-                  <Button variant="outline" size="sm" className="bg-transparent">
-                    Voir
-                  </Button>
-                </Link>
-              </CardContent>
-            </Card>
-          )}
+      <Card className="border-[#1F5C2E]/20">
+        <CardContent className="p-4 flex flex-wrap items-center gap-3">
+          <Activity className="h-5 w-5 text-[#1F5C2E]" />
+          <span className="text-sm font-medium">Santé ops</span>
+          <Badge variant={opsHealth.feexpay ? "default" : "destructive"}>
+            FeexPay {opsHealth.feexpay ? "OK" : "✗"}
+          </Badge>
+          <Badge variant={opsHealth.sms ? "default" : "destructive"}>
+            SMS {opsHealth.sms ? "OK" : "✗"}
+          </Badge>
+          <Badge variant={opsHealth.gemini ? "default" : "secondary"}>
+            Gemini {opsHealth.gemini ? "OK" : "✗"}
+          </Badge>
+        </CardContent>
+      </Card>
+
+      {queue.length > 0 ? (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {queue.map((item) => {
+            const Icon = item.icon
+            return (
+              <Link key={item.key} href={item.href}>
+                <Card className="hover:border-[#1F5C2E]/40 transition-colors h-full">
+                  <CardContent className="p-4 flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100">
+                      <Icon className="h-5 w-5 text-amber-700" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-semibold">
+                        {item.count} {item.label}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Ouvrir la file</p>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                  </CardContent>
+                </Card>
+              </Link>
+            )
+          })}
         </div>
+      ) : (
+        <Card>
+          <CardContent className="p-6 text-sm text-muted-foreground flex items-center gap-2">
+            <Clock className="h-4 w-4" />
+            Aucune file active. Les KPIs ci-dessous restent cliquables.
+          </CardContent>
+        </Card>
       )}
 
-      {/* Stats */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Utilisateurs</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.totalUsers}</div>
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <TrendingUp className="h-3 w-3 text-green-500" />
-              +{stats.newUsersToday} aujourd'hui
-            </p>
-          </CardContent>
-        </Card>
+        <Link href="/admin/users">
+          <Card className="hover:border-[#1F5C2E]/30">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Utilisateurs</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.totalUsers}</div>
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <TrendingUp className="h-3 w-3 text-green-500" />+
+                {stats.newUsersToday} aujourd’hui
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Produits</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.totalProducts}</div>
-            <p className="text-xs text-muted-foreground">
-              {stats.pendingProducts} en attente de modération
-            </p>
-          </CardContent>
-        </Card>
+        <Link href="/admin/products">
+          <Card className="hover:border-[#1F5C2E]/30">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Produits</CardTitle>
+              <Package className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.totalProducts}</div>
+              <p className="text-xs text-muted-foreground">
+                {stats.pendingProducts} en attente
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Commandes</CardTitle>
-            <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.totalOrders}</div>
-            <p className="text-xs text-muted-foreground">
-              {stats.pendingOrders} en cours
-            </p>
-          </CardContent>
-        </Card>
+        <Link href="/admin/orders">
+          <Card className="hover:border-[#1F5C2E]/30">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Commandes</CardTitle>
+              <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.totalOrders}</div>
+              <p className="text-xs text-muted-foreground">
+                {stats.pendingOrders} en cours
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Chiffre d'affaires</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats.totalRevenue)}</div>
-            <p className="text-xs text-muted-foreground">
-              Total des ventes
-            </p>
-          </CardContent>
-        </Card>
+        <Link href="/admin/finances">
+          <Card className="hover:border-[#1F5C2E]/30">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Volume payé</CardTitle>
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {formatCurrency(stats.totalRevenue)}
+              </div>
+              <p className="text-xs text-muted-foreground">Commandes paid</p>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Recent Orders */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle>Commandes récentes</CardTitle>
-              <CardDescription>Les 5 dernières commandes</CardDescription>
-            </div>
-            <Link href="/admin/orders">
-              <Button variant="outline" size="sm" className="bg-transparent">
-                Voir tout
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            </Link>
+          <CardHeader>
+            <CardTitle className="text-base">Produits à modérer</CardTitle>
           </CardHeader>
-          <CardContent>
-            {recentOrders.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">Aucune commande</p>
+          <CardContent className="space-y-3">
+            {pendingProducts.length === 0 ? (
+              <p className="text-sm text-muted-foreground">File vide</p>
             ) : (
-              <div className="space-y-4">
-                {recentOrders.map((order) => (
-                  <div key={order.id} className="flex items-center gap-4">
-                    <Avatar className="h-9 w-9">
-                      <AvatarImage src={order.buyer?.avatar_url || "/placeholder.svg"} />
-                      <AvatarFallback>{order.buyer?.full_name?.charAt(0) || "?"}</AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{order.order_number}</p>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {order.buyer?.full_name || "Client"} - {formatDate(order.created_at)}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium">{formatCurrency(order.total_amount)}</p>
-                      {getStatusBadge(order.status)}
-                    </div>
+              pendingProducts.map((p) => (
+                <div key={p.id} className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{p.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {p.seller?.full_name} · {formatDate(p.created_at)}
+                    </p>
                   </div>
-                ))}
-              </div>
+                  <Button asChild size="sm" variant="outline">
+                    <Link href={`/admin/products?status=pending`}>Traiter</Link>
+                  </Button>
+                </div>
+              ))
             )}
           </CardContent>
         </Card>
 
-        {/* Recent Users */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle>Nouveaux utilisateurs</CardTitle>
-              <CardDescription>Les 5 derniers inscrits</CardDescription>
-            </div>
-            <Link href="/admin/users">
-              <Button variant="outline" size="sm" className="bg-transparent">
-                Voir tout
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            </Link>
+          <CardHeader>
+            <CardTitle className="text-base">Dernières commandes</CardTitle>
           </CardHeader>
-          <CardContent>
-            {recentUsers.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">Aucun utilisateur</p>
+          <CardContent className="space-y-3">
+            {recentOrders.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Aucune</p>
             ) : (
-              <div className="space-y-4">
-                {recentUsers.map((user) => (
-                  <div key={user.id} className="flex items-center gap-4">
-                    <Avatar className="h-9 w-9">
-                      <AvatarImage src={user.avatar_url || "/placeholder.svg"} />
-                      <AvatarFallback>{user.full_name?.charAt(0) || "?"}</AvatarFallback>
+              recentOrders.map((o) => (
+                <div key={o.id} className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src={o.buyer?.avatar_url} />
+                      <AvatarFallback>
+                        {(o.buyer?.full_name || "?").slice(0, 1)}
+                      </AvatarFallback>
                     </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{user.full_name || "Sans nom"}</p>
-                      <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">
+                        {o.order_number || o.id.slice(0, 8)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {o.buyer?.full_name} · {formatCurrency(o.total_amount)}
+                      </p>
                     </div>
-                    <Badge variant="outline">{user.user_type || "user"}</Badge>
                   </div>
-                ))}
-              </div>
+                  <Badge variant="secondary">{o.status}</Badge>
+                </div>
+              ))
             )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Pending Products */}
-      {pendingProducts.length > 0 && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle>Produits en attente de modération</CardTitle>
-              <CardDescription>Produits nécessitant une validation</CardDescription>
-            </div>
-            <Link href="/admin/products?status=pending">
-              <Button variant="outline" size="sm" className="bg-transparent">
-                Voir tout
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            </Link>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {pendingProducts.map((product) => (
-                <div key={product.id} className="flex gap-3 p-3 border rounded-lg">
-                  <div className="h-16 w-16 rounded bg-muted flex-shrink-0 overflow-hidden">
-                    {product.images?.[0] ? (
-                      <img 
-                        src={product.images[0] || "/placeholder.svg"} 
-                        alt={product.name}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <div className="h-full w-full flex items-center justify-center">
-                        <Package className="h-6 w-6 text-muted-foreground" />
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{product.name}</p>
-                    <p className="text-sm text-muted-foreground truncate">
-                      Par {product.seller?.full_name || "Vendeur"}
-                    </p>
-                    <p className="text-sm font-medium">{formatCurrency(product.price)}</p>
-                  </div>
-                  <Link href={`/produit/${product.id}`}>
-                    <Button variant="ghost" size="icon">
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                  </Link>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Nouveaux utilisateurs</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {recentUsers.map((u) => (
+            <div key={u.id} className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src={u.avatar_url} />
+                  <AvatarFallback>{(u.full_name || "?").slice(0, 1)}</AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="text-sm font-medium">{u.full_name}</p>
+                  <p className="text-xs text-muted-foreground">{u.user_type}</p>
                 </div>
-              ))}
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {formatDate(u.created_at)}
+              </span>
             </div>
-          </CardContent>
-        </Card>
-      )}
+          ))}
+        </CardContent>
+      </Card>
     </div>
   )
 }

@@ -13,7 +13,6 @@ import {
   Building2, Sprout, CheckCircle2, AlertCircle, Globe, Plus, Copy
 } from 'lucide-react'
 import { createClient } from "@/lib/supabase/client"
-import { DashboardNav } from "@/components/dashboard-nav"
 import { toast } from "sonner"
 import { isFactoringEligible } from "@/lib/factoring/eligibility"
 import { Banknote } from "lucide-react"
@@ -156,8 +155,8 @@ export default function CooperativeDashboard() {
         .limit(5)
 
       const preferred =
-        membership?.find((m) => m.role === "admin") ||
-        membership?.find((m) => m.role === "manager") ||
+        membership?.find((m: { role: string }) => m.role === "admin") ||
+        membership?.find((m: { role: string }) => m.role === "manager") ||
         membership?.[0]
 
       if (preferred?.cooperative_id) {
@@ -281,219 +280,177 @@ export default function CooperativeDashboard() {
     )
   }
 
-  // Pas encore de coopérative : inviter à en créer une
+  // Pas encore de coopérative : créer ou rejoindre
   if (!coop) {
     return (
-      <div className="min-h-screen bg-[#F0FDF4] pb-20">
-        <header className="bg-gradient-to-br from-[#059669] to-[#047857] text-white px-4 pt-12 pb-6 rounded-b-3xl">
-          <div className="flex items-center justify-between mb-6">
-            <button onClick={() => router.back()}><ArrowLeft className="h-6 w-6" /></button>
-            <h1 className="text-lg font-semibold">Espace Coopérative</h1>
-            <Link href="/notifications"><Bell className="h-6 w-6" /></Link>
-          </div>
+      <div className="min-h-screen bg-gradient-to-b from-[#E8F5E9] to-[#FFF6E5] pb-24">
+        <header className="px-4 pt-6 pb-4">
+          <p className="text-sm font-medium text-[#C27D10]">Espace coopérative</p>
+          <h1 className="text-2xl font-bold text-[#1F5C2E]">Rejoins ou crée</h1>
+          <p className="mt-1 text-sm text-[#6B7280]">
+            Deux chemins : créer ta coop, ou rejoindre une existante.
+          </p>
         </header>
-        <main className="px-4 -mt-4">
-          <Card className="bg-white border-0 shadow-lg">
-            <CardContent className="p-8 text-center">
-              <Building2 className="h-12 w-12 text-[#059669]/40 mx-auto mb-4" />
-              <h2 className="font-bold text-[#111827] mb-2">Aucune coopérative</h2>
-              <p className="text-sm text-[#4B5563] mb-6">
-                Créez votre coopérative pour gérer vos membres producteurs et leurs produits.
-              </p>
-              <Link href="/cooperatives/create">
-                <Button className="bg-[#059669] hover:bg-[#047857]">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Créer ma coopérative
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
+        <main className="space-y-3 px-4">
+          <Link
+            href="/cooperatives/create"
+            className="flex items-center gap-3 rounded-2xl bg-[#1F5C2E] p-4 text-white"
+          >
+            <Plus className="h-6 w-6" />
+            <div>
+              <p className="font-semibold">Créer ma coopérative</p>
+              <p className="text-xs text-white/80">Tu seras administrateur</p>
+            </div>
+          </Link>
+          <Link
+            href="/cooperatives/rejoindre"
+            className="flex items-center gap-3 rounded-2xl bg-white p-4 ring-1 ring-[#1F5C2E]/15"
+          >
+            <UserPlus className="h-6 w-6 text-[#1F5C2E]" />
+            <div>
+              <p className="font-semibold text-[#1a1a1a]">Rejoindre une coop</p>
+              <p className="text-xs text-[#6B7280]">Avec un lien d’invitation</p>
+            </div>
+          </Link>
         </main>
-        <DashboardNav userType={profile?.user_type} />
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-[#F0FDF4] pb-20">
+    <div className="min-h-screen bg-gradient-to-b from-[#E8F5E9] to-[#FFF6E5] pb-24">
       {/* Header Coopérative */}
-      <header className="bg-gradient-to-br from-[#059669] to-[#047857] text-white px-4 pt-12 pb-6 rounded-b-3xl">
-        <div className="flex items-center justify-between mb-6">
-          <button onClick={() => router.back()}>
-            <ArrowLeft className="h-6 w-6" />
-          </button>
-          <h1 className="text-lg font-semibold">Espace Coopérative</h1>
-          <Link href="/notifications">
+      <header className="bg-gradient-to-br from-[#1F5C2E] to-[#2d7a3e] text-white px-4 pt-8 pb-6 rounded-b-3xl">
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-lg font-semibold">{coop.name}</h1>
+          <Link href="/notifications" aria-label="Notifications">
             <Bell className="h-6 w-6" />
           </Link>
         </div>
 
-        <div className="flex items-center gap-4 mb-6">
-          <div className="w-16 h-16 rounded-2xl bg-white/20 flex items-center justify-center overflow-hidden">
-            {coop.logo_url ? (
-              <Image src={coop.logo_url} alt="" width={64} height={64} className="object-cover" />
-            ) : (
-              <Building2 className="h-8 w-8 text-white" />
-            )}
+        <div className="mb-4">
+          <div className="mb-1 flex items-center justify-between text-xs text-white/80">
+            <span>Membres actifs</span>
+            <span className="font-semibold text-white">
+              {stats.totalMembers}/{COOP_MIN_ACTIVE_MEMBERS}
+            </span>
           </div>
-          <div className="flex-1">
-            <h2 className="text-xl font-bold">{coop.name}</h2>
-            <p className="text-white/80 text-sm flex items-center gap-1">
-              <Globe className="h-3 w-3" />
-              {coop.city || coop.country || "Afrique"}
-            </p>
-            {coop.is_verified && (
-              <Badge className="bg-white/20 text-white mt-1">
-                <CheckCircle2 className="h-3 w-3 mr-1" />
-                Certifiée
-              </Badge>
-            )}
+          <div className="h-2 overflow-hidden rounded-full bg-white/20">
+            <div
+              className="h-full rounded-full bg-[#F39A1F] transition-all"
+              style={{
+                width: `${Math.min(100, (stats.totalMembers / COOP_MIN_ACTIVE_MEMBERS) * 100)}%`,
+              }}
+            />
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
-          <div className="bg-white/10 rounded-xl p-3 text-center">
-            <Users className="h-6 w-6 mx-auto mb-1" />
-            <p className="text-2xl font-bold">{stats.totalMembers}</p>
-            <p className="text-xs text-white/70">Membres</p>
-          </div>
-          <div className="bg-white/10 rounded-xl p-3 text-center">
-            <Sprout className="h-6 w-6 mx-auto mb-1" />
-            <p className="text-2xl font-bold">{stats.managers}</p>
-            <p className="text-xs text-white/70">Habilités</p>
-          </div>
-          <div className="bg-white/10 rounded-xl p-3 text-center">
-            <Package className="h-6 w-6 mx-auto mb-1" />
-            <p className="text-2xl font-bold">{stats.totalProducts}</p>
-            <p className="text-xs text-white/70">Produits</p>
-          </div>
-        </div>
+        {canInviteMembers(myRole) ? (
+          <Button
+            onClick={handleInvite}
+            className="w-full rounded-full bg-white text-[#1F5C2E] hover:bg-white/90"
+          >
+            <UserPlus className="mr-2 h-4 w-4" />
+            Inviter des membres
+          </Button>
+        ) : null}
       </header>
 
-      <main className="px-4 -mt-4">
+      <main className="px-4 -mt-2 pt-4 space-y-4">
         {qualificationBanner && (
-          <Card className="bg-white border-0 shadow-lg mb-4">
-            <CardContent className="p-4 text-sm text-[#4B5563]">
-              <p className="font-semibold text-[#111827] mb-1">Qualification coopérative</p>
-              <p>
-                {qualificationBanner}
-                {stats.totalMembers < COOP_MIN_ACTIVE_MEMBERS
-                  ? ` (${stats.totalMembers}/${COOP_MIN_ACTIVE_MEMBERS})`
-                  : ""}
-              </p>
-            </CardContent>
-          </Card>
+          <div className="rounded-2xl bg-white p-4 text-sm text-[#4B5563] ring-1 ring-[#1F5C2E]/10">
+            <p className="font-semibold text-[#111827] mb-1">Checklist qualification</p>
+            <p>{qualificationBanner}</p>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs">
+              <Badge variant={stats.totalMembers >= COOP_MIN_ACTIVE_MEMBERS ? "default" : "secondary"}>
+                Membres {stats.totalMembers}/{COOP_MIN_ACTIVE_MEMBERS}
+              </Badge>
+              <Badge
+                variant={
+                  (Array.isArray(coop.legal_documents) && coop.legal_documents.length > 0) ||
+                  coop.registration_number
+                    ? "default"
+                    : "secondary"
+                }
+              >
+                Docs légaux
+              </Badge>
+              <Badge variant={coop.validation_status === "qualified" ? "default" : "secondary"}>
+                Statut {coop.validation_status || "en cours"}
+              </Badge>
+            </div>
+            {!(
+              (Array.isArray(coop.legal_documents) && coop.legal_documents.length > 0) ||
+              coop.registration_number
+            ) ? (
+              <div className="mt-3 flex gap-2">
+                <Link href="/contact" className="text-xs font-medium text-[#1F5C2E] underline">
+                  Contacter le support
+                </Link>
+                <Link href="/profil/edit" className="text-xs font-medium text-[#1F5C2E] underline">
+                  Compléter le profil
+                </Link>
+              </div>
+            ) : null}
+          </div>
         )}
 
-        {/* Actions rapides */}
-        <Card className="bg-white border-0 shadow-lg mb-6">
-          <CardContent className="p-4">
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                onClick={handleInvite}
-                className="text-center disabled:opacity-40"
-                disabled={!canInviteMembers(myRole)}
-              >
-                <div className="w-12 h-12 rounded-xl bg-[#059669]/10 flex items-center justify-center mx-auto mb-1">
-                  <UserPlus className="h-6 w-6 text-[#059669]" />
-                </div>
-                <p className="text-xs text-[#4B5563]">Inviter</p>
-              </button>
-              <Link href="/dashboard/products" className="text-center">
-                <div className="w-12 h-12 rounded-xl bg-[#F39A1F]/10 flex items-center justify-center mx-auto mb-1">
-                  <Package className="h-6 w-6 text-[#F39A1F]" />
-                </div>
-                <p className="text-xs text-[#4B5563]">Produits</p>
-              </Link>
-              <Link href="/scg" className="text-center">
-                <div className="w-12 h-12 rounded-xl bg-purple-500/10 flex items-center justify-center mx-auto mb-1">
-                  <BarChart3 className="h-6 w-6 text-purple-500" />
-                </div>
-                <p className="text-xs text-[#4B5563]">Score SCG</p>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="grid grid-cols-2 gap-3">
+          <Link
+            href="/dashboard/products"
+            className="rounded-2xl bg-white p-4 ring-1 ring-black/5"
+          >
+            <Package className="h-5 w-5 text-[#C27D10]" />
+            <p className="mt-2 text-2xl font-bold">{stats.totalProducts}</p>
+            <p className="text-xs text-[#6B7280]">Catalogue coop</p>
+          </Link>
+          <Link href="/scg" className="rounded-2xl bg-white p-4 ring-1 ring-black/5">
+            <BarChart3 className="h-5 w-5 text-[#1F5C2E]" />
+            <p className="mt-2 text-sm font-semibold">Score SCG</p>
+            <p className="text-xs text-[#6B7280]">Confiance groupe</p>
+          </Link>
+        </div>
 
-        {/* Bloc affacturage (préfinancement) — visible selon éligibilité SCG */}
-        <Link href="/affacturage" className="block mb-6">
-          <Card className="bg-white border-0 shadow-sm">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-xl bg-[#059669]/10 flex items-center justify-center flex-shrink-0">
-                  <Banknote className="h-6 w-6 text-[#059669]" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h4 className="font-semibold text-[#111827]">Affacturage</h4>
-                    {isFactoringEligible({
-                      scg_bancable: profile?.scg_bancable,
-                      scg_score: profile?.scg_score,
-                    }) ? (
-                      <Badge className="bg-green-100 text-green-700">Éligible</Badge>
-                    ) : (
-                      <Badge className="bg-gray-100 text-gray-600">Score requis</Badge>
-                    )}
-                  </div>
-                  <p className="text-sm text-[#4B5563]">
-                    Avance de trésorerie adossée à votre Score de Confiance GWA.
-                  </p>
-                </div>
-                <ChevronRight className="h-5 w-5 text-[#4B5563]" />
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-
-        {/* Lien d'invitation */}
-        <Card className="bg-white border-0 shadow-sm mb-6">
-          <CardContent className="p-4">
-            <h3 className="font-bold text-[#111827] mb-2 flex items-center gap-2">
-              <UserPlus className="h-4 w-4 text-[#059669]" />
-              Inviter des producteurs
-            </h3>
-            <p className="text-sm text-[#4B5563] mb-3">
-              Partage ce lien pour ajouter des membres.
-            </p>
-            <div className="flex items-center gap-2">
-              <input
-                readOnly
-                value={inviteLink}
-                className="flex-1 h-10 px-3 rounded-xl border border-gray-200 bg-gray-50 text-xs text-[#4B5563] truncate"
-              />
-              <Button onClick={handleInvite} size="sm" className="bg-[#059669] hover:bg-[#047857] shrink-0">
-                <Copy className="h-4 w-4 mr-1" />
-                Copier
-              </Button>
+        {isFactoringEligible({
+          scg_bancable: profile?.scg_bancable,
+          scg_score: profile?.scg_score,
+        }) ? (
+          <Link
+            href="/affacturage"
+            className="flex items-center gap-3 rounded-2xl bg-[#1F5C2E] px-4 py-3 text-white"
+          >
+            <Banknote className="h-5 w-5" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold">Affacturage disponible</p>
+              <p className="text-xs text-white/80">Avance sur trésorerie</p>
             </div>
-          </CardContent>
-        </Card>
+            <ChevronRight className="h-4 w-4" />
+          </Link>
+        ) : null}
 
         {/* Liste des membres */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-bold text-[#111827] flex items-center gap-2">
-              <Users className="h-5 w-5 text-[#059669]" />
+              <Users className="h-5 w-5 text-[#1F5C2E]" />
               Membres
             </h3>
-            <Button onClick={handleInvite} variant="outline" size="sm" className="rounded-full border-[#059669] text-[#059669] bg-transparent">
-              <UserPlus className="h-4 w-4 mr-1" />
-              Inviter
-            </Button>
           </div>
 
           {members.length === 0 ? (
             <Card className="bg-white border-0 shadow-sm">
               <CardContent className="p-8 text-center">
-                <Users className="h-12 w-12 text-[#059669]/30 mx-auto mb-4" />
+                <Users className="h-12 w-12 text-[#1F5C2E]/30 mx-auto mb-4" />
                 <h4 className="font-semibold text-[#111827] mb-2">Aucun membre</h4>
                 <p className="text-sm text-[#4B5563] mb-4">
-                  Invitez des producteurs à rejoindre votre coopérative
+                  Invite des producteurs avec le bouton en haut de page.
                 </p>
-                <Button onClick={handleInvite} className="bg-[#059669]">
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  Inviter des membres
-                </Button>
+                {canInviteMembers(myRole) ? (
+                  <Button onClick={handleInvite} className="bg-[#1F5C2E]">
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Copier le lien d’invitation
+                  </Button>
+                ) : null}
               </CardContent>
             </Card>
           ) : (
@@ -594,8 +551,6 @@ export default function CooperativeDashboard() {
           </Card>
         </Link>
       </main>
-
-      <DashboardNav userType={profile?.user_type} />
     </div>
   )
 }

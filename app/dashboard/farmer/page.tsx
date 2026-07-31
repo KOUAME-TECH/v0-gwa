@@ -4,22 +4,26 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { 
-  Sprout, CloudSun, TrendingUp, Package, Users, Wallet, 
-  Plus, ChevronRight, Truck, Bell, Sun, Droplets, Wind,
-  ArrowLeft, MoreVertical, Eye, Edit2, BarChart3
-} from 'lucide-react'
+import {
+  Package,
+  Plus,
+  Wallet,
+  Crown,
+  ChevronRight,
+  Banknote,
+  Eye,
+} from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
-import { DashboardNav } from "@/components/dashboard-nav"
 import { WeatherWidget } from "@/components/weather-widget"
 import { isFactoringEligible } from "@/lib/factoring/eligibility"
-import { Banknote } from "lucide-react"
 import { getCoachActions } from "@/lib/scg/coach"
 import { ScgCoachPanel } from "@/components/scg/scg-coach"
 import type { SCGDimensions } from "@/lib/scg/engine"
+import { EmptyState } from "@/components/ui/empty-state"
+import { entitlementsForTier } from "@/lib/pricing/entitlements"
+import { productDetailPath } from "@/lib/products/paths"
 
 interface Product {
   id: string
@@ -29,34 +33,31 @@ interface Product {
   stock_quantity: number
   images: string[]
   status: string
-  origin_region: string | null
 }
 
 interface Order {
   id: string
   total_amount: number
   status: string
+  escrow_status?: string | null
   created_at: string
   profiles: { full_name: string } | null
 }
 
+function formatFcfa(n: number) {
+  return new Intl.NumberFormat("fr-FR").format(n) + " FCFA"
+}
+
 export default function FarmerDashboard() {
   const router = useRouter()
-  const [user, setUser] = useState<any>(null)
-  const [profile, setProfile] = useState<any>(null)
+  const [profile, setProfile] = useState<Record<string, unknown> | null>(null)
   const [products, setProducts] = useState<Product[]>([])
   const [orders, setOrders] = useState<Order[]>([])
-  const [stats, setStats] = useState({
-    totalRevenue: 0,
-    totalProducts: 0,
-    totalOrders: 0,
-    pendingOrders: 0
-  })
+  const [pendingOrders, setPendingOrders] = useState(0)
   const [coachDims, setCoachDims] = useState<SCGDimensions | null>(null)
   const [coachScore, setCoachScore] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [sellerStats, setSellerStats] = useState<{
-    gmv_fcfa: number
     net_fcfa: number
     product_views: number
   } | null>(null)
@@ -65,68 +66,59 @@ export default function FarmerDashboard() {
   useEffect(() => {
     const fetchData = async () => {
       const supabase = createClient()
-      const { data: { user: authUser } } = await supabase.auth.getUser()
-      
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser()
       if (!authUser) {
         router.push("/auth/login")
         return
       }
-      setUser(authUser)
 
-      // Profil
       const { data: profileData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', authUser.id)
+        .from("profiles")
+        .select("*")
+        .eq("id", authUser.id)
         .single()
       setProfile(profileData)
 
-      // Produits
-      const { data: productsData, error: productsError } = await supabase
-        .from('products')
-        .select('id, name, price, unit, images, description, origin_country, origin_region, is_organic, is_fair_trade, product_type, seller_id, category_id, status, likes_count, comments_count, shares_count, created_at, updated_at, stock_quantity')
-        .eq('seller_id', authUser.id)
-        .neq('status', 'archived')
-        .order('created_at', { ascending: false })
-      if (productsError) console.error('[dashboard/farmer products]', productsError.message)
-      setProducts(productsData || [])
+      const { data: productsData } = await supabase
+        .from("products")
+        .select(
+          "id, name, price, unit, images, status, stock_quantity, seller_id, created_at",
+        )
+        .eq("seller_id", authUser.id)
+        .neq("status", "archived")
+        .order("created_at", { ascending: false })
+      setProducts((productsData as Product[]) || [])
 
-      // Commandes (en tant que vendeur via order_items)
-      const productIds = productsData?.map(p => p.id) || []
+      const productIds = (productsData || []).map((p: { id: string }) => p.id)
       let ordersData: Order[] = []
-      
       if (productIds.length > 0) {
         const { data: orderItems } = await supabase
-          .from('order_items')
-          .select('order_id')
-          .in('product_id', productIds)
-        
-        const orderIds = [...new Set(orderItems?.map(oi => oi.order_id) || [])]
-        
+          .from("order_items")
+          .select("order_id")
+          .in("product_id", productIds)
+        const orderIds = [
+          ...new Set((orderItems || []).map((oi: { order_id: string }) => oi.order_id)),
+        ]
         if (orderIds.length > 0) {
           const { data: ordersResult } = await supabase
-            .from('orders')
-            .select('*, profiles:buyer_id(full_name)')
-            .in('id', orderIds)
-            .order('created_at', { ascending: false })
-            .limit(5)
-          ordersData = ordersResult || []
+            .from("orders")
+            .select("id, total_amount, status, escrow_status, created_at, profiles:buyer_id(full_name)")
+            .in("id", orderIds)
+            .order("created_at", { ascending: false })
+            .limit(8)
+          ordersData = (ordersResult as Order[]) || []
         }
       }
       setOrders(ordersData)
-
-      // Stats
-      const totalRevenue = ordersData.reduce((sum, o) => 
-        o.status === 'delivered' ? sum + (o.total_amount || 0) : sum, 0)
-      const pendingOrders = ordersData.filter(o => 
-        ['pending', 'confirmed', 'shipping'].includes(o.status)).length
-
-      setStats({
-        totalRevenue,
-        totalProducts: productsData?.length || 0,
-        totalOrders: ordersData.length,
-        pendingOrders
-      })
+      setPendingOrders(
+        ordersData.filter((o) =>
+          ["pending", "confirmed", "processing", "shipping", "shipped"].includes(
+            o.status,
+          ),
+        ).length,
+      )
 
       const { data: scg } = await supabase
         .from("scg_scores")
@@ -154,14 +146,12 @@ export default function FarmerDashboard() {
         const statsJson = await statsRes.json().catch(() => ({}))
         if (statsRes.ok && statsJson.stats) {
           setSellerStats({
-            gmv_fcfa: statsJson.stats.gmv_fcfa || 0,
             net_fcfa: statsJson.stats.net_fcfa || 0,
             product_views: statsJson.stats.product_views || 0,
           })
           setStatsLocked(false)
         } else if (statsRes.status === 403) {
           setStatsLocked(true)
-          setSellerStats(null)
         }
       } catch {
         /* ignore */
@@ -169,334 +159,258 @@ export default function FarmerDashboard() {
 
       setIsLoading(false)
     }
-    fetchData()
+    void fetchData()
   }, [router])
+
+  const firstName = String(profile?.full_name || "Producteur").split(" ")[0]
+  const tier = String(profile?.subscription_tier || "free")
+  const entitlements = entitlementsForTier(tier)
+  const showFactoring =
+    profile &&
+    isFactoringEligible({
+      scg_score: Number(profile.scg_score || coachScore || 0),
+      scg_bancable: Boolean(profile.scg_bancable),
+    })
+  const showCoach = Boolean(coachDims && entitlements.scgAdvanced)
+  const lowStock = products.filter(
+    (p) => (p.stock_quantity ?? 0) > 0 && (p.stock_quantity ?? 0) <= 5,
+  )
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#FFF6E5] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#2F7D32]" />
+      <div className="min-h-screen bg-[#FFF6E5] p-4 pb-24 space-y-4 animate-pulse">
+        <div className="h-10 w-56 rounded bg-[#1F5C2E]/15" />
+        <div className="h-16 rounded-2xl bg-white/70" />
+        <div className="grid grid-cols-2 gap-3">
+          <div className="h-24 rounded-2xl bg-white/70" />
+          <div className="h-24 rounded-2xl bg-white/70" />
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-[#FFF6E5] pb-20">
-      {/* Header Producteur - Vert nature */}
-      <header className="bg-gradient-to-br from-[#2F7D32] to-[#1B5E20] text-white px-4 pt-12 pb-6 rounded-b-3xl">
-        <div className="flex items-center justify-between mb-6">
-          <button onClick={() => router.back()}>
-            <ArrowLeft className="h-6 w-6" />
-          </button>
-          <h1 className="text-lg font-semibold">Espace Producteur</h1>
-          <Link href="/notifications">
-            <Bell className="h-6 w-6" />
-          </Link>
-        </div>
-
-        {/* Profil */}
-        <div className="flex items-center gap-4 mb-6">
-          <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center overflow-hidden">
-            {profile?.avatar_url ? (
-              <Image src={profile.avatar_url || "/placeholder.svg"} alt="" width={64} height={64} className="object-cover" />
-            ) : (
-              <Sprout className="h-8 w-8 text-white" />
-            )}
-          </div>
+    <div className="min-h-screen bg-gradient-to-b from-[#E8F5E9] to-[#FFF6E5] pb-24">
+      <header className="px-4 pt-6 pb-4">
+        <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-xl font-bold">{profile?.full_name || "Producteur"}</h2>
-            <p className="text-white/80 text-sm">{profile?.city || profile?.country || "Afrique"}</p>
-            {profile?.is_verified && (
-              <Badge className="bg-white/20 text-white mt-1">Certifié GWA</Badge>
-            )}
+            <p className="text-sm font-medium text-[#C27D10]">Espace producteur</p>
+            <h1 className="text-2xl font-bold tracking-tight text-[#1F5C2E]">
+              {firstName}
+            </h1>
+            <p className="mt-1 text-sm text-[#6B7280]">
+              Publie, vends, suis l’argent qui arrive.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Link
+              href="/wallet"
+              className="rounded-full bg-white p-2.5 ring-1 ring-[#1F5C2E]/15"
+              aria-label="Portefeuille"
+            >
+              <Wallet className="h-5 w-5 text-[#1F5C2E]" />
+            </Link>
+            <Link
+              href="/abonnement"
+              className="rounded-full bg-white p-2.5 ring-1 ring-[#1F5C2E]/15"
+              aria-label="Abonnement"
+            >
+              <Crown className="h-5 w-5 text-[#C27D10]" />
+            </Link>
           </div>
         </div>
 
+        <div className="mt-4 flex gap-2">
+          <Button asChild className="flex-1 rounded-full bg-[#1F5C2E] hover:bg-[#174824]">
+            <Link href="/publier">
+              <Plus className="mr-2 h-4 w-4" />
+              Publier
+            </Link>
+          </Button>
+          <Button
+            asChild
+            variant="outline"
+            className="relative flex-1 rounded-full border-[#1F5C2E]/30"
+          >
+            <Link href="/dashboard/commandes">
+              Commandes
+              {pendingOrders > 0 ? (
+                <span className="ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#C27D10] px-1.5 text-[10px] font-bold text-white">
+                  {pendingOrders}
+                </span>
+              ) : null}
+            </Link>
+          </Button>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[#6B7280]">
+          <Badge variant="secondary" className="capitalize">
+            {entitlements.tier}
+          </Badge>
+          <span>
+            Yelly{" "}
+            {entitlements.yellyRequestsPerDay == null
+              ? "illimité"
+              : `${entitlements.yellyRequestsPerDay}/j`}
+          </span>
+        </div>
       </header>
 
-      <main className="px-4 -mt-4">
-        {/* Météo réelle (Open-Meteo via /api/weather) */}
-        <div className="mb-4">
+      <div className="px-4 mb-4">
+        {showCoach && coachDims ? (
+          <ScgCoachPanel
+            score={coachScore || Number(profile?.scg_score || 0)}
+            actions={getCoachActions(coachDims)}
+          />
+        ) : (
           <WeatherWidget />
-        </div>
-
-        {coachDims && (
-          <div className="mb-6">
-            <ScgCoachPanel
-              score={coachScore || profile?.scg_score || 0}
-              actions={getCoachActions(coachDims)}
-            />
-          </div>
         )}
+      </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 gap-3 mb-6">
-          <Card className="bg-white border-0 shadow-sm">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between mb-2">
-                <Wallet className="h-8 w-8 text-[#2F7D32] bg-[#2F7D32]/10 p-1.5 rounded-lg" />
-                <TrendingUp className="h-4 w-4 text-green-500" />
-              </div>
-              <p className="text-2xl font-bold text-[#111827]">
-                {sellerStats
-                  ? sellerStats.net_fcfa > 0
-                    ? `${(sellerStats.net_fcfa / 1000).toFixed(0)}K`
-                    : "0"
-                  : stats.totalRevenue > 0
-                    ? `${(stats.totalRevenue / 1000).toFixed(0)}K`
-                    : "0"}
-              </p>
-              <p className="text-xs text-[#4B5563]">
-                {sellerStats ? "Net perçu (FCFA)" : "Revenus (FCFA)"}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white border-0 shadow-sm">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between mb-2">
-                <Package className="h-8 w-8 text-[#F39A1F] bg-[#F39A1F]/10 p-1.5 rounded-lg" />
-                <span className="text-xs text-[#4B5563]">{products.filter(p => p.status === 'active').length} actifs</span>
-              </div>
-              <p className="text-2xl font-bold text-[#111827]">{stats.totalProducts}</p>
-              <p className="text-xs text-[#4B5563]">Produits</p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white border-0 shadow-sm">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between mb-2">
-                <Truck className="h-8 w-8 text-blue-500 bg-blue-500/10 p-1.5 rounded-lg" />
-                {stats.pendingOrders > 0 && (
-                  <Badge className="bg-red-500 text-white text-xs">{stats.pendingOrders}</Badge>
-                )}
-              </div>
-              <p className="text-2xl font-bold text-[#111827]">{stats.totalOrders}</p>
-              <p className="text-xs text-[#4B5563]">Commandes</p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white border-0 shadow-sm">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between mb-2">
-                <BarChart3 className="h-8 w-8 text-[#C27D10] bg-[#C27D10]/10 p-1.5 rounded-lg" />
-              </div>
-              {statsLocked ? (
-                <>
-                  <p className="text-sm font-semibold text-[#111827]">Stats Starter+</p>
-                  <Link href="/abonnement" className="text-xs text-[#2F7D32] underline">
-                    Débloquer
-                  </Link>
-                </>
-              ) : (
-                <>
-                  <p className="text-2xl font-bold text-[#111827]">
-                    {sellerStats?.product_views ?? 0}
-                  </p>
-                  <p className="text-xs text-[#4B5563]">Vues boutique</p>
-                </>
-              )}
-            </CardContent>
-          </Card>
+      <section className="grid grid-cols-2 gap-3 px-4">
+        <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-[#1F5C2E]/8">
+          <p className="text-xs text-[#6B7280]">
+            {statsLocked ? "Net (Starter+)" : "Net vendeur"}
+          </p>
+          {statsLocked ? (
+            <Link href="/abonnement" className="mt-1 block text-sm font-semibold text-[#1F5C2E]">
+              Débloquer les stats →
+            </Link>
+          ) : (
+            <p className="mt-1 text-2xl font-bold text-[#1a1a1a]">
+              {sellerStats ? formatFcfa(sellerStats.net_fcfa) : "—"}
+            </p>
+          )}
         </div>
+        <Link
+          href="/dashboard/products"
+          className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-[#1F5C2E]/8"
+        >
+          <p className="text-xs text-[#6B7280]">Produits</p>
+          <p className="mt-1 text-2xl font-bold">{products.length}</p>
+          {lowStock.length > 0 ? (
+            <p className="text-[11px] text-amber-700">{lowStock.length} stock bas</p>
+          ) : null}
+        </Link>
+      </section>
 
-        {/* Actions rapides */}
-        <div className="flex gap-3 mb-6 overflow-x-auto pb-2">
-          <Link href="/publier">
-            <Button className="bg-[#2F7D32] hover:bg-[#1B5E20] text-white rounded-full whitespace-nowrap">
-              <Plus className="h-4 w-4 mr-2" />
-              Ajouter produit
-            </Button>
+      {showFactoring ? (
+        <section className="mt-4 px-4">
+          <Link
+            href="/affacturage"
+            className="flex items-center gap-3 rounded-2xl bg-[#1F5C2E] px-4 py-3 text-white"
+          >
+            <Banknote className="h-5 w-5" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold">Affacturage disponible</p>
+              <p className="text-xs text-white/80">Demande un avance sur commande</p>
+            </div>
+            <ChevronRight className="h-4 w-4" />
           </Link>
-          <Link href="/dashboard/commandes">
-            <Button variant="outline" className="rounded-full whitespace-nowrap border-[#2F7D32] text-[#2F7D32] bg-transparent">
-              <Truck className="h-4 w-4 mr-2" />
-              Commandes
-            </Button>
-          </Link>
-          <Link href="/messages">
-            <Button variant="outline" className="rounded-full whitespace-nowrap bg-transparent">
-              Messages
-            </Button>
+        </section>
+      ) : null}
+
+      <section className="mt-6 px-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-base font-semibold">À traiter</h2>
+          <Link
+            href="/dashboard/commandes"
+            className="flex items-center gap-0.5 text-xs font-medium text-[#1F5C2E]"
+          >
+            Tout voir <ChevronRight className="h-3.5 w-3.5" />
           </Link>
         </div>
+        {orders.length === 0 ? (
+          <EmptyState
+            icon={Package}
+            title="Pas encore de commandes"
+            description="Partage ton annonce pour démarrer les ventes."
+            actionLabel="Voir mes produits"
+            actionHref="/dashboard/products"
+          />
+        ) : (
+          <ul className="space-y-2">
+            {orders.slice(0, 4).map((order) => (
+              <li key={order.id}>
+                <Link
+                  href="/dashboard/commandes"
+                  className="flex items-center justify-between rounded-xl bg-white p-3 ring-1 ring-black/5"
+                >
+                  <div>
+                    <p className="text-sm font-medium">
+                      {order.profiles?.full_name || "Acheteur"}
+                    </p>
+                    <p className="text-xs text-[#6B7280]">
+                      {formatFcfa(order.total_amount || 0)}
+                      {order.escrow_status === "held"
+                        ? " · en séquestre"
+                        : order.escrow_status === "released"
+                          ? " · libéré"
+                          : ""}
+                    </p>
+                  </div>
+                  <Badge variant="secondary">{order.status}</Badge>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
-        {/* Bloc affacturage (préfinancement) — visible selon éligibilité SCG */}
-        <Link href="/affacturage" className="block mb-6">
-          <Card className="bg-white border-0 shadow-sm overflow-hidden">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-xl bg-[#2F7D32]/10 flex items-center justify-center flex-shrink-0">
-                  <Banknote className="h-6 w-6 text-[#2F7D32]" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h4 className="font-semibold text-[#111827]">Affacturage</h4>
-                    {isFactoringEligible({
-                      scg_bancable: profile?.scg_bancable,
-                      scg_score: profile?.scg_score,
-                    }) ? (
-                      <Badge className="bg-green-100 text-green-700">Éligible</Badge>
+      <section className="mt-8 px-4 pb-8">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-base font-semibold">Mes produits</h2>
+          <Link
+            href="/dashboard/products"
+            className="flex items-center gap-0.5 text-xs font-medium text-[#1F5C2E]"
+          >
+            Gérer <ChevronRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+        {products.length === 0 ? (
+          <EmptyState
+            icon={Plus}
+            title="Aucune annonce active"
+            description={`Palier ${entitlements.tier} — publie ta première annonce.`}
+            actionLabel="Publier"
+            actionHref="/publier"
+          />
+        ) : (
+          <ul className="space-y-2">
+            {products.slice(0, 4).map((p) => (
+              <li key={p.id}>
+                <Link
+                  href={productDetailPath(p.id)}
+                  className="flex items-center gap-3 rounded-xl bg-white p-3 ring-1 ring-black/5"
+                >
+                  <div className="relative h-12 w-12 overflow-hidden rounded-lg bg-[#F3F4F6]">
+                    {p.images?.[0] ? (
+                      <Image src={p.images[0]} alt="" fill className="object-cover" sizes="48px" />
                     ) : (
-                      <Badge className="bg-gray-100 text-gray-600">Score requis</Badge>
+                      <Package className="m-3 h-6 w-6 text-[#9CA3AF]" />
                     )}
                   </div>
-                  <p className="text-sm text-[#4B5563]">
-                    {isFactoringEligible({
-                      scg_bancable: profile?.scg_bancable,
-                      scg_score: profile?.scg_score,
-                    })
-                      ? "Obtenez une avance de trésorerie sur vos ventes."
-                      : "Améliorez votre Score de Confiance GWA pour y accéder."}
-                  </p>
-                </div>
-                <ChevronRight className="h-5 w-5 text-[#4B5563]" />
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-
-        {/* Mes Produits */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-bold text-[#111827]">Mes Produits</h3>
-            <Link href="/dashboard/products" className="text-[#2F7D32] text-sm font-medium flex items-center">
-              Voir tout <ChevronRight className="h-4 w-4" />
-            </Link>
-          </div>
-
-          {products.length === 0 ? (
-            <Card className="bg-white border-0 shadow-sm">
-              <CardContent className="p-8 text-center">
-                <Sprout className="h-12 w-12 text-[#2F7D32]/30 mx-auto mb-4" />
-                <h4 className="font-semibold text-[#111827] mb-2">Aucun produit</h4>
-                <p className="text-sm text-[#4B5563] mb-4">
-                  Commencez à vendre vos récoltes
-                </p>
-                <Link href="/publier">
-                  <Button className="bg-[#2F7D32]">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Ajouter un produit
-                  </Button>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{p.name}</p>
+                    <p className="text-xs text-[#6B7280]">
+                      {formatFcfa(p.price)} · stock {p.stock_quantity ?? 0}
+                    </p>
+                  </div>
+                  {(p.stock_quantity ?? 0) <= 5 ? (
+                    <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">Bas</Badge>
+                  ) : null}
                 </Link>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-3">
-              {products.slice(0, 4).map((product) => (
-                <Card key={product.id} className="bg-white border-0 shadow-sm overflow-hidden">
-                  <CardContent className="p-0">
-                    <div className="flex items-center">
-                      <Link
-                        href={`/produit/${product.id}`}
-                        className="w-20 h-20 bg-[#FFF6E5] flex-shrink-0 active:opacity-80"
-                        aria-label={`Voir ${product.name}`}
-                      >
-                        {product.images?.[0] ? (
-                          <Image
-                            src={product.images[0] || "/placeholder.svg"}
-                            alt={product.name}
-                            width={80}
-                            height={80}
-                            className="object-cover w-full h-full"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <Sprout className="h-8 w-8 text-[#2F7D32]/30" />
-                          </div>
-                        )}
-                      </Link>
-                      <div className="flex-1 p-3 min-w-0">
-                        <div className="flex items-start justify-between gap-2">
-                          <Link href={`/produit/${product.id}`} className="min-w-0 flex-1 active:opacity-80">
-                            <h4 className="font-semibold text-[#111827] line-clamp-1">{product.name}</h4>
-                            <p className="text-sm text-[#2F7D32] font-medium">
-                              {product.price.toLocaleString()} FCFA/{product.unit}
-                            </p>
-                          </Link>
-                          <Badge 
-                            className={product.status === 'active' 
-                              ? "bg-green-100 text-green-700" 
-                              : "bg-gray-100 text-gray-600"}
-                          >
-                            {product.status === 'active' ? 'Actif' : 'Inactif'}
-                          </Badge>
-                        </div>
-                        <div className="flex items-center justify-between mt-2">
-                          <p className="text-xs text-[#4B5563]">
-                            Stock: {product.stock_quantity} {product.unit}
-                          </p>
-                          <div className="flex gap-1">
-                            <Link href={`/produit/${product.id}`} aria-label="Voir le produit">
-                              <Button size="sm" variant="ghost" className="h-7 w-7 p-0">
-                                <Eye className="h-4 w-4 text-[#4B5563]" />
-                              </Button>
-                            </Link>
-                            <Link href={`/dashboard/products/${product.id}/edit`} aria-label="Modifier le produit">
-                              <Button size="sm" variant="ghost" className="h-7 w-7 p-0">
-                                <Edit2 className="h-4 w-4 text-[#4B5563]" />
-                              </Button>
-                            </Link>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Commandes récentes */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-bold text-[#111827]">Commandes Récentes</h3>
-            <Link href="/dashboard/commandes" className="text-[#2F7D32] text-sm font-medium flex items-center">
-              Voir tout <ChevronRight className="h-4 w-4" />
-            </Link>
-          </div>
-
-          {orders.length === 0 ? (
-            <Card className="bg-white border-0 shadow-sm">
-              <CardContent className="p-6 text-center">
-                <Truck className="h-10 w-10 text-[#4B5563]/30 mx-auto mb-3" />
-                <p className="text-sm text-[#4B5563]">Aucune commande pour le moment</p>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-3">
-              {orders.slice(0, 3).map((order) => (
-                <Card key={order.id} className="bg-white border-0 shadow-sm">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold text-[#111827]">#{order.id.slice(0, 8)}</p>
-                        <p className="text-sm text-[#4B5563]">{order.profiles?.full_name || 'Client'}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-bold text-[#2F7D32]">{order.total_amount?.toLocaleString()} FCFA</p>
-                        <Badge className={
-                          order.status === 'delivered' ? "bg-green-100 text-green-700" :
-                          order.status === 'shipping' ? "bg-blue-100 text-blue-700" :
-                          "bg-yellow-100 text-yellow-700"
-                        }>
-                          {order.status === 'delivered' ? 'Livré' :
-                           order.status === 'shipping' ? 'En cours' :
-                           order.status === 'confirmed' ? 'Confirmé' : 'En attente'}
-                        </Badge>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </div>
-
-      </main>
-
-      <DashboardNav userType={profile?.user_type} />
+              </li>
+            ))}
+          </ul>
+        )}
+        {sellerStats && !statsLocked ? (
+          <p className="mt-3 flex items-center gap-1 text-xs text-[#6B7280]">
+            <Eye className="h-3.5 w-3.5" />
+            {sellerStats.product_views} vues (période stats)
+          </p>
+        ) : null}
+      </section>
     </div>
   )
 }

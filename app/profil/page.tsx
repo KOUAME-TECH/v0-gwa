@@ -26,8 +26,10 @@ import {
   FileText,
   ShieldCheck,
   Crown,
+  LayoutDashboard,
 } from "lucide-react"
 import { shouldShowVerifiedBadge } from "@/lib/verification/badge"
+import { isSellerRole } from "@/lib/dashboard/routing"
 type Profile = {
   id: string
   full_name: string
@@ -200,19 +202,18 @@ export default function ProfilPage() {
     )
   }
 
-  const isSeller = [
-    "producteur",
-    "transformateur",
-    "cooperative",
-    "entreprise",
-    "farmer",
-    "processor",
-  ].includes(profile.user_type || "")
+  const isSeller = isSellerRole(profile.user_type)
   const isCooperative = profile.user_type === "cooperative"
 
   const getMainMenuItems = (): MenuItem[] => {
+    const espace: MenuItem = {
+      icon: LayoutDashboard,
+      label: "Mon espace",
+      href: "/dashboard",
+    }
     if (isSeller || isCooperative) {
       return [
+        espace,
         {
           icon: Package,
           label: isCooperative ? "Ma coopérative" : "Mes produits",
@@ -231,6 +232,7 @@ export default function ProfilPage() {
       ]
     }
     return [
+      espace,
       {
         icon: ShoppingBag,
         label: "Mes commandes",
@@ -243,7 +245,11 @@ export default function ProfilPage() {
         href: "/favoris",
         count: stats.favorites,
       },
-      { icon: Wallet, label: "Portefeuille", href: "/wallet" },
+      {
+        icon: FileText,
+        label: "Mes paiements",
+        href: "/dashboard/commandes",
+      },
     ]
   }
 

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation"
 import { Home, ShoppingBag, MessageCircle, User, Plus, Bell, Search, Store } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { shouldShowBottomNav } from "@/lib/navigation/shell-routes"
+import { isSellerRole } from "@/lib/dashboard/routing"
 import { useHideOnScroll } from "@/hooks/use-hide-on-scroll"
 import { useNavBadges } from "@/hooks/use-nav-badges"
 
@@ -36,24 +37,30 @@ export function BottomNav() {
   const unreadNotifications = unreadNotifs
   const ordersCount = activeOrders
 
-  const isSeller = ["producteur", "cooperative", "transformateur", "entreprise"].includes(
-    userType || "",
-  )
+  const isSeller = isSellerRole(userType)
 
   const getActiveWorld = (): "social" | "commerce" | "messaging" | "profile" | null => {
-    if (pathname === "/" || pathname?.startsWith("/recherche")) return "social"
+    if (pathname === "/" || pathname?.startsWith("/recherche") || pathname === "/publier")
+      return "social"
     if (
       pathname?.startsWith("/marketplace") ||
       pathname?.startsWith("/produit") ||
       pathname?.startsWith("/panier") ||
-      pathname?.startsWith("/agriculture")
+      pathname?.startsWith("/agriculture") ||
+      pathname?.startsWith("/dashboard/products") ||
+      pathname?.startsWith("/dashboard/commandes")
     )
       return "commerce"
     if (pathname?.startsWith("/messages")) return "messaging"
     if (
       pathname?.startsWith("/profil") ||
       pathname?.startsWith("/notifications") ||
-      pathname?.startsWith("/favoris")
+      pathname?.startsWith("/favoris") ||
+      pathname?.startsWith("/dashboard") ||
+      pathname?.startsWith("/wallet") ||
+      pathname?.startsWith("/abonnement") ||
+      pathname?.startsWith("/scg") ||
+      pathname?.startsWith("/affacturage")
     )
       return "profile"
     return null

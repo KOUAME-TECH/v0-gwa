@@ -15,6 +15,7 @@ export type AdminSection =
   | "scg"
   | "finances"
   | "factoring"
+  | "subscriptions"
   | "analytics"
   | "settings"
   | "support"
@@ -40,6 +41,7 @@ export const ADMIN_NAV: { name: string; href: string; section: AdminSection }[] 
   { name: "SCG Config", href: "/admin/scg", section: "scg" },
   { name: "Finances", href: "/admin/finances", section: "finances" },
   { name: "Affacturage", href: "/admin/factoring", section: "factoring" },
+  { name: "Abonnements", href: "/admin/subscriptions", section: "subscriptions" },
   { name: "Statistiques", href: "/admin/analytics", section: "analytics" },
   { name: "Parametres", href: "/admin/settings", section: "settings" },
 ]
@@ -58,6 +60,7 @@ const ROLE_SECTIONS: Record<AdminRole, AdminSection[]> = {
     "disputes",
     "verifications",
     "factoring",
+    "subscriptions",
   ],
   moderator: ["dashboard", "products", "reports", "support"],
 }

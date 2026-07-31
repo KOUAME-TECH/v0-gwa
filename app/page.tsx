@@ -1107,7 +1107,7 @@ export default function HomePage() {
                     </Link>
                   )}
                   {["producteur", "cooperative", "transformateur", "entreprise", "farmer", "processor"].includes(userType || "") && (
-                    <Link href="/dashboard/farmer">
+                    <Link href="/dashboard">
                       <Button variant="outline" className="w-full rounded-full bg-transparent">
                         Mon tableau de bord
                       </Button>

@@ -18,12 +18,21 @@ describe("shouldShowBottomNav", () => {
     expect(shouldShowBottomNav("/publier")).toBe(true)
   })
 
+  it("affiche aussi dashboards / wallet / abo (nav unifiée)", () => {
+    expect(shouldShowBottomNav("/dashboard/buyer")).toBe(true)
+    expect(shouldShowBottomNav("/dashboard/farmer")).toBe(true)
+    expect(shouldShowBottomNav("/dashboard/cooperative")).toBe(true)
+    expect(shouldShowBottomNav("/dashboard/commandes")).toBe(true)
+    expect(shouldShowBottomNav("/dashboard/products")).toBe(true)
+    expect(shouldShowBottomNav("/wallet")).toBe(true)
+    expect(shouldShowBottomNav("/abonnement")).toBe(true)
+  })
+
   it("masque sur les autres pages", () => {
     expect(shouldShowBottomNav("/cooperatives")).toBe(false)
     expect(shouldShowBottomNav("/conditions")).toBe(false)
     expect(shouldShowBottomNav("/auth/login")).toBe(false)
     expect(shouldShowBottomNav("/admin")).toBe(false)
-    expect(shouldShowBottomNav("/wallet")).toBe(false)
     expect(shouldShowBottomNav("/messages/xyz")).toBe(false)
     expect(shouldShowBottomNav("/download")).toBe(false)
     expect(shouldShowBottomNav("/profil/lier")).toBe(false)

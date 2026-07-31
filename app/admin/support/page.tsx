@@ -41,6 +41,15 @@ const STATUS_LABEL: Record<string, string> = {
   spam: "Spam",
 }
 
+function slaBadge(createdAt: string, status: string) {
+  if (status === "resolved" || status === "spam") return null
+  const ageH = (Date.now() - new Date(createdAt).getTime()) / 36e5
+  if (ageH > 24) {
+    return <Badge className="bg-red-600 text-white hover:bg-red-600">&gt;24h</Badge>
+  }
+  return <Badge className="bg-emerald-600 text-white hover:bg-emerald-600">Nouveau</Badge>
+}
+
 export default function AdminSupportPage() {
   const [messages, setMessages] = useState<ContactMessage[]>([])
   const [loading, setLoading] = useState(true)

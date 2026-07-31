@@ -1,6 +1,6 @@
 # Propositions UI/UX — dashboards & backoffice GWA
 
-**Date :** 31 juillet 2026  
+**Date :** 31 juillet 2026 · **Statut :** Sprint UI-1 → UI-3 **implémentés** (nav unifiée, homes rôles, admin file + abonnements)  
 **Périmètre :** UI globale · dashboards acheteur / producteur / coop · admin  
 **Sources code :** `app/dashboard/*`, `app/admin/*`, `components/dashboard-nav.tsx`, `app/profil`
 

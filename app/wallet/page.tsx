@@ -21,6 +21,8 @@ import {
 } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { fr } from "date-fns/locale"
+import { isSellerRole } from "@/lib/dashboard/routing"
+import Link from "next/link"
 
 interface Transaction {
   id: string
@@ -81,6 +83,11 @@ export default function WalletPage() {
     
     setProfile(profileData)
     setWithdrawPhone(profileData?.phone || "")
+
+    if (!isSellerRole(profileData?.user_type)) {
+      setLoading(false)
+      return
+    }
 
     // Calculate wallet balance from completed orders (seller)
     const { data: completedOrders } = await supabase
@@ -275,6 +282,33 @@ export default function WalletPage() {
           <div className="flex items-center justify-center h-64">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
           </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!isSellerRole(profile?.user_type)) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-[#FFF6E5] to-white pb-24 px-4 pt-8">
+        <Navigation />
+        <h1 className="text-2xl font-bold text-[#1F5C2E]">Mes paiements</h1>
+        <p className="mt-2 text-sm text-[#6B7280]">
+          Côté acheteur, suis tes commandes et confirme la réception pour libérer
+          le séquestre. Le portefeuille vendeur n’est pas utilisé ici.
+        </p>
+        <div className="mt-6 space-y-3">
+          <Link
+            href="/dashboard/commandes"
+            className="flex items-center justify-center rounded-full bg-[#1F5C2E] px-5 py-3 text-sm font-semibold text-white"
+          >
+            Voir mes commandes
+          </Link>
+          <Link
+            href="/dashboard/buyer"
+            className="flex items-center justify-center rounded-full border border-[#1F5C2E]/30 px-5 py-3 text-sm font-semibold text-[#1F5C2E]"
+          >
+            Mon espace acheteur
+          </Link>
         </div>
       </div>
     )

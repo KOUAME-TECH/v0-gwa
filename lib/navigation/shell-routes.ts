@@ -1,6 +1,6 @@
 /**
  * Bottom nav (mobile) + top nav (desktop) = shell principal.
- * Masquées hors parcours principaux.
+ * Inclut dashboards / wallet / abo pour éviter les écrans « orphelins ».
  */
 
 const EXACT = new Set([
@@ -14,6 +14,17 @@ const EXACT = new Set([
   "/panier",
   "/favoris",
   "/publier",
+  "/wallet",
+  "/abonnement",
+  "/scg",
+  "/affacturage",
+  "/dashboard",
+  "/dashboard/buyer",
+  "/dashboard/farmer",
+  "/dashboard/cooperative",
+  "/dashboard/commandes",
+  "/dashboard/products",
+  "/dashboard/reviews",
 ])
 
 const PREFIXES = [
@@ -23,13 +34,19 @@ const PREFIXES = [
   "/produit/",
   "/post/",
   "/profil/",
+  "/wallet/",
+  "/dashboard/commandes",
+  "/dashboard/products",
+  "/dashboard/buyer",
+  "/dashboard/farmer",
+  "/dashboard/cooperative",
+  "/dashboard/reviews",
 ] as const
 
 function isShellPath(pathname: string): boolean {
   if (
     pathname.startsWith("/auth") ||
     pathname.startsWith("/admin") ||
-    pathname.startsWith("/dashboard") ||
     pathname.startsWith("/messages/") ||
     pathname.startsWith("/profil/edit") ||
     pathname.startsWith("/profil/lier") ||
@@ -39,9 +56,6 @@ function isShellPath(pathname: string): boolean {
     pathname.startsWith("/confidentialite") ||
     pathname.startsWith("/download") ||
     pathname.startsWith("/contact") ||
-    pathname.startsWith("/wallet") ||
-    pathname.startsWith("/scg") ||
-    pathname.startsWith("/affacturage") ||
     pathname.startsWith("/commandes") ||
     pathname.startsWith("/facture") ||
     pathname.startsWith("/dev") ||
