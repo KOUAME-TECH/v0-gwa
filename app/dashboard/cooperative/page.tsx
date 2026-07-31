@@ -346,13 +346,33 @@ export default function CooperativeDashboard() {
         </div>
 
         {canInviteMembers(myRole) ? (
-          <Button
-            onClick={handleInvite}
-            className="w-full rounded-full bg-white text-[#1F5C2E] hover:bg-white/90"
-          >
-            <UserPlus className="mr-2 h-4 w-4" />
-            Inviter des membres
-          </Button>
+          <div className="space-y-2">
+            <Button
+              onClick={handleInvite}
+              className="w-full rounded-full bg-white text-[#1F5C2E] hover:bg-white/90"
+            >
+              <UserPlus className="mr-2 h-4 w-4" />
+              Copier le lien d’invitation
+            </Button>
+            {inviteLink ? (
+              <div className="flex gap-2">
+                <a
+                  href={`https://wa.me/?text=${encodeURIComponent(`Rejoins notre coop sur GWA : ${inviteLink}`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 rounded-full bg-[#25D366] py-2 text-center text-xs font-semibold text-white"
+                >
+                  WhatsApp
+                </a>
+                <a
+                  href={`sms:?body=${encodeURIComponent(`Rejoins notre coop GWA : ${inviteLink}`)}`}
+                  className="flex-1 rounded-full bg-white/20 py-2 text-center text-xs font-semibold text-white"
+                >
+                  SMS
+                </a>
+              </div>
+            ) : null}
+          </div>
         ) : null}
       </header>
 

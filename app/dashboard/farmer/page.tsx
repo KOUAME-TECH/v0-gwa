@@ -243,6 +243,40 @@ export default function FarmerDashboard() {
           </Button>
         </div>
 
+        {/* P1 — prochaine action unique */}
+        <div className="mt-3 rounded-xl bg-white/90 px-3 py-2.5 text-sm text-[#1F5C2E] ring-1 ring-[#1F5C2E]/15">
+          {products.length === 0 ? (
+            <Link href="/publier" className="font-semibold underline">
+              Prochaine étape : publie ta première annonce
+            </Link>
+          ) : pendingOrders > 0 ? (
+            <Link href="/dashboard/commandes" className="font-semibold underline">
+              Prochaine étape : traite {pendingOrders} commande
+              {pendingOrders > 1 ? "s" : ""}
+            </Link>
+          ) : lowStock.length > 0 ? (
+            <Link href="/dashboard/products" className="font-semibold underline">
+              Prochaine étape : mets à jour le stock ({lowStock.length})
+            </Link>
+          ) : (
+            <Link href="/dashboard/products" className="font-semibold underline">
+              Prochaine étape : partage ta boutique
+            </Link>
+          )}
+        </div>
+
+        {entitlements.tier === "free" ? (
+          <Link
+            href="/abonnement"
+            className="mt-3 block rounded-xl bg-[#C27D10]/10 px-3 py-2.5 text-sm ring-1 ring-[#C27D10]/25"
+          >
+            <p className="font-semibold text-[#92400E]">Passe Starter</p>
+            <p className="text-xs text-[#6B7280]">
+              Débloque stats vendeur + 40 requêtes Yelly / jour + boost catalogue
+            </p>
+          </Link>
+        ) : null}
+
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[#6B7280]">
           <Badge variant="secondary" className="capitalize">
             {entitlements.tier}
@@ -397,9 +431,19 @@ export default function FarmerDashboard() {
                     </p>
                   </div>
                   {(p.stock_quantity ?? 0) <= 5 ? (
-                    <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">Bas</Badge>
+                    <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">
+                      Stock bas
+                    </Badge>
                   ) : null}
                 </Link>
+                {(p.stock_quantity ?? 0) <= 5 ? (
+                  <Link
+                    href={`/dashboard/products/${p.id}/edit`}
+                    className="text-[11px] font-medium text-amber-800 underline px-1"
+                  >
+                    Maj stock
+                  </Link>
+                ) : null}
               </li>
             ))}
           </ul>

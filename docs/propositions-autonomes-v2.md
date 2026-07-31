@@ -1,8 +1,9 @@
 # Propositions d’améliorations — vague 2 (autonomes)
 
 **Date :** 31 juillet 2026  
+**Statut :** **VALIDÉE** — implémentation agent en cours / partielle (Yelly Ops inline, perso acheteur/producteur, ConfirmDestructive, copy escrow).  
 **Objectif :** backlog que l’agent peut **implémenter sans toi** (pas de clés Vercel, pas d’approbation Sender ID, pas de décision DG).  
-**Déjà livré cette vague :** **Yelly Ops** backoffice + quotas IA par rôle admin (`/admin/ai`, `lib/admin/ai-entitlements.ts`).
+**Déjà livré :** **Yelly Ops** + quotas · assist inline produits/support/litiges · dashboards perso B/P · v3 backlog.
 
 ---
 

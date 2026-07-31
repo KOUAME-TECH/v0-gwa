@@ -92,6 +92,10 @@ export default function AdminDashboardPage() {
     sms: false,
     gemini: false,
   })
+  const [aiQuota, setAiQuota] = useState<{
+    remaining: number | null
+    limit: number | null
+  }>({ remaining: null, limit: null })
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([])
   const [recentUsers, setRecentUsers] = useState<RecentUser[]>([])
   const [pendingProducts, setPendingProducts] = useState<PendingProduct[]>([])
@@ -103,17 +107,25 @@ export default function AdminDashboardPage() {
 
   const fetchDashboardData = async () => {
     try {
-      const res = await fetch("/api/admin/stats")
+      const [res, aiRes] = await Promise.all([
+        fetch("/api/admin/stats"),
+        fetch("/api/admin/ai/assist"),
+      ])
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setLoading(false)
-        return
+      if (res.ok) {
+        if (data.stats) setStats(data.stats)
+        if (data.opsHealth) setOpsHealth(data.opsHealth)
+        if (data.recentOrders) setRecentOrders(data.recentOrders)
+        if (data.recentUsers) setRecentUsers(data.recentUsers)
+        if (data.pendingProducts) setPendingProducts(data.pendingProducts)
       }
-      if (data.stats) setStats(data.stats)
-      if (data.opsHealth) setOpsHealth(data.opsHealth)
-      if (data.recentOrders) setRecentOrders(data.recentOrders)
-      if (data.recentUsers) setRecentUsers(data.recentUsers)
-      if (data.pendingProducts) setPendingProducts(data.pendingProducts)
+      if (aiRes.ok) {
+        const ai = await aiRes.json().catch(() => ({}))
+        setAiQuota({
+          remaining: typeof ai.aiRemaining === "number" ? ai.aiRemaining : null,
+          limit: ai.aiLimit === null ? null : typeof ai.aiLimit === "number" ? ai.aiLimit : null,
+        })
+      }
     } catch {
       /* ignore */
     }
@@ -229,6 +241,12 @@ export default function AdminDashboardPage() {
           </Badge>
           <Badge variant={opsHealth.gemini ? "default" : "secondary"}>
             Gemini {opsHealth.gemini ? "OK" : "✗"}
+          </Badge>
+          <Badge variant="outline">
+            IA{" "}
+            {aiQuota.limit == null
+              ? "illimitée"
+              : `${aiQuota.remaining ?? "—"}/${aiQuota.limit}`}
           </Badge>
         </CardContent>
       </Card>

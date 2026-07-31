@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { MessageSquare, RefreshCw, Mail, User } from "lucide-react"
+import { AdminAiAssistButton } from "@/components/admin/ai-assist-button"
 
 type ContactMessage = {
   id: string
@@ -217,7 +218,18 @@ export default function AdminSupportPage() {
                 {selected.message}
               </p>
               <div className="space-y-1.5">
-                <Label>Notes internes</Label>
+                <div className="flex items-center justify-between gap-2">
+                  <Label>Notes / brouillon réponse</Label>
+                  <AdminAiAssistButton
+                    task="support_reply"
+                    context={[
+                      `De: ${selected.name} <${selected.email}>`,
+                      `Sujet: ${selected.subject}`,
+                      `Message:\n${selected.message}`,
+                    ].join("\n")}
+                    onDraft={(draft) => setNotes(draft)}
+                  />
+                </div>
                 <Textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}

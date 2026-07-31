@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
+import { AdminAiAssistButton } from "@/components/admin/ai-assist-button"
 import {
   Search,
   MoreHorizontal,
@@ -536,9 +537,24 @@ function AdminProductsContent() {
               </div>
             )}
             <div className="space-y-2">
-              <Label htmlFor="notes">
-                {moderationAction === "approve" ? "Notes (optionnel)" : "Raison du rejet"}
-              </Label>
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="notes">
+                  {moderationAction === "approve" ? "Notes (optionnel)" : "Raison du rejet"}
+                </Label>
+                {selectedProduct ? (
+                  <AdminAiAssistButton
+                    task="moderation"
+                    context={[
+                      `Action demandée: ${moderationAction}`,
+                      `Produit: ${selectedProduct.name}`,
+                      `Prix: ${selectedProduct.price}`,
+                      `Vendeur: ${selectedProduct.seller?.full_name || "?"}`,
+                      `Description: ${(selectedProduct as { description?: string }).description || "n/a"}`,
+                    ].join("\n")}
+                    onDraft={(draft) => setModerationNotes(draft)}
+                  />
+                ) : null}
+              </div>
               <Textarea
                 id="notes"
                 placeholder={moderationAction === "approve" 

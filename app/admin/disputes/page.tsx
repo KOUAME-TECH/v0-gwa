@@ -23,6 +23,7 @@ import {
 } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { fr } from "date-fns/locale"
+import { AdminAiAssistButton } from "@/components/admin/ai-assist-button"
 
 interface Dispute {
   id: string
@@ -481,7 +482,25 @@ export default function AdminDisputesPage() {
                     {(newStatus === 'resolved' || newStatus === 'closed') && (
                       <>
                         <div className="space-y-2">
-                          <Label>Resolution</Label>
+                          <div className="flex items-center justify-between gap-2">
+                            <Label>Resolution</Label>
+                            <AdminAiAssistButton
+                              task="dispute_summary"
+                              context={[
+                                `Raison: ${selectedDispute.reason || ""}`,
+                                `Description: ${selectedDispute.description || ""}`,
+                                `Statut: ${selectedDispute.status}`,
+                                `Commande: ${selectedDispute.orders?.total_amount ?? "?"} FCFA`,
+                                `Order status: ${selectedDispute.orders?.status || "?"}`,
+                              ].join("\n")}
+                              onDraft={(draft) => {
+                                setResolution(draft)
+                                if (!newStatus || newStatus === "open") {
+                                  setNewStatus("under_review")
+                                }
+                              }}
+                            />
+                          </div>
                           <Textarea
                             placeholder="Decrivez la resolution du litige..."
                             value={resolution}

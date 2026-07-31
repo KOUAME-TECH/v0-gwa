@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { toast } from "sonner"
-import { Crown, Check, X } from "lucide-react"
+import { ConfirmDestructive } from "@/components/ui/confirm-destructive"
 
 type SubRequest = {
   id: string
@@ -73,7 +73,6 @@ export default function AdminSubscriptionsPage() {
   }
 
   async function reject(id: string) {
-    if (!window.confirm("Rejeter cette demande d’abonnement ?")) return
     setBusy(id)
     try {
       const res = await fetch("/api/admin/subscriptions", {
@@ -167,15 +166,14 @@ export default function AdminSubscriptionsPage() {
                       <Check className="h-4 w-4 mr-1" />
                       Activer
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
+                    <ConfirmDestructive
+                      triggerLabel="Rejeter"
+                      title="Rejeter cette demande ?"
+                      description={`Le palier ${r.requested_tier} ne sera pas activé pour ${r.profile?.full_name || "cet utilisateur"}.`}
+                      confirmLabel="Rejeter"
                       disabled={busy === r.id}
-                      onClick={() => void reject(r.id)}
-                    >
-                      <X className="h-4 w-4 mr-1" />
-                      Rejeter
-                    </Button>
+                      onConfirm={() => void reject(r.id)}
+                    />
                   </div>
                 ) : null}
               </CardContent>
