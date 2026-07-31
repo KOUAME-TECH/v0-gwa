@@ -30,6 +30,10 @@ import {
 } from "lucide-react"
 import { shouldShowVerifiedBadge } from "@/lib/verification/badge"
 import { dashboardPathForUserType, isSellerRole } from "@/lib/dashboard/routing"
+import {
+  isDualIdentity,
+  productEspaceLabel,
+} from "@/lib/auth/dual-identity"
 type Profile = {
   id: string
   full_name: string
@@ -65,6 +69,7 @@ export default function ProfilPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [adminRoleLabel, setAdminRoleLabel] = useState<string | null>(null)
   const supabase = createClient()
 
   useEffect(() => {
@@ -127,6 +132,11 @@ export default function ProfilPage() {
       if (!mounted) return
 
       setIsAdmin(!!adminRes.data)
+      setAdminRoleLabel(
+        adminRes.data?.role
+          ? String(adminRes.data.role).replace(/_/g, " ")
+          : null,
+      )
       setUnreadNotifs(notifRes.count || 0)
       setUnreadMsgs(msgRes.count || 0)
       setStats({
@@ -205,16 +215,10 @@ export default function ProfilPage() {
   const isSeller = isSellerRole(profile.user_type)
   const isCooperative = profile.user_type === "cooperative"
   const roleHome = dashboardPathForUserType(profile.user_type)
+  const dual = isDualIdentity(isAdmin, profile.user_type)
 
   const getMainMenuItems = (): MenuItem[] => {
-    const espaceLabel =
-      roleHome === "/dashboard/farmer"
-        ? "Espace producteur"
-        : roleHome === "/dashboard/cooperative"
-          ? "Espace coopérative"
-          : profile.user_type === "entreprise" || profile.user_type === "business"
-            ? "Desk achats"
-            : "Espace acheteur"
+    const espaceLabel = productEspaceLabel(profile.user_type)
 
     const espace: MenuItem = {
       icon: LayoutDashboard,
@@ -280,15 +284,21 @@ export default function ProfilPage() {
     ]
   }
 
-  const menuSections: { items: MenuItem[] }[] = [
-    { items: getMainMenuItems() },
+  const menuSections: { title?: string; items: MenuItem[] }[] = [
+    {
+      title: "Compte GWA",
+      items: getMainMenuItems(),
+    },
     ...(isAdmin
       ? [
           {
+            title: dual ? "Backoffice (séparé)" : "Administration",
             items: [
               {
                 icon: Shield,
-                label: "Backoffice admin",
+                label: dual
+                  ? `Backoffice admin${adminRoleLabel ? ` · ${adminRoleLabel}` : ""}`
+                  : "Backoffice admin",
                 href: "/admin",
                 highlight: true,
               },
@@ -379,6 +389,7 @@ export default function ProfilPage() {
             </div>
             <p className="text-sm text-neutral-500 mb-1">
               {getUserTypeLabel(profile.user_type)}
+              {dual ? " · aussi admin backoffice" : ""}
             </p>
             {(profile.city || profile.country) && (
               <div className="flex items-center gap-1 text-sm text-neutral-500">
@@ -396,6 +407,16 @@ export default function ProfilPage() {
             {profile.bio}
           </p>
         )}
+
+        {dual ? (
+          <div className="mt-4 rounded-xl border border-[#1F5C2E]/20 bg-[#1F5C2E]/5 px-3 py-2.5 text-sm text-[#1F5C2E]">
+            <p className="font-medium">Double identité</p>
+            <p className="text-xs text-[#1F5C2E]/80 mt-0.5 leading-relaxed">
+              Votre espace {getUserTypeLabel(profile.user_type).toLowerCase()} et le
+              backoffice sont séparés. Utilisez le menu ci-dessous pour basculer.
+            </p>
+          </div>
+        ) : null}
 
         <Link href="/profil/edit" className="block mt-4">
           <Button
@@ -434,10 +455,13 @@ export default function ProfilPage() {
 
       <div className="px-5 space-y-4">
         {menuSections.map((section, idx) => (
-          <div
-            key={idx}
-            className="bg-white rounded-2xl overflow-hidden shadow-sm"
-          >
+          <div key={idx} className="space-y-1.5">
+            {section.title ? (
+              <p className="px-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                {section.title}
+              </p>
+            ) : null}
+            <div className="bg-white rounded-2xl overflow-hidden shadow-sm">
             {section.items.map((item, itemIdx) => (
               <Link key={`${item.href}-${item.label}`} href={item.href}>
                 <div
@@ -470,6 +494,7 @@ export default function ProfilPage() {
                 </div>
               </Link>
             ))}
+            </div>
           </div>
         ))}
 

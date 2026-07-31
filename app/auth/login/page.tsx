@@ -57,28 +57,25 @@ function LoginForm() {
         /* non bloquant */
       }
 
-      // Prefer server gate (service role) — reliable even if RLS regresses
-      let isAdmin = false
-      try {
-        const res = await fetch("/api/auth/admin-status")
-        const data = await res.json()
-        isAdmin = !!data.isAdmin
-      } catch {
-        const { data: adminRole } = await supabase
-          .from("admin_roles")
-          .select("role")
-          .eq("user_id", user.id)
-          .eq("is_active", true)
-          .maybeSingle()
-        isAdmin = !!adminRole
-      }
-
-      if (isAdmin) {
-        router.push("/admin")
+      // Redirect explicite (ex. ?redirect=/admin ou /abonnement) prioritaire
+      if (redirectTo) {
+        router.push(redirectTo)
         return
       }
 
-      router.push(redirectTo || fallbackPath || "/profil")
+      // Double identité : serveur préfère l’espace métier ; staff-only → /admin
+      try {
+        const res = await fetch("/api/auth/post-auth-destination")
+        const data = await res.json().catch(() => ({}))
+        if (res.ok && data.path) {
+          router.push(data.path)
+          return
+        }
+      } catch {
+        /* fallback ci-dessous */
+      }
+
+      router.push(fallbackPath || "/profil")
     },
     [router, redirectTo],
   )

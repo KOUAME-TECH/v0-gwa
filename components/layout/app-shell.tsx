@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation"
 import { BottomNav } from "@/components/bottom-nav"
 import { Navigation } from "@/components/navigation"
 import { OfflineBanner } from "@/components/layout/offline-banner"
+import { AdminModeBanner } from "@/components/layout/admin-mode-banner"
 import { IncompleteRouteBanner } from "@/components/dev/incomplete-route-banner"
 import { AppErrorBoundary } from "@/components/layout/app-error-boundary"
 import { YellyProvider } from "@/components/yelly/yelly-provider"
@@ -51,6 +52,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           Aller au contenu
         </a>
         <OfflineBanner offsetForDesktopNav={showDesktopNav} />
+        <AdminModeBanner />
         <IncompleteRouteBanner />
         {showDesktopNav ? <Navigation /> : null}
         <AppErrorBoundary>

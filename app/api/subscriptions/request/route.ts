@@ -9,6 +9,7 @@ import {
   SUBSCRIPTION_PRICES_FCFA,
   type SubscriptionTier,
 } from "@/lib/pricing/service-fee"
+import { isSellerRole } from "@/lib/dashboard/routing"
 
 const REQUESTABLE: SubscriptionTier[] = ["starter", "pro", "enterprise"]
 
@@ -48,6 +49,16 @@ export async function POST(request: NextRequest) {
       .select("subscription_tier, user_type, full_name, phone")
       .eq("id", user.id)
       .maybeSingle()
+
+    if (!isSellerRole(profile?.user_type)) {
+      return NextResponse.json(
+        {
+          error:
+            "Les abonnements payants sont réservés aux producteurs et coopératives",
+        },
+        { status: 403 },
+      )
+    }
 
     const current = normalizeSubscriptionTier(profile?.subscription_tier)
     if (current === tier) {

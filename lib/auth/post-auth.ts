@@ -1,22 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import {
+  USER_TYPE_MAP,
+  hasProductAccount,
+  canonicalProductUserType,
+} from "@/lib/auth/dual-identity"
 
-// Nouvelle vision GWA (agriculture) : 3 rôles canoniques.
-// Les rôles hérités sont mappés vers l'un d'eux.
-export const USER_TYPE_MAP: Record<string, string> = {
-  // Producteur / vendeur agricole
-  farmer: "producteur",
-  producteur: "producteur",
-  processor: "producteur",
-  transformateur: "producteur",
-  artisan: "producteur",
-  // Acheteur
-  buyer: "acheteur",
-  acheteur: "acheteur",
-  business: "acheteur",
-  entreprise: "acheteur",
-  // Coopérative
-  cooperative: "cooperative",
-}
+export { USER_TYPE_MAP }
 
 const DASHBOARD_ROUTES: Record<string, string> = {
   producteur: "/dashboard/farmer",
@@ -24,6 +13,14 @@ const DASHBOARD_ROUTES: Record<string, string> = {
   cooperative: "/dashboard/cooperative",
 }
 
+/**
+ * Destination après login / OTP.
+ *
+ * Double identité (admin_roles + user_type métier) :
+ * on ouvre l’espace produit, pas le backoffice — le backoffice reste
+ * accessible via « Backoffice admin » / bannière Mode admin.
+ * Staff sans compte produit → /admin.
+ */
 export async function resolvePostAuthRedirect(
   supabase: SupabaseClient,
   userId: string,
@@ -43,7 +40,11 @@ export async function resolvePostAuthRedirect(
       .maybeSingle(),
   ])
 
-  if (adminRole) {
+  const productType = canonicalProductUserType(profile?.user_type)
+  const productAccount = hasProductAccount(profile?.user_type)
+
+  // Staff-only : pas de compte métier → backoffice
+  if (adminRole && !productAccount) {
     return { path: "/admin", isNewUser: false }
   }
 
@@ -61,12 +62,19 @@ export async function resolvePostAuthRedirect(
     return { path: "/auth/signup?resume=onboarding", isNewUser: true }
   }
 
-  const userType = profile?.user_type
-    ? USER_TYPE_MAP[profile.user_type] || profile.user_type
-    : null
+  if (productType && DASHBOARD_ROUTES[productType]) {
+    return {
+      path: DASHBOARD_ROUTES[productType],
+      isNewUser: false,
+    }
+  }
+
+  if (adminRole) {
+    return { path: "/admin", isNewUser: false }
+  }
 
   return {
-    path: (userType && DASHBOARD_ROUTES[userType]) || fallback,
+    path: fallback,
     isNewUser: false,
   }
 }

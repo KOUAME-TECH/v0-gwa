@@ -39,6 +39,7 @@ import {
   MessageSquare,
   Crown,
   Sparkles,
+  UserRound,
 } from "lucide-react"
 import {
   ADMIN_ROLE_LABELS,
@@ -48,6 +49,11 @@ import {
   isAdminRole,
   sectionFromPath,
 } from "@/lib/auth/admin-permissions"
+import {
+  hasProductAccount,
+  productEspaceLabel,
+  productEspacePath,
+} from "@/lib/auth/dual-identity"
 
 const NAV_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   Dashboard: LayoutDashboard,
@@ -75,6 +81,7 @@ interface AdminUser {
   full_name: string
   avatar_url?: string
   role: AdminRole
+  user_type?: string | null
 }
 
 export default function AdminLayout({
@@ -117,7 +124,7 @@ export default function AdminLayout({
 
         const { data: profile } = await supabase
           .from("profiles")
-          .select("full_name, avatar_url, email")
+          .select("full_name, avatar_url, email, user_type")
           .eq("id", user.id)
           .single()
 
@@ -129,6 +136,7 @@ export default function AdminLayout({
           full_name: profile?.full_name || "Admin",
           avatar_url: profile?.avatar_url,
           role: status.role as AdminRole,
+          user_type: profile?.user_type ?? null,
         })
 
         if (canAccessSection(status.role as AdminRole, "support")) {
@@ -206,7 +214,9 @@ export default function AdminLayout({
           <div className="flex items-center justify-between h-16 px-4 border-b">
             <Link href="/admin" className="flex items-center gap-2 min-w-0">
               <GwaMark size={32} showWordmark wordmarkClassName="text-lg text-[#1F5C2E]" />
-              <span className="text-xs font-medium text-muted-foreground shrink-0">Admin</span>
+              <span className="text-xs font-medium text-muted-foreground shrink-0">
+                Backoffice
+              </span>
             </Link>
             <Button
               variant="ghost"
@@ -257,23 +267,44 @@ export default function AdminLayout({
             </nav>
           </ScrollArea>
 
-          {/* User section */}
-          <div className="border-t p-4">
-            <Link 
-              href="/"
-              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-3"
+          {/* User section — séparé du compte métier */}
+          <div className="border-t p-4 space-y-2">
+            {hasProductAccount(adminUser.user_type) ? (
+              <Link
+                href={productEspacePath(adminUser.user_type)}
+                className="flex items-center gap-2 text-sm font-medium text-[#1F5C2E] hover:underline"
+              >
+                <UserRound className="h-4 w-4" />
+                {productEspaceLabel(adminUser.user_type)}
+              </Link>
+            ) : null}
+            <Link
+              href="/profil"
+              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
             >
               <Home className="h-4 w-4" />
-              Retour au site
+              Mon profil GWA
             </Link>
-            <div className="flex items-center gap-3">
+            <Link
+              href="/"
+              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+            >
+              <Home className="h-4 w-4" />
+              Accueil marketplace
+            </Link>
+            <div className="flex items-center gap-3 pt-1">
               <Avatar className="h-9 w-9">
                 <AvatarImage src={adminUser.avatar_url || "/placeholder.svg"} />
                 <AvatarFallback>{adminUser.full_name.charAt(0)}</AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">{adminUser.full_name}</p>
-                <p className="text-xs text-muted-foreground">{ADMIN_ROLE_LABELS[adminUser.role]}</p>
+                <p className="text-xs text-muted-foreground">
+                  {ADMIN_ROLE_LABELS[adminUser.role]}
+                  {hasProductAccount(adminUser.user_type)
+                    ? " · + compte métier"
+                    : ""}
+                </p>
               </div>
             </div>
           </div>
@@ -315,17 +346,32 @@ export default function AdminLayout({
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
+              {hasProductAccount(adminUser.user_type) ? (
+                <DropdownMenuItem asChild>
+                  <Link href={productEspacePath(adminUser.user_type)}>
+                    <UserRound className="h-4 w-4 mr-2" />
+                    {productEspaceLabel(adminUser.user_type)}
+                  </Link>
+                </DropdownMenuItem>
+              ) : null}
+              <DropdownMenuItem asChild>
+                <Link href="/profil">
+                  <Home className="h-4 w-4 mr-2" />
+                  Mon profil GWA
+                </Link>
+              </DropdownMenuItem>
               {canOpenSettings && (
                 <>
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
                     <Link href="/admin/settings">
                       <Settings className="h-4 w-4 mr-2" />
-                      Paramètres
+                      Paramètres backoffice
                     </Link>
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator />
                 </>
               )}
+              <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleLogout} className="text-destructive">
                 <LogOut className="h-4 w-4 mr-2" />
                 Déconnexion
