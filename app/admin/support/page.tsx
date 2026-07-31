@@ -179,10 +179,13 @@ export default function AdminSupportPage() {
                       {m.message}
                     </p>
                   </div>
-                  <div className="text-right shrink-0">
-                    <Badge variant="secondary">
-                      {STATUS_LABEL[m.status] || m.status}
-                    </Badge>
+                  <div className="text-right shrink-0 space-y-1">
+                    <div className="flex flex-col items-end gap-1">
+                      <Badge variant="secondary">
+                        {STATUS_LABEL[m.status] || m.status}
+                      </Badge>
+                      {slaBadge(m.created_at, m.status)}
+                    </div>
                     <p className="text-[10px] text-muted-foreground mt-1">
                       {new Date(m.created_at).toLocaleString("fr-FR")}
                     </p>
