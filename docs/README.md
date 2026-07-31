@@ -30,5 +30,6 @@
 | [`ops-support-backoffice.md`](./ops-support-backoffice.md) | Support / admin |
 | [`ops-notifications.md`](./ops-notifications.md) | OneSignal + Digest |
 | [`yelly-gemini.md`](./yelly-gemini.md) | Yelly / Gemini |
-| [`security.md`](./security.md) | Synthèse sécu |
+| [`security.md`](./security.md) | Synthèse sécu + Advisor |
 | [`beta-test-matrix.md`](./beta-test-matrix.md) | Matrice QA |
+| [`../supabase/README.md`](../supabase/README.md) | Intégrations GitHub / Vercel Supabase |
