@@ -25,7 +25,15 @@ Corrigé en SQL :
 
 **À faire dans le Dashboard (manuel)** : activer Leaked Password Protection (HIBP).
 
-**Ignorer en bêta** : avalanche « Unused Index » — ne pas DROP massif.
+**Unused Index (Performance)** :
+- Trafic bêta faible → Advisor marque presque tout « unused ».
+- On ne DROP **pas** les index `products` / `orders` / `profiles` / `messages`.
+- Nettoyé uniquement les index hors scope (`055_drop_unused_indexes_legacy.sql` :
+  courses, groups, RFQ, artisan, `product_favorites`).
+
+**GitHub / Vercel Integrations** : voir `supabase/README.md` — laisser
+« Deploy to production » **OFF** tant que les migrations ne sont pas dans
+`supabase/migrations/`.
 
 ## Intégrations
 

@@ -1,0 +1,11 @@
+# Minimal stub for Supabase GitHub Integration UI.
+# Migrations: see ../scripts/schema/ (do not enable auto-deploy until migrated here).
+
+[project]
+id = "frorfexbcyfbydkiwxqv"
+
+[api]
+enabled = true
+
+[db]
+major_version = 15
