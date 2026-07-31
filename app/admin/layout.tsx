@@ -213,6 +213,7 @@ export default function AdminLayout({
               size="icon"
               className="lg:hidden"
               onClick={() => setSidebarOpen(false)}
+              aria-label="Fermer le menu"
             >
               <X className="h-5 w-5" />
             </Button>
@@ -288,6 +289,7 @@ export default function AdminLayout({
             size="icon"
             className="lg:hidden"
             onClick={() => setSidebarOpen(true)}
+            aria-label="Ouvrir le menu"
           >
             <Menu className="h-5 w-5" />
           </Button>

@@ -14,10 +14,15 @@ type ChatLine = { role: "user" | "assistant"; content: string }
 
 function TypingDots() {
   return (
-    <div className="flex items-center gap-1 px-3 py-2" aria-label="Yelly écrit…">
-      <span className="gwa-dot inline-block h-1.5 w-1.5 rounded-full bg-[#1F5C2E]" />
-      <span className="gwa-dot inline-block h-1.5 w-1.5 rounded-full bg-[#1F5C2E]" />
-      <span className="gwa-dot inline-block h-1.5 w-1.5 rounded-full bg-[#1F5C2E]" />
+    <div
+      className="flex items-center gap-1 px-3 py-2"
+      role="status"
+      aria-live="polite"
+      aria-label="Yelly écrit…"
+    >
+      <span className="gwa-dot inline-block h-1.5 w-1.5 rounded-full bg-[#1F5C2E]" aria-hidden />
+      <span className="gwa-dot inline-block h-1.5 w-1.5 rounded-full bg-[#1F5C2E]" aria-hidden />
+      <span className="gwa-dot inline-block h-1.5 w-1.5 rounded-full bg-[#1F5C2E]" aria-hidden />
     </div>
   )
 }
@@ -44,8 +49,43 @@ export function YellyPanel({
   const [pending, startTransition] = useTransition()
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const previouslyFocused = useRef<HTMLElement | null>(null)
   const historyLoaded = useRef(false)
   const suggestions = yellySuggestionsForRole(userType)
+
+  useEffect(() => {
+    if (!open) return
+    previouslyFocused.current = document.activeElement as HTMLElement | null
+    const t = window.setTimeout(() => inputRef.current?.focus(), 50)
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault()
+        onClose()
+        return
+      }
+      if (e.key !== "Tab" || !panelRef.current) return
+      const focusables = panelRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
+      )
+      if (focusables.length === 0) return
+      const first = focusables[0]
+      const last = focusables[focusables.length - 1]
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener("keydown", onKey)
+    return () => {
+      window.clearTimeout(t)
+      document.removeEventListener("keydown", onKey)
+      previouslyFocused.current?.focus?.()
+    }
+  }, [open, onClose])
 
   useEffect(() => {
     let cancelled = false
@@ -300,6 +340,7 @@ export function YellyPanel({
         onClick={onClose}
       />
       <div
+        ref={panelRef}
         className={cn(
           "relative z-10 flex h-[min(78dvh,560px)] w-full flex-col overflow-hidden",
           "rounded-t-2xl lg:rounded-2xl lg:max-w-md",
@@ -333,7 +374,11 @@ export function YellyPanel({
           </button>
         </header>
 
-        <div className="flex-1 space-y-3 overflow-y-auto px-3 py-4">
+        <div
+          className="flex-1 space-y-3 overflow-y-auto px-3 py-4"
+          aria-live="polite"
+          aria-relevant="additions"
+        >
           {lines.map((line, i) => (
             <div
               key={`${i}-${line.role}-${line.content.slice(0, 12)}`}
@@ -362,7 +407,7 @@ export function YellyPanel({
                 key={s}
                 type="button"
                 onClick={() => send(s)}
-                className="rounded-full border border-[#1F5C2E]/20 bg-white px-3 py-1 text-xs text-[#1F5C2E] transition hover:bg-[#1F5C2E]/5"
+                className="min-h-11 rounded-full border border-[#1F5C2E]/20 bg-white px-4 py-2.5 text-sm text-[#1F5C2E] transition hover:bg-[#1F5C2E]/5"
               >
                 {s}
               </button>
@@ -375,7 +420,7 @@ export function YellyPanel({
             type="button"
             onClick={() => void escalate()}
             disabled={escalating}
-            className="inline-flex items-center gap-1.5 rounded-full border border-[#1F5C2E]/20 bg-white px-3 py-1 text-xs font-medium text-[#1F5C2E] disabled:opacity-50"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-[#1F5C2E]/20 bg-white px-3 py-2 text-xs font-medium text-[#1F5C2E] disabled:opacity-50"
           >
             <LifeBuoy className="h-3.5 w-3.5" />
             Passer à quelqu’un
@@ -454,7 +499,7 @@ export function YellyPanel({
               rec.onerror = () => setError("Micro indisponible")
               rec.start()
             }}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#1F5C2E]/20 text-[#1F5C2E]"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-[#1F5C2E]/20 text-[#1F5C2E]"
             aria-label="Parler à Yelly"
             disabled={pending}
           >
@@ -466,14 +511,15 @@ export function YellyPanel({
             onChange={(e) => setInput(e.target.value)}
             maxLength={800}
             placeholder="Dis-moi ce dont tu as besoin…"
-            className="min-w-0 flex-1 rounded-full border border-[#1F5C2E]/15 bg-[#F7F4EE] px-4 py-2.5 text-sm outline-none ring-[#1F5C2E]/30 focus:ring-2"
+            aria-label="Message pour Yelly"
+            className="min-h-11 min-w-0 flex-1 rounded-full border border-[#1F5C2E]/15 bg-[#F7F4EE] px-4 py-2.5 text-base outline-none ring-[#1F5C2E]/30 focus:ring-2"
             disabled={pending}
             autoComplete="off"
           />
           <button
             type="submit"
             disabled={pending || !input.trim()}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#1F5C2E] text-white disabled:opacity-40"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-[#1F5C2E] text-white disabled:opacity-40"
             aria-label="Envoyer"
           >
             <Send className="h-4 w-4" />

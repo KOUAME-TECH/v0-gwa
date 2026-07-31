@@ -14,6 +14,7 @@ const EXACT = new Set([
   "/panier",
   "/favoris",
   "/publier",
+  "/aide",
   "/wallet",
   "/abonnement",
   "/scg",

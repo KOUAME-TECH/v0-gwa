@@ -292,7 +292,8 @@ export default function ProfilPage() {
       items: [
         { icon: Settings, label: "Paramètres", href: "/profil/edit" },
         { icon: Download, label: "Installer l'app", href: "/download" },
-        { icon: HelpCircle, label: "Aide & Contact", href: "/contact" },
+        { icon: HelpCircle, label: "Aide", href: "/aide" },
+        { icon: HelpCircle, label: "Contact", href: "/contact" },
       ],
     },
     {

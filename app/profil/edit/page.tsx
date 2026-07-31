@@ -87,7 +87,8 @@ export default function EditProfilPage() {
   } = useRealtimeLocation({ auto: true, maximumAge: 0 })
   const { enabled: listenMode, toggle: toggleListenMode, hydrated: listenHydrated } =
     useListenMode()
-  const { largeText, setLargeText, quietHours, setQuietHours } = useA11yPrefs()
+  const { largeText, setLargeText, quietHours, setQuietHours, reduceMotion, setReduceMotion } =
+    useA11yPrefs()
   const {
     enabled: dataSaver,
     toggle: toggleDataSaver,
@@ -551,6 +552,7 @@ export default function EditProfilPage() {
           <div className="flex items-center justify-between gap-3 rounded-xl border border-[#E5E7EB] px-3 py-2.5">
             <div className="min-w-0">
               <p className="text-sm text-[#374151]">Grand texte</p>
+              <p className="text-xs text-[#6B7280]">Lecture plus confortable</p>
             </div>
             <Switch
               checked={largeText}
@@ -560,12 +562,23 @@ export default function EditProfilPage() {
           </div>
           <div className="flex items-center justify-between gap-3 rounded-xl border border-[#E5E7EB] px-3 py-2.5">
             <div className="min-w-0">
+              <p className="text-sm text-[#374151]">Moins d’animations</p>
+              <p className="text-xs text-[#6B7280]">Réduit le mouvement à l’écran</p>
+            </div>
+            <Switch
+              checked={reduceMotion}
+              onCheckedChange={setReduceMotion}
+              aria-label="Moins d’animations"
+            />
+          </div>
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-[#E5E7EB] px-3 py-2.5">
+            <div className="min-w-0">
               <p className="text-sm text-[#374151]">Silence la nuit</p>
             </div>
             <Switch
               checked={quietHours}
               onCheckedChange={setQuietHours}
-              aria-label="Quiet hours"
+              aria-label="Silence la nuit (22h–6h)"
             />
           </div>
           <div className="flex items-center justify-between gap-3 rounded-xl border border-[#E5E7EB] px-3 py-2.5">

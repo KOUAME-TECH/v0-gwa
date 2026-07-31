@@ -121,7 +121,8 @@ export function BottomNav() {
             cartCount > 0 && (
               <Link
                 href="/panier"
-                className="pointer-events-auto flex items-center gap-2 bg-[#2F7D32] text-white rounded-full pl-3 pr-4 py-2.5 shadow-lg shadow-[#2F7D32]/25 active:scale-95 transition-transform"
+                className="pointer-events-auto flex min-h-11 items-center gap-2 bg-[#2F7D32] text-white rounded-full pl-3 pr-4 py-2.5 shadow-lg shadow-[#2F7D32]/25 active:scale-95 transition-transform"
+                aria-label={`Panier, ${cartCount} article${cartCount > 1 ? "s" : ""}`}
               >
                 <ShoppingBag className="h-4 w-4" />
                 <span className="text-sm font-semibold">{cartCount}</span>
@@ -130,7 +131,8 @@ export function BottomNav() {
           {unreadNotifications > 0 && pathname !== "/notifications" && (
             <Link
               href="/notifications"
-              className="pointer-events-auto flex items-center gap-2 bg-white border border-[#E5E7EB] rounded-full pl-3 pr-4 py-2.5 shadow-md active:scale-95 transition-transform"
+              className="pointer-events-auto flex min-h-11 items-center gap-2 bg-white border border-[#E5E7EB] rounded-full pl-3 pr-4 py-2.5 shadow-md active:scale-95 transition-transform"
+              aria-label={`${unreadNotifications} notification${unreadNotifications > 1 ? "s" : ""}`}
             >
               <Bell className="h-4 w-4 text-[#F39A1F]" />
               <span className="text-xs font-semibold text-[#111827]">{unreadNotifications}</span>
@@ -231,7 +233,7 @@ export function BottomNav() {
                     <Icon
                       className={cn(
                         "h-[22px] w-[22px] transition-all duration-200",
-                        isActive && itemColor ? itemColor.text : "text-[#9CA3AF]",
+                        isActive && itemColor ? itemColor.text : "text-[#6B7280]",
                       )}
                       strokeWidth={isActive ? 2.5 : 1.5}
                       fill={isActive ? "currentColor" : "none"}
@@ -254,9 +256,9 @@ export function BottomNav() {
                   <span
                     className={cn(
                       "text-[10px] font-medium transition-all duration-200 leading-tight",
-                      isActive && itemColor
+                        isActive && itemColor
                         ? cn(itemColor.text, "font-semibold")
-                        : "text-[#9CA3AF]",
+                        : "text-[#6B7280]",
                     )}
                   >
                     {item.label}

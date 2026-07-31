@@ -10,6 +10,8 @@
 | [`propositions-ui-ux-dashboards.md`](./propositions-ui-ux-dashboards.md) | UI/UX dashboards + backoffice par rôle |
 | [`propositions-autonomes-v2.md`](./propositions-autonomes-v2.md) | Vague 2 autonome (**validée**) + IA admin |
 | [`propositions-autonomes-v3.md`](./propositions-autonomes-v3.md) | Vague 3 autonome (croissance, escrow UX, PWA…) |
+| [`propositions-accessibilite-facilite-v4.md`](./propositions-accessibilite-facilite-v4.md) | Vague 4 — a11y + facilité d’usage pour tous |
+| [`a11y-checklist.md`](./a11y-checklist.md) | Checklist accessibilité PR |
 | [`cahier-des-charges-actuel-evolution-6-12-24.md`](./cahier-des-charges-actuel-evolution-6-12-24.md) | CdC + roadmap 6 / 12 / 24 mois |
 | [`architecture.md`](./architecture.md) | Front / back |
 | [`scope-beta.md`](./scope-beta.md) | Périmètre (hors scope) |

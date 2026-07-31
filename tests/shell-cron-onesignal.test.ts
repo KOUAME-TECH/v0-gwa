@@ -26,6 +26,7 @@ describe("shouldShowBottomNav", () => {
     expect(shouldShowBottomNav("/dashboard/products")).toBe(true)
     expect(shouldShowBottomNav("/wallet")).toBe(true)
     expect(shouldShowBottomNav("/abonnement")).toBe(true)
+    expect(shouldShowBottomNav("/aide")).toBe(true)
   })
 
   it("masque sur les autres pages", () => {

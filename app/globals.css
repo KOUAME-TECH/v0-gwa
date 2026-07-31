@@ -236,6 +236,26 @@
   html.gwa-large-text {
     font-size: 18.5px;
   }
+
+  @media (prefers-reduced-motion: reduce) {
+    html:not(.gwa-allow-motion) *,
+    html:not(.gwa-allow-motion) *::before,
+    html:not(.gwa-allow-motion) *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  html.gwa-reduce-motion *,
+  html.gwa-reduce-motion *::before,
+  html.gwa-reduce-motion *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
   
   body {
     @apply bg-background text-foreground antialiased;

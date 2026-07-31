@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { toast } from "sonner"
+import { Crown, Check } from "lucide-react"
 import { ConfirmDestructive } from "@/components/ui/confirm-destructive"
 
 type SubRequest = {

@@ -85,46 +85,48 @@ export function OfflineBanner({ offsetForDesktopNav = false }: { offsetForDeskto
       className={cn(
         "fixed left-0 right-0 z-[100] flex flex-wrap items-center justify-center gap-x-3 gap-y-1 px-4 py-2 text-xs font-semibold shadow-sm animate-slideUp",
         offsetForDesktopNav ? "top-0 lg:top-16" : "top-0",
-        status === "offline" ? "bg-amber-500 text-white" : "bg-green-600 text-white",
+        status === "offline"
+          ? "bg-[#92400E] text-white"
+          : "bg-[#166534] text-white",
       )}
       role="status"
       aria-live="polite"
     >
       {status === "offline" ? (
         <>
-          <span className="inline-flex items-center gap-1.5">
-            <WifiOff className="h-3.5 w-3.5" />
+          <span className="inline-flex items-center gap-1.5 text-sm">
+            <WifiOff className="h-4 w-4" aria-hidden />
             Hors ligne
             {queueCount > 0 ? ` · ${queueCount} en file` : ""}
           </span>
           {catalogHint && (
             <Link
               href="/marketplace"
-              className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-0.5 underline-offset-2 hover:underline"
+              className="inline-flex min-h-11 items-center gap-1 rounded-full bg-white/25 px-3 py-2 underline-offset-2 hover:underline"
             >
-              <ShoppingBag className="h-3 w-3" />
+              <ShoppingBag className="h-4 w-4" aria-hidden />
               Boutique
             </Link>
           )}
           <Link
             href="/"
-            className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-0.5 underline-offset-2 hover:underline"
+            className="inline-flex min-h-11 items-center gap-1 rounded-full bg-white/25 px-3 py-2 underline-offset-2 hover:underline"
           >
             Feed
           </Link>
           {(draftHint || queueCount > 0) && (
             <Link
               href="/publier"
-              className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-0.5 underline-offset-2 hover:underline"
+              className="inline-flex min-h-11 items-center gap-1 rounded-full bg-white/25 px-3 py-2 underline-offset-2 hover:underline"
             >
-              <FilePenLine className="h-3 w-3" />
+              <FilePenLine className="h-4 w-4" aria-hidden />
               Publier
             </Link>
           )}
         </>
       ) : (
-        <span className="inline-flex items-center gap-1.5">
-          <Wifi className="h-3.5 w-3.5" />
+        <span className="inline-flex items-center gap-1.5 text-sm">
+          <Wifi className="h-4 w-4" aria-hidden />
           {queueCount > 0
             ? `Sync… ${queueCount} restante(s)`
             : "Connexion rétablie"}

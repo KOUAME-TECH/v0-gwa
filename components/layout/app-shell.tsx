@@ -18,6 +18,9 @@ function hydrateA11yPrefs() {
     if (localStorage.getItem("gwa_large_text") === "1") {
       document.documentElement.classList.add("gwa-large-text")
     }
+    if (localStorage.getItem("gwa_reduce_motion") === "1") {
+      document.documentElement.classList.add("gwa-reduce-motion")
+    }
   } catch {
     /* ignore */
   }
@@ -41,13 +44,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <YellyProvider>
       <div className="relative flex min-h-dvh w-full flex-col bg-background gwa-desktop-atmosphere">
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-[200] focus:rounded-lg focus:bg-[#1F5C2E] focus:px-4 focus:py-2.5 focus:text-sm focus:font-semibold focus:text-white focus:shadow-lg"
+        >
+          Aller au contenu
+        </a>
         <OfflineBanner offsetForDesktopNav={showDesktopNav} />
         <IncompleteRouteBanner />
         {showDesktopNav ? <Navigation /> : null}
         <AppErrorBoundary>
           <main
+            id="main-content"
+            tabIndex={-1}
             className={cn(
-              "flex-1 min-w-0",
+              "flex-1 min-w-0 outline-none",
               /* Bottom pad mobile only — desktop uses top nav */
               showBottomNav && "pb-[calc(4.75rem+env(safe-area-inset-bottom))] safe-bottom lg:pb-0",
             )}
