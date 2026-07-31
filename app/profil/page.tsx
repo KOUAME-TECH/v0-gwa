@@ -29,7 +29,7 @@ import {
   LayoutDashboard,
 } from "lucide-react"
 import { shouldShowVerifiedBadge } from "@/lib/verification/badge"
-import { isSellerRole } from "@/lib/dashboard/routing"
+import { dashboardPathForUserType, isSellerRole } from "@/lib/dashboard/routing"
 type Profile = {
   id: string
   full_name: string
@@ -204,20 +204,51 @@ export default function ProfilPage() {
 
   const isSeller = isSellerRole(profile.user_type)
   const isCooperative = profile.user_type === "cooperative"
+  const roleHome = dashboardPathForUserType(profile.user_type)
 
   const getMainMenuItems = (): MenuItem[] => {
+    const espaceLabel =
+      roleHome === "/dashboard/farmer"
+        ? "Espace producteur"
+        : roleHome === "/dashboard/cooperative"
+          ? "Espace coopérative"
+          : profile.user_type === "entreprise" || profile.user_type === "business"
+            ? "Desk achats"
+            : "Espace acheteur"
+
     const espace: MenuItem = {
       icon: LayoutDashboard,
-      label: "Mon espace",
-      href: "/dashboard",
+      label: espaceLabel,
+      href: roleHome,
     }
-    if (isSeller || isCooperative) {
+
+    if (isCooperative) {
       return [
         espace,
         {
           icon: Package,
-          label: isCooperative ? "Ma coopérative" : "Mes produits",
-          href: isCooperative ? "/dashboard/cooperative" : "/dashboard/products",
+          label: "Catalogue / produits",
+          href: "/dashboard/products",
+          count: stats.products,
+        },
+        {
+          icon: ShoppingBag,
+          label: "Mes ventes",
+          href: "/dashboard/commandes",
+          count: stats.orders,
+        },
+        { icon: Wallet, label: "Portefeuille", href: "/wallet" },
+        { icon: Crown, label: "Abonnement", href: "/abonnement" },
+      ]
+    }
+
+    if (isSeller) {
+      return [
+        espace,
+        {
+          icon: Package,
+          label: "Mes produits",
+          href: "/dashboard/products",
           count: stats.products,
         },
         {
@@ -231,6 +262,7 @@ export default function ProfilPage() {
         { icon: Star, label: "Mes avis", href: "/dashboard/reviews" },
       ]
     }
+
     return [
       espace,
       {
@@ -245,19 +277,25 @@ export default function ProfilPage() {
         href: "/favoris",
         count: stats.favorites,
       },
-      {
-        icon: FileText,
-        label: "Mes paiements",
-        href: "/dashboard/commandes",
-      },
     ]
   }
 
   const menuSections: { items: MenuItem[] }[] = [
-    ...(isAdmin
-      ? [{ items: [{ icon: Shield, label: "Administration", href: "/admin", highlight: true }] }]
-      : []),
     { items: getMainMenuItems() },
+    ...(isAdmin
+      ? [
+          {
+            items: [
+              {
+                icon: Shield,
+                label: "Backoffice admin",
+                href: "/admin",
+                highlight: true,
+              },
+            ],
+          },
+        ]
+      : []),
     ...(isSeller || isCooperative
       ? [
           {
@@ -293,7 +331,7 @@ export default function ProfilPage() {
         { icon: Settings, label: "Paramètres", href: "/profil/edit" },
         { icon: Download, label: "Installer l'app", href: "/download" },
         { icon: HelpCircle, label: "Aide", href: "/aide" },
-        { icon: HelpCircle, label: "Contact", href: "/contact" },
+        { icon: FileText, label: "Contact", href: "/contact" },
       ],
     },
     {
