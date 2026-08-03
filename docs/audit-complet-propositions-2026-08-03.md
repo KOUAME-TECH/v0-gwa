@@ -1,8 +1,7 @@
-# Audit complet GWA — propositions d’amélioration
-
 **Date :** 2026-08-03  
-**Périmètre :** PWA Next.js (`v0-gwa`), Auth/double identité, abonnements, backoffice, paiements/escrow, UX rôles, ops go-live, sécu, tests.  
-**Méthode :** revue code + schémas SQL + docs existantes (pas d’exécution prod).
+**Statut :** **historique** — remplacé par [`audit-complet-propositions-2026-08-03-v2.md`](./audit-complet-propositions-2026-08-03-v2.md) (état post-`567a0d9`).
+
+# Audit complet GWA — propositions d’amélioration
 
 ---
 

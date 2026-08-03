@@ -6,7 +6,8 @@
 |---------|---------|
 | [`onboarding-equipe.md`](./onboarding-equipe.md) | **Orientation repo** — lire en premier |
 | [`etat-des-lieux-prochaines-etapes.md`](./etat-des-lieux-prochaines-etapes.md) | **État actuel + prochaines étapes** |
-| [`audit-complet-propositions-2026-08-03.md`](./audit-complet-propositions-2026-08-03.md) | **Audit complet** — sécu, abo, double identité, UX, ops + propositions P0–P2 |
+| [`audit-complet-propositions-2026-08-03.md`](./audit-complet-propositions-2026-08-03.md) | Audit v1 (historique) |
+| [`audit-complet-propositions-2026-08-03-v2.md`](./audit-complet-propositions-2026-08-03-v2.md) | **Audit à jour** — post-correctifs P0/P1, propositions restantes, mobile après 1er sept |
 | [`propositions-ameliorations-optimisations.md`](./propositions-ameliorations-optimisations.md) | Améliorations / optimisations proposées |
 | [`propositions-ui-ux-dashboards.md`](./propositions-ui-ux-dashboards.md) | UI/UX dashboards + backoffice par rôle |
 | [`propositions-autonomes-v2.md`](./propositions-autonomes-v2.md) | Vague 2 autonome (**validée**) + IA admin |
