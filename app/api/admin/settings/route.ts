@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server"
-import { requireAdmin } from "@/lib/auth/require-admin"
+import { requireAdminSection } from "@/lib/auth/require-admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 
 /** Aligné RLS settings_update_admin : admin | super_admin */
@@ -52,7 +52,7 @@ export async function GET() {
       return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })
     }
 
-    const gate = await requireAdmin()
+    const gate = await requireAdminSection("settings")
     if (!gate.isAdmin || !gate.admin) {
       return NextResponse.json(
         { error: gate.error || "Accès refusé" },
@@ -87,7 +87,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })
     }
 
-    const gate = await requireAdmin()
+    const gate = await requireAdminSection("settings")
     if (!gate.isAdmin || !gate.admin) {
       return NextResponse.json(
         { error: gate.error || "Accès refusé" },

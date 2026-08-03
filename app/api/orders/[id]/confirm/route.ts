@@ -13,6 +13,7 @@ type Ctx = { params: Promise<{ id: string }> }
 /**
  * POST /api/orders/[id]/confirm
  * Acheteur confirme réception → payout vendeur (net commission) + release escrow.
+ * Si le payout échoue : commande livrée mais escrow reste held (file ops / retry).
  */
 export async function POST(request: NextRequest, context: Ctx) {
   try {
@@ -118,18 +119,30 @@ export async function POST(request: NextRequest, context: Ctx) {
     } else if (!creds && process.env.ALLOW_PAYMENT_SIMULATION === "true") {
       payoutStatus = "skipped_sim"
       payoutRef = `SIM-OUT-${Date.now().toString(36).toUpperCase()}`
+    } else if (!creds) {
+      payoutStatus = "failed"
+      payoutError = "PAYMENT_PROVIDER_MISSING"
+    } else if (payoutAmount <= 0) {
+      payoutStatus = "skipped_zero"
     }
+
+    const payoutOk =
+      payoutStatus === "paid" ||
+      payoutStatus === "skipped_sim" ||
+      payoutStatus === "skipped_zero"
+
+    const escrowStatus = payoutOk ? "released" : "held"
 
     const orderPatch: Record<string, unknown> = {
       status: "delivered",
-      escrow_status: "released",
+      escrow_status: escrowStatus,
       confirmed_by_buyer_at: now,
-      delivered_at: now,
+      delivered_at: order.delivered_at || now,
       updated_at: now,
       payout_status: payoutStatus,
       payout_ref: payoutRef,
       payout_network: payoutNetwork,
-      payout_at: now,
+      payout_at: payoutOk ? now : null,
       payout_error: payoutError,
     }
     if (receptionPhotoUrl) {
@@ -141,31 +154,32 @@ export async function POST(request: NextRequest, context: Ctx) {
 
     const { error: updErr } = await admin.from("orders").update(orderPatch).eq("id", id)
     if (updErr) {
-      // Colonnes payout absentes (migration 053 non appliquée) → release minimale
       console.warn("[api/orders/confirm] payout cols?", updErr.message)
       await admin
         .from("orders")
         .update({
           status: "delivered",
-          escrow_status: "released",
+          escrow_status: escrowStatus,
           confirmed_by_buyer_at: now,
-          delivered_at: now,
+          delivered_at: order.delivered_at || now,
           updated_at: now,
         })
         .eq("id", id)
     }
 
-    await admin
-      .from("escrow_transactions")
-      .update({ status: "released", released_at: now })
-      .eq("order_id", id)
-      .eq("status", "held")
+    if (payoutOk) {
+      await admin
+        .from("escrow_transactions")
+        .update({ status: "released", released_at: now })
+        .eq("order_id", id)
+        .eq("status", "held")
+    }
 
     await admin.from("order_audit_log").insert({
       order_id: id,
       performed_by: user.id,
-      action: "buyer_confirmed",
-      new_value: "released",
+      action: payoutOk ? "buyer_confirmed" : "buyer_confirmed_payout_pending",
+      new_value: escrowStatus,
       notes: [
         receptionPhotoUrl ? `Photo: ${receptionPhotoUrl}` : null,
         `payout=${payoutStatus}`,
@@ -177,18 +191,20 @@ export async function POST(request: NextRequest, context: Ctx) {
         .join(" | "),
     })
 
-    const invoiceNumber = `FA-${order.order_number}`
-    await admin.from("invoices").upsert(
-      {
-        order_id: id,
-        number: invoiceNumber,
-        buyer_id: order.buyer_id,
-        seller_id: order.seller_id,
-        total_fcfa: Math.round(Number(order.total_amount) || 0),
-        issued_at: now,
-      },
-      { onConflict: "order_id", ignoreDuplicates: true },
-    )
+    if (payoutOk) {
+      const invoiceNumber = `FA-${order.order_number}`
+      await admin.from("invoices").upsert(
+        {
+          order_id: id,
+          number: invoiceNumber,
+          buyer_id: order.buyer_id,
+          seller_id: order.seller_id,
+          total_fcfa: Math.round(Number(order.total_amount) || 0),
+          issued_at: now,
+        },
+        { onConflict: "order_id", ignoreDuplicates: true },
+      )
+    }
 
     const sellerMsg =
       payoutStatus === "paid"
@@ -200,7 +216,12 @@ export async function POST(request: NextRequest, context: Ctx) {
     await admin.from("notifications").insert({
       user_id: order.seller_id,
       type: "order",
-      title: payoutStatus === "paid" ? "Paiement reçu" : "Fonds libérés",
+      title:
+        payoutStatus === "paid"
+          ? "Paiement reçu"
+          : payoutOk
+            ? "Fonds libérés"
+            : "Livraison confirmée — versement en cours",
       message: sellerMsg,
       body: sellerMsg,
       link: `/wallet`,
@@ -209,18 +230,24 @@ export async function POST(request: NextRequest, context: Ctx) {
     })
 
     void sendPushToUser(supabase as never, order.seller_id, {
-      title: payoutStatus === "paid" ? "Argent versé" : "Argent libéré",
+      title:
+        payoutStatus === "paid"
+          ? "Argent versé"
+          : payoutOk
+            ? "Argent libéré"
+            : "Confirmation reçue",
       body: sellerMsg,
       url: "/wallet",
     })
 
     return NextResponse.json({
       success: true,
-      escrow_status: "released",
+      escrow_status: escrowStatus,
       payout_status: payoutStatus,
       payout_ref: payoutRef,
       payout_amount_fcfa: payoutAmount,
       payout_error: payoutError,
+      payout_pending: !payoutOk,
     })
   } catch (err) {
     console.error("[api/orders/confirm]", err)

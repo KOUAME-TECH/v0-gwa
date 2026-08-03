@@ -24,6 +24,9 @@ risque des doubles applications ou un schéma désynchronisé.
 2. Appliquer via SQL Editor / MCP `apply_migration` / agent
 3. Commit + push `main`
 
+**Appliqué en prod (2026-08-03) :**  
+`scripts/schema/056_protect_privileged_service_role_only.sql` — bloque l’auto-élévation dual-identity (admin JWT ne peut plus écrire `subscription_tier` / `is_verified` côté client).
+
 ## Vercel Marketplace
 
 L’intégration sync surtout les variables **`NEXT_PUBLIC_*`**.  

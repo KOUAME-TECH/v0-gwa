@@ -36,6 +36,8 @@
 | [`ops-auth.md`](./ops-auth.md) | OTP SMS + Sender ID |
 | [`ops-support-backoffice.md`](./ops-support-backoffice.md) | Support / admin |
 | [`ops-notifications.md`](./ops-notifications.md) | OneSignal + Digest |
+| [`onesignal-vs-africas-talking.md`](./onesignal-vs-africas-talking.md) | **OneSignal ≠ Africa’s Talking** (SMS OTP vs push) |
+| [`roadmap-mobile-post-1er-septembre-2026.md`](./roadmap-mobile-post-1er-septembre-2026.md) | Mobile natif **après** le 1er sept — PWA d’abord |
 | [`yelly-gemini.md`](./yelly-gemini.md) | Yelly / Gemini |
 | [`security.md`](./security.md) | Synthèse sécu + Advisor |
 | [`beta-test-matrix.md`](./beta-test-matrix.md) | Matrice QA |

@@ -3,6 +3,8 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import {
   type AdminAction,
   type AdminRole,
+  type AdminSection,
+  canAccessSection,
   canPerformAdminAction,
   isAdminRole,
   isSuperAdmin,
@@ -43,16 +45,41 @@ export async function requireAdmin() {
     }
   }
 
-  const adminRole = isAdminRole(role.role) ? role.role : ("admin" as AdminRole)
+  // Rôle DB inconnu → refuser (ne jamais promouvoir en "admin")
+  if (!isAdminRole(role.role)) {
+    console.warn("[requireAdmin] rôle inconnu refusé:", role.role)
+    return {
+      user: base.user,
+      supabase: base.supabase,
+      error: "Rôle admin invalide" as const,
+      isAdmin: false as const,
+    }
+  }
 
   return {
     user: base.user,
     supabase: base.supabase,
     admin,
-    role: { ...role, role: adminRole },
+    role: { ...role, role: role.role as AdminRole },
     error: null,
     isAdmin: true as const,
   }
+}
+
+/** Admin + accès section (matrice ROLE_SECTIONS) */
+export async function requireAdminSection(section: AdminSection) {
+  const gate = await requireAdmin()
+  if (!gate.isAdmin) return gate
+
+  if (!canAccessSection(gate.role.role, section)) {
+    return {
+      ...gate,
+      isAdmin: false as const,
+      error: "Accès section refusé" as const,
+    }
+  }
+
+  return gate
 }
 
 /** super_admin uniquement — promotion / révocation de rôles admin */

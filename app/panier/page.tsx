@@ -291,12 +291,33 @@ export default function CartPage() {
           window.location.href = payPayload.payment_url
           return
         }
-        if (!payRes.ok && payRes.status !== 503) {
-          console.error("[panier] pay", payPayload)
-          if (payPayload?.code === "PHONE_REQUIRED" || payPayload?.code === "INVALID_PHONE") {
-            throw new Error(payPayload?.error || "Numéro Mobile Money requis")
-          }
+        if (payRes.ok && payPayload?.status === "paid_simulated") {
+          continue
         }
+        if (payRes.ok && payPayload?.status === "ussd_pending") {
+          await supabase.from("cart_items").delete().eq("user_id", user.id)
+          const { notifyCartChanged } = await import("@/lib/cart/events")
+          notifyCartChanged()
+          router.push(`/commandes/confirmation?order=${orderId}&pending=ussd`)
+          return
+        }
+
+        const code = String(payPayload?.code || "")
+        if (
+          payRes.status === 503 ||
+          code === "PAYMENT_PROVIDER_MISSING"
+        ) {
+          throw new Error(
+            "Paiement Mobile Money indisponible pour le moment. Réessaie plus tard ou contacte le support WhatsApp GWA. Ta commande n’a pas été finalisée.",
+          )
+        }
+        if (code === "PHONE_REQUIRED" || code === "INVALID_PHONE") {
+          throw new Error(payPayload?.error || "Numéro Mobile Money requis")
+        }
+        throw new Error(
+          payPayload?.error ||
+            "Le paiement n’a pas pu démarrer. Vérifie ton numéro et réessaie.",
+        )
       }
 
       // Vider le panier une fois toutes les commandes creees
@@ -309,9 +330,11 @@ export default function CartPage() {
       router.push(`/commandes/confirmation?order=${createdOrderIds[0]}`)
     } catch (err) {
       console.log("[v0] Checkout error:", err)
-      setCheckoutError(
-        "Une erreur est survenue lors de la commande. Reessayez.",
-      )
+      const msg =
+        err instanceof Error && err.message
+          ? err.message
+          : "Une erreur est survenue lors de la commande. Réessayez."
+      setCheckoutError(msg)
       setIsProcessing(false)
     }
   }

@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { requireAdmin } from "@/lib/auth/require-admin"
+import { requireAdminAction } from "@/lib/auth/require-admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { sendPushToUser } from "@/lib/notifications/push"
 
@@ -16,14 +16,6 @@ export async function PATCH(request: NextRequest, context: Ctx) {
       return NextResponse.json({ error: "Trop de demandes. Réessayez plus tard." }, { status: 429 })
     }
 
-    const gate = await requireAdmin()
-    if (!gate.isAdmin || !gate.admin) {
-      return NextResponse.json(
-        { error: gate.error || "Accès refusé" },
-        { status: gate.user ? 403 : 401 },
-      )
-    }
-
     const { id } = await context.params
     const body = await request.json().catch(() => ({}))
     const action = String(body?.action || "")
@@ -31,6 +23,16 @@ export async function PATCH(request: NextRequest, context: Ctx) {
       return NextResponse.json(
         { error: "Choisissez approuver ou refuser." },
         { status: 400 },
+      )
+    }
+
+    const gate = await requireAdminAction(
+      action === "approve" ? "verification_approve" : "verification_reject",
+    )
+    if (!gate.isAdmin || !gate.admin) {
+      return NextResponse.json(
+        { error: gate.error || "Accès refusé" },
+        { status: gate.user ? 403 : 401 },
       )
     }
 

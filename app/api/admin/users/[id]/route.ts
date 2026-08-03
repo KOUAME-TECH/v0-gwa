@@ -8,7 +8,7 @@ import {
 
 } from "@/lib/auth/admin-permissions"
 
-import { requireAdmin, requireSuperAdmin } from "@/lib/auth/require-admin"
+import { requireAdminAction, requireSuperAdmin } from "@/lib/auth/require-admin"
 
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 
@@ -246,7 +246,9 @@ export async function PATCH(request: NextRequest, context: Ctx) {
 
 
 
-    const gate = await requireAdmin()
+    const gate = await requireAdminAction(
+      action as "verify" | "unverify" | "suspend" | "unsuspend",
+    )
 
     if (!gate.isAdmin || !gate.admin) {
 

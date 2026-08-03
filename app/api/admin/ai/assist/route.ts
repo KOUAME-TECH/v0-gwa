@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
-import { requireAdmin } from "@/lib/auth/require-admin"
+import { requireAdminSection } from "@/lib/auth/require-admin"
 import {
   ADMIN_AI_PAGE,
   adminAiEntitlements,
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const gate = await requireAdmin()
+    const gate = await requireAdminSection("ai")
     if (!gate.isAdmin || !gate.role || !gate.user || !gate.supabase) {
       return NextResponse.json(
         { error: gate.error || "Admin requis" },
@@ -163,7 +163,7 @@ export async function POST(request: NextRequest) {
 /** GET — état quota */
 export async function GET() {
   try {
-    const gate = await requireAdmin()
+    const gate = await requireAdminSection("ai")
     if (!gate.isAdmin || !gate.role || !gate.user || !gate.supabase) {
       return NextResponse.json(
         { error: gate.error || "Admin requis" },

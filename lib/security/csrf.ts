@@ -16,7 +16,22 @@ export function assertSameOrigin(request: Request): NextResponse | null {
   const auth = request.headers.get("authorization") || ""
   if (/^Bearer\s+\S+/i.test(auth)) return null
   if (request.headers.get("x-vercel-cron") === "1") return null
-  if (request.headers.get("x-gwa-internal-key")) return null
+
+  // Clé interne : valeur obligatoire + match secret env (pas juste présence)
+  const internalHeader = (request.headers.get("x-gwa-internal-key") || "").trim()
+  if (internalHeader) {
+    const expected = (
+      process.env.GWA_INTERNAL_KEY ||
+      process.env.DIGEST_INTERNAL_KEY ||
+      process.env.CRON_SECRET ||
+      ""
+    ).trim()
+    if (expected && internalHeader === expected) return null
+    return NextResponse.json(
+      { error: "CSRF: clé interne invalide" },
+      { status: 403 },
+    )
+  }
 
   const origin = request.headers.get("origin")
   const referer = request.headers.get("referer")

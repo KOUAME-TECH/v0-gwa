@@ -1,8 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { requireAdmin } from "@/lib/auth/require-admin"
+import { requireAdminSection } from "@/lib/auth/require-admin"
 import { assertSameOrigin } from "@/lib/security/csrf"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
-import { canAccessSection } from "@/lib/auth/admin-permissions"
 import { sanitizeForQuery } from "@/lib/security/validation"
 import { normalizeSubscriptionTier } from "@/lib/pricing/service-fee"
 import { isSellerRole } from "@/lib/dashboard/routing"
@@ -22,16 +21,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })
     }
 
-    const gate = await requireAdmin()
+    const gate = await requireAdminSection("subscriptions")
     if (!gate.isAdmin || !gate.admin || !gate.role || !gate.user) {
       return NextResponse.json(
         { error: gate.error || "Accès refusé" },
         { status: gate.user ? 403 : 401 },
       )
-    }
-
-    if (!canAccessSection(gate.role.role, "subscriptions")) {
-      return NextResponse.json({ error: "Accès refusé" }, { status: 403 })
     }
 
     const admin = gate.admin

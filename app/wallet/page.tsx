@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
-import { Navigation } from "@/components/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -277,7 +276,6 @@ export default function WalletPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
-        <Navigation />
         <div className="container mx-auto px-4 py-8">
           <div className="flex items-center justify-center h-64">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
@@ -290,7 +288,6 @@ export default function WalletPage() {
   if (!isSellerRole(profile?.user_type)) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-[#FFF6E5] to-white pb-24 px-4 pt-8">
-        <Navigation />
         <h1 className="text-2xl font-bold text-[#1F5C2E]">Mes paiements</h1>
         <p className="mt-2 text-sm text-[#6B7280]">
           Côté acheteur, suis tes commandes et confirme la réception pour libérer
@@ -316,7 +313,6 @@ export default function WalletPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navigation />
       
       <main className="container mx-auto px-4 py-8">
         <div className="mb-8">

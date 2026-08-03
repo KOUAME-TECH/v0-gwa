@@ -82,6 +82,9 @@ export async function updateSession(request: NextRequest) {
     '/notifications',
     '/wallet',
     '/commandes',
+    '/abonnement',
+    '/scg',
+    '/affacturage',
   ]
   const needsAuth = protectedPrefixes.some(
     (p) => path === p || path.startsWith(`${p}/`),

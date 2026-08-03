@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { requireAdmin } from "@/lib/auth/require-admin"
+import { requireAdminSection } from "@/lib/auth/require-admin"
 import { isAdminRole, type AdminRole } from "@/lib/auth/admin-permissions"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { sanitizeForQuery } from "@/lib/security/validation"
@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })
     }
 
-    const gate = await requireAdmin()
+    const gate = await requireAdminSection("users")
     if (!gate.isAdmin || !gate.admin) {
       return NextResponse.json(
         { error: gate.error || "Accès refusé" },

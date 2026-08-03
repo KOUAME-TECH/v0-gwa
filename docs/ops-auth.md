@@ -1,5 +1,10 @@
 # Ops — Auth (SMS OTP login) go-live checklist
 
+> **Africa’s Talking ≠ OneSignal.**  
+> Ici = **SMS OTP** pour se connecter.  
+> Push commandes = OneSignal ([`ops-notifications.md`](./ops-notifications.md)).  
+> Synthèse : [`onesignal-vs-africas-talking.md`](./onesignal-vs-africas-talking.md).
+
 GWA auth = **Supabase session** unlocked by **SMS OTP** (Africa's Talking), with phone
 linked to an email. This is NOT Clerk/Auth0 — do not migrate. This page lists exactly what
 must be green for a producer to log in by SMS in production.

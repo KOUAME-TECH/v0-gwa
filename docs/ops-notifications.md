@@ -1,5 +1,10 @@
 # Ops — Notifications (OneSignal + Digest)
 
+> **OneSignal ≠ Africa’s Talking.**  
+> SMS OTP = Africa’s Talking ([`ops-auth.md`](./ops-auth.md)).  
+> Push commandes / digest = OneSignal (ce fichier).  
+> Synthèse : [`onesignal-vs-africas-talking.md`](./onesignal-vs-africas-talking.md).
+
 ## OneSignal Web Push
 
 Fichiers `public/` :

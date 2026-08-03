@@ -207,3 +207,23 @@ flowchart TD
 ---
 
 *Document vivant : mettre à jour la colonne « Statut » des propositions au fur et à mesure des livraisons.*
+
+---
+
+## Suivi corrections (2026-08-03, agent autonome)
+
+| ID | Statut | Notes |
+|----|--------|-------|
+| P0-1 RBAC API | **Fait (code)** | `requireAdminSection` sur routes admin |
+| P0-2 Trigger privilégié | **Fait (appliqué prod)** | `056` via Supabase + `scripts/schema/056_…sql` |
+| P0-3 Rôle inconnu | **Fait** | `requireAdmin` refuse |
+| P0-4 FeexPay E2E | **Bloqué ops** | Secrets Vercel |
+| P0-5 AT_SENDER_ID | **Bloqué ops** | Africa’s Talking (≠ OneSignal) |
+| P0-6 Checkout erreur | **Fait** | Panier ne confirme plus si pay échoue |
+| P1-1 Escrow payout fail | **Fait** | Escrow reste `held` si payout KO |
+| P1-2 CSRF internal key | **Fait** | Clé vérifiée vs env |
+| P1-6 Double Navigation | **Fait** | Wallet / affacturage |
+| P1-7 Confirm 1 tap | **Fait** | Home acheteur |
+| Middleware abo/scg | **Fait** | |
+| Docs OneSignal vs AT | **Fait** | `onesignal-vs-africas-talking.md` |
+| Mobile natif | **Reporté** | Après **1er sept 2026** — `roadmap-mobile-post-1er-septembre-2026.md` |

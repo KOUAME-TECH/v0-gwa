@@ -77,6 +77,7 @@ export default function BuyerDashboard() {
   const [nearby, setNearby] = useState<NearbyProduct | null>(null)
   const [popular, setPopular] = useState<NearbyProduct[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [confirmBusy, setConfirmBusy] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -171,6 +172,37 @@ export default function BuyerDashboard() {
   const hasDelivered = orders.some((o) => o.status === "delivered")
   const showFirstOrderChecklist = orders.length === 0 || !hasDelivered
 
+  async function confirmReception(orderId: string) {
+    setConfirmBusy(orderId)
+    try {
+      const res = await fetch(`/api/orders/${orderId}/confirm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        alert(data.error || "Confirmation impossible")
+        return
+      }
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === orderId
+            ? {
+                ...o,
+                status: "delivered",
+                escrow_status: data.escrow_status || o.escrow_status,
+              }
+            : o,
+        ),
+      )
+    } catch {
+      alert("Erreur réseau")
+    } finally {
+      setConfirmBusy(null)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[#FFF6E5] p-4 pb-24 space-y-4 animate-pulse">
@@ -231,6 +263,45 @@ export default function BuyerDashboard() {
             </Link>
           </div>
         </div>
+      ) : null}
+
+      {toConfirm.length > 0 ? (
+        <section className="mx-4 mb-4 space-y-2">
+          <h2 className="text-base font-semibold text-[#1F5C2E]">À confirmer</h2>
+          {toConfirm.slice(0, 3).map((o) => {
+            const name =
+              o.order_items?.[0]?.products?.name || "Commande"
+            return (
+              <div
+                key={o.id}
+                className="flex items-center gap-3 rounded-2xl bg-white p-3 ring-1 ring-[#1F5C2E]/10"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{name}</p>
+                  <p className="text-xs text-[#6B7280]">
+                    {formatFcfa(Number(o.total_amount) || 0)}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  className="shrink-0 rounded-full bg-[#1F5C2E] hover:bg-[#174824]"
+                  disabled={confirmBusy === o.id}
+                  onClick={() => void confirmReception(o.id)}
+                >
+                  {confirmBusy === o.id ? "…" : "J’ai reçu"}
+                </Button>
+              </div>
+            )
+          })}
+          {toConfirm.length > 3 ? (
+            <Link
+              href="/dashboard/commandes"
+              className="block text-center text-xs font-medium text-[#1F5C2E] underline"
+            >
+              Voir toutes ({toConfirm.length})
+            </Link>
+          ) : null}
+        </section>
       ) : null}
 
       {showFirstOrderChecklist ? (
