@@ -5,6 +5,7 @@
 | Fichier | Contenu |
 |---------|---------|
 | [`onboarding-equipe.md`](./onboarding-equipe.md) | **Orientation repo** — lire en premier |
+| [`gwa-os/README.md`](./gwa-os/README.md) | **GWA OS** — source de vérité (Dashboard + 6 domaines + décisions) à coller dans Notion |
 | [`etat-des-lieux-prochaines-etapes.md`](./etat-des-lieux-prochaines-etapes.md) | **État actuel + prochaines étapes** |
 | [`audit-complet-propositions-2026-08-03.md`](./audit-complet-propositions-2026-08-03.md) | Audit v1 (historique) |
 | [`audit-complet-propositions-2026-08-03-v2.md`](./audit-complet-propositions-2026-08-03-v2.md) | **Audit à jour** — post-correctifs P0/P1, propositions restantes, mobile après 1er sept |
