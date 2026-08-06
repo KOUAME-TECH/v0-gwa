@@ -13,12 +13,13 @@ Marketplace agroalimentaire PWA — Côte d’Ivoire.
 
 | | Lien |
 |--|------|
-| **Ouvre chaque jour** | [⚡ Dashboard](https://app.notion.com/p/3b4a6d3a76b48144bfd2e4f06e8cd7ae) |
-| **Racine OS** | [🏠 GWA OS](https://app.notion.com/p/3b4a6d3a76b48117883cdd39d34acde7) |
-| Décisions (historique) | [Décisions GWA](https://app.notion.com/p/cfcbd24df32e4556ae1d94246f842cd5) |
-| Rappels & Actions | [Rappels GWA](https://app.notion.com/p/1f0d5b6b299b4453b3747e0585652e39) |
-| Outils & Accès | [Outils GWA](https://app.notion.com/p/78893c28013d41abbd84305ac4ca7ff4) |
-| Nouveau dans l’équipe | [Je suis nouveau](https://app.notion.com/p/3b4a6d3a76b481a9a043dfd989252f30) |
+| **HQ Groupe** | [🏢 GWA Group OS](https://app.notion.com/p/3b4a6d3a76b48117883cdd39d34acde7) |
+| **Command Center** | [⚡ Dashboard](https://app.notion.com/p/3b4a6d3a76b48144bfd2e4f06e8cd7ae) |
+| Org / Roles | [Org Chart](https://app.notion.com/p/7b176f77198f47c1ac61a4b643e7ca9c) |
+| Décisions | [Décisions GWA](https://app.notion.com/p/cfcbd24df32e4556ae1d94246f842cd5) |
+| Risks | [Risks & Compliance](https://app.notion.com/p/ef6a119a7de64cb58eaa043524442ca5) |
+| Projects / SOP | [Operating Model](https://app.notion.com/p/3b4a6d3a76b481468ce9ca103464afc9) |
+| Nouveau | [Je suis nouveau](https://app.notion.com/p/3b4a6d3a76b481a9a043dfd989252f30) |
 | Investisseurs + Newsletter | [💼 Espace Investisseurs](https://app.notion.com/p/3b4a6d3a76b481daa065fa0e47bb8738) |
 
 Ce dépôt ne contient **que du code** + ce README.  
