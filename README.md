@@ -1,12 +1,26 @@
 # GWA Platform
 
-Marketplace agroalimentaire PWA — Côte d’Ivoire.  
-**Prod :** https://v0-gwa-mu.vercel.app
+Marketplace agroalimentaire PWA — Côte d’Ivoire.
 
-## Nouveau dans l’équipe ?
+**Prod :** https://v0-gwa-mu.vercel.app  
+**Repo :** https://github.com/MYSTERE-arch/v0-gwa
 
-**Commence ici → [`docs/onboarding-equipe.md`](docs/onboarding-equipe.md)**  
-(carte du repo, où chercher, docs à lire, flux escrow / abo, checklist J1)
+---
+
+## Documentation = Notion (pas ce repo)
+
+**Toute la doc produit / ops / décisions vit dans Notion — GWA OS.**
+
+| | Lien |
+|--|------|
+| **Ouvre chaque jour** | [⚡ Dashboard](https://app.notion.com/p/3b4a6d3a76b48144bfd2e4f06e8cd7ae) |
+| **Racine OS** | [🏠 GWA OS](https://app.notion.com/p/3b4a6d3a76b48117883cdd39d34acde7) |
+| Investisseurs (hors OS) | [💼 Espace Investisseurs](https://app.notion.com/p/3b4a6d3a76b481daa065fa0e47bb8738) |
+
+Ce dépôt ne contient **que du code** + ce README.  
+Ne pas rajouter de dossier `docs/` : mettre à jour le **Dashboard Notion** en fin de session.
+
+---
 
 ## Stack
 
@@ -17,15 +31,10 @@ Marketplace agroalimentaire PWA — Côte d’Ivoire.
 | Data | Supabase (Auth, Postgres, Realtime, Storage) |
 | Infra | Vercel · Upstash Redis · OneSignal · Africa’s Talking · FeexPay · Gemini |
 
-## Frontend vs Backend
-
 ```
 Frontend  →  app/**/page.tsx  ·  components/  ·  hooks/  ·  public/
 Backend   →  app/api/**       ·  lib/**       ·  middleware.ts  ·  scripts/schema/
 ```
-
-- Cahier des charges : [`docs/cahier-des-charges-actuel-evolution-6-12-24.md`](docs/cahier-des-charges-actuel-evolution-6-12-24.md)  
-- Index docs (liste courte) : [`docs/README.md`](docs/README.md)
 
 ## Démarrage local
 
@@ -36,27 +45,28 @@ npm run dev
 npm test
 ```
 
-Statut des routes : `lib/routes/inventory.ts` · UI locale `/dev/routes`.
-
-## Arborescence utile
+## Arborescence
 
 ```
-app/                 # Pages (UI) + app/api (HTTP backend)
-components/          # UI par domaine
-hooks/               # Hooks client
-lib/                 # Domaine métier serveur (pricing, orders, feexpay, scg…)
-public/              # Logo, PWA, service workers
-scripts/schema/      # Migrations SQL (ordre 001 → …)
-docs/                # Onboarding, CdC, décisions, ops
+app/                 # Pages (UI) + app/api (HTTP)
+components/          # UI
+hooks/
+lib/                 # Domaine métier serveur
+public/              # PWA, workers
+scripts/schema/      # Migrations SQL (001 → …)
 tests/               # Vitest
+README.md            # ← seul fichier documentation du repo
 ```
 
-## Déploiement
+## Déploiement & SQL
 
-Push sur `main` → Vercel (prod).  
-Install : `npm install --legacy-peer-deps` (`vercel.json`).
+- Push `main` → Vercel prod.
+- Migrations : appliquer `scripts/schema/0XX_*.sql` dans l’ordre (SQL Editor Supabase). Toujours un **nouveau** fichier, ne pas réécrire l’historique.
+- Install Vercel : `npm install --legacy-peer-deps` (`vercel.json`).
+- Intégration GitHub Supabase : **Deploy to production = OFF** (les migrations ne sont pas dans `supabase/migrations/`).
 
-## Migrations SQL
+## Ops urgents (détail dans Notion Dashboard)
 
-Appliquer dans l’ordre `scripts/schema/0XX_*.sql` (SQL Editor Supabase).  
-Ne pas réécrire l’historique : toujours un **nouveau** fichier.
+1. `FEEXPAY_*` + webhook E2E  
+2. `AT_SENDER_ID` (SMS ≠ OneSignal)  
+3. Soft-launch seed contenu
