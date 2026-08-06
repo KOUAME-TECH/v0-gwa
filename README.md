@@ -15,7 +15,11 @@ Marketplace agroalimentaire PWA — Côte d’Ivoire.
 |--|------|
 | **Ouvre chaque jour** | [⚡ Dashboard](https://app.notion.com/p/3b4a6d3a76b48144bfd2e4f06e8cd7ae) |
 | **Racine OS** | [🏠 GWA OS](https://app.notion.com/p/3b4a6d3a76b48117883cdd39d34acde7) |
-| Investisseurs (hors OS) | [💼 Espace Investisseurs](https://app.notion.com/p/3b4a6d3a76b481daa065fa0e47bb8738) |
+| Décisions (historique) | [Décisions GWA](https://app.notion.com/p/cfcbd24df32e4556ae1d94246f842cd5) |
+| Rappels & Actions | [Rappels GWA](https://app.notion.com/p/1f0d5b6b299b4453b3747e0585652e39) |
+| Outils & Accès | [Outils GWA](https://app.notion.com/p/78893c28013d41abbd84305ac4ca7ff4) |
+| Nouveau dans l’équipe | [Je suis nouveau](https://app.notion.com/p/3b4a6d3a76b481a9a043dfd989252f30) |
+| Investisseurs + Newsletter | [💼 Espace Investisseurs](https://app.notion.com/p/3b4a6d3a76b481daa065fa0e47bb8738) |
 
 Ce dépôt ne contient **que du code** + ce README.  
 Ne pas rajouter de dossier `docs/` : mettre à jour le **Dashboard Notion** en fin de session.
