@@ -2,6 +2,9 @@
 
 Business Unit de **KOUAME Corporation** — marketplace agroalimentaire PWA (Côte d’Ivoire).
 
+**Tech Lead GWA :** Makan Diabaté (pilotage quotidien — prise en main)  
+**DG / supervision :** Yao Kouamé (vérification ponctuelle)
+
 **Prod :** https://v0-gwa-mu.vercel.app  
 **Repo :** https://github.com/MYSTERE-arch/v0-gwa
 
