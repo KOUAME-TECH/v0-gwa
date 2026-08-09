@@ -89,6 +89,7 @@ export const PAGE_ROUTES: RouteEntry[] = [
 /** API routes présentes */
 export const API_ROUTES: RouteEntry[] = [
   { path: "/api/health", status: "complete" },
+  { path: "/api/health/ping", status: "complete" },
   { path: "/api/weather", status: "complete", note: "Open-Meteo réel" },
   { path: "/api/contact", status: "complete", note: "AgentMail" },
   { path: "/api/auth/send-otp", status: "complete" },

@@ -9,12 +9,13 @@ export const runtime = "nodejs"
 /**
  * POST|GET /api/cron/harmattan-digest
  *
- * Déclencheur **manuel / secours** (OneSignal push enrichi).
- * Le planning principal est **Supabase pg_cron** :
- *   job `gwa-harmattan-digest-daily` → `SELECT public.run_harmattan_digest();`
- *   (migration 041 — notifications in-app, sans CRON_SECRET Vercel)
+ * Déclencheur push OneSignal + secours manuel.
  *
- * Auth secours : Bearer CRON_SECRET | x-vercel-cron | DIGEST_INTERNAL_KEY
+ * Planning :
+ * 1. **Principal** — Supabase pg_cron `gwa-harmattan-digest-daily` (06:00 UTC)
+ *    → `SELECT public.run_harmattan_digest();` (migration 041, in-app)
+ * 2. **Backup** — Vercel Cron `vercel.json` → GET this route (06:00 UTC)
+ * 3. **Manuel** — Bearer CRON_SECRET | x-vercel-cron | DIGEST_INTERNAL_KEY
  */
 async function handle(request: Request) {
   const auth = authorizeCronRequest(request)
