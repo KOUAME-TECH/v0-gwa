@@ -21,14 +21,9 @@ export function assertSameOrigin(request: Request): NextResponse | null {
     // Sans Bearer valide : ne pas court-circuiter Origin (défense en profondeur)
   }
 
-  // Bearer : uniquement JWT-like long (évite CSRF avec « Bearer x »)
-  const auth = request.headers.get("authorization") || ""
-  const bearerMatch = /^Bearer\s+(\S+)/i.exec(auth)
-  if (bearerMatch) {
-    const token = bearerMatch[1]
-    // JWT Supabase ≈ 3 segments ; clés cron déjà gérées ci-dessus / routes exempt
-    if (token.split(".").length === 3 && token.length >= 40) return null
-  }
+  // Pas de bypass Bearer JWT-shaped : un token forgeable (3 segments) ne doit
+  // jamais court-circuiter Origin/Referer. Les routes cron/webhook sont
+  // exemptées dans middleware + secrets dédiés.
 
   // Clé interne : valeur obligatoire + match secret env (pas juste présence)
   const internalHeader = (request.headers.get("x-gwa-internal-key") || "").trim()

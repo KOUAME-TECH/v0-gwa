@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+import { requireUser } from "@/lib/auth/require-admin"
 import { sendPushToUser } from "@/lib/notifications/push"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 
@@ -14,13 +14,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Trop de messages" }, { status: 429 })
     }
 
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
+    const gate = await requireUser()
+    if (!gate.user) {
+      return NextResponse.json(
+        { error: gate.error || "Non authentifié" },
+        { status: gate.suspended ? 403 : 401 },
+      )
     }
+    const user = gate.user
+    const supabase = gate.supabase
 
     const body = await request.json()
     const conversationId = String(body?.conversation_id || "")

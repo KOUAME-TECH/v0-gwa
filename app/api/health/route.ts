@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/auth/require-admin'
 import {
   hasAfricasTalkingProvider,
   hasAfricasTalkingSenderId,
@@ -19,7 +20,19 @@ function envSet(name: string): boolean {
   return !!(process.env[name] || '').replace(/^"|"$/g, '').trim()
 }
 
-export async function GET() {
+async function isPrivilegedHealth(request: Request): Promise<boolean> {
+  const cronSecret = (process.env.CRON_SECRET || '').trim()
+  const auth = request.headers.get('authorization') || ''
+  if (cronSecret && auth === `Bearer ${cronSecret}`) return true
+  try {
+    const gate = await requireAdmin()
+    return !!gate.isAdmin
+  } catch {
+    return false
+  }
+}
+
+export async function GET(request: Request) {
   let dbStatus = 'unknown'
   try {
     const supabase = await createClient()
@@ -29,6 +42,21 @@ export async function GET() {
     dbStatus = 'error'
   }
   const healthy = dbStatus === 'connected'
+
+  const privileged = await isPrivilegedHealth(request)
+  if (!privileged) {
+    return NextResponse.json(
+      {
+        status: healthy ? 'healthy' : 'degraded',
+        app: 'GWA Platform',
+        ping: 'pong',
+        db: dbStatus,
+        ts: new Date().toISOString(),
+      },
+      { status: healthy ? 200 : 503 },
+    )
+  }
+
   const smsConfigured = hasSmsProvider()
   const otpPepper = envSet('OTP_PEPPER')
   const cronSecret = envSet('CRON_SECRET')

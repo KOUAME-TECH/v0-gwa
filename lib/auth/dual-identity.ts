@@ -17,6 +17,19 @@ export const USER_TYPE_MAP: Record<string, string> = {
   cooperative: "cooperative",
 }
 
+/**
+ * Types autorisés à l'inscription / OTP client.
+ * `cooperative` UNIQUEMENT via POST /api/cooperatives (service_role).
+ */
+export function safeSelfServeUserType(
+  raw: string | null | undefined,
+): "acheteur" | "producteur" | undefined {
+  if (!raw) return undefined
+  const mapped = USER_TYPE_MAP[raw] || raw
+  if (mapped === "producteur" || mapped === "acheteur") return mapped
+  return undefined
+}
+
 const PRODUCT_TYPES = new Set(["producteur", "acheteur", "cooperative"])
 
 /** Type métier canonique (producteur | acheteur | cooperative) ou null. */

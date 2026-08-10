@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+import { randomBytes } from "crypto"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { requireUser } from "@/lib/auth/require-admin"
 import { assertSameOrigin } from "@/lib/security/csrf"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { sanitizePlainText } from "@/lib/security/validation"
@@ -24,13 +25,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })
     }
 
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
+    const gate = await requireUser()
+    if (!gate.user) {
+      return NextResponse.json(
+        { error: gate.error || "Non authentifié" },
+        { status: gate.suspended ? 403 : 401 },
+      )
     }
+    const user = gate.user
 
     const body = await request.json().catch(() => null)
     if (!body || typeof body !== "object") {
@@ -85,7 +87,7 @@ export async function POST(request: NextRequest) {
         validation_status: "pending_validation",
         members_deadline_at: membersDeadline.toISOString(),
         docs_deadline_at: docsDeadline.toISOString(),
-        invite_code: `gwa-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+        invite_code: randomBytes(16).toString("hex"),
       })
       .select("id, name, slug, validation_status, invite_code")
       .single()

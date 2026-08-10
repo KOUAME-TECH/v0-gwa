@@ -14,6 +14,11 @@ export type PriceOfferPayload = {
   productId?: string
   status: OfferStatus
   note?: string
+  /** Set only by server /api/offers/respond — never trust client. */
+  accepted_by?: string
+  accepted_at?: string
+  declined_by?: string
+  declined_at?: string
 }
 
 export function buildOfferContent(input: {

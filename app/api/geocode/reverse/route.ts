@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server"
+import { requireUser } from "@/lib/auth/require-admin"
+import { checkRateLimit } from "@/lib/security/rate-limiter"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -21,6 +23,19 @@ type ReverseResult = {
  * Reverse geocode précis (Nominatim, zoom bâtiment/rue).
  */
 export async function GET(request: Request) {
+  const gate = await requireUser()
+  if (!gate.user) {
+    return NextResponse.json(
+      { error: gate.error || "Non authentifié" },
+      { status: gate.suspended ? 403 : 401 },
+    )
+  }
+
+  const rate = await checkRateLimit("API_GENERAL")
+  if (!rate.success) {
+    return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })
+  }
+
   const { searchParams } = new URL(request.url)
   const lat = Number(searchParams.get("lat"))
   const lon = Number(searchParams.get("lon"))

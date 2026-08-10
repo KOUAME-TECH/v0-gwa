@@ -111,12 +111,14 @@ async function askOpenAICompat(opts: {
   apiKey: string
   model: string
   baseUrl: string
+  extraHeaders?: Record<string, string>
 }): Promise<YellyChatResult | null> {
   const res = await fetch(`${opts.baseUrl}/chat/completions`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${opts.apiKey}`,
       "Content-Type": "application/json",
+      ...(opts.extraHeaders || {}),
     },
     body: JSON.stringify({
       model: opts.model,
@@ -146,6 +148,7 @@ export async function askYelly(opts: AskYellyInput): Promise<YellyChatResult> {
   const userMsg = sanitizePlainText(opts.message, 800)
   const geminiKey = await resolveGeminiKey()
   const model = resolveModel()
+  const gatewayKey = (process.env.AI_GATEWAY_API_KEY || "").trim()
   const openAiKey = process.env.OPENAI_API_KEY || ""
   const baseUrl = (process.env.YELLY_BASE_URL || "https://api.openai.com/v1").replace(
     /\/$/,
@@ -161,12 +164,31 @@ export async function askYelly(opts: AskYellyInput): Promise<YellyChatResult> {
     systemPrompt: opts.systemPrompt,
   })
   const history = (opts.history || []).filter((h) => h.role !== "system").slice(-8)
+  const messages: YellyMessage[] = [
+    { role: "system", content: system },
+    ...history.slice(-6),
+    { role: "user", content: userMsg },
+  ]
 
-  if (!geminiKey && !openAiKey) {
+  if (!gatewayKey && !geminiKey && !openAiKey) {
     return { reply: keywordFallback(userMsg, opts.page), source: "fallback" }
   }
 
   try {
+    // Prefer Vercel AI Gateway when configured (before direct Gemini/OpenAI)
+    if (gatewayKey) {
+      const gateway = await askOpenAICompat({
+        messages,
+        apiKey: gatewayKey,
+        model: process.env.YELLY_GATEWAY_MODEL || "google/gemini-2.5-flash",
+        baseUrl: "https://ai-gateway.vercel.sh/v1",
+        extraHeaders: {
+          "ai-reporting-tags": "yelly,gwa",
+        },
+      })
+      if (gateway) return gateway
+    }
+
     if (geminiKey) {
       const gemini = await askGemini({
         system,
@@ -179,11 +201,6 @@ export async function askYelly(opts: AskYellyInput): Promise<YellyChatResult> {
     }
 
     if (openAiKey) {
-      const messages: YellyMessage[] = [
-        { role: "system", content: system },
-        ...history.slice(-6),
-        { role: "user", content: userMsg },
-      ]
       const openai = await askOpenAICompat({
         messages,
         apiKey: openAiKey,

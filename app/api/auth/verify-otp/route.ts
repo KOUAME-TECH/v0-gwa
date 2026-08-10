@@ -8,6 +8,7 @@ import {
   computeProfileCompletion,
   USER_TYPE_MAP,
 } from "@/lib/auth/post-auth"
+import { safeSelfServeUserType } from "@/lib/auth/dual-identity"
 import {
   getOtp,
   bumpOtpAttempts,
@@ -354,13 +355,11 @@ export async function POST(request: Request) {
         })
 
         if (profileData) {
-          const mappedType = profileData.userType
-            ? USER_TYPE_MAP[profileData.userType] || profileData.userType
-            : undefined
+          const mappedType = safeSelfServeUserType(profileData.userType)
           const profileUpdate = {
             phone: formatted,
             full_name: profileData.name || undefined,
-            user_type: mappedType,
+            ...(mappedType ? { user_type: mappedType } : {}),
             country: profileData.country || undefined,
             city: profileData.city || undefined,
             auth_method: "phone" as const,
@@ -444,13 +443,11 @@ export async function POST(request: Request) {
       })
 
       if (profileData) {
-        const mappedType = profileData.userType
-          ? USER_TYPE_MAP[profileData.userType] || profileData.userType
-          : undefined
+        const mappedType = safeSelfServeUserType(profileData.userType)
         const profileUpdate = {
           phone: formatted,
           full_name: profileData.name || undefined,
-          user_type: mappedType,
+          ...(mappedType ? { user_type: mappedType } : {}),
           country: profileData.country || undefined,
           city: profileData.city || undefined,
           auth_method: "phone" as const,
@@ -498,14 +495,12 @@ export async function POST(request: Request) {
     }
 
     if (profileData) {
-      const mappedType = profileData.userType
-        ? USER_TYPE_MAP[profileData.userType] || profileData.userType
-        : undefined
+      const mappedType = safeSelfServeUserType(profileData.userType)
 
       const profileUpdate = {
         phone: formatted,
         full_name: profileData.name || undefined,
-        user_type: mappedType,
+        ...(mappedType ? { user_type: mappedType } : {}),
         country: profileData.country || undefined,
         city: profileData.city || undefined,
         auth_method: "phone" as const,
@@ -528,7 +523,7 @@ export async function POST(request: Request) {
       await supabase.auth.updateUser({
         data: {
           full_name: profileData.name,
-          user_type: mappedType,
+          ...(mappedType ? { user_type: mappedType } : {}),
           country: profileData.country,
           city: profileData.city,
           phone: formatted,

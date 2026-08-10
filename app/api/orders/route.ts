@@ -1,5 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
+import { requireUser } from "@/lib/auth/require-admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { sendPushToUser } from "@/lib/notifications/push"
 
@@ -53,13 +55,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })
     }
 
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
+    const gate = await requireUser()
+    if (!gate.user) {
+      return NextResponse.json(
+        { error: gate.error || "Non authentifié" },
+        { status: gate.suspended ? 403 : 401 },
+      )
     }
+    const user = gate.user
+    const supabase = gate.supabase
 
     const body = await request.json()
     const sellerId = String(body?.seller_id || "")
@@ -213,16 +217,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: itemsError.message }, { status: 400 })
     }
 
-    // Décrémente stock (best-effort) — réservation soft jusqu'au pay
+    // Stock atomique (RPC) — annule la commande si rupture concurrente
+    const admin = createAdminClient()
     for (const li of lineItems) {
-      const product = priceMap.get(li.product_id)
-      if (!product || product.stock_quantity == null) continue
-      const next = Math.max(0, Number(product.stock_quantity) - li.quantity)
-      await supabase
-        .from("products")
-        .update({ stock_quantity: next, updated_at: new Date().toISOString() })
-        .eq("id", li.product_id)
-        .eq("seller_id", sellerId)
+      const { error: stockErr } = await admin.rpc("decrement_product_stock", {
+        p_product_id: li.product_id,
+        p_qty: li.quantity,
+      })
+      if (stockErr) {
+        await admin.from("order_items").delete().eq("order_id", order.id)
+        await admin.from("orders").delete().eq("id", order.id)
+        return NextResponse.json(
+          { error: "Stock insuffisant", code: "OUT_OF_STOCK" },
+          { status: 400 },
+        )
+      }
     }
 
     // Escrow tranche unique (100% à livraison) — pending jusqu'au pay

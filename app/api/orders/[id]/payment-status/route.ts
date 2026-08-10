@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server"
-import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { requireUser } from "@/lib/auth/require-admin"
 import {
   getFeexPayCredentials,
   isFeexPayFailedStatus,
@@ -17,13 +17,15 @@ type Ctx = { params: Promise<{ id: string }> }
 export async function GET(_request: NextRequest, context: Ctx) {
   try {
     const { id } = await context.params
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
+    const gate = await requireUser()
+    if (!gate.user) {
+      return NextResponse.json(
+        { error: gate.error || "Non authentifié" },
+        { status: gate.suspended ? 403 : 401 },
+      )
     }
+    const user = gate.user
+    const supabase = gate.supabase
 
     const { data: order } = await supabase
       .from("orders")
@@ -49,6 +51,32 @@ export async function GET(_request: NextRequest, context: Ctx) {
     ) {
       const verified = await verifyFeexPayTransaction(String(order.feexpay_ref))
       if (verified.ok && isFeexPayPaidStatus(verified.status)) {
+        const raw = verified.raw || {}
+        const paidAmount = Number(
+          raw.amount ?? raw.paid_amount ?? raw.montant ?? NaN,
+        )
+        const expectedAmt = Number(order.total_amount)
+        if (
+          Number.isFinite(paidAmount) &&
+          Number.isFinite(expectedAmt) &&
+          paidAmount + 1e-6 < expectedAmt
+        ) {
+          console.error(
+            `[api/orders/payment-status] amount_mismatch ref=${order.feexpay_ref} paid=${paidAmount} expected=${expectedAmt}`,
+          )
+          return NextResponse.json({
+            order_id: id,
+            payment_status: "processing",
+            escrow_status: order.escrow_status,
+            status: order.status,
+            feexpay_ref: order.feexpay_ref,
+            verified: true,
+            amount_mismatch: true,
+            paid_amount: paidAmount,
+            expected_amount: expectedAmt,
+          })
+        }
+
         const admin = createAdminClient()
         const now = new Date().toISOString()
         await admin

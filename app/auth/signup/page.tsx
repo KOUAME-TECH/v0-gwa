@@ -13,7 +13,6 @@ import {
   EyeOff,
   Sprout,
   ShoppingCart,
-  Users,
   Check,
   Phone,
   Mail,
@@ -27,8 +26,8 @@ import { OtpInput, OtpCountdown } from "@/components/auth/otp-input"
 import { maskPhone } from "@/lib/auth/phone"
 import {
   computeProfileCompletion,
-  USER_TYPE_MAP,
 } from "@/lib/auth/post-auth"
+import { safeSelfServeUserType } from "@/lib/auth/dual-identity"
 import { mergeGuestCartToUser } from "@/lib/cart/guest"
 import { cn } from "@/lib/utils"
 import { HibpPasswordBanner } from "@/components/auth/hibp-password-banner"
@@ -38,7 +37,6 @@ import { GwaMark } from "@/components/brand/gwa-mark"
 const userTypes = [
   { value: "farmer", label: "Producteur", icon: Sprout },
   { value: "buyer", label: "Acheteur", icon: ShoppingCart },
-  { value: "cooperative", label: "Cooperative", icon: Users },
 ]
 
 const countries = [
@@ -213,7 +211,7 @@ function SignupForm() {
       return false
     }
 
-    const mappedType = USER_TYPE_MAP[formData.userType] || formData.userType
+    const mappedType = safeSelfServeUserType(formData.userType) || "acheteur"
     // NB: le numéro est déjà écrit (vérifié) par /api/auth/verify-otp via le
     // service_role. On ne le réécrit pas ici : le trigger DB gèle profiles.phone
     // pour les clients normaux (anti-takeover).
@@ -339,7 +337,7 @@ function SignupForm() {
     }
 
     const supabase = createClient()
-    const mappedType = USER_TYPE_MAP[formData.userType] || formData.userType
+    const mappedType = safeSelfServeUserType(formData.userType) || "acheteur"
 
     const { data, error: authError } = await supabase.auth.signUp({
       email: formData.email,

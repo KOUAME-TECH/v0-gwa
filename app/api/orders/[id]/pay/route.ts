@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { requireUser } from "@/lib/auth/require-admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { sendPushToUser } from "@/lib/notifications/push"
 import {
@@ -46,13 +46,15 @@ export async function POST(request: NextRequest, context: Ctx) {
     }
 
     const { id } = await context.params
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
+    const gate = await requireUser()
+    if (!gate.user) {
+      return NextResponse.json(
+        { error: gate.error || "Non authentifié" },
+        { status: gate.suspended ? 403 : 401 },
+      )
     }
+    const user = gate.user
+    const supabase = gate.supabase
 
     const { data: order } = await supabase
       .from("orders")
