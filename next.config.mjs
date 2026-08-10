@@ -1,4 +1,5 @@
-/** @type {import('next').NextConfig} */
+import { withSentryConfig } from '@sentry/nextjs'
+
 const securityHeaders = [
   { key: 'X-DNS-Prefetch-Control', value: 'on' },
   { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
@@ -31,6 +32,7 @@ const securityHeaders = [
 ]
 
 const nextConfig = {
+<<<<<<< Updated upstream
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -47,6 +49,10 @@ const nextConfig = {
       },
     ],
   },
+=======
+  typescript: { ignoreBuildErrors: true },
+  images: { unoptimized: true },
+>>>>>>> Stashed changes
   poweredByHeader: false,
   compress: true,
   experimental: {
@@ -114,4 +120,11 @@ const nextConfig = {
   ],
 }
 
-export default nextConfig
+export default withSentryConfig(nextConfig, {
+  silent: true,
+  org: 'gwa-platform',
+  project: 'gwa-web',
+  hideSourceMaps: true,
+  widenClientFileUpload: true,
+  disableLogger: true,
+})

@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -79,10 +80,46 @@ export async function POST(request: Request) {
           code: "SMS_PROVIDER_MISSING",
         },
         { status: 503 },
+=======
+/**
+ * POST /api/auth/send-otp
+ * Envoie un OTP SMS via Supabase Auth (provider Twilio configuré dans le dashboard)
+ * Body: { phone: string }  — format E.164 : +22507XXXXXXXX
+ */
+import { type NextRequest, NextResponse } from "next/server"
+import { createClient } from "@/lib/supabase/server"
+import { validateCIPhone, checkOtpRateLimit } from "@/lib/auth/otp"
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { phone } = body as { phone: string }
+
+    if (!phone) {
+      return NextResponse.json({ error: "Numéro de téléphone requis" }, { status: 400 })
+    }
+
+    // Validation format CI (accepte le format E.164 +225...)
+    const localPhone = phone.replace(/^\+225/, "")
+    if (!validateCIPhone(localPhone)) {
+      return NextResponse.json(
+        { error: "Numéro invalide. Format CI requis (ex: +22507XXXXXXXX)" },
+        { status: 400 }
+      )
+    }
+
+    // Rate limit : 5 tentatives / 15 min par numéro
+    const { allowed, waitSeconds } = checkOtpRateLimit(phone)
+    if (!allowed) {
+      return NextResponse.json(
+        { error: `Trop de tentatives. Réessayez dans ${waitSeconds} secondes.` },
+        { status: 429 }
+>>>>>>> Stashed changes
       )
     }
 
     const supabase = await createClient()
+<<<<<<< Updated upstream
     const {
       data: { user: sessionUser },
     } = await supabase.auth.getUser()
@@ -312,6 +349,27 @@ export async function POST(request: Request) {
     })
   } catch (err) {
     console.error("[auth/send-otp]", err)
+=======
+
+    // Supabase Auth envoie l'OTP via le provider SMS configuré (Twilio)
+    const { error } = await supabase.auth.signInWithOtp({
+      phone,
+      options: { shouldCreateUser: true },
+    })
+
+    if (error) {
+      console.error("[GWA] send-otp error:", error.message)
+      // Message générique pour ne pas exposer les détails
+      return NextResponse.json(
+        { error: "Impossible d'envoyer le code. Vérifiez votre numéro." },
+        { status: 400 }
+      )
+    }
+
+    return NextResponse.json({ success: true, expires_in: 600 })
+  } catch (err) {
+    console.error("[GWA] send-otp unexpected:", err)
+>>>>>>> Stashed changes
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 })
   }
 }

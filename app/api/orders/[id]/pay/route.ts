@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -217,6 +218,107 @@ export async function POST(request: NextRequest, context: Ctx) {
     })
   } catch (err) {
     console.error("[api/orders/pay]", err)
+=======
+/**
+ * POST /api/orders/[id]/pay
+ * Initie le paiement escrow via Feexpay
+ * Body: { paiement_type, phone_paiement }
+ */
+import { type NextRequest, NextResponse } from "next/server"
+import { createClient } from "@/lib/supabase/server"
+import { capturePayment, type FeexpayNetwork } from "@/lib/payment/feexpay"
+import { sendPushNotification } from "@/lib/notifications/push"
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id: orderId } = await params
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
+
+    const body = await request.json()
+    const { paiement_type, phone_paiement } = body as {
+      paiement_type: FeexpayNetwork
+      phone_paiement: string
+    }
+
+    // Charger la commande
+    const { data: order } = await supabase
+      .from("orders")
+      .select("*, profiles!orders_seller_id_fkey(full_name)")
+      .eq("id", orderId)
+      .eq("buyer_id", user.id)
+      .single()
+
+    if (!order) return NextResponse.json({ error: "Commande introuvable" }, { status: 404 })
+    if (order.escrow_status !== "pending") {
+      return NextResponse.json({ error: "Cette commande a déjà été payée" }, { status: 400 })
+    }
+
+    // Charger profil acheteur pour le nom
+    const { data: buyer } = await supabase
+      .from("profiles")
+      .select("full_name, phone")
+      .eq("id", user.id)
+      .single()
+
+    const nameParts = (buyer?.full_name ?? "").split(" ")
+
+    // Appel Feexpay
+    const result = await capturePayment({
+      amount: order.total_amount,
+      phoneNumber: phone_paiement,
+      network: paiement_type,
+      motif: `Commande GWA ${order.order_number}`,
+      orderId: order.id,
+      buyerEmail: user.email,
+      buyerFirstName: nameParts[0],
+      buyerLastName: nameParts.slice(1).join(" "),
+    })
+
+    if (!result.success) {
+      return NextResponse.json({ error: result.message ?? "Échec du paiement" }, { status: 400 })
+    }
+
+    // Mettre à jour la commande — statut en attente webhook
+    await supabase
+      .from("orders")
+      .update({
+        feexpay_ref: result.feexpay_ref,
+        paiement_type,
+        status: "paiement_escrow",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", orderId)
+
+    // Mettre à jour escrow_transaction tranche 1
+    await supabase
+      .from("escrow_transactions")
+      .update({
+        feexpay_ref: result.feexpay_ref,
+        paid_at: new Date().toISOString(),
+      })
+      .eq("order_id", orderId)
+      .eq("tranche_numero", 1)
+
+    // Notif acheteur
+    await sendPushNotification(user.id, {
+      title: "Paiement en cours...",
+      body: `Validez le paiement de ${order.total_amount.toLocaleString("fr-FR")} FCFA sur votre téléphone.`,
+      data: { type: "payment", order_id: orderId },
+    }).catch(() => null)
+
+    return NextResponse.json({
+      success: true,
+      feexpay_ref: result.feexpay_ref,
+      message: "Confirmez le paiement sur votre téléphone.",
+    })
+  } catch (err) {
+    console.error("[GWA] /api/orders/[id]/pay error:", err)
+>>>>>>> Stashed changes
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 })
   }
 }

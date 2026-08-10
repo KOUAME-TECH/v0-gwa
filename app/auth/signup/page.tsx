@@ -3,10 +3,6 @@
 import React, { Suspense, useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   ArrowLeft,
   Eye,
@@ -20,6 +16,10 @@ import {
   MapPin,
   Loader2,
 } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { createClient } from "@/lib/supabase/client"
 import { mapAuthErrorMessage } from "@/lib/auth/auth-errors"
 import { PhoneInput } from "@/components/auth/phone-input"
@@ -41,19 +41,18 @@ const userTypes = [
   { value: "cooperative", label: "Cooperative", icon: Users },
 ]
 
-const countries = [
+// Minimal countries list used for fallback location select
+const countries: { value: string; label: string }[] = [
   { value: "ci", label: "Côte d'Ivoire" },
   { value: "sn", label: "Sénégal" },
-  { value: "cm", label: "Cameroun" },
   { value: "ml", label: "Mali" },
   { value: "bf", label: "Burkina Faso" },
   { value: "gh", label: "Ghana" },
+  { value: "gn", label: "Guinée" },
+  { value: "cm", label: "Cameroun" },
   { value: "bj", label: "Bénin" },
   { value: "tg", label: "Togo" },
-  { value: "gn", label: "Guinée" },
-  { value: "ne", label: "Niger" },
   { value: "ng", label: "Nigeria" },
-  { value: "ma", label: "Maroc" },
 ]
 
 function countryNameToCode(name: string | null | undefined): string {
@@ -151,7 +150,6 @@ function SignupForm() {
       setOtp("")
       if (data.account_hint === "existing") {
         setError(null)
-        // Soft info: compte existant → OTP = connexion
         setExistingAccountHint(true)
       } else {
         setExistingAccountHint(false)
@@ -214,9 +212,6 @@ function SignupForm() {
     }
 
     const mappedType = USER_TYPE_MAP[formData.userType] || formData.userType
-    // NB: le numéro est déjà écrit (vérifié) par /api/auth/verify-otp via le
-    // service_role. On ne le réécrit pas ici : le trigger DB gèle profiles.phone
-    // pour les clients normaux (anti-takeover).
     const profileUpdate = {
       full_name: formData.name,
       user_type: mappedType,
@@ -253,7 +248,6 @@ function SignupForm() {
       },
     })
 
-    // Lier email au téléphone déjà vérifié
     if (formData.linkedEmail?.trim()) {
       await fetch("/api/auth/link-email", {
         method: "POST",
@@ -353,8 +347,6 @@ function SignupForm() {
           user_type: mappedType,
           country: formData.country,
           city: formData.city,
-          // Numéro NON vérifié : stocké comme "pending" seulement. Il ne doit
-          // jamais servir de preuve d'identité ni être lu par send-otp (lookup).
           pending_phone: formData.phone || phone,
           auth_method: "email",
         },
@@ -377,8 +369,6 @@ function SignupForm() {
         email: formData.email,
         phone: phoneVal,
       })
-      // On n'écrit PAS profiles.phone ici : un numéro saisi à l'inscription email
-      // n'est pas vérifié. Il sera lié après un OTP réussi ("bind phone").
       await supabase
         .from("profiles")
         .update({
@@ -473,7 +463,7 @@ function SignupForm() {
                   Rejoins GWA
                 </h1>
                 <p className="mt-2 text-[15px] leading-relaxed text-[#4B5563]">
-                  Ton numéro ou ton email — on s’occupe du reste.
+                  Ton numéro ou ton email — on s'occupe du reste.
                 </p>
               </div>
 
@@ -749,7 +739,6 @@ function SignupForm() {
                 </div>
               )}
 
-              {/* Fallback discret si GPS refusé */}
               {geoStatus === "denied" && (
                 <div className="space-y-3">
                   <p className="text-xs text-amber-700">

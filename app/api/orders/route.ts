@@ -117,7 +117,6 @@ export async function POST(request: NextRequest) {
         )
       }
       const qty = Math.max(1, Math.min(999_999, Number(item.quantity) || 1))
-      // Prix toujours depuis la DB — ignorer unit_price client
       const unitPrice = Number(product.price)
       if (!Number.isFinite(unitPrice) || unitPrice < 0) {
         return NextResponse.json(
@@ -135,7 +134,6 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Décision DG : 0 frais GWA acheteur ; commission vendeur selon palier vendeur
     const shipping = 0
     const { data: sellerProfile } = await supabase
       .from("profiles")
@@ -199,7 +197,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: itemsError.message }, { status: 400 })
     }
 
-    // Escrow tranche unique (100% à livraison) — pending jusqu'au pay
     await supabase.from("escrow_transactions").insert({
       order_id: order.id,
       tranche_numero: 1,
@@ -218,7 +215,6 @@ export async function POST(request: NextRequest) {
       notes: "Créée via /api/orders",
     })
 
-    // Notif + push vendeur
     await supabase.from("notifications").insert({
       user_id: sellerId,
       type: "order",

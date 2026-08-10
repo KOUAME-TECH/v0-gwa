@@ -3,10 +3,10 @@
 import React, { Suspense, useState, useCallback, useEffect } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
+import { ArrowLeft, Eye, EyeOff, Phone, Mail } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ArrowLeft, Eye, EyeOff, Phone, Mail } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { mapAuthErrorMessage } from "@/lib/auth/auth-errors"
 import { PhoneInput } from "@/components/auth/phone-input"
@@ -63,7 +63,7 @@ function LoginForm() {
         return
       }
 
-      // Double identité : serveur préfère l’espace métier ; staff-only → /admin
+      // Double identité : serveur préfère l'espace métier ; staff-only → /admin
       try {
         const res = await fetch("/api/auth/post-auth-destination")
         const data = await res.json().catch(() => ({}))
@@ -157,9 +157,8 @@ function LoginForm() {
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsLoading(true)
     setError(null)
-
+    setIsLoading(true)
     try {
       const supabase = createClient()
       const { data, error: authError } = await supabase.auth.signInWithPassword({
@@ -206,7 +205,7 @@ function LoginForm() {
             Content de te revoir
           </h1>
           <p className="mt-2 text-[15px] leading-relaxed text-[#4B5563]">
-            Entre avec ton numéro ou ton email — comme d’habitude.
+            Entre avec ton numéro ou ton email — comme d'habitude.
           </p>
         </div>
 
@@ -253,7 +252,7 @@ function LoginForm() {
                     disabled={isLoading}
                   />
                   <p className="mt-2 text-xs leading-relaxed text-[#6B7280]">
-                    On t’envoie un code SMS. Utilise le même numéro qu’à l’inscription.
+                    On t'envoie un code SMS. Utilise le même numéro qu'à l'inscription.
                   </p>
                 </div>
                 <Button

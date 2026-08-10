@@ -66,6 +66,12 @@ interface AuditLog {
   action: string
   old_value: string | null
   new_value: string | null
+<<<<<<< Updated upstream
+=======
+  old_status?: string
+  new_status?: string
+  change_reason?: string | null
+>>>>>>> Stashed changes
   performed_by: string | null
   notes: string | null
   created_at: string

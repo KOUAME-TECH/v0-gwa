@@ -323,6 +323,7 @@ function MarketplaceContent() {
         .order("created_at", { ascending: false })
         .limit(48)
 
+<<<<<<< Updated upstream
       const digestIdsQuery =
         digestIds.length > 0
           ? supabase
@@ -378,6 +379,12 @@ function MarketplaceContent() {
     } finally {
       setIsLoading(false)
     }
+=======
+    if (productsRes.data) setProducts(productsRes.data as unknown as Product[])
+    if (categoriesRes.data) setCategories(categoriesRes.data)
+    if (favsRes.data) setFavorites(new Set((favsRes.data as { product_id: string }[]).map(f => f.product_id)))
+    setIsLoading(false)
+>>>>>>> Stashed changes
   }
 
   async function toggleFavorite(id: string, e: React.MouseEvent) {

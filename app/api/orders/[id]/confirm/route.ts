@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -251,6 +252,79 @@ export async function POST(request: NextRequest, context: Ctx) {
     })
   } catch (err) {
     console.error("[api/orders/confirm]", err)
+=======
+/**
+ * POST /api/orders/[id]/confirm — Vendeur confirme la commande
+ * Body optionnel: { delivery_deadline?: string (ISO date) }
+ */
+import { type NextRequest, NextResponse } from "next/server"
+import { createClient } from "@/lib/supabase/server"
+import { sendPushNotification } from "@/lib/notifications/push"
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id: orderId } = await params
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
+
+    // Seul le vendeur peut confirmer
+    const { data: order } = await supabase
+      .from("orders")
+      .select("*")
+      .eq("id", orderId)
+      .eq("seller_id", user.id)
+      .single()
+
+    if (!order) return NextResponse.json({ error: "Commande introuvable" }, { status: 404 })
+    if (!["en_attente", "paiement_escrow"].includes(order.status)) {
+      return NextResponse.json(
+        { error: `Impossible de confirmer une commande en statut "${order.status}"` },
+        { status: 400 }
+      )
+    }
+
+    let body: { delivery_deadline?: string } = {}
+    try {
+      const text = await request.text()
+      if (text) body = JSON.parse(text)
+    } catch {
+      // body optionnel — ignorer l'erreur de parsing
+    }
+
+    const now = new Date().toISOString()
+    const updates: Record<string, unknown> = {
+      status: "confirme",
+      updated_at: now,
+    }
+    if (body.delivery_deadline) {
+      updates.delivery_deadline = body.delivery_deadline
+    }
+
+    const { error: updateError } = await supabase
+      .from("orders")
+      .update(updates)
+      .eq("id", orderId)
+
+    if (updateError) {
+      console.error("[GWA] confirm order update error:", updateError)
+      return NextResponse.json({ error: updateError.message }, { status: 500 })
+    }
+
+    // Notifier l'acheteur
+    await sendPushNotification(order.buyer_id, {
+      title: "Commande confirmée ✓",
+      body: `Le vendeur a confirmé votre commande ${order.order_number}. Préparation en cours.`,
+      data: { type: "order_status", order_id: orderId },
+    }).catch(() => null)
+
+    return NextResponse.json({ success: true, order_id: orderId })
+  } catch (err) {
+    console.error("[GWA] POST /api/orders/[id]/confirm exception:", err)
+>>>>>>> Stashed changes
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 })
   }
 }

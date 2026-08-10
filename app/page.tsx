@@ -310,6 +310,7 @@ export default function HomePage() {
           profiles: profileMap.get(post.author_id) || null,
         }))
 
+<<<<<<< Updated upstream
         const feedItems: FeedItem[] = []
         const rankedProducts = ([...(products || [])] as Product[]).sort((a, b) => {
           const pa = feedPriorityForTier(a.profiles?.subscription_tier)
@@ -318,6 +319,30 @@ export default function HomePage() {
           return Date.parse(b.created_at || "0") - Date.parse(a.created_at || "0")
         })
         const maxLen = Math.max(rankedProducts.length, posts.length)
+=======
+      // Melanger produits et posts dans le feed
+      const feedItems: FeedItem[] = []
+      const maxLen = Math.max(products?.length || 0, posts?.length || 0)
+      
+      for (let i = 0; i < maxLen; i++) {
+        if (products?.[i]) {
+          feedItems.push({ 
+            type: "product", 
+            data: products[i] as unknown as Product,
+            isLiked: userFavorites.includes(products[i].id),
+            isSaved: userFavorites.includes(products[i].id)
+          })
+        }
+        if (posts?.[i]) {
+          feedItems.push({ 
+            type: "post", 
+            data: posts[i] as Post,
+            isLiked: userLikes.includes(posts[i].id),
+            isSaved: false
+          })
+        }
+      }
+>>>>>>> Stashed changes
 
         for (let i = 0; i < maxLen; i++) {
           if (rankedProducts[i]) {
@@ -522,7 +547,7 @@ export default function HomePage() {
               ...f.data,
               likes_count: isLiked ? f.data.likes_count - 1 : f.data.likes_count + 1
             }
-          }
+          } as FeedItem
         : f
     ))
 
@@ -543,7 +568,7 @@ export default function HomePage() {
     } catch (error) {
       // Annuler en cas d'erreur
       setFeed(prev => prev.map(f => 
-        f.data.id === itemId ? { ...f, isLiked, data: { ...f.data, likes_count: item.data.likes_count } } : f
+        f.data.id === itemId ? { ...f, isLiked, data: { ...f.data, likes_count: item.data.likes_count } } as FeedItem : f
       ))
       toast.error("Erreur lors de l'enregistrement")
     }
@@ -701,6 +726,7 @@ export default function HomePage() {
         voiceStored: boolean
       }
 
+<<<<<<< Updated upstream
       if (replyTo) {
         const inject = (list: Comment[]): Comment[] =>
           list.map((c) => {
@@ -725,6 +751,30 @@ export default function HomePage() {
           prev ? { ...prev, data: { ...prev.data, comments_count: newCount } } : prev,
         )
       }
+=======
+      if (error) throw error
+
+      // Charger le profil de l'utilisateur
+      const { data: profile } = await supabase.from("profiles").select("id, full_name, avatar_url").eq("id", user.id).single()
+
+      // Ajouter le commentaire
+      setComments(prev => [{
+        id: data.id,
+        content: data.content || data.comment,
+        created_at: data.created_at,
+        author: profile
+      }, ...prev])
+
+      // Mettre à jour le compteur
+      const newCount = selectedItem.data.comments_count + 1
+      setFeed(prev => prev.map(f => 
+        f.data.id === selectedItem.data.id 
+          ? { ...f, data: { ...f.data, comments_count: newCount } } as FeedItem
+          : f
+      ))
+
+      await supabase.from(countTable).update({ comments_count: newCount }).eq("id", selectedItem.data.id)
+>>>>>>> Stashed changes
 
       setNewComment("")
       setReplyTo(null)
@@ -768,7 +818,7 @@ export default function HomePage() {
 
       setFeed(prev => prev.map(f => 
         f.data.id === shareItem.data.id 
-          ? { ...f, data: { ...f.data, shares_count: newCount } }
+          ? { ...f, data: { ...f.data, shares_count: newCount } } as FeedItem
           : f
       ))
     } catch (error) {
@@ -1511,8 +1561,13 @@ const FeedCard = memo(function FeedCard({
             <p className="text-[11px] text-[#6B7280] flex items-center gap-1 truncate">
               {isProduct ? (
                 <>
+<<<<<<< Updated upstream
                   <MapPin className="h-3 w-3 shrink-0" />
                   {(data as Product).origin_region || (data as Product).origin_country || ("city" in (profile || {}) ? (profile as { city?: string }).city : null) || "Afrique"}
+=======
+                  <MapPin className="h-3 w-3" />
+                  {(data as Product).origin_region || (data as Product).origin_country || (profile as { city?: string })?.city || "Afrique"}
+>>>>>>> Stashed changes
                 </>
               ) : (
                 <>{formatTimeAgo(data.created_at)}</>
