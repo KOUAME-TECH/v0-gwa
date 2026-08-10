@@ -1107,7 +1107,7 @@ export default function HomePage() {
           </div>
           <div className="mt-6 flex flex-col gap-1 border-t border-[#1F5C2E]/10 pt-4">
             {[
-              { key: "tout", label: "Pour vous" },
+              { key: "tout", label: "Pour toi" },
               { key: "suivis", label: "Suivis" },
               { key: "produits", label: "Produits" },
               { key: "publications", label: "Publications" },
