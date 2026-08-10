@@ -1,4 +1,5 @@
-import { createBrowserClient, type SupabaseClient } from '@supabase/ssr'
+import { createBrowserClient } from '@supabase/ssr'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 // Attach the singleton to globalThis so it survives module re-evaluation
 // across separate bundles. A plain module-level variable can be duplicated

@@ -145,6 +145,53 @@ function MessagesContent() {
     return () => { mounted = false }
   }, [])
 
+  // ── Supabase Realtime : nouveaux messages entrants ──────────────────────────
+  useEffect(() => {
+    if (!user) return
+    const supabase = createClient()
+
+    const channel = supabase
+      .channel(`inbox:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `recipient_id=eq.${user.id}`,
+        },
+        (payload) => {
+          const newMsg = payload.new as {
+            id: string
+            conversation_id: string
+            sender_id: string
+            content: string
+            created_at: string
+            status: string
+          }
+
+          // Mettre à jour le badge non-lu sur la bonne conversation
+          setConversations((prev) =>
+            prev.map((conv) =>
+              conv.id === newMsg.conversation_id
+                ? { ...conv, unread_count: (conv.unread_count ?? 0) + 1, last_message: newMsg.content }
+                : conv
+            )
+          )
+
+          // Son de notification si pas dans cette conversation
+          if (!selectedConv || selectedConv.id !== newMsg.conversation_id) {
+            new Audio('/sounds/message.mp3').play().catch(() => null)
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [user, selectedConv])
+
   // Handle "to" param - open existing or create new conversation
   useEffect(() => {
     if (!user || !recipientId || loading) return

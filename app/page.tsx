@@ -307,6 +307,7 @@ export default function HomePage() {
         const metaPromise = currentUser
           ? Promise.all([
               supabase.from("post_likes").select("post_id").eq("user_id", currentUser.id).limit(200),
+              supabase.from("product_likes").select("product_id").eq("user_id", currentUser.id).limit(200),
               supabase.from("favorites").select("product_id").eq("user_id", currentUser.id).limit(200),
               supabase.from("profiles").select("user_type").eq("id", currentUser.id).maybeSingle(),
               supabase.from("followers").select("following_id").eq("follower_id", currentUser.id).limit(200),
@@ -323,8 +324,9 @@ export default function HomePage() {
 
         const [metaRes, authorsRes] = await Promise.all([metaPromise, authorsPromise])
 
+        let userProductLikes: string[] = []
         if (metaRes) {
-          const [likesRes, favsRes, profileRes, followsRes] = metaRes
+          const [likesRes, productLikesRes, favsRes, profileRes, followsRes] = metaRes
           if (profileRes.data) {
             setUserType(profileRes.data.user_type)
           }
@@ -332,6 +334,7 @@ export default function HomePage() {
             setFollowingIds(new Set(followsRes.data.map((f) => f.following_id)))
           }
           userLikes = likesRes.data?.map((l) => l.post_id) || []
+          userProductLikes = productLikesRes.data?.map((l) => l.product_id) || []
           userFavorites = favsRes.data?.map((f) => f.product_id) || []
         }
 
@@ -357,7 +360,7 @@ export default function HomePage() {
             feedItems.push({
               type: "product",
               data: rankedProducts[i],
-              isLiked: userFavorites.includes(rankedProducts[i].id),
+              isLiked: userProductLikes.includes(rankedProducts[i].id),
               isSaved: userFavorites.includes(rankedProducts[i].id),
             })
           }
@@ -562,7 +565,85 @@ export default function HomePage() {
     return new Date(date).toLocaleDateString("fr-FR")
   }
 
-  // Gérer la sauvegarde (favoris)
+  // Gérer le like (posts → post_likes ; produits → product_likes via API)
+  const handleLike = async (item: FeedItem) => {
+    if (!user) {
+      toast.error("Connecte-toi pour aimer")
+      return
+    }
+
+    const itemId = item.data.id
+    const isLiked = item.isLiked
+    const prevCount = item.data.likes_count || 0
+
+    setFeed((prev) =>
+      prev.map((f) =>
+        f.data.id === itemId
+          ? ({
+              ...f,
+              isLiked: !isLiked,
+              data: {
+                ...f.data,
+                likes_count: isLiked ? Math.max(0, prevCount - 1) : prevCount + 1,
+              },
+            } as FeedItem)
+          : f,
+      ),
+    )
+
+    try {
+      if (item.type === "product") {
+        const res = await fetch(`/api/products/${itemId}/like`, { method: "POST" })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data.error || "Like impossible")
+        setFeed((prev) =>
+          prev.map((f) =>
+            f.data.id === itemId
+              ? ({
+                  ...f,
+                  isLiked: !!data.liked,
+                  data: {
+                    ...f.data,
+                    likes_count: Number(data.likes_count) || 0,
+                  },
+                } as FeedItem)
+              : f,
+          ),
+        )
+        return
+      }
+
+      // Posts : trigger BD gère likes_count — pas de .update client
+      if (isLiked) {
+        const { error } = await supabase
+          .from("post_likes")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("post_id", itemId)
+        if (error) throw error
+      } else {
+        const { error } = await supabase
+          .from("post_likes")
+          .insert({ user_id: user.id, post_id: itemId })
+        if (error) throw error
+      }
+    } catch {
+      setFeed((prev) =>
+        prev.map((f) =>
+          f.data.id === itemId
+            ? ({
+                ...f,
+                isLiked,
+                data: { ...f.data, likes_count: prevCount },
+              } as FeedItem)
+            : f,
+        ),
+      )
+      toast.error("Erreur lors de l'enregistrement")
+    }
+  }
+
+  // Gérer la sauvegarde (favoris) — distinct du like
   const handleSave = async (item: FeedItem) => {
     if (!user) {
       toast.error("Connecte-toi pour sauvegarder")
@@ -574,80 +655,33 @@ export default function HomePage() {
 
     setFeed((prev) =>
       prev.map((f) =>
-        f.data.id === item.data.id
-          ? { ...f, isSaved: !isSaved, isLiked: !isSaved }
-          : f,
+        f.data.id === item.data.id ? { ...f, isSaved: !isSaved } : f,
       ),
     )
 
     try {
       if (isSaved) {
-        await supabase.from("favorites").delete().eq("user_id", user.id).eq("product_id", item.data.id)
+        const { error } = await supabase
+          .from("favorites")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("product_id", item.data.id)
+        if (error) throw error
         toast.success("Retiré des favoris")
       } else {
-        await supabase.from("favorites").insert({ user_id: user.id, product_id: item.data.id })
+        const { error } = await supabase
+          .from("favorites")
+          .insert({ user_id: user.id, product_id: item.data.id })
+        if (error) throw error
         toast.success("Ajouté aux favoris")
       }
-    } catch (error) {
+    } catch {
       setFeed((prev) =>
         prev.map((f) =>
-          f.data.id === item.data.id ? { ...f, isSaved, isLiked: isSaved } : f,
+          f.data.id === item.data.id ? { ...f, isSaved } : f,
         ),
       )
       toast.error("Erreur lors de la sauvegarde")
-    }
-  }
-
-  // Gérer le like (posts → post_likes + trigger compteur ; produits → favoris)
-  const handleLike = async (item: FeedItem) => {
-    if (!user) {
-      toast.error("Connecte-toi pour aimer cette publication")
-      return
-    }
-
-    // Produits : le cœur enregistre en favoris (pas de likes_count client)
-    if (item.type === "product") {
-      await handleSave(item)
-      return
-    }
-
-    const itemId = item.data.id
-    const isLiked = item.isLiked
-
-    setFeed((prev) =>
-      prev.map((f) =>
-        f.data.id === itemId
-          ? {
-              ...f,
-              isLiked: !isLiked,
-              data: {
-                ...f.data,
-                likes_count: Math.max(
-                  0,
-                  (f.data.likes_count || 0) + (isLiked ? -1 : 1),
-                ),
-              },
-            }
-          : f,
-      ),
-    )
-
-    try {
-      if (isLiked) {
-        await supabase.from("post_likes").delete().eq("user_id", user.id).eq("post_id", itemId)
-      } else {
-        await supabase.from("post_likes").insert({ user_id: user.id, post_id: itemId })
-      }
-      // likes_count posts : trigger update_post_likes_count — jamais écrit côté client
-    } catch (error) {
-      setFeed((prev) =>
-        prev.map((f) =>
-          f.data.id === itemId
-            ? { ...f, isLiked, data: { ...f.data, likes_count: item.data.likes_count } }
-            : f,
-        ),
-      )
-      toast.error("Impossible d'enregistrer le j'aime")
     }
   }
 

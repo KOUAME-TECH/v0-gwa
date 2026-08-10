@@ -151,7 +151,6 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Décision DG : 0 frais GWA acheteur ; commission vendeur selon palier vendeur
     const shipping = 0
     const { data: sellerProfile } = await supabase
       .from("profiles")
