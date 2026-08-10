@@ -172,7 +172,7 @@ function ConfirmationContent() {
 
   const orderStatuses = [
     { status: "pending", label: "Commande reçue", icon: CheckCircle2, completed: true },
-    { status: "confirmed", label: "Confirmée", icon: Package, completed: ["confirmed", "processing", "shipped", "delivered"].includes(order?.status || "") },
+    { status: "confirmed", label: "Payée", icon: Package, completed: ["confirmed", "processing", "shipped", "delivered"].includes(order?.status || "") },
     { status: "shipped", label: "En livraison", icon: Truck, completed: order?.status === "shipped" || order?.status === "delivered" },
     { status: "delivered", label: "Livrée", icon: MapPin, completed: order?.status === "delivered" },
   ]
@@ -261,14 +261,14 @@ function ConfirmationContent() {
                 ? "Paiement échoué"
                 : paymentPending
                   ? "En attente de validation Mobile Money"
-                  : "Commande confirmée"}
+                  : "Paiement reçu"}
             </h1>
             <p className="text-muted-foreground">
               {paymentFailed
                 ? "Le paiement n’a pas abouti. Réessaie depuis tes commandes."
                 : paymentPending
                   ? "Valide sur ton téléphone (USSD / push). Cette page se met à jour automatiquement."
-                  : "Ton paiement est protégé : le vendeur touche l’argent après confirmation de livraison."}
+                  : "Ton argent est protégé : le vendeur est payé après que tu confirmes la réception."}
             </p>
           </div>
 

@@ -11,6 +11,8 @@ import {
   canBuyerConfirmReception,
   normalizeOrderStatus,
 } from "@/lib/orders/escrow-flow"
+import { checkRateLimit } from "@/lib/security/rate-limiter"
+import { assertSameOrigin } from "@/lib/security/csrf"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -21,6 +23,13 @@ type Ctx = { params: Promise<{ id: string }> }
  */
 export async function POST(request: NextRequest, context: Ctx) {
   try {
+    const csrf = assertSameOrigin(request)
+    if (csrf) return csrf
+    const rate = await checkRateLimit("PAYMENT")
+    if (!rate.success) {
+      return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })
+    }
+
     const { id } = await context.params
     const gate = await requireUser()
     if (!gate.user) {
@@ -82,6 +91,7 @@ export async function POST(request: NextRequest, context: Ctx) {
     const now = new Date().toISOString()
 
     // Claim atomique anti double-confirm / double-payout
+    // Seulement si pas déjà en payout (null ou failed)
     const { data: claimed, error: claimErr } = await admin
       .from("orders")
       .update({
@@ -91,6 +101,7 @@ export async function POST(request: NextRequest, context: Ctx) {
       .eq("id", id)
       .eq("escrow_status", "held")
       .eq("payment_status", "paid")
+      .or("payout_status.is.null,payout_status.eq.failed")
       .select("*")
       .maybeSingle()
 
@@ -203,25 +214,38 @@ export async function POST(request: NextRequest, context: Ctx) {
         .slice(0, 2000)
     }
 
-    const { error: updErr } = await admin
+    const { data: finalized, error: updErr } = await admin
       .from("orders")
       .update(orderPatch)
       .eq("id", id)
       .eq("payout_status", "processing")
+      .eq("escrow_status", "held")
+      .select("id")
+      .maybeSingle()
 
-    if (updErr) {
-      console.warn("[api/orders/confirm] payout cols?", updErr.message)
+    if (updErr || !finalized) {
+      // Litige ouvert pendant le payout, ou claim concurrent — ne pas forcer release
+      console.warn(
+        "[api/orders/confirm] finalize skipped",
+        updErr?.message || "not held/processing",
+      )
       await admin
         .from("orders")
         .update({
-          status: "delivered",
-          escrow_status: escrowStatus,
-          confirmed_by_buyer_at: now,
-          delivered_at: claimed.delivered_at || now,
+          payout_status: "failed",
+          payout_error: payoutError || "FINALIZE_BLOCKED_FROZEN_OR_RACE",
           updated_at: now,
-          payout_status: finalPayoutStatus,
         })
         .eq("id", id)
+        .eq("payout_status", "processing")
+      return NextResponse.json(
+        {
+          error:
+            "Impossible de finaliser : litige ouvert ou libération déjà en cours",
+          code: "ESCROW_FINALIZE_BLOCKED",
+        },
+        { status: 409 },
+      )
     }
 
     if (payoutOk) {

@@ -6,6 +6,8 @@ import {
   mapLitigeDescriptionToReason,
   normalizeDisputeReason,
 } from "@/lib/orders/escrow-flow"
+import { checkRateLimit } from "@/lib/security/rate-limiter"
+import { assertSameOrigin } from "@/lib/security/csrf"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -15,6 +17,13 @@ type Ctx = { params: Promise<{ id: string }> }
  */
 export async function POST(request: NextRequest, context: Ctx) {
   try {
+    const csrf = assertSameOrigin(request)
+    if (csrf) return csrf
+    const rate = await checkRateLimit("API_CREATE")
+    if (!rate.success) {
+      return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })
+    }
+
     const { id } = await context.params
     const gate = await requireUser()
     if (!gate.user) {
@@ -44,6 +53,16 @@ export async function POST(request: NextRequest, context: Ctx) {
     if (order.buyer_id !== user.id && order.seller_id !== user.id) {
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 })
     }
+    // Ne pas geler pendant un payout en cours — attendre fin ou failed
+    if (order.payout_status === "processing") {
+      return NextResponse.json(
+        {
+          error: "Libération d’argent en cours — réessaie dans un instant",
+          code: "PAYOUT_IN_PROGRESS",
+        },
+        { status: 409 },
+      )
+    }
     if (order.payment_status !== "paid") {
       return NextResponse.json(
         { error: "Litige possible seulement après paiement", code: "NOT_PAID" },
@@ -61,7 +80,7 @@ export async function POST(request: NextRequest, context: Ctx) {
       ? normalizeDisputeReason(String(body.reason))
       : mapLitigeDescriptionToReason(description)
 
-    await admin
+    const { data: frozen, error: freezeErr } = await admin
       .from("orders")
       .update({
         status: "disputed",
@@ -72,6 +91,20 @@ export async function POST(request: NextRequest, context: Ctx) {
         updated_at: now,
       })
       .eq("id", id)
+      .neq("payout_status", "processing")
+      .neq("escrow_status", "frozen")
+      .select("id")
+      .maybeSingle()
+
+    if (freezeErr || !frozen) {
+      return NextResponse.json(
+        {
+          error: "Impossible d’ouvrir le litige (libération en cours ou déjà gelé)",
+          code: "LITIGE_CLAIM_FAILED",
+        },
+        { status: 409 },
+      )
+    }
 
     await admin
       .from("escrow_transactions")

@@ -247,7 +247,11 @@ export default function WalletPage() {
         body: JSON.stringify({
           amount_fcfa: amount,
           phone: withdrawPhone,
-          network: "orange",
+          network: withdrawMethod.includes("mtn")
+            ? "mtn"
+            : withdrawMethod.includes("moov")
+              ? "moov"
+              : "orange",
         }),
       })
       const data = await res.json().catch(() => ({}))

@@ -67,6 +67,8 @@ async function handle(request: Request) {
       .update({ payout_status: "processing", updated_at: now })
       .eq("id", order.id)
       .eq("escrow_status", "held")
+      .eq("payment_status", "paid")
+      .or("payout_status.is.null,payout_status.eq.failed")
       .select("id, seller_id, order_number, vendeur_recoit_fcfa, total_amount, commission_fcfa, service_fee, payment_method, payout_network")
       .maybeSingle()
 

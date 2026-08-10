@@ -47,7 +47,6 @@ const paymentMethods = [
   { id: "mtn", name: "MTN MoMo", icon: Smartphone, color: "text-yellow-500" },
   { id: "wave", name: "Wave", icon: Smartphone, color: "text-cyan-500" },
   { id: "moov", name: "Moov Money", icon: Smartphone, color: "text-blue-500" },
-  { id: "bank", name: "Virement", icon: Building2, color: "text-gray-500" },
 ]
 
 export default function CartPage() {
