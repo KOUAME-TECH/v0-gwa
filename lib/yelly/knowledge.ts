@@ -101,6 +101,7 @@ export function buildYellyDomainFacts(): string {
 PRODUIT
 - GWA = Business Unit de KOUAME Corporation. Escrow = argent protégé applicatif (FeexPay Mobile Money), jamais « banque escrow ».
 - Rôles compte : acheteur, producteur, transformateur, cooperative, entreprise (desk achats). Affacturage n’est pas un rôle d’inscription.
+- Espace producteur (hub unique) : /dashboard/farmer — sections Accueil · Ventes · Produits · Argent · Score. Bottom nav « Ventes » y mène. Publier = /publier (pas /dashboard/products/new). Mes ventes = /dashboard/commandes?tab=ventes.
 
 ARGENT / COMMANDES
 - Parcours : panier (1 vendeur à la fois) → commande → paiement Mobile Money (Orange/MTN/Moov/Wave via FeexPay) → fonds en « argent protégé » (held) → vendeur prépare/expédie → acheteur confirme réception → escrow released → vendeur reçoit le net (après commission).

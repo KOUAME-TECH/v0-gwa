@@ -24,12 +24,10 @@ function allowPaymentSimulation(): boolean {
   return process.env.NODE_ENV === "development" && !process.env.VERCEL_ENV
 }
 
-function appOrigin(request: NextRequest): string {
+function appOrigin(_request: NextRequest): string {
+  // Jamais X-Forwarded-Host (spoof → return_url phishing)
   const env = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "")
   if (env) return env
-  const host = request.headers.get("x-forwarded-host") || request.headers.get("host")
-  const proto = request.headers.get("x-forwarded-proto") || "https"
-  if (host) return `${proto}://${host}`
   return "https://v0-gwa-mu.vercel.app"
 }
 

@@ -42,17 +42,20 @@ export async function PATCH(request: NextRequest, context: Ctx) {
     }
 
     const { id } = await context.params
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
+    const { requireUser } = await import("@/lib/auth/require-admin")
+    const gate = await requireUser()
+    if (!gate.user) {
+      return NextResponse.json(
+        { error: gate.error || "Non authentifié" },
+        { status: gate.suspended ? 403 : 401 },
+      )
     }
+    const user = gate.user
+    const supabase = gate.supabase
 
     const { data: existing } = await supabase
       .from("products")
-      .select("id, seller_id")
+      .select("id, seller_id, status")
       .eq("id", id)
       .maybeSingle()
 
@@ -81,8 +84,6 @@ export async function PATCH(request: NextRequest, context: Ctx) {
       "is_fair_trade",
       "region",
       "ville",
-      "status",
-      "offer_status",
     ] as const
 
     const update: Record<string, unknown> = {
@@ -90,6 +91,13 @@ export async function PATCH(request: NextRequest, context: Ctx) {
     }
     for (const key of allowed) {
       if (body?.[key] !== undefined) update[key] = body[key]
+    }
+    // Statut : allowlist vendeur (pas de réactivation archive admin)
+    if (typeof body?.status === "string") {
+      const st = body.status
+      if (st === "active" || st === "paused") {
+        if (existing.status !== "archived") update.status = st
+      }
     }
 
     const { data, error } = await supabase

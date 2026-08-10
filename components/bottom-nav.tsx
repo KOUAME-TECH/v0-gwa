@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Home, ShoppingBag, MessageCircle, User, Plus, Bell, Search, Store } from "lucide-react"
+// ShoppingBag = hub ventes producteur ; Store = marketplace acheteur
 import { cn } from "@/lib/utils"
 import { shouldShowBottomNav } from "@/lib/navigation/shell-routes"
 import { isSellerRole } from "@/lib/dashboard/routing"
@@ -48,7 +49,11 @@ export function BottomNav() {
       pathname?.startsWith("/panier") ||
       pathname?.startsWith("/agriculture") ||
       pathname?.startsWith("/dashboard/products") ||
-      pathname?.startsWith("/dashboard/commandes")
+      pathname?.startsWith("/dashboard/commandes") ||
+      pathname?.startsWith("/dashboard/farmer") ||
+      pathname?.startsWith("/wallet") ||
+      pathname?.startsWith("/scg") ||
+      pathname?.startsWith("/affacturage")
     )
       return "commerce"
     if (pathname?.startsWith("/messages")) return "messaging"
@@ -57,10 +62,7 @@ export function BottomNav() {
       pathname?.startsWith("/notifications") ||
       pathname?.startsWith("/favoris") ||
       pathname?.startsWith("/dashboard") ||
-      pathname?.startsWith("/wallet") ||
-      pathname?.startsWith("/abonnement") ||
-      pathname?.startsWith("/scg") ||
-      pathname?.startsWith("/affacturage")
+      pathname?.startsWith("/abonnement")
     )
       return "profile"
     return null
@@ -78,9 +80,9 @@ export function BottomNav() {
   const navItems: NavItem[] = [
     { href: "/", icon: Home, label: "Feed", world: "social" },
     {
-      href: "/marketplace",
-      icon: Store,
-      label: "Shop",
+      href: isSeller ? "/dashboard/farmer" : "/marketplace",
+      icon: isSeller ? ShoppingBag : Store,
+      label: isSeller ? "Ventes" : "Shop",
       world: "commerce",
       badge: ordersCount > 0 ? ordersCount : undefined,
     },

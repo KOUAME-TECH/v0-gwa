@@ -247,19 +247,12 @@ export default function ProfilPage() {
     }
 
     if (isSeller) {
+      // Hub unique — évite la duplication Mes produits / Mes ventes
       return [
-        espace,
         {
-          icon: Package,
-          label: "Mes produits",
-          href: "/dashboard/products",
-          count: stats.products,
-        },
-        {
-          icon: ShoppingBag,
-          label: "Mes ventes",
-          href: "/dashboard/commandes",
-          count: stats.orders,
+          ...espace,
+          label: "Espace producteur",
+          count: stats.orders || stats.products || undefined,
         },
         { icon: Wallet, label: "Portefeuille", href: "/wallet" },
         { icon: Crown, label: "Abonnement", href: "/abonnement" },

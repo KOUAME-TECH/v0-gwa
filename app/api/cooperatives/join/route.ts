@@ -59,11 +59,12 @@ export async function POST(request: Request) {
     }
 
     const expected = String(
-      (coop as { invite_code?: string | null }).invite_code || coop.slug || "",
+      (coop as { invite_code?: string | null }).invite_code || "",
     )
       .trim()
       .toLowerCase()
-    if (!expected || !safeEqualCode(inviteCode, expected)) {
+    // Jamais de fallback slug (public) — invite_code obligatoire
+    if (!expected || expected.length < 16 || !safeEqualCode(inviteCode, expected)) {
       return NextResponse.json(
         { error: "Code d’invitation invalide", code: "INVITE_INVALID" },
         { status: 403 },

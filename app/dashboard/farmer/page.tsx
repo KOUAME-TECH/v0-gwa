@@ -24,6 +24,8 @@ import type { SCGDimensions } from "@/lib/scg/engine"
 import { EmptyState } from "@/components/ui/empty-state"
 import { entitlementsForTier } from "@/lib/pricing/entitlements"
 import { productDetailPath } from "@/lib/products/paths"
+import { ProducerSubnav } from "@/components/producer/producer-subnav"
+import { YellyAideButton } from "@/components/yelly/yelly-aide-button"
 
 interface Product {
   id: string
@@ -192,6 +194,7 @@ export default function FarmerDashboard() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#E8F5E9] to-[#FFF6E5] pb-24">
       <header className="px-4 pt-6 pb-4">
+        <ProducerSubnav />
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-sm font-medium text-[#C27D10]">Espace producteur</p>
@@ -199,10 +202,11 @@ export default function FarmerDashboard() {
               {firstName}
             </h1>
             <p className="mt-1 text-sm text-[#6B7280]">
-              Publie, vends, suis l’argent qui arrive.
+              Un seul lieu : publier, vendre, encaisser.
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            <YellyAideButton source="farmer_hub" className="rounded-full bg-white px-3 py-2 ring-1 ring-[#1F5C2E]/15" />
             <Link
               href="/wallet"
               className="rounded-full bg-white p-2.5 ring-1 ring-[#1F5C2E]/15"
@@ -232,8 +236,8 @@ export default function FarmerDashboard() {
             variant="outline"
             className="relative flex-1 rounded-full border-[#1F5C2E]/30"
           >
-            <Link href="/dashboard/commandes">
-              Commandes
+            <Link href="/dashboard/commandes?tab=ventes">
+              Mes ventes
               {pendingOrders > 0 ? (
                 <span className="ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#C27D10] px-1.5 text-[10px] font-bold text-white">
                   {pendingOrders}
@@ -250,8 +254,8 @@ export default function FarmerDashboard() {
               Prochaine étape : publie ta première annonce
             </Link>
           ) : pendingOrders > 0 ? (
-            <Link href="/dashboard/commandes" className="font-semibold underline">
-              Prochaine étape : traite {pendingOrders} commande
+            <Link href="/dashboard/commandes?tab=ventes" className="font-semibold underline">
+              Prochaine étape : traite {pendingOrders} vente
               {pendingOrders > 1 ? "s" : ""}
             </Link>
           ) : lowStock.length > 0 ? (
@@ -348,7 +352,7 @@ export default function FarmerDashboard() {
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-base font-semibold">À traiter</h2>
           <Link
-            href="/dashboard/commandes"
+            href="/dashboard/commandes?tab=ventes"
             className="flex items-center gap-0.5 text-xs font-medium text-[#1F5C2E]"
           >
             Tout voir <ChevronRight className="h-3.5 w-3.5" />

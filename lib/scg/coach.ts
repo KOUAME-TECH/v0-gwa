@@ -11,7 +11,7 @@ const COACH_MAP: Record<keyof SCGDimensions, Omit<CoachAction, "dim">> = {
   fiabilite: {
     title: "Honorer tes prochaines livraisons",
     how: "Confirme et livre à l’heure — chaque commande réussie monte ta fiabilité.",
-    href: "/dashboard/commandes",
+    href: "/dashboard/commandes?tab=ventes",
   },
   qualite: {
     title: "Soigner la qualité perçue",
@@ -26,7 +26,7 @@ const COACH_MAP: Record<keyof SCGDimensions, Omit<CoachAction, "dim">> = {
   volumes: {
     title: "Augmenter un peu les volumes",
     how: "Ajoute une offre claire (prix + quantité) pour plus de transactions.",
-    href: "/dashboard/products/new",
+    href: "/publier",
   },
   stabilite: {
     title: "Stabiliser ton approvisionnement",

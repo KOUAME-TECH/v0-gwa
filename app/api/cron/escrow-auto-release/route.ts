@@ -110,40 +110,48 @@ async function handle(request: Request) {
         payoutStatus = "paid"
         payoutRef = payout.reference
       } else {
-        payoutStatus = "credited_wallet"
-        payoutError = payout.error || "PAYOUT_FAILED_CREDITED_WALLET"
+        // Aligné confirm : ne pas release si payout échoue (anti double-spend)
+        payoutStatus = "failed"
+        payoutError = payout.error || "PAYOUT_FAILED"
       }
+    } else if (!creds || !phone) {
+      // Sans FeexPay / téléphone : crédit wallet uniquement (ops)
+      payoutStatus = "credited_wallet"
     }
+
+    const releaseOk = payoutStatus === "paid" || payoutStatus === "credited_wallet"
 
     await admin
       .from("orders")
       .update({
-        status: "delivered",
-        escrow_status: "released",
+        status: releaseOk ? "delivered" : order.status,
+        escrow_status: releaseOk ? "released" : "held",
         payout_status: payoutStatus,
         payout_ref: payoutRef,
         payout_error: payoutError,
-        payout_at: now,
-        delivered_at: order.delivered_at || now,
+        payout_at: releaseOk ? now : null,
+        delivered_at: releaseOk ? order.delivered_at || now : order.delivered_at,
         updated_at: now,
       })
       .eq("id", claimed.id)
 
-    await admin
-      .from("escrow_transactions")
-      .update({ status: "released", released_at: now })
-      .eq("order_id", claimed.id)
-      .eq("status", "held")
+    if (releaseOk) {
+      await admin
+        .from("escrow_transactions")
+        .update({ status: "released", released_at: now })
+        .eq("order_id", claimed.id)
+        .eq("status", "held")
+    }
 
     await admin.from("order_audit_log").insert({
       order_id: claimed.id,
       performed_by: null,
-      action: "escrow_auto_release",
-      new_value: "released",
+      action: releaseOk ? "escrow_auto_release" : "escrow_auto_release_payout_failed",
+      new_value: releaseOk ? "released" : "held",
       notes: `auto ${days}j payout=${payoutStatus}`,
     })
 
-    if (payoutStatus === "paid" || payoutStatus === "credited_wallet") {
+    if (releaseOk) {
       released++
     } else {
       failed++

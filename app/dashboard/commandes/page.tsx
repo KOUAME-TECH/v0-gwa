@@ -1,8 +1,11 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useMemo, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Navigation } from "@/components/navigation"
+import { ProducerSubnav } from "@/components/producer/producer-subnav"
+import { isSellerRole } from "@/lib/dashboard/routing"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -85,7 +88,8 @@ const orderStatuses: Record<string, { label: string; color: string; icon: typeof
   disputed: { label: ORDER_STATUS_LABELS.disputed, color: "bg-red-600", icon: AlertTriangle },
 }
 
-export default function OrdersPage() {
+function OrdersPageInner() {
+  const searchParams = useSearchParams()
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
@@ -93,9 +97,21 @@ export default function OrdersPage() {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
   const [loadingAudit, setLoadingAudit] = useState(false)
   const [user, setUser] = useState<any>(null)
+  const [userType, setUserType] = useState<string | null>(null)
   const [litigeOrderId, setLitigeOrderId] = useState<string | null>(null)
   
   const supabase = createClient()
+  const sellerMode = isSellerRole(userType)
+  const salesCount = useMemo(
+    () => orders.filter((o) => o.seller_id === user?.id).length,
+    [orders, user?.id],
+  )
+  const defaultTab = useMemo(() => {
+    const q = (searchParams?.get("tab") || "").toLowerCase()
+    if (q === "ventes" || q === "achats" || q === "all" || q === "active") return q
+    if (sellerMode && salesCount > 0) return "ventes"
+    return "achats"
+  }, [searchParams, sellerMode, salesCount])
 
   useEffect(() => {
     loadOrders()
@@ -109,6 +125,13 @@ export default function OrdersPage() {
       setLoading(false)
       return
     }
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("user_type")
+      .eq("id", user.id)
+      .maybeSingle()
+    setUserType(profile?.user_type || null)
 
     // Load orders as buyer
     const { data: buyerOrders } = await supabase
@@ -317,19 +340,33 @@ export default function OrdersPage() {
       <Navigation />
 
       <div className="gwa-shell-wide w-full px-4 py-6 md:px-6 lg:py-10">
+        {sellerMode ? <ProducerSubnav /> : null}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-8">
           <div>
-            <h1 className="font-display text-2xl md:text-3xl text-[#1F5C2E]">Mes commandes</h1>
+            <h1 className="font-display text-2xl md:text-3xl text-[#1F5C2E]">
+              {sellerMode ? "Mes ventes" : "Mes commandes"}
+            </h1>
             <p className="text-[#4B5563] mt-1 text-sm md:text-base">
-              Suivi des achats et ventes.
+              {sellerMode
+                ? "Prépare, expédie, suis le séquestre — tout au même endroit."
+                : "Suivi de tes achats et livraisons."}
             </p>
           </div>
-          <Link href="/marketplace">
-            <Button className="rounded-xl bg-[#1F5C2E] hover:bg-[#184a25]">
-              Continuer les courses
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          </Link>
+          {sellerMode ? (
+            <Link href="/publier">
+              <Button className="rounded-xl bg-[#1F5C2E] hover:bg-[#184a25]">
+                Publier une offre
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
+          ) : (
+            <Link href="/marketplace">
+              <Button className="rounded-xl bg-[#1F5C2E] hover:bg-[#184a25]">
+                Continuer les courses
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
+          )}
         </div>
 
         {/* Stats — une ligne claire, pas un dashboard froid */}
@@ -394,13 +431,13 @@ export default function OrdersPage() {
           </Button>
         </div>
 
-        <Tabs defaultValue="achats">
+        <Tabs key={defaultTab} defaultValue={defaultTab}>
           <TabsList className="bg-white/80 border border-[#E5E7EB] rounded-xl h-auto flex-wrap p-1">
             <TabsTrigger value="achats" className="rounded-lg">
               Mes achats ({orders.filter((o) => o.seller_id !== user?.id).length})
             </TabsTrigger>
             <TabsTrigger value="ventes" className="rounded-lg">
-              Mes ventes ({orders.filter((o) => o.seller_id === user?.id).length})
+              Mes ventes ({salesCount})
             </TabsTrigger>
             <TabsTrigger value="all" className="rounded-lg">
               Toutes ({orders.length})
@@ -887,5 +924,19 @@ function OrderCard({
           </div>
         )}
     </div>
+  )
+}
+
+export default function OrdersPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-[#FFF6E5] text-sm text-[#6B7280]">
+          Chargement des commandes…
+        </div>
+      }
+    >
+      <OrdersPageInner />
+    </Suspense>
   )
 }

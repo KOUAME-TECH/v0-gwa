@@ -146,7 +146,7 @@ export default function ScgPage() {
       {/* Header */}
       <header className="sticky top-0 z-10 bg-white border-b border-[#E5E7EB]">
         <div className="flex items-center gap-3 px-4 h-14">
-          <Link href="/profil" aria-label="Retour">
+          <Link href="/dashboard/farmer" aria-label="Retour espace producteur">
             <ArrowLeft className="h-5 w-5 text-[#1A1A1A]" />
           </Link>
           <h1 className="text-lg font-semibold text-[#1A1A1A]">Score de Confiance GWA</h1>

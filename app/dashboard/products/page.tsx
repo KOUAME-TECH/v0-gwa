@@ -35,6 +35,7 @@ import {
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
+import { ProducerSubnav } from "@/components/producer/producer-subnav"
 
 interface Product {
   id: string
@@ -145,9 +146,9 @@ export default function ProductsPage() {
       <header className="sticky top-0 z-40 bg-white border-b border-[#E5E7EB] safe-top">
         <div className="flex items-center gap-2 h-14 px-3">
           <Link
-            href="/profil"
+            href="/dashboard/farmer"
             className="p-2 -ml-1 rounded-full active:bg-neutral-100"
-            aria-label="Retour"
+            aria-label="Retour espace producteur"
           >
             <ArrowLeft className="h-5 w-5 text-[#111827]" />
           </Link>
@@ -163,6 +164,7 @@ export default function ProductsPage() {
       </header>
 
       <div className="max-w-3xl mx-auto px-4 py-4 pb-[calc(env(safe-area-inset-bottom)+24px)]">
+        <ProducerSubnav />
         {/* Recherche */}
         <div className="relative mb-4">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" />

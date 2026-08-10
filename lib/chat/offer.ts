@@ -17,8 +17,10 @@ export type PriceOfferPayload = {
   /** Set only by server /api/offers/respond — never trust client. */
   accepted_by?: string
   accepted_at?: string
+  accepted_via?: "api_offers_respond"
   declined_by?: string
   declined_at?: string
+  declined_via?: "api_offers_respond"
 }
 
 export function buildOfferContent(input: {

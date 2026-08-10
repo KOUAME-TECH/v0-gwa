@@ -57,11 +57,12 @@ export async function POST(request: Request) {
         { status: 400 },
       )
     }
-    // Contrepartie obligatoire — bloque l'auto-accept offreur
+    // Contrepartie + marqueur serveur (059 : clients ne peuvent plus UPDATE les offers)
     if (
       !offer.accepted_by ||
       offer.accepted_by === msg.sender_id ||
-      typeof offer.accepted_by !== "string"
+      typeof offer.accepted_by !== "string" ||
+      (offer as { accepted_via?: string }).accepted_via !== "api_offers_respond"
     ) {
       return NextResponse.json(
         {

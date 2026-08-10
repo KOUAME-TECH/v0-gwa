@@ -64,11 +64,26 @@ self.addEventListener("fetch", (event) => {
   if (url.hostname.includes("onesignal.com")) return
 
   // Navigations HTML : network-first → cache page → offline.html
+  // Ne jamais cacher les espaces authentifiés (fuite session / appareil partagé)
+  const isPrivateNav =
+    url.pathname.startsWith("/dashboard") ||
+    url.pathname.startsWith("/wallet") ||
+    url.pathname.startsWith("/messages") ||
+    url.pathname.startsWith("/profil") ||
+    url.pathname.startsWith("/admin") ||
+    url.pathname.startsWith("/scg") ||
+    url.pathname.startsWith("/affacturage") ||
+    url.pathname.startsWith("/abonnement") ||
+    url.pathname.startsWith("/panier")
   if (event.request.mode === "navigate") {
     event.respondWith(
       fetch(event.request)
         .then((response) => {
-          if (response.ok && url.origin === self.location.origin) {
+          if (
+            response.ok &&
+            url.origin === self.location.origin &&
+            !isPrivateNav
+          ) {
             const clone = response.clone()
             caches.open(CACHE).then((cache) => cache.put(event.request, clone))
           }

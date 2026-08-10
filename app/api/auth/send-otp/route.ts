@@ -196,13 +196,9 @@ export async function POST(request: Request) {
           message: "Code SMS envoyé",
           expires_in: 600,
           resend_after: 60,
-          linked_email_masked: linkedEmail
-            ? maskEmail(linkedEmail)
-            : undefined,
           otp_mode: "supabase",
-          account_hint: accountHint,
-          phone_verified: profileByPhone?.phone_verified === true,
-        })
+          account_hint: "ok",
+                  })
       }
 
       supabasePhoneError = smsError.message
@@ -283,11 +279,8 @@ export async function POST(request: Request) {
             message: "Code SMS envoyé",
             expires_in: 600,
             resend_after: 60,
-            linked_email_masked: linkedEmail
-              ? maskEmail(linkedEmail)
-              : undefined,
             otp_mode: "supabase_fallback",
-            account_hint: accountHint,
+            account_hint: "ok",
           })
         }
         supabasePhoneError = smsError.message
@@ -328,10 +321,8 @@ export async function POST(request: Request) {
       message: "Code SMS envoyé",
       expires_in: 600,
       resend_after: 60,
-      linked_email_masked: linkedEmail ? maskEmail(linkedEmail) : undefined,
       otp_mode: mode,
-      account_hint: accountHint,
-      phone_verified: profileByPhone?.phone_verified === true,
+      account_hint: "ok",
       ...(sms.warning ? { delivery_warning: sms.warning } : {}),
     })
   } catch (err) {

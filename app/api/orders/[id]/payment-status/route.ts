@@ -56,8 +56,22 @@ export async function GET(_request: NextRequest, context: Ctx) {
           raw.amount ?? raw.paid_amount ?? raw.montant ?? NaN,
         )
         const expectedAmt = Number(order.total_amount)
+        // Aligné webhook : montant obligatoire + >= attendu
+        if (!Number.isFinite(paidAmount)) {
+          console.error(
+            `[api/orders/payment-status] amount_missing ref=${order.feexpay_ref}`,
+          )
+          return NextResponse.json({
+            order_id: id,
+            payment_status: "processing",
+            escrow_status: order.escrow_status,
+            status: order.status,
+            feexpay_ref: order.feexpay_ref,
+            verified: true,
+            amount_missing: true,
+          })
+        }
         if (
-          Number.isFinite(paidAmount) &&
           Number.isFinite(expectedAmt) &&
           paidAmount + 1e-6 < expectedAmt
         ) {

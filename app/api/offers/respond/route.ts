@@ -93,12 +93,14 @@ export async function POST(request: Request) {
             status: "accepted" as const,
             accepted_by: user.id,
             accepted_at: now,
+            accepted_via: "api_offers_respond" as const,
           }
         : {
             ...offer,
             status: "declined" as const,
             declined_by: user.id,
             declined_at: now,
+            declined_via: "api_offers_respond" as const,
           }
 
     const content = JSON.stringify(next)

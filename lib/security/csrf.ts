@@ -43,10 +43,8 @@ export function assertSameOrigin(request: Request): NextResponse | null {
 
   const origin = request.headers.get("origin")
   const referer = request.headers.get("referer")
-  const host =
-    request.headers.get("x-forwarded-host") ||
-    request.headers.get("host") ||
-    ""
+  // Ne jamais faire confiance à X-Forwarded-Host pour CSRF (spoofable).
+  const host = (request.headers.get("host") || "").trim()
 
   if (!host) {
     return NextResponse.json({ error: "Origine invalide" }, { status: 403 })
@@ -59,9 +57,21 @@ export function assertSameOrigin(request: Request): NextResponse | null {
       .filter(Boolean),
   )
 
-  // Preview / prod Vercel aliases
   const requestUrl = new URL(request.url)
   allowedHosts.add(requestUrl.host.toLowerCase())
+
+  // Origines explicites (prod + preview) via env
+  const extra = (process.env.ALLOWED_ORIGINS || process.env.NEXT_PUBLIC_APP_URL || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+  for (const raw of extra) {
+    try {
+      allowedHosts.add(new URL(raw).host.toLowerCase())
+    } catch {
+      /* ignore */
+    }
+  }
 
   const checkUrl = (raw: string | null): boolean => {
     if (!raw) return false

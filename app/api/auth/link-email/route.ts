@@ -108,35 +108,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: msg }, { status: 400 })
     }
 
-    const profileUpdate: Record<string, unknown> = {
-      email,
-      linked_email: email,
-      email_linked_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }
-
-    const { error: profileError } = await supabase
+    // Ne pas écrire profiles.email / linked_email avant confirmation —
+    // updateUser({ email }) envoie le mail de verif ; le profil suit après.
+    await supabase
       .from("profiles")
-      .update(profileUpdate)
+      .update({
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", user.id)
-
-    if (profileError) {
-      if (/email_linked_at|column/i.test(profileError.message)) {
-        const { error: retryErr } = await supabase
-          .from("profiles")
-          .update({
-            email,
-            linked_email: email,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", user.id)
-        if (retryErr) {
-          return NextResponse.json({ error: retryErr.message }, { status: 400 })
-        }
-      } else {
-        return NextResponse.json({ error: profileError.message }, { status: 400 })
-      }
-    }
 
     return NextResponse.json({
       success: true,

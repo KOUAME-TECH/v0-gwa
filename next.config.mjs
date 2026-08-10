@@ -105,6 +105,8 @@ const nextConfig = {
     { source: '/b2b', destination: '/marketplace', permanent: false },
     { source: '/business', destination: '/agriculture', permanent: false },
     { source: '/dashboard/business', destination: '/dashboard/farmer', permanent: false },
+    // Création produit unique → /publier
+    { source: '/dashboard/products/new', destination: '/publier', permanent: false },
     { source: '/network', destination: '/messages', permanent: false },
     { source: '/network/profile/:id', destination: '/profil/:id', permanent: false },
     { source: '/communaute', destination: '/messages', permanent: false },
