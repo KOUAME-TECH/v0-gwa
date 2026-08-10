@@ -177,11 +177,43 @@ export default function HomePage() {
   const [hasMoreFeed, setHasMoreFeed] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [offlineMode, setOfflineMode] = useState(false)
+  const [feedError, setFeedError] = useState(false)
+  const [showFilters, setShowFilters] = useState(false)
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set())
   const pullStartY = useRef<number | null>(null)
   const feedSentinelRef = useRef<HTMLDivElement | null>(null)
   const headerHidden = useHideOnScroll(true)
 
   const supabase = createClient()
+
+  useEffect(() => {
+    try {
+      const next = new Set<string>()
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i)
+        if (k?.startsWith("gwa_hide_") && localStorage.getItem(k) === "1") {
+          next.add(k.replace(/^gwa_hide_(product|post)_/, ""))
+        }
+      }
+      if (next.size) setHiddenIds(next)
+    } catch {
+      /* private mode */
+    }
+  }, [])
+
+  useEffect(() => {
+    const onHide = (ev: Event) => {
+      const id = (ev as CustomEvent<{ id?: string }>).detail?.id
+      if (!id) return
+      setHiddenIds((prev) => {
+        const n = new Set(prev)
+        n.add(id)
+        return n
+      })
+    }
+    window.addEventListener("gwa:feed-hide", onHide as EventListener)
+    return () => window.removeEventListener("gwa:feed-hide", onHide as EventListener)
+  }, [])
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -222,6 +254,7 @@ export default function HomePage() {
   // Charger l'utilisateur et le feed (parallèle : auth + catalogue + offline)
   useEffect(() => {
     const loadData = async () => {
+      setFeedError(false)
       const offline = typeof navigator !== "undefined" && !navigator.onLine
       const cached = loadFeedCache()
 
@@ -231,7 +264,7 @@ export default function HomePage() {
         setHasMoreFeed(false)
         setIsLoading(false)
         setRefreshing(false)
-        toast.message(`Feed hors ligne · ${feedCacheAgeLabel(cached.at)}`)
+        toast.message(`Contenu enregistré · ${feedCacheAgeLabel(cached.at)}`)
         return
       }
 
@@ -360,7 +393,10 @@ export default function HomePage() {
           setFeed(cached.items as FeedItem[])
           setOfflineMode(true)
           setHasMoreFeed(false)
-          toast.message(`Feed hors ligne · ${feedCacheAgeLabel(cached.at)}`)
+          toast.message(`Contenu enregistré · ${feedCacheAgeLabel(cached.at)}`)
+        } else {
+          setFeedError(true)
+          toast.error("Impossible de charger l’accueil")
         }
         setIsLoading(false)
         setRefreshing(false)
@@ -425,22 +461,49 @@ export default function HomePage() {
         profiles: profileMap.get(post.author_id) || null,
       }))
 
+      const productIds = (products || []).map((p) => p.id)
+      const postIds = posts.map((p) => p.id)
+      let moreFavs: string[] = []
+      let moreLikes: string[] = []
+      if (user?.id) {
+        const [favRes, likeRes] = await Promise.all([
+          productIds.length
+            ? supabase
+                .from("favorites")
+                .select("product_id")
+                .eq("user_id", user.id)
+                .in("product_id", productIds)
+            : Promise.resolve({ data: [] as { product_id: string }[] }),
+          postIds.length
+            ? supabase
+                .from("post_likes")
+                .select("post_id")
+                .eq("user_id", user.id)
+                .in("post_id", postIds)
+            : Promise.resolve({ data: [] as { post_id: string }[] }),
+        ])
+        moreFavs = (favRes.data || []).map((f: { product_id: string }) => f.product_id)
+        moreLikes = (likeRes.data || []).map((l: { post_id: string }) => l.post_id)
+      }
+
       const more: FeedItem[] = []
       const maxLen = Math.max(products?.length || 0, posts.length)
       for (let i = 0; i < maxLen; i++) {
         if (products?.[i]) {
+          const pid = products[i].id
+          const saved = moreFavs.includes(pid)
           more.push({
             type: "product",
             data: products[i] as Product,
-            isLiked: false,
-            isSaved: false,
+            isLiked: saved,
+            isSaved: saved,
           })
         }
         if (posts[i]) {
           more.push({
             type: "post",
             data: posts[i] as Post,
-            isLiked: false,
+            isLiked: moreLikes.includes(posts[i].id),
             isSaved: false,
           })
         }
@@ -499,56 +562,6 @@ export default function HomePage() {
     return new Date(date).toLocaleDateString("fr-FR")
   }
 
-  // Gérer le like
-  const handleLike = async (item: FeedItem) => {
-    if (!user) {
-      toast.error("Connecte-toi pour aimer cette publication")
-      return
-    }
-
-    const itemId = item.data.id
-    const isLiked = item.isLiked
-    const table = item.type === "post" ? "post_likes" : "favorites"
-    const idField = item.type === "post" ? "post_id" : "product_id"
-    const countTable = item.type === "post" ? "posts" : "products"
-
-    // Mise à jour optimiste
-    setFeed(prev => prev.map(f => 
-      f.data.id === itemId 
-        ? { 
-            ...f, 
-            isLiked: !isLiked,
-            data: {
-              ...f.data,
-              likes_count: isLiked ? f.data.likes_count - 1 : f.data.likes_count + 1
-            }
-          }
-        : f
-    ))
-
-    try {
-      if (isLiked) {
-        await supabase.from(table).delete().eq("user_id", user.id).eq(idField, itemId)
-      } else {
-        await supabase.from(table).insert({ user_id: user.id, [idField]: itemId })
-      }
-
-      // Mettre à jour le compteur en BD
-      await supabase
-        .from(countTable)
-        .update({ likes_count: isLiked ? item.data.likes_count - 1 : item.data.likes_count + 1 })
-        .eq("id", itemId)
-
-      toast.success(isLiked ? "J'aime retiré" : "J'aime ajouté")
-    } catch (error) {
-      // Annuler en cas d'erreur
-      setFeed(prev => prev.map(f => 
-        f.data.id === itemId ? { ...f, isLiked, data: { ...f.data, likes_count: item.data.likes_count } } : f
-      ))
-      toast.error("Erreur lors de l'enregistrement")
-    }
-  }
-
   // Gérer la sauvegarde (favoris)
   const handleSave = async (item: FeedItem) => {
     if (!user) {
@@ -559,9 +572,13 @@ export default function HomePage() {
 
     const isSaved = item.isSaved
 
-    setFeed(prev => prev.map(f => 
-      f.data.id === item.data.id ? { ...f, isSaved: !isSaved } : f
-    ))
+    setFeed((prev) =>
+      prev.map((f) =>
+        f.data.id === item.data.id
+          ? { ...f, isSaved: !isSaved, isLiked: !isSaved }
+          : f,
+      ),
+    )
 
     try {
       if (isSaved) {
@@ -572,10 +589,65 @@ export default function HomePage() {
         toast.success("Ajouté aux favoris")
       }
     } catch (error) {
-      setFeed(prev => prev.map(f => 
-        f.data.id === item.data.id ? { ...f, isSaved } : f
-      ))
+      setFeed((prev) =>
+        prev.map((f) =>
+          f.data.id === item.data.id ? { ...f, isSaved, isLiked: isSaved } : f,
+        ),
+      )
       toast.error("Erreur lors de la sauvegarde")
+    }
+  }
+
+  // Gérer le like (posts → post_likes + trigger compteur ; produits → favoris)
+  const handleLike = async (item: FeedItem) => {
+    if (!user) {
+      toast.error("Connecte-toi pour aimer cette publication")
+      return
+    }
+
+    // Produits : le cœur enregistre en favoris (pas de likes_count client)
+    if (item.type === "product") {
+      await handleSave(item)
+      return
+    }
+
+    const itemId = item.data.id
+    const isLiked = item.isLiked
+
+    setFeed((prev) =>
+      prev.map((f) =>
+        f.data.id === itemId
+          ? {
+              ...f,
+              isLiked: !isLiked,
+              data: {
+                ...f.data,
+                likes_count: Math.max(
+                  0,
+                  (f.data.likes_count || 0) + (isLiked ? -1 : 1),
+                ),
+              },
+            }
+          : f,
+      ),
+    )
+
+    try {
+      if (isLiked) {
+        await supabase.from("post_likes").delete().eq("user_id", user.id).eq("post_id", itemId)
+      } else {
+        await supabase.from("post_likes").insert({ user_id: user.id, post_id: itemId })
+      }
+      // likes_count posts : trigger update_post_likes_count — jamais écrit côté client
+    } catch (error) {
+      setFeed((prev) =>
+        prev.map((f) =>
+          f.data.id === itemId
+            ? { ...f, isLiked, data: { ...f.data, likes_count: item.data.likes_count } }
+            : f,
+        ),
+      )
+      toast.error("Impossible d'enregistrer le j'aime")
     }
   }
 
@@ -760,20 +832,20 @@ export default function HomePage() {
       ? `Découvrez ${(shareItem.data as Product).name} sur GWA`
       : `${(shareItem.data as Post).content?.slice(0, 100)}...`
 
-    try {
-      const countTable = shareItem.type === "post" ? "posts" : "products"
-      const newCount = shareItem.data.shares_count + 1
-      
-      await supabase.from(countTable).update({ shares_count: newCount }).eq("id", shareItem.data.id)
-
-      setFeed(prev => prev.map(f => 
-        f.data.id === shareItem.data.id 
-          ? { ...f, data: { ...f.data, shares_count: newCount } }
-          : f
-      ))
-    } catch (error) {
-      console.error("Erreur mise à jour partages:", error)
-    }
+    // Compteur partages : pas d'UPDATE client (anti-inflation) — UI optimiste locale
+    setFeed((prev) =>
+      prev.map((f) =>
+        f.data.id === shareItem.data.id
+          ? {
+              ...f,
+              data: {
+                ...f.data,
+                shares_count: (f.data.shares_count || 0) + 1,
+              },
+            }
+          : f,
+      ),
+    )
 
     switch (platform) {
       case "whatsapp":
@@ -850,6 +922,7 @@ export default function HomePage() {
 
   // Filtrer le feed
   const filteredFeed = feed.filter(item => {
+    if (hiddenIds.has(item.data.id)) return false
     // Filtre par onglet
     if (activeTab === "produits" && item.type !== "product") return false
     if (activeTab === "publications" && item.type !== "post") return false
@@ -881,98 +954,130 @@ export default function HomePage() {
   })
 
   return (
-    <div className="min-h-screen bg-[#FFF6E5]">
-      {/* Météo — mobile / tablette */}
-      {userType && ["farmer", "cooperative"].includes(userType) && (
-        <div className="gwa-shell-feed px-4 pt-3 lg:hidden">
-          <WeatherWidget />
-        </div>
-      )}
-
-      {/* Header mobile — disparaît au scroll bas comme bottom nav */}
+    <div className="min-h-screen gwa-home-atmosphere">
+      {/* Header mobile — brand first, chrome léger */}
       <header
         className={cn(
-          "sticky top-0 z-40 bg-white border-b border-[#E5E7EB] lg:hidden",
+          "sticky top-0 z-40 border-b border-[#1F5C2E]/10 bg-[#FFF6E5]/92 backdrop-blur-md lg:hidden",
           "transition-transform duration-300 ease-out will-change-transform",
-          headerHidden && "-translate-y-full",
+          headerHidden && "-translate-y-full pointer-events-none",
         )}
-        aria-hidden={headerHidden}
+        aria-hidden={headerHidden || undefined}
       >
-        <div className="px-4 py-3">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-2" aria-label="GWA accueil">
-              <GwaMark size={36} showWordmark wordmarkClassName="font-display text-2xl" />
+        <div className="px-4 pt-3 pb-2">
+          <div className="flex items-center justify-between gap-2">
+            <Link href="/" className="flex min-h-11 items-center gap-2" aria-label="GWA accueil">
+              <GwaMark size={40} showWordmark wordmarkClassName="font-display text-[1.65rem] tracking-tight" />
             </Link>
-            <div className="flex items-center gap-2">
-              <ListenRitualBadge streak={listenStreak} />
-              <YellyAideButton source="mobile_feed_header" compact className="text-[#1F5C2E]" />
+            <div className="flex items-center gap-1">
+              <YellyAideButton source="mobile_feed_header" compact className="text-[#1F5C2E] min-h-11 min-w-11" />
               <Link
                 href="/marketplace?digest=1"
-                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-xl bg-[#1F5C2E]/8 text-[#1F5C2E] text-xs font-semibold active:scale-95 transition-transform"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-[#1F5C2E] px-3.5 text-sm font-semibold text-white active:scale-95 transition-transform"
                 aria-label="Écouter les nouveautés près de toi"
-                title="Écouter les nouveautés près de chez toi"
               >
                 Nouveautés
               </Link>
-              <Link href="/recherche">
-                <Button variant="ghost" size="icon" className="rounded-full h-10 w-10">
+              <Link href="/recherche" aria-label="Rechercher">
+                <Button variant="ghost" size="icon" className="rounded-full h-11 w-11">
                   <Search className="h-5 w-5 text-[#4B5563]" />
                 </Button>
               </Link>
-              <Link href="/notifications" aria-label="Notifications">
-                <Button variant="ghost" size="icon" className="rounded-full h-10 w-10 relative">
+              <Link
+                href="/notifications"
+                aria-label={
+                  unreadNotifications > 0
+                    ? `Notifications, ${unreadNotifications} non lues`
+                    : "Notifications"
+                }
+              >
+                <Button variant="ghost" size="icon" className="rounded-full h-11 w-11 relative">
                   <Bell className="h-5 w-5 text-[#4B5563]" />
                   {unreadNotifications > 0 && (
-                    <span className="absolute top-1 right-1 min-w-[8px] h-2 px-0.5 bg-[#F39A1F] rounded-full" />
+                    <span className="absolute top-1.5 right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#F39A1F] px-1 text-[10px] font-bold text-white">
+                      {unreadNotifications > 9 ? "9+" : unreadNotifications}
+                    </span>
                   )}
                 </Button>
               </Link>
             </div>
           </div>
+          <p className="mt-1 font-display text-sm text-[#1F5C2E]/80 animate-fadeIn">
+            Le marché près de toi
+          </p>
+          {listenStreak > 0 ? (
+            <div className="mt-1.5">
+              <ListenRitualBadge streak={listenStreak} />
+            </div>
+          ) : null}
         </div>
-        
+
         {/* Onglets */}
-        <div className="flex border-t border-[#E5E7EB]">
+        <div className="flex border-t border-[#1F5C2E]/8">
           {[
-            { key: "tout", label: "Pour vous" },
+            { key: "tout", label: "Pour toi" },
             { key: "suivis", label: "Suivis" },
             { key: "produits", label: "Produits" },
-            { key: "publications", label: "Pubs" },
+            { key: "publications", label: "Publications" },
           ].map(tab => (
             <button
               key={tab.key}
+              type="button"
               onClick={() => startTransition(() => setActiveTab(tab.key as typeof activeTab))}
               className={cn(
-                "flex-1 py-3 text-sm font-medium transition-colors",
+                "flex-1 min-h-11 py-2.5 text-sm font-medium transition-colors",
                 activeTab === tab.key
-                  ? "text-[#2F7D32] border-b-2 border-[#2F7D32]"
-                  : "text-[#4B5563]"
+                  ? "text-[#1F5C2E] border-b-2 border-[#1F5C2E]"
+                  : "text-[#6B7280]"
               )}
             >
               {tab.label}
             </button>
           ))}
         </div>
-        
-        {/* Catégories */}
-        <div className="flex gap-2 overflow-x-auto scrollbar-none px-4 py-3">
-          {categories.map((cat) => (
-            <button
-              key={cat.id}
-              type="button"
-              onClick={() => startTransition(() => setActiveCategory(cat.id))}
-              className={cn(
-                "px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-colors",
-                activeCategory === cat.id
-                  ? "bg-[#2F7D32] text-white"
-                  : "bg-white text-[#4B5563] border border-[#E5E7EB]"
-              )}
-            >
-              {cat.name}
-            </button>
-          ))}
+
+        <div className="flex items-center gap-2 px-4 py-2">
+          <button
+            type="button"
+            onClick={() => setShowFilters((v) => !v)}
+            className={cn(
+              "inline-flex min-h-10 items-center rounded-full border px-3.5 text-sm font-medium transition-colors",
+              showFilters || activeCategory !== "all"
+                ? "border-[#1F5C2E] bg-[#1F5C2E] text-white"
+                : "border-[#1F5C2E]/20 bg-white/70 text-[#1F5C2E]",
+            )}
+            aria-expanded={showFilters}
+          >
+            Filtrer{activeCategory !== "all" ? " · actif" : ""}
+          </button>
         </div>
+
+        {showFilters ? (
+          <div className="flex gap-2 overflow-x-auto scrollbar-none px-4 pb-3 animate-fadeIn">
+            {categories.map((cat) => (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => startTransition(() => setActiveCategory(cat.id))}
+                className={cn(
+                  "min-h-10 px-4 rounded-full text-sm font-medium whitespace-nowrap transition-colors",
+                  activeCategory === cat.id
+                    ? "bg-[#1F5C2E] text-white"
+                    : "bg-white/80 text-[#4B5563] border border-[#E5E7EB]"
+                )}
+              >
+                {cat.name}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </header>
+
+      {userType && ["farmer", "cooperative", "producteur"].includes(userType) && (
+        <div className="gwa-shell-feed px-4 pt-3 lg:hidden">
+          <WeatherWidget />
+        </div>
+      )}
 
       {/* Desktop composition */}
       <div className="gwa-feed-desktop">
@@ -1053,7 +1158,7 @@ export default function HomePage() {
         )}
         {isLoading ? (
           Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="bg-white p-4 rounded-2xl shadow-sm">
+            <div key={i} className="bg-white/80 p-4 rounded-2xl ring-1 ring-[#1F5C2E]/8 animate-fadeIn">
               <div className="flex items-center gap-3 mb-4">
                 <Skeleton className="h-11 w-11 rounded-full" />
                 <div className="space-y-2">
@@ -1068,68 +1173,79 @@ export default function HomePage() {
               </div>
             </div>
           ))
+        ) : feedError ? (
+          <div className="rounded-2xl border border-dashed border-[#1F5C2E]/25 bg-white/70 px-6 py-14 text-center">
+            <h3 className="font-display text-lg text-[#1F5C2E]">Pas de connexion</h3>
+            <p className="mt-2 text-sm text-[#6B7280]">
+              Impossible de charger l’accueil. Réessaie quand le réseau revient.
+            </p>
+            <Button
+              className="mt-5 rounded-full bg-[#1F5C2E] hover:bg-[#184a25]"
+              onClick={() => {
+                setRefreshing(true)
+                setRefreshKey((k) => k + 1)
+              }}
+            >
+              Réessayer
+            </Button>
+          </div>
         ) : filteredFeed.length === 0 ? (
-          <div className="bg-white p-8 text-center rounded-2xl shadow-sm">
-            <div className="w-20 h-20 rounded-full bg-[#2F7D32]/10 flex items-center justify-center mx-auto mb-4">
-              <ShoppingBag className="h-10 w-10 text-[#2F7D32]" />
+          <div className="rounded-2xl border border-dashed border-[#1F5C2E]/20 bg-white/70 p-8 text-center">
+            <div className="w-16 h-16 rounded-full bg-[#1F5C2E]/10 flex items-center justify-center mx-auto mb-4">
+              <ShoppingBag className="h-8 w-8 text-[#1F5C2E]" />
             </div>
             {user ? (
               <>
-                <h3 className="font-semibold text-lg text-[#111827] mb-2">
+                <h3 className="font-display text-lg text-[#1F5C2E] mb-2">
                   {activeTab === "suivis"
                     ? followingIds.size === 0
                       ? "Suis des producteurs"
                       : "Rien de nouveau chez tes suivis"
-                    : "Aucune publication pour le moment"}
+                    : "Rien à afficher pour l’instant"}
                 </h3>
-                <p className="text-[#4B5563] text-sm mb-6">
+                <p className="text-[#6B7280] text-sm mb-6">
                   {activeTab === "suivis"
                     ? "Appuie sur Suivre sous une publication pour remplir cet onglet."
-                    : ["producteur", "cooperative", "transformateur", "entreprise", "farmer", "processor"].includes(userType || "")
-                    ? "Publiez votre premier produit pour commencer a vendre"
-                    : userType === "entreprise" || userType === "business"
-                    ? "Explorez le marketplace pour trouver des fournisseurs"
-                    : "Decouvrez les produits des producteurs agricoles africains"
-                  }
+                    : ["producteur", "cooperative", "transformateur", "farmer", "processor"].includes(userType || "")
+                    ? "Publie ton premier produit pour commencer à vendre."
+                    : "Découvre les produits des producteurs près de toi."}
                 </p>
                 <div className="flex flex-col gap-3">
-                  {["producteur", "cooperative", "transformateur", "entreprise", "farmer", "processor"].includes(userType || "") ? (
+                  {["producteur", "cooperative", "transformateur", "farmer", "processor"].includes(userType || "") ? (
                     <Link href="/publier">
-                      <Button className="w-full rounded-full bg-[#2F7D32] hover:bg-[#256427]">
+                      <Button className="w-full rounded-full bg-[#1F5C2E] hover:bg-[#184a25]">
                         Publier un produit
                       </Button>
                     </Link>
                   ) : (
                     <Link href="/marketplace">
-                      <Button className="w-full rounded-full bg-[#2F7D32] hover:bg-[#256427]">
-                        Explorer le marketplace
+                      <Button className="w-full rounded-full bg-[#1F5C2E] hover:bg-[#184a25]">
+                        Voir le marché
                       </Button>
                     </Link>
                   )}
-                  {["producteur", "cooperative", "transformateur", "entreprise", "farmer", "processor"].includes(userType || "") && (
-                    <Link href="/dashboard">
-                      <Button variant="outline" className="w-full rounded-full bg-transparent">
-                        Mon tableau de bord
-                      </Button>
-                    </Link>
-                  )}
+                  <Link href="/marketplace">
+                    <Button variant="outline" className="w-full rounded-full border-[#1F5C2E]/25 bg-transparent">
+                      Parcourir le marché
+                    </Button>
+                  </Link>
                 </div>
               </>
             ) : (
               <>
-                <h3 className="font-semibold text-lg text-[#111827] mb-2">Bienvenue sur GWA</h3>
-                <p className="text-[#4B5563] text-sm mb-6">
-                  Découvrez et connectez-vous avec des producteurs agricoles africains
+                <h3 className="font-display text-lg text-[#1F5C2E] mb-2">Bienvenue sur GWA</h3>
+                <p className="text-[#6B7280] text-sm mb-6">
+                  Le marché agri de Côte d’Ivoire — produits frais, argent protégé.
                 </p>
                 <div className="flex flex-col gap-3">
                   <Link href="/auth/signup">
-                    <Button className="w-full rounded-full bg-[#2F7D32] hover:bg-[#256427]">
+                    <Button className="w-full rounded-full bg-[#1F5C2E] hover:bg-[#184a25]">
                       Créer un compte
                     </Button>
                   </Link>
                   <Link href="/marketplace">
-                    <Button variant="outline" className="w-full rounded-full bg-transparent">
-                      Explorer le marketplace
+                    <Button variant="outline" className="w-full rounded-full border-[#1F5C2E]/25 bg-transparent">
+                      Voir le marché
                     </Button>
                   </Link>
                 </div>
@@ -1206,7 +1322,7 @@ export default function HomePage() {
           ) : null}
           {offlineMode ? (
             <p className="px-4 pb-4 text-center text-xs text-amber-700">
-              Mode hors ligne — contenu en cache
+              Hors ligne — tu vois le contenu enregistré
             </p>
           ) : null}
           </>
@@ -1480,7 +1596,7 @@ const FeedCard = memo(function FeedCard({
   const hasMultipleImages = medias && medias.length > 1
 
   return (
-    <article className="bg-white rounded-2xl overflow-hidden shadow-sm ring-1 ring-black/[0.04]" onMouseEnter={() => onPrefetch?.()} onFocusCapture={() => onPrefetch?.()} onTouchStart={() => onPrefetch?.()}>
+    <article className="bg-white/90 rounded-2xl overflow-hidden ring-1 ring-[#1F5C2E]/8 transition-shadow duration-300 hover:ring-[#1F5C2E]/20" onMouseEnter={() => onPrefetch?.()} onFocusCapture={() => onPrefetch?.()} onTouchStart={() => onPrefetch?.()}>
       {/* Header auteur — actions secondaires dans le menu */}
       <div className="flex items-center justify-between px-3.5 py-3">
         <Link 
@@ -1830,7 +1946,7 @@ const FeedCard = memo(function FeedCard({
               <h3 className="font-semibold text-[#111827] text-[15px] leading-snug line-clamp-2">
                 {(data as Product).name}
               </h3>
-              <p className="text-base font-bold text-red-600 tabular-nums shrink-0">
+              <p className="text-base font-bold text-[#1F5C2E] tabular-nums shrink-0">
                 {formatPrice((data as Product).price)}
                 <span className="text-[10px] font-medium text-[#6B7280] ml-0.5">
                   /{(data as Product).unit}
@@ -1841,23 +1957,38 @@ const FeedCard = memo(function FeedCard({
         </div>
       )}
 
-      {/* Actions prioritaires : like + comment + partager (+ acheter pour produit) */}
+      {/* Actions : favoris (produit) / j’aime (post) + commenter + partager */}
       <div className="flex items-center gap-1 px-2.5 py-2.5">
         <button
           type="button"
           onClick={onLike}
-          className="flex items-center gap-1.5 px-2.5 py-2 rounded-full active:bg-[#FFF6E5] transition-colors"
-          aria-label="J'aime"
+          className="flex min-h-11 items-center gap-1.5 px-2.5 py-2 rounded-full active:bg-[#FFF6E5] transition-colors"
+          aria-label={isProduct ? (item.isSaved ? "Retirer des favoris" : "Ajouter aux favoris") : "J'aime"}
         >
-          <Heart className={cn(
-            "h-6 w-6 transition-colors",
-            item.isLiked ? "fill-[#F39A1F] text-[#F39A1F]" : "text-[#4B5563]"
-          )} />
-          {(data.likes_count || 0) > 0 && (
-            <span className={cn(
-              "text-sm font-medium tabular-nums",
-              item.isLiked ? "text-[#F39A1F]" : "text-[#4B5563]"
-            )}>
+          {isProduct ? (
+            <Bookmark
+              className={cn(
+                "h-6 w-6 transition-colors",
+                item.isSaved || item.isLiked
+                  ? "fill-[#1F5C2E] text-[#1F5C2E]"
+                  : "text-[#4B5563]",
+              )}
+            />
+          ) : (
+            <Heart
+              className={cn(
+                "h-6 w-6 transition-colors",
+                item.isLiked ? "fill-[#F39A1F] text-[#F39A1F]" : "text-[#4B5563]",
+              )}
+            />
+          )}
+          {!isProduct && (data.likes_count || 0) > 0 && (
+            <span
+              className={cn(
+                "text-sm font-medium tabular-nums",
+                item.isLiked ? "text-[#F39A1F]" : "text-[#4B5563]",
+              )}
+            >
               {data.likes_count}
             </span>
           )}
@@ -1866,7 +1997,7 @@ const FeedCard = memo(function FeedCard({
         <button
           type="button"
           onClick={onComment}
-          className="flex items-center gap-1.5 px-2.5 py-2 rounded-full text-[#4B5563] active:bg-[#FFF6E5] transition-colors"
+          className="flex min-h-11 items-center gap-1.5 px-2.5 py-2 rounded-full text-[#4B5563] active:bg-[#FFF6E5] transition-colors"
           aria-label="Commenter"
         >
           <MessageCircle className="h-6 w-6" />
@@ -1878,7 +2009,7 @@ const FeedCard = memo(function FeedCard({
         <button
           type="button"
           onClick={onShare}
-          className="flex items-center gap-1.5 px-2.5 py-2 rounded-full text-[#4B5563] active:bg-[#FFF6E5] transition-colors"
+          className="flex min-h-11 items-center gap-1.5 px-2.5 py-2 rounded-full text-[#4B5563] active:bg-[#FFF6E5] transition-colors"
           aria-label="Partager"
         >
           <Share2 className="h-6 w-6" />
@@ -2025,7 +2156,7 @@ function CommentThread({
               type="button"
               onClick={() => onLike(comment.id)}
               className={cn(
-                "inline-flex items-center gap-1 font-medium",
+                "inline-flex min-h-11 items-center gap-1 px-1 font-medium",
                 comment.liked_by_me ? "text-[#F39A1F]" : "text-[#4B5563]",
               )}
             >
@@ -2036,7 +2167,7 @@ function CommentThread({
               <button
                 type="button"
                 onClick={() => onReply(comment)}
-                className="font-medium text-[#4B5563]"
+                className="min-h-11 px-1 font-medium text-[#4B5563]"
               >
                 Répondre
               </button>
@@ -2050,7 +2181,7 @@ function CommentThread({
                     setEditText(comment.content || "")
                     setEditing(true)
                   }}
-                  className="font-medium text-[#4B5563]"
+                  className="min-h-11 px-1 font-medium text-[#4B5563]"
                 >
                   Modifier
                 </button>
