@@ -274,6 +274,7 @@ export default function HomePage() {
         const metaPromise = currentUser
           ? Promise.all([
               supabase.from("post_likes").select("post_id").eq("user_id", currentUser.id).limit(200),
+              supabase.from("product_likes").select("product_id").eq("user_id", currentUser.id).limit(200),
               supabase.from("favorites").select("product_id").eq("user_id", currentUser.id).limit(200),
               supabase.from("profiles").select("user_type").eq("id", currentUser.id).maybeSingle(),
               supabase.from("followers").select("following_id").eq("follower_id", currentUser.id).limit(200),
@@ -290,8 +291,9 @@ export default function HomePage() {
 
         const [metaRes, authorsRes] = await Promise.all([metaPromise, authorsPromise])
 
+        let userProductLikes: string[] = []
         if (metaRes) {
-          const [likesRes, favsRes, profileRes, followsRes] = metaRes
+          const [likesRes, productLikesRes, favsRes, profileRes, followsRes] = metaRes
           if (profileRes.data) {
             setUserType(profileRes.data.user_type)
           }
@@ -299,6 +301,7 @@ export default function HomePage() {
             setFollowingIds(new Set(followsRes.data.map((f) => f.following_id)))
           }
           userLikes = likesRes.data?.map((l) => l.post_id) || []
+          userProductLikes = productLikesRes.data?.map((l) => l.product_id) || []
           userFavorites = favsRes.data?.map((f) => f.product_id) || []
         }
 
@@ -310,7 +313,6 @@ export default function HomePage() {
           profiles: profileMap.get(post.author_id) || null,
         }))
 
-<<<<<<< Updated upstream
         const feedItems: FeedItem[] = []
         const rankedProducts = ([...(products || [])] as Product[]).sort((a, b) => {
           const pa = feedPriorityForTier(a.profiles?.subscription_tier)
@@ -319,37 +321,13 @@ export default function HomePage() {
           return Date.parse(b.created_at || "0") - Date.parse(a.created_at || "0")
         })
         const maxLen = Math.max(rankedProducts.length, posts.length)
-=======
-      // Melanger produits et posts dans le feed
-      const feedItems: FeedItem[] = []
-      const maxLen = Math.max(products?.length || 0, posts?.length || 0)
-      
-      for (let i = 0; i < maxLen; i++) {
-        if (products?.[i]) {
-          feedItems.push({ 
-            type: "product", 
-            data: products[i] as unknown as Product,
-            isLiked: userFavorites.includes(products[i].id),
-            isSaved: userFavorites.includes(products[i].id)
-          })
-        }
-        if (posts?.[i]) {
-          feedItems.push({ 
-            type: "post", 
-            data: posts[i] as Post,
-            isLiked: userLikes.includes(posts[i].id),
-            isSaved: false
-          })
-        }
-      }
->>>>>>> Stashed changes
 
         for (let i = 0; i < maxLen; i++) {
           if (rankedProducts[i]) {
             feedItems.push({
               type: "product",
               data: rankedProducts[i],
-              isLiked: userFavorites.includes(rankedProducts[i].id),
+              isLiked: userProductLikes.includes(rankedProducts[i].id),
               isSaved: userFavorites.includes(rankedProducts[i].id),
             })
           }
@@ -524,57 +502,85 @@ export default function HomePage() {
     return new Date(date).toLocaleDateString("fr-FR")
   }
 
-  // Gérer le like
+  // Gérer le like (posts → post_likes ; produits → product_likes via API)
   const handleLike = async (item: FeedItem) => {
     if (!user) {
-      toast.error("Connecte-toi pour aimer cette publication")
+      toast.error("Connecte-toi pour aimer")
       return
     }
 
     const itemId = item.data.id
     const isLiked = item.isLiked
-    const table = item.type === "post" ? "post_likes" : "favorites"
-    const idField = item.type === "post" ? "post_id" : "product_id"
-    const countTable = item.type === "post" ? "posts" : "products"
+    const prevCount = item.data.likes_count || 0
 
-    // Mise à jour optimiste
-    setFeed(prev => prev.map(f => 
-      f.data.id === itemId 
-        ? { 
-            ...f, 
-            isLiked: !isLiked,
-            data: {
-              ...f.data,
-              likes_count: isLiked ? f.data.likes_count - 1 : f.data.likes_count + 1
-            }
-          } as FeedItem
-        : f
-    ))
+    setFeed((prev) =>
+      prev.map((f) =>
+        f.data.id === itemId
+          ? ({
+              ...f,
+              isLiked: !isLiked,
+              data: {
+                ...f.data,
+                likes_count: isLiked ? Math.max(0, prevCount - 1) : prevCount + 1,
+              },
+            } as FeedItem)
+          : f,
+      ),
+    )
 
     try {
-      if (isLiked) {
-        await supabase.from(table).delete().eq("user_id", user.id).eq(idField, itemId)
-      } else {
-        await supabase.from(table).insert({ user_id: user.id, [idField]: itemId })
+      if (item.type === "product") {
+        const res = await fetch(`/api/products/${itemId}/like`, { method: "POST" })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data.error || "Like impossible")
+        setFeed((prev) =>
+          prev.map((f) =>
+            f.data.id === itemId
+              ? ({
+                  ...f,
+                  isLiked: !!data.liked,
+                  data: {
+                    ...f.data,
+                    likes_count: Number(data.likes_count) || 0,
+                  },
+                } as FeedItem)
+              : f,
+          ),
+        )
+        return
       }
 
-      // Mettre à jour le compteur en BD
-      await supabase
-        .from(countTable)
-        .update({ likes_count: isLiked ? item.data.likes_count - 1 : item.data.likes_count + 1 })
-        .eq("id", itemId)
-
-      toast.success(isLiked ? "J'aime retiré" : "J'aime ajouté")
-    } catch (error) {
-      // Annuler en cas d'erreur
-      setFeed(prev => prev.map(f => 
-        f.data.id === itemId ? { ...f, isLiked, data: { ...f.data, likes_count: item.data.likes_count } } as FeedItem : f
-      ))
+      // Posts : trigger BD gère likes_count — pas de .update client
+      if (isLiked) {
+        const { error } = await supabase
+          .from("post_likes")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("post_id", itemId)
+        if (error) throw error
+      } else {
+        const { error } = await supabase
+          .from("post_likes")
+          .insert({ user_id: user.id, post_id: itemId })
+        if (error) throw error
+      }
+    } catch {
+      setFeed((prev) =>
+        prev.map((f) =>
+          f.data.id === itemId
+            ? ({
+                ...f,
+                isLiked,
+                data: { ...f.data, likes_count: prevCount },
+              } as FeedItem)
+            : f,
+        ),
+      )
       toast.error("Erreur lors de l'enregistrement")
     }
   }
 
-  // Gérer la sauvegarde (favoris)
+  // Gérer la sauvegarde (favoris) — distinct du like
   const handleSave = async (item: FeedItem) => {
     if (!user) {
       toast.error("Connecte-toi pour sauvegarder")
@@ -584,22 +590,34 @@ export default function HomePage() {
 
     const isSaved = item.isSaved
 
-    setFeed(prev => prev.map(f => 
-      f.data.id === item.data.id ? { ...f, isSaved: !isSaved } : f
-    ))
+    setFeed((prev) =>
+      prev.map((f) =>
+        f.data.id === item.data.id ? { ...f, isSaved: !isSaved } : f,
+      ),
+    )
 
     try {
       if (isSaved) {
-        await supabase.from("favorites").delete().eq("user_id", user.id).eq("product_id", item.data.id)
+        const { error } = await supabase
+          .from("favorites")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("product_id", item.data.id)
+        if (error) throw error
         toast.success("Retiré des favoris")
       } else {
-        await supabase.from("favorites").insert({ user_id: user.id, product_id: item.data.id })
+        const { error } = await supabase
+          .from("favorites")
+          .insert({ user_id: user.id, product_id: item.data.id })
+        if (error) throw error
         toast.success("Ajouté aux favoris")
       }
-    } catch (error) {
-      setFeed(prev => prev.map(f => 
-        f.data.id === item.data.id ? { ...f, isSaved } : f
-      ))
+    } catch {
+      setFeed((prev) =>
+        prev.map((f) =>
+          f.data.id === item.data.id ? { ...f, isSaved } : f,
+        ),
+      )
       toast.error("Erreur lors de la sauvegarde")
     }
   }
@@ -726,7 +744,6 @@ export default function HomePage() {
         voiceStored: boolean
       }
 
-<<<<<<< Updated upstream
       if (replyTo) {
         const inject = (list: Comment[]): Comment[] =>
           list.map((c) => {
@@ -751,30 +768,6 @@ export default function HomePage() {
           prev ? { ...prev, data: { ...prev.data, comments_count: newCount } } : prev,
         )
       }
-=======
-      if (error) throw error
-
-      // Charger le profil de l'utilisateur
-      const { data: profile } = await supabase.from("profiles").select("id, full_name, avatar_url").eq("id", user.id).single()
-
-      // Ajouter le commentaire
-      setComments(prev => [{
-        id: data.id,
-        content: data.content || data.comment,
-        created_at: data.created_at,
-        author: profile
-      }, ...prev])
-
-      // Mettre à jour le compteur
-      const newCount = selectedItem.data.comments_count + 1
-      setFeed(prev => prev.map(f => 
-        f.data.id === selectedItem.data.id 
-          ? { ...f, data: { ...f.data, comments_count: newCount } } as FeedItem
-          : f
-      ))
-
-      await supabase.from(countTable).update({ comments_count: newCount }).eq("id", selectedItem.data.id)
->>>>>>> Stashed changes
 
       setNewComment("")
       setReplyTo(null)
@@ -1561,13 +1554,8 @@ const FeedCard = memo(function FeedCard({
             <p className="text-[11px] text-[#6B7280] flex items-center gap-1 truncate">
               {isProduct ? (
                 <>
-<<<<<<< Updated upstream
                   <MapPin className="h-3 w-3 shrink-0" />
                   {(data as Product).origin_region || (data as Product).origin_country || ("city" in (profile || {}) ? (profile as { city?: string }).city : null) || "Afrique"}
-=======
-                  <MapPin className="h-3 w-3" />
-                  {(data as Product).origin_region || (data as Product).origin_country || (profile as { city?: string })?.city || "Afrique"}
->>>>>>> Stashed changes
                 </>
               ) : (
                 <>{formatTimeAgo(data.created_at)}</>

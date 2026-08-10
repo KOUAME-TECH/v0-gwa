@@ -108,14 +108,17 @@ export default function FavorisPage() {
   const removeFavorite = async (favoriteId: string, productName: string) => {
     if (!user) return
 
-    setFavorites(prev => prev.filter(f => f.id !== favoriteId))
+    const snapshot = favorites
+    setFavorites((prev) => prev.filter((f) => f.id !== favoriteId))
 
     const { error } = await supabase
       .from("favorites")
       .delete()
       .eq("id", favoriteId)
+      .eq("user_id", user.id)
 
     if (error) {
+      setFavorites(snapshot)
       toast.error("Erreur lors de la suppression")
       return
     }

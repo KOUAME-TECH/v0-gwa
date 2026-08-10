@@ -1,4 +1,3 @@
-<<<<<<< Updated upstream
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 
@@ -91,46 +90,4 @@ export async function PATCH(request: NextRequest) {
     console.error("[api/notifications PATCH]", err)
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 })
   }
-=======
-/**
- * GET  /api/notifications  — liste les notifications de l'user connecté
- * POST /api/notifications  — marque des notifications comme lues
- */
-import { type NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-
-export async function GET(_request: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
-
-  const { data: notifications, error } = await supabase
-    .from('notifications')
-    .select('*')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
-    .limit(50)
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  const unread = notifications?.filter((n) => !n.read).length ?? 0
-  return NextResponse.json({ notifications: notifications ?? [], unread })
-}
-
-export async function POST(request: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
-
-  const { ids } = await request.json() as { ids: string[] }
-  if (!ids?.length) return NextResponse.json({ error: 'ids requis' }, { status: 400 })
-
-  await supabase
-    .from('notifications')
-    .update({ read: true })
-    .in('id', ids)
-    .eq('user_id', user.id)
-
-  return NextResponse.json({ success: true })
->>>>>>> Stashed changes
 }

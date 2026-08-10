@@ -32,7 +32,6 @@ const securityHeaders = [
 ]
 
 const nextConfig = {
-<<<<<<< Updated upstream
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -49,10 +48,6 @@ const nextConfig = {
       },
     ],
   },
-=======
-  typescript: { ignoreBuildErrors: true },
-  images: { unoptimized: true },
->>>>>>> Stashed changes
   poweredByHeader: false,
   compress: true,
   experimental: {
