@@ -55,8 +55,20 @@ npm test
 - Migrations : `scripts/schema/0XX_*.sql` dans l’ordre (SQL Editor Supabase).
 - GitHub Supabase Deploy = **OFF**.
 
-## Ops urgents
+## Ops urgents (semaine pro — go-live)
 
-1. `FEEXPAY_*` + webhook E2E  
-2. `AT_SENDER_ID` (SMS ≠ OneSignal)  
-3. Soft-launch seed contenu
+1. **FeexPay live** sur Vercel : `FEEXPAY_API_KEY` + `FEEXPAY_SHOP_ID` + `FEEXPAY_WEBHOOK_SECRET` + `FEEXPAY_MODE=live`  
+   Callback → `https://v0-gwa-mu.vercel.app/api/webhooks/feexpay`  
+2. **Africa’s Talking live** : `AT_USERNAME` (pas sandbox) + `AT_API_KEY` + `AT_SENDER_ID`  
+3. Soft-launch seed contenu  
+4. Vérifier `/api/health` → `feexpay.payin_ready` + `sms_delivery_ready` = true
+
+## Monitoring & crons
+
+| Outil | URL / job |
+|-------|-----------|
+| UptimeRobot (home) | `https://v0-gwa-mu.vercel.app/` |
+| Health deep | `/api/health` (keyword `healthy`) |
+| Ping | `/api/health/ping` (keyword `pong`) |
+| Digest principal | Supabase pg_cron `gwa-harmattan-digest-daily` |
+| Digest backup | Vercel Cron → `/api/cron/harmattan-digest` 06:00 UTC |

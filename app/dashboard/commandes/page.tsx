@@ -191,6 +191,29 @@ export default function OrdersPage() {
     if (selectedOrder?.id === orderId) loadAuditLog(orderId)
   }
 
+  async function leaveReview(orderId: string) {
+    const raw = window.prompt("Note de 1 à 5 pour ce vendeur ?")
+    if (raw == null) return
+    const rating = Math.round(Number(raw))
+    if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+      toast.error("Entre une note entre 1 et 5")
+      return
+    }
+    const comment =
+      window.prompt("Commentaire (optionnel)")?.trim().slice(0, 500) || undefined
+    const res = await fetch("/api/reviews", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ order_id: orderId, rating, comment }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      toast.error(data.error || "Avis non enregistré")
+      return
+    }
+    toast.success("Merci pour ton avis — ça aide le score confiance vendeur")
+  }
+
   async function confirmReception(orderId: string) {
     let receptionPhotoUrl: string | undefined
     try {
@@ -405,6 +428,7 @@ export default function OrdersPage() {
                     onUpdateStatus={updateOrderStatus}
                     onConfirmReception={confirmReception}
                     onOpenLitige={openLitige}
+                    onLeaveReview={leaveReview}
                     currentUserId={user?.id}
                   />
                 ))}
@@ -428,6 +452,7 @@ export default function OrdersPage() {
                     onUpdateStatus={updateOrderStatus}
                     onConfirmReception={confirmReception}
                     onOpenLitige={openLitige}
+                    onLeaveReview={leaveReview}
                     currentUserId={user?.id}
                   />
                 ))}
@@ -461,6 +486,7 @@ export default function OrdersPage() {
                     onUpdateStatus={updateOrderStatus}
                     onConfirmReception={confirmReception}
                     onOpenLitige={openLitige}
+                    onLeaveReview={leaveReview}
                     currentUserId={user?.id}
                   />
                 ))}
@@ -480,6 +506,7 @@ export default function OrdersPage() {
                     onUpdateStatus={updateOrderStatus}
                     onConfirmReception={confirmReception}
                     onOpenLitige={openLitige}
+                    onLeaveReview={leaveReview}
                     currentUserId={user?.id}
                   />
                 ))}
@@ -498,6 +525,7 @@ export default function OrdersPage() {
                     onUpdateStatus={updateOrderStatus}
                     onConfirmReception={confirmReception}
                     onOpenLitige={openLitige}
+                    onLeaveReview={leaveReview}
                     currentUserId={user?.id}
                   />
                 ))}
@@ -516,6 +544,7 @@ export default function OrdersPage() {
                     onUpdateStatus={updateOrderStatus}
                     onConfirmReception={confirmReception}
                     onOpenLitige={openLitige}
+                    onLeaveReview={leaveReview}
                     currentUserId={user?.id}
                   />
                 ))}
@@ -685,6 +714,7 @@ function OrderCard({
   onUpdateStatus,
   onConfirmReception,
   onOpenLitige,
+  onLeaveReview,
   currentUserId,
 }: {
   order: Order
@@ -692,6 +722,7 @@ function OrderCard({
   onUpdateStatus: (orderId: string, status: string, reason?: string) => void
   onConfirmReception: (orderId: string) => void
   onOpenLitige: (orderId: string) => void
+  onLeaveReview?: (orderId: string) => void
   currentUserId?: string
 }) {
   const status = normalizeOrderStatus(order.status)
@@ -820,6 +851,16 @@ function OrderCard({
                 >
                   <CheckCircle2 className="h-4 w-4 mr-1" />
                   J’ai bien reçu
+                </Button>
+              )}
+              {!isSeller && status === "delivered" && onLeaveReview && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="rounded-xl border-[#1F5C2E]/30 text-[#1F5C2E]"
+                  onClick={() => onLeaveReview(order.id)}
+                >
+                  Laisser un avis
                 </Button>
               )}
               {canLitige && (

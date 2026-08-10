@@ -1,12 +1,13 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import type { ProducteurData } from "./engine"
 
 /**
  * Agrège les données réelles d'un producteur depuis Supabase
  * pour alimenter le calcul du SCG.
+ * Service role : lecture complète indépendante du caller (avis, confirm, cron).
  */
 export async function aggregateProducerData(userId: string): Promise<ProducteurData> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   // ── Profil (ancienneté, coopérative, certifications) ──
   const { data: profile } = await supabase
@@ -51,11 +52,20 @@ export async function aggregateProducerData(userId: string): Promise<ProducteurD
     orders?.map((o) => ({ date: o.created_at, amount: Number(o.total_amount || 0) })) ?? []
   )
 
-  // ── Avis reçus ──
-  const { data: reviews } = await supabase.from("reviews").select("rating").eq("seller_id", userId)
+  // ── Avis reçus (notes 1–5 uniquement ; rating 0 = commentaire produit, exclu) ──
+  const { data: reviews } = await supabase
+    .from("reviews")
+    .select("rating, order_id")
+    .eq("seller_id", userId)
+    .gte("rating", 1)
+    .lte("rating", 5)
 
-  const nbEvaluations = reviews?.length ?? 0
-  const noteMoyenne = nbEvaluations > 0 ? reviews!.reduce((s, r) => s + (r.rating || 0), 0) / nbEvaluations : 0
+  const scored = (reviews || []).filter((r) => Number(r.rating) >= 1)
+  const nbEvaluations = scored.length
+  const noteMoyenne =
+    nbEvaluations > 0
+      ? scored.reduce((s, r) => s + (Number(r.rating) || 0), 0) / nbEvaluations
+      : 0
 
   // ── Litiges ──
   let litigesOuverts = 0

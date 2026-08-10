@@ -1556,7 +1556,18 @@ const FeedCard = memo(function FeedCard({
               <LinkIcon className="h-4 w-4 mr-2" />
               Copier le lien
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => toast.success("Publication masquée")}>
+            <DropdownMenuItem
+              onClick={() => {
+                try {
+                  const key = `gwa_hide_${item.type}_${data.id}`
+                  localStorage.setItem(key, "1")
+                  toast.success("Publication masquée sur cet appareil")
+                  window.dispatchEvent(new CustomEvent("gwa:feed-hide", { detail: { id: data.id } }))
+                } catch {
+                  toast.success("Publication masquée")
+                }
+              }}
+            >
               <EyeOff className="h-4 w-4 mr-2" />
               Masquer
             </DropdownMenuItem>
@@ -1569,7 +1580,40 @@ const FeedCard = memo(function FeedCard({
                 Supprimer
               </DropdownMenuItem>
             ) : (
-              <DropdownMenuItem onClick={() => toast.success("Signalement envoyé")} className="text-destructive">
+              <DropdownMenuItem
+                onClick={() => {
+                  void (async () => {
+                    if (!currentUserId) {
+                      toast.error("Connecte-toi pour signaler")
+                      return
+                    }
+                    const reason =
+                      window.prompt(
+                        "Pourquoi signales-tu ce contenu ? (spam, arnaque, inapproprié…)",
+                      ) || ""
+                    if (reason.trim().length < 3) {
+                      toast.error("Motif trop court")
+                      return
+                    }
+                    const res = await fetch("/api/reports", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        reported_type: isProduct ? "product" : "post",
+                        reported_id: data.id,
+                        reason: reason.trim(),
+                      }),
+                    })
+                    if (!res.ok) {
+                      const err = await res.json().catch(() => ({}))
+                      toast.error(err.error || "Signalement impossible")
+                      return
+                    }
+                    toast.success("Signalement envoyé à la modération")
+                  })()
+                }}
+                className="text-destructive"
+              >
                 <Flag className="h-4 w-4 mr-2" />
                 Signaler
               </DropdownMenuItem>

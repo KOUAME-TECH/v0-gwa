@@ -246,7 +246,8 @@ export async function submitFeedComment(
           comment: textValue,
           review_type: mediaType,
           audio_url: audioUrl,
-          rating: 5,
+          // Commentaire produit ≠ avis noté — rating 0 exclu du SCG (aggregate)
+          rating: 0,
           ...(parent ? { parent_review_id: parent } : {}),
         }
 
@@ -262,7 +263,7 @@ export async function submitFeedComment(
           [idField]: target.id,
           reviewer_id: userId,
           comment: textValue || "Note vocale",
-          rating: 5,
+          rating: 0,
           ...(parent ? { parent_review_id: parent } : {}),
         }
 

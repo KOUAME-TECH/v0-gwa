@@ -240,6 +240,23 @@ export async function POST(request: NextRequest, context: Ctx) {
       url: "/wallet",
     })
 
+    // Recalcul SCG vendeur après livraison confirmée
+    try {
+      const { aggregateProducerData } = await import("@/lib/scg/aggregate")
+      const { calculateSCG } = await import("@/lib/scg/engine")
+      const scgData = await aggregateProducerData(order.seller_id)
+      const scg = calculateSCG(scgData)
+      await admin
+        .from("profiles")
+        .update({
+          scg_score: scg.score_global,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", order.seller_id)
+    } catch (scgErr) {
+      console.warn("[api/orders/confirm] scg", scgErr)
+    }
+
     return NextResponse.json({
       success: true,
       escrow_status: escrowStatus,
@@ -248,6 +265,7 @@ export async function POST(request: NextRequest, context: Ctx) {
       payout_amount_fcfa: payoutAmount,
       payout_error: payoutError,
       payout_pending: !payoutOk,
+      review_cta: true,
     })
   } catch (err) {
     console.error("[api/orders/confirm]", err)

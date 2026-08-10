@@ -57,9 +57,31 @@ export async function POST(request: NextRequest) {
     const phone = String(body?.phone || "").trim()
     const network = mapPaymentMethodToNetwork(String(body?.network || body?.method || "orange"))
 
-    if (!Number.isFinite(amount) || amount < 1000) {
+    const admin = createAdminClient()
+    let minWithdrawal = 1000
+    try {
+      const { data: setting } = await admin
+        .from("platform_settings")
+        .select("value")
+        .eq("key", "min_withdrawal")
+        .maybeSingle()
+      const raw = setting?.value
+      const parsed =
+        typeof raw === "object" && raw && "XOF" in (raw as object)
+          ? Number((raw as { XOF: number }).XOF)
+          : Number(raw)
+      if (Number.isFinite(parsed) && parsed >= 500) minWithdrawal = Math.round(parsed)
+    } catch {
+      /* défaut 1000 */
+    }
+
+    if (!Number.isFinite(amount) || amount < minWithdrawal) {
       return NextResponse.json(
-        { error: "Montant minimum 1 000 FCFA", code: "AMOUNT_TOO_LOW" },
+        {
+          error: `Montant minimum ${minWithdrawal.toLocaleString("fr-FR")} FCFA`,
+          code: "AMOUNT_TOO_LOW",
+          min_withdrawal_fcfa: minWithdrawal,
+        },
         { status: 400 },
       )
     }
@@ -69,8 +91,6 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       )
     }
-
-    const admin = createAdminClient()
 
     // Solde disponible = commandes livrées / escrow released
     const { data: completed } = await admin

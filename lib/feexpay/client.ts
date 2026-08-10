@@ -8,9 +8,16 @@ import {
   normalizeFeexPayPhone,
   type FeexPayNetwork,
 } from "@/lib/feexpay/networks"
+import {
+  getFeexPayReadinessFromEnv,
+  isFeexPayFailedStatus,
+  isFeexPayPaidStatus,
+  parseFeexPayMode,
+} from "@/lib/feexpay/readiness"
 
 export type { FeexPayNetwork }
 export { mapPaymentMethodToNetwork, normalizeFeexPayPhone }
+export { isFeexPayFailedStatus, isFeexPayPaidStatus }
 
 export type FeexPayCredentials = {
   apiKey: string
@@ -41,11 +48,16 @@ export function getFeexPayCredentials(): FeexPayCredentials | null {
   const apiKey = (process.env.FEEXPAY_API_KEY || "").replace(/^"|"$/g, "").trim()
   const shopId = (process.env.FEEXPAY_SHOP_ID || "").replace(/^"|"$/g, "").trim()
   if (!apiKey || !shopId) return null
-  const modeRaw = (process.env.FEEXPAY_MODE || "sandbox").toLowerCase()
-  const mode = modeRaw === "live" || modeRaw === "prod" || modeRaw === "production"
-    ? "live"
-    : "sandbox"
-  return { apiKey, shopId, mode }
+  return { apiKey, shopId, mode: parseFeexPayMode(process.env.FEEXPAY_MODE) }
+}
+
+export function getFeexPayWebhookSecret(): string {
+  return (process.env.FEEXPAY_WEBHOOK_SECRET || "").replace(/^"|"$/g, "").trim()
+}
+
+/** Readiness ops — pay-in live exige clé + shop + webhook. */
+export function getFeexPayReadiness() {
+  return getFeexPayReadinessFromEnv(process.env)
 }
 
 function pickString(obj: Record<string, unknown>, keys: string[]): string | null {

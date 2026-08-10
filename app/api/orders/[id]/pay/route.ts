@@ -6,6 +6,7 @@ import { sendPushToUser } from "@/lib/notifications/push"
 import {
   createFeexPayPayIn,
   getFeexPayCredentials,
+  getFeexPayReadiness,
   mapPaymentMethodToNetwork,
 } from "@/lib/feexpay/client"
 
@@ -62,6 +63,24 @@ export async function POST(request: NextRequest, context: Ctx) {
       return NextResponse.json({ error: "Déjà payée" }, { status: 400 })
     }
 
+    // Idempotence : pay-in déjà lancé → renvoyer le même état
+    if (
+      order.payment_status === "processing" &&
+      order.feexpay_ref &&
+      !String(order.feexpay_ref).startsWith("SIM-")
+    ) {
+      return NextResponse.json({
+        status: "ussd_pending",
+        feexpay_ref: order.feexpay_ref,
+        payment_url: null,
+        network: mapPaymentMethodToNetwork(
+          String(order.payment_method || "orange"),
+        ),
+        message: "Paiement déjà initié — valide sur ton téléphone ou attends la confirmation",
+        idempotent: true,
+      })
+    }
+
     const body = await request.json().catch(() => ({}))
     const paymentMethod =
       String(body?.payment_method || order.payment_method || "orange").trim()
@@ -77,10 +96,13 @@ export async function POST(request: NextRequest, context: Ctx) {
       String(body?.phone || order.shipping_phone || buyerProfile?.phone || "").trim()
 
     const admin = createAdminClient()
-    const creds = getFeexPayCredentials()
+    const readiness = getFeexPayReadiness()
+    const creds = readiness.payin_ready ? getFeexPayCredentials() : null
     const amount = Math.round(Number(order.total_amount) || 0)
     const origin = appOrigin(request)
-    const returnUrl = `${origin}/commandes/confirmation?order=${id}`
+    const returnUrl = `${origin}/commandes/confirmation?order=${id}&pending=1`
+    const exposeDetails =
+      process.env.NODE_ENV !== "production" && process.env.VERCEL_ENV !== "production"
 
     if (creds) {
       if (!phone) {
@@ -111,7 +133,7 @@ export async function POST(request: NextRequest, context: Ctx) {
           {
             error: "Échec initiation paiement FeexPay",
             code: payIn.error || "PAYIN_FAILED",
-            details: payIn.raw,
+            ...(exposeDetails ? { details: payIn.raw } : {}),
           },
           { status: 502 },
         )
@@ -153,8 +175,11 @@ export async function POST(request: NextRequest, context: Ctx) {
       return NextResponse.json(
         {
           error:
-            "Paiements live non configurés. Définissez FEEXPAY_API_KEY + FEEXPAY_SHOP_ID.",
-          code: "PAYMENT_PROVIDER_MISSING",
+            readiness.live_blocked_reason ||
+            "Paiements live non prêts. Définissez FEEXPAY_API_KEY + FEEXPAY_SHOP_ID + FEEXPAY_WEBHOOK_SECRET (mode live).",
+          code: readiness.configured
+            ? "PAYMENT_WEBHOOK_MISSING"
+            : "PAYMENT_PROVIDER_MISSING",
         },
         { status: 503 },
       )

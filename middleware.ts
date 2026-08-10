@@ -20,6 +20,32 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   const method = request.method.toUpperCase()
 
+  // Mode maintenance (platform_settings) — cookie court-circuité pour health/webhooks/cron/admin
+  const maintenanceOn = process.env.GWA_MAINTENANCE_MODE === "true"
+  if (
+    maintenanceOn &&
+    !pathname.startsWith("/api/health") &&
+    !pathname.startsWith("/api/webhooks/") &&
+    !pathname.startsWith("/api/cron/") &&
+    !pathname.startsWith("/admin") &&
+    !pathname.startsWith("/api/admin") &&
+    !pathname.startsWith("/_next")
+  ) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json(
+        {
+          error: "Maintenance en cours. Réessaie dans quelques minutes.",
+          code: "MAINTENANCE",
+        },
+        { status: 503 },
+      )
+    }
+    const url = request.nextUrl.clone()
+    url.pathname = "/aide"
+    url.searchParams.set("maintenance", "1")
+    return NextResponse.redirect(url)
+  }
+
   // CSRF / Same-Origin for API mutations (defense in depth with cookie auth)
   if (pathname.startsWith("/api/") && MUTATING_METHODS.has(method) && !isCsrfExempt(pathname)) {
     const csrf = assertSameOrigin(request)

@@ -18,6 +18,7 @@ import {
   hasAfricasTalkingProvider,
   hasSmsProvider,
   hasTwilioProvider,
+  isSmsDeliveryReady,
   sendSmsOtp,
 } from "@/lib/auth/sms"
 
@@ -77,6 +78,22 @@ export async function POST(request: Request) {
           error:
             "L'envoi de SMS est temporairement indisponible. Réessayez plus tard ou utilisez l'email.",
           code: "SMS_PROVIDER_MISSING",
+        },
+        { status: 503 },
+      )
+    }
+
+    if (
+      process.env.VERCEL_ENV === "production" &&
+      hasAfricasTalkingProvider() &&
+      !hasTwilioProvider() &&
+      !isSmsDeliveryReady()
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "SMS non prêt (config opérateur). Utilisez l'email ou réessayez après configuration AT_SENDER_ID.",
+          code: "SMS_DELIVERY_NOT_READY",
         },
         { status: 503 },
       )
@@ -247,7 +264,9 @@ export async function POST(request: Request) {
 
     const sms = await sendSmsOtp(formatted, code)
     if (!sms.success) {
-      console.error("[auth/send-otp] sms", sms.error)
+      console.error("[auth/send-otp] sms", sms.error, sms.code)
+      // Ne pas laisser un OTP fantôme si le SMS n'est pas parti
+      await clearOtp(formatted).catch(() => {})
       // Pas de fallback Supabase Phone si AT est le provider choisi :
       // sinon l'UI dit « envoyé » alors que le SMS n'arrive jamais.
       if (mode === "login" && !hasAfricasTalkingProvider()) {
@@ -256,7 +275,6 @@ export async function POST(request: Request) {
           options: { shouldCreateUser: false },
         })
         if (!smsError) {
-          await clearOtp(formatted).catch(() => {})
           return NextResponse.json({
             success: true,
             phone: formatted,
@@ -275,7 +293,14 @@ export async function POST(request: Request) {
         supabasePhoneError = smsError.message
         console.warn("[auth/send-otp] supabase fallback:", smsError.message)
       }
+      const userMessage =
+        sms.code === "AT_SENDER_ID_MISSING"
+          ? "SMS non prêt (Sender ID manquant). Utilisez l'email ou contactez le support."
+          : sms.code === "AT_SANDBOX"
+            ? "SMS encore en mode test opérateur. Utilisez l'email pour l'instant."
+            : "Impossible d'envoyer le SMS pour le moment. Réessayez plus tard ou utilisez l'email."
       const hintParts = [
+        sms.code || null,
         sms.provider
           ? `${sms.provider}:${(sms.error || "fail").slice(0, 120)}`
           : null,
@@ -286,9 +311,8 @@ export async function POST(request: Request) {
       ].filter(Boolean)
       return NextResponse.json(
         {
-          error:
-            "Impossible d'envoyer le SMS pour le moment. Réessayez plus tard.",
-          code: "SMS_SEND_FAILED",
+          error: userMessage,
+          code: sms.code || "SMS_SEND_FAILED",
           hint: hintParts.join(" | ") || undefined,
         },
         { status: 502 },
