@@ -98,6 +98,8 @@ export async function POST(request: Request) {
     }
 
     if (!order && callbackOrderId) {
+      // Uniquement si ref absente ET commande encore processing sans feexpay_ref
+      // sinon exiger le match ref (anti marquage paid arbitraire)
       const { data } = await admin
         .from("orders")
         .select(
@@ -105,20 +107,35 @@ export async function POST(request: Request) {
         )
         .eq("id", callbackOrderId)
         .maybeSingle()
-      order = data
+      if (data && (!ref || !data.feexpay_ref || data.feexpay_ref === ref)) {
+        order = data
+      }
     }
 
     if (!order) {
       return NextResponse.json({ received: true, matched: false })
     }
 
-    // Re-vérification optionnelle auprès de FeexPay (anti-spoof payload)
+    // Re-vérification auprès de FeexPay (anti-spoof payload)
     let effectiveStatus = status
-    if (ref && (isFeexPayPaidStatus(status) || !status)) {
+    let verifiedRaw: Record<string, unknown> = {}
+    if (ref) {
       const verified = await verifyFeexPayTransaction(ref)
-      if (verified.ok && verified.status) {
-        effectiveStatus = verified.status
+      if (verified.ok) {
+        verifiedRaw = verified.raw || {}
+        if (verified.status) effectiveStatus = verified.status
+      } else if (isFeexPayPaidStatus(status)) {
+        // Ne pas marquer paid si le provider ne confirme pas
+        return NextResponse.json(
+          { error: "Vérification FeexPay échouée", received: true, matched: true },
+          { status: 422 },
+        )
       }
+    } else if (isFeexPayPaidStatus(status)) {
+      return NextResponse.json(
+        { error: "Référence FeexPay manquante", received: true, matched: true },
+        { status: 422 },
+      )
     }
 
     const paid = isFeexPayPaidStatus(effectiveStatus)
@@ -135,7 +152,13 @@ export async function POST(request: Request) {
       }
 
       const paidAmount = Number(
-        payload.amount ?? payload.paid_amount ?? payload.montant ?? NaN,
+        verifiedRaw.amount ??
+          verifiedRaw.paid_amount ??
+          verifiedRaw.montant ??
+          payload.amount ??
+          payload.paid_amount ??
+          payload.montant ??
+          NaN,
       )
       const expectedAmt = Number(order.total_amount)
       if (!Number.isFinite(paidAmount)) {

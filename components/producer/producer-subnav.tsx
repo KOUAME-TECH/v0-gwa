@@ -7,28 +7,28 @@ import { cn } from "@/lib/utils"
 import { YellyAideButton } from "@/components/yelly/yelly-aide-button"
 
 const LINKS = [
-  { href: "/dashboard/farmer", label: "Accueil", icon: LayoutDashboard, match: (p: string) => p === "/dashboard/farmer" },
+  { href: "/dashboard/farmer", label: "Mon espace", icon: LayoutDashboard, match: (p: string) => p === "/dashboard/farmer" },
   {
     href: "/dashboard/commandes?tab=ventes",
-    label: "Ventes",
+    label: "Mes ventes",
     icon: ShoppingBag,
     match: (p: string) => p.startsWith("/dashboard/commandes"),
   },
   {
     href: "/dashboard/products",
-    label: "Produits",
+    label: "Mes produits",
     icon: Package,
     match: (p: string) => p.startsWith("/dashboard/products"),
   },
   {
     href: "/wallet",
-    label: "Argent",
+    label: "Mon argent",
     icon: Wallet,
     match: (p: string) => p.startsWith("/wallet") || p.startsWith("/affacturage"),
   },
   {
     href: "/scg",
-    label: "Score",
+    label: "Mon score",
     icon: Sparkles,
     match: (p: string) => p.startsWith("/scg"),
   },

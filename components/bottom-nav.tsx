@@ -2,8 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Home, ShoppingBag, MessageCircle, User, Plus, Bell, Search, Store } from "lucide-react"
-// ShoppingBag = hub ventes producteur ; Store = marketplace acheteur
+import { Home, MessageCircle, User, Plus, Bell, Search, Store } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { shouldShowBottomNav } from "@/lib/navigation/shell-routes"
 import { isSellerRole } from "@/lib/dashboard/routing"
@@ -78,25 +77,25 @@ export function BottomNav() {
   }
 
   const navItems: NavItem[] = [
-    { href: "/", icon: Home, label: "Feed", world: "social" },
+    { href: "/", icon: Home, label: "Accueil", world: "social" },
     {
-      href: isSeller ? "/dashboard/farmer" : "/marketplace",
-      icon: isSeller ? ShoppingBag : Store,
-      label: isSeller ? "Ventes" : "Shop",
+      href: "/marketplace",
+      icon: Store,
+      label: "Shop",
       world: "commerce",
       badge: ordersCount > 0 ? ordersCount : undefined,
     },
     {
       href: isSeller ? "/publier" : "/recherche",
       icon: isSeller ? Plus : Search,
-      label: isSeller ? "Publier" : "Explorer",
+      label: isSeller ? "Publier" : "Chercher",
       world: "social",
       isCenter: true,
     },
     {
       href: "/messages",
       icon: MessageCircle,
-      label: "Chat",
+      label: "Messages",
       world: "messaging",
       badge: unreadMessages > 0 ? unreadMessages : undefined,
     },

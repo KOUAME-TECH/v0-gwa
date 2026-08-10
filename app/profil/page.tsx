@@ -30,10 +30,7 @@ import {
 } from "lucide-react"
 import { shouldShowVerifiedBadge } from "@/lib/verification/badge"
 import { dashboardPathForUserType, isSellerRole } from "@/lib/dashboard/routing"
-import {
-  isDualIdentity,
-  productEspaceLabel,
-} from "@/lib/auth/dual-identity"
+import { productEspaceLabel } from "@/lib/auth/dual-identity"
 type Profile = {
   id: string
   full_name: string
@@ -215,7 +212,6 @@ export default function ProfilPage() {
   const isSeller = isSellerRole(profile.user_type)
   const isCooperative = profile.user_type === "cooperative"
   const roleHome = dashboardPathForUserType(profile.user_type)
-  const dual = isDualIdentity(isAdmin, profile.user_type)
 
   const getMainMenuItems = (): MenuItem[] => {
     const espaceLabel = productEspaceLabel(profile.user_type)
@@ -285,15 +281,12 @@ export default function ProfilPage() {
     ...(isAdmin
       ? [
           {
-            title: dual ? "Backoffice (séparé)" : "Administration",
+            title: "Administration",
             items: [
               {
                 icon: Shield,
-                label: dual
-                  ? `Backoffice admin${adminRoleLabel ? ` · ${adminRoleLabel}` : ""}`
-                  : "Backoffice admin",
+                label: "Administration",
                 href: "/admin",
-                highlight: true,
               },
             ],
           },
@@ -382,7 +375,6 @@ export default function ProfilPage() {
             </div>
             <p className="text-sm text-neutral-500 mb-1">
               {getUserTypeLabel(profile.user_type)}
-              {dual ? " · aussi admin backoffice" : ""}
             </p>
             {(profile.city || profile.country) && (
               <div className="flex items-center gap-1 text-sm text-neutral-500">
@@ -401,15 +393,7 @@ export default function ProfilPage() {
           </p>
         )}
 
-        {dual ? (
-          <div className="mt-4 rounded-xl border border-[#1F5C2E]/20 bg-[#1F5C2E]/5 px-3 py-2.5 text-sm text-[#1F5C2E]">
-            <p className="font-medium">Double identité</p>
-            <p className="text-xs text-[#1F5C2E]/80 mt-0.5 leading-relaxed">
-              Votre espace {getUserTypeLabel(profile.user_type).toLowerCase()} et le
-              backoffice sont séparés. Utilisez le menu ci-dessous pour basculer.
-            </p>
-          </div>
-        ) : null}
+        {/* Admin : lien discret dans le menu uniquement — pas de bandeau double identité */}
 
         <Link href="/profil/edit" className="block mt-4">
           <Button

@@ -202,7 +202,7 @@ export default function FarmerDashboard() {
               {firstName}
             </h1>
             <p className="mt-1 text-sm text-[#6B7280]">
-              Un seul lieu : publier, vendre, encaisser.
+              Ici tu gères tes ventes, ton argent et tes produits.
             </p>
           </div>
           <div className="flex items-center gap-2">
