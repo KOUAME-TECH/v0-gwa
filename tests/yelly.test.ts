@@ -38,7 +38,7 @@ describe("Yelly prompt", () => {
 
   it("personnalise suggestions par rôle", () => {
     expect(yellySuggestionsForRole("acheteur").join(" ")).toMatch(/commande/i)
-    expect(yellySuggestionsForRole("producteur").join(" ")).toMatch(/publier|SCG|palier/i)
+    expect(yellySuggestionsForRole("producteur").join(" ")).toMatch(/publier|score|palier|avance/i)
     expect(yellySuggestionsForRole("cooperative").join(" ")).toMatch(/membres|coop/i)
     expect(yellyWelcomeForRole("cooperative")).toMatch(/coop/i)
   })
@@ -68,7 +68,7 @@ describe("Yelly knowledge", () => {
     expect(ctx).toMatch(/producteur/)
     expect(ctx).toMatch(/Starter/)
     expect(ctx).toMatch(/6\.5/)
-    expect(ctx).toMatch(/SCG: 420/)
+    expect(ctx).toMatch(/Score: 420/)
     expect(ctx).toMatch(/wallet/)
   })
 })

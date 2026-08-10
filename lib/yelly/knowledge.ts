@@ -100,7 +100,7 @@ export function buildYellyDomainFacts(): string {
 
 PRODUIT
 - GWA = Business Unit de KOUAME Corporation. Escrow = argent protégé applicatif (FeexPay Mobile Money), jamais « banque escrow ».
-- Rôles compte : acheteur, producteur, transformateur, cooperative, entreprise (desk achats). Affacturage n’est pas un rôle d’inscription.
+- Rôles compte : acheteur, producteur, transformateur, cooperative, entreprise (desk achats). L’avance sur vente n’est pas un rôle d’inscription.
 - Espace producteur (hub unique) : /dashboard/farmer — sections Accueil · Ventes · Produits · Argent · Score. Bottom nav « Ventes » y mène. Publier = /publier (pas /dashboard/products/new). Mes ventes = /dashboard/commandes?tab=ventes.
 
 ARGENT / COMMANDES
@@ -111,21 +111,21 @@ ARGENT / COMMANDES
 
 ABONNEMENTS VENDEUR
 - ${tiers}
-- Gratuit : max ${FREE_MAX_ACTIVE_LISTINGS} annonces actives. Starter+ : plus d’annonces, Digest, stats selon palier.
+- Gratuit : max ${FREE_MAX_ACTIVE_LISTINGS} annonces actives. Starter+ : plus d’annonces, Nouveautés, stats selon palier.
 - Activation abo : demande dans l’app puis validation ops (preuve WhatsApp) — pas de carte bancaire dans GWA.
 
-SCORE DE CONFIANCE (SCG)
+SCORE DE CONFIANCE
 - Score 0–${YELLY_SCG_MAX}. Seuil bancable / affacturage ≈ ${YELLY_SCG_BANCABLE_THRESHOLD}.
 - Monte avec profil complet, livraisons honorées, avis notés (1–5 liés à commande), moins de litiges.
-- Commentaires produit sans note (rating 0) n’influencent pas le SCG.
-- Affacturage : file semi-manuelle pour producteurs/coop éligibles — décaissement hors plateforme après validation.
+- Commentaires produit sans note (rating 0) n’influencent pas le score.
+- Avance sur vente : file semi-manuelle pour producteurs/coop éligibles — décaissement hors plateforme après validation.
 
 COOPÉRATIVES
 - Qualification : au moins ${YELLY_COOP_MIN_MEMBERS} membres actifs (fenêtre ${YELLY_COOP_MEMBER_WINDOW_DAYS} j) + documents légaux sous ${YELLY_COOP_DOCS_MONTHS} mois.
-- Sinon : usage basique OK, fonctions avancées (ex. affacturage) restreintes. Rôles coop : admin / manager / member.
+- Sinon : usage basique OK, fonctions avancées (ex. avance sur vente) restreintes. Rôles coop : admin / manager / member.
 
 DIGEST / NOTIFS
-- Digest Harmattan : nouveautés près de toi (Boutique → Écouter / notifications). Push = OneSignal. SMS OTP = Africa’s Talking (pas OneSignal).
+- Nouveautés : près de toi (Marché → Écouter / notifications). Push = OneSignal. SMS OTP = Africa’s Talking (pas OneSignal).
 
 OÙ ALLER DANS L’APP
 - Vendre : Publier. Acheter : Boutique / Agriculture. Argent vendeur : Wallet. Score : /scg. Abo : /abonnement. Aide : /aide ou WhatsApp ${YELLY_SUPPORT_WHATSAPP}.
@@ -166,7 +166,7 @@ export function formatYellyUserContext(input: {
     const bancable =
       input.scgBancable === true || score >= YELLY_SCG_BANCABLE_THRESHOLD
     parts.push(
-      `SCG: ${score}${bancable ? " (bancable)" : ` (seuil ${YELLY_SCG_BANCABLE_THRESHOLD})`}`,
+      `Score: ${score}${bancable ? " (éligible avance)" : ` (seuil ${YELLY_SCG_BANCABLE_THRESHOLD})`}`,
     )
   }
   if (input.page) parts.push(`Page: ${input.page}`)

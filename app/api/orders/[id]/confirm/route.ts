@@ -71,7 +71,7 @@ export async function POST(request: NextRequest, context: Ctx) {
           error:
             st !== "shipped" && st !== "delivered"
               ? "Confirme la réception seulement après expédition (statut « En route »)."
-              : "Impossible de libérer : paiement non confirmé ou fonds non en séquestre",
+              : "Impossible de libérer : paiement non confirmé ou fonds non protégés",
           code: "CONFIRM_NOT_ALLOWED",
         },
         { status: 400 },

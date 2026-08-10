@@ -152,7 +152,7 @@ export async function POST(request: NextRequest) {
           return NextResponse.json(
             {
               error:
-                "Affacturage réservé aux coopératives qualifiées (membres + docs). Fonctions de base restent ouvertes.",
+                "Avance sur vente réservée aux coopératives qualifiées (membres + docs). Les fonctions de base restent ouvertes.",
               code: "COOP_ADVANCED_RESTRICTED",
               access,
             },
