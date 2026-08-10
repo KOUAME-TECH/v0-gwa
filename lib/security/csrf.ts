@@ -12,10 +12,23 @@ export function assertSameOrigin(request: Request): NextResponse | null {
     return null
   }
 
-  // Auth non-cookie (Bearer, API keys) → hors scope CSRF navigateur
+  // Cron Vercel : le header seul ne bypass PAS le CSRF ici —
+  // les routes /api/cron sont exemptées dans middleware + exigent CRON_SECRET.
+  if (request.headers.get("x-vercel-cron") === "1") {
+    const cronSecret = (process.env.CRON_SECRET || "").replace(/^"|"$/g, "").trim()
+    const auth = request.headers.get("authorization") || ""
+    if (cronSecret && auth === `Bearer ${cronSecret}`) return null
+    // Sans Bearer valide : ne pas court-circuiter Origin (défense en profondeur)
+  }
+
+  // Bearer : uniquement JWT-like long (évite CSRF avec « Bearer x »)
   const auth = request.headers.get("authorization") || ""
-  if (/^Bearer\s+\S+/i.test(auth)) return null
-  if (request.headers.get("x-vercel-cron") === "1") return null
+  const bearerMatch = /^Bearer\s+(\S+)/i.exec(auth)
+  if (bearerMatch) {
+    const token = bearerMatch[1]
+    // JWT Supabase ≈ 3 segments ; clés cron déjà gérées ci-dessus / routes exempt
+    if (token.split(".").length === 3 && token.length >= 40) return null
+  }
 
   // Clé interne : valeur obligatoire + match secret env (pas juste présence)
   const internalHeader = (request.headers.get("x-gwa-internal-key") || "").trim()

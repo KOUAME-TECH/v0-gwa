@@ -37,7 +37,8 @@ export async function countYellyUserMessagesToday(
 
   if (error) {
     console.warn("[yelly] count today", error.message)
-    return 0
+    // Fail-closed : refuse le quota « 0 utilisé » en cas d’erreur lecture
+    return Number.MAX_SAFE_INTEGER
   }
   return count ?? 0
 }

@@ -88,19 +88,14 @@ export default function WalletPage() {
       return
     }
 
-    // Calculate wallet balance from completed orders (seller)
-    const { data: completedOrders } = await supabase
-      .from('orders')
-      .select('total_amount, service_fee, vendeur_recoit_fcfa, commission_fcfa')
-      .eq('seller_id', user.id)
-      .eq('status', 'delivered')
-      .eq('payment_status', 'paid')
-
+    // Solde Wallet via API (exclut payout déjà paid — anti double cash-out)
     type OrderMoney = {
       total_amount?: number | null
       service_fee?: number | null
       vendeur_recoit_fcfa?: number | null
       commission_fcfa?: number | null
+      payout_status?: string | null
+      escrow_status?: string | null
     }
 
     const sellerNet = (order: OrderMoney) => {
@@ -111,29 +106,20 @@ export default function WalletPage() {
       return Math.max(0, total - (Number(order.service_fee) || 0))
     }
 
-    const totalEarned =
-      (completedOrders as OrderMoney[] | null)?.reduce((sum: number, order: OrderMoney) => {
-        return sum + sellerNet(order)
-      }, 0) || 0
-
-    // Calculate pending balance (orders not yet delivered)
-    const { data: pendingOrders } = await supabase
-      .from('orders')
-      .select('total_amount, service_fee, vendeur_recoit_fcfa, commission_fcfa')
-      .eq('seller_id', user.id)
-      .in('status', ['confirmed', 'preparing', 'shipping'])
-      .eq('payment_status', 'paid')
-
-    const pendingBalance =
-      (pendingOrders as OrderMoney[] | null)?.reduce((sum: number, order: OrderMoney) => {
-        return sum + sellerNet(order)
-      }, 0) || 0
-
+    let totalEarned = 0
     let totalWithdrawn = 0
+    let availableFromApi: number | null = null
     const withdrawTxns: Transaction[] = []
     try {
       const wRes = await fetch("/api/wallet/withdraw")
       const wData = await wRes.json().catch(() => ({}))
+      if (Number.isFinite(Number(wData.gross_fcfa))) totalEarned = Number(wData.gross_fcfa)
+      if (Number.isFinite(Number(wData.withdrawn_fcfa))) {
+        totalWithdrawn = Number(wData.withdrawn_fcfa)
+      }
+      if (Number.isFinite(Number(wData.balance_fcfa))) {
+        availableFromApi = Number(wData.balance_fcfa)
+      }
       const rows = (wData.withdrawals || []) as {
         id: string
         amount_fcfa: number
@@ -141,9 +127,11 @@ export default function WalletPage() {
         feexpay_ref?: string | null
         created_at: string
       }[]
-      totalWithdrawn = rows
-        .filter((w) => ["pending", "processing", "paid"].includes(w.status))
-        .reduce((s, w) => s + (Number(w.amount_fcfa) || 0), 0)
+      if (!Number.isFinite(Number(wData.withdrawn_fcfa))) {
+        totalWithdrawn = rows
+          .filter((w) => ["pending", "processing", "paid"].includes(w.status))
+          .reduce((s, w) => s + (Number(w.amount_fcfa) || 0), 0)
+      }
       for (const w of rows) {
         withdrawTxns.push({
           id: w.id,
@@ -163,24 +151,64 @@ export default function WalletPage() {
     } catch {
       /* API absente / migration */
     }
-    
+
+    const { data: completedOrders } = await supabase
+      .from("orders")
+      .select(
+        "total_amount, service_fee, vendeur_recoit_fcfa, commission_fcfa, payout_status, escrow_status",
+      )
+      .eq("seller_id", user.id)
+      .eq("payment_status", "paid")
+      .eq("escrow_status", "released")
+
+    if (totalEarned === 0) {
+      totalEarned =
+        (completedOrders as OrderMoney[] | null)?.reduce((sum, order) => {
+          const ps = (order.payout_status || "").toLowerCase()
+          if (["paid", "skipped_sim", "processing", "skipped_zero"].includes(ps)) {
+            return sum
+          }
+          return sum + sellerNet(order)
+        }, 0) || 0
+    }
+
+    const { data: pendingOrders } = await supabase
+      .from("orders")
+      .select("total_amount, service_fee, vendeur_recoit_fcfa, commission_fcfa")
+      .eq("seller_id", user.id)
+      .eq("payment_status", "paid")
+      .eq("escrow_status", "held")
+
+    const pendingBalance =
+      (pendingOrders as OrderMoney[] | null)?.reduce((sum, order) => {
+        return sum + sellerNet(order)
+      }, 0) || 0
+
     setWallet({
-      balance: Math.max(0, totalEarned - totalWithdrawn),
+      balance:
+        availableFromApi != null
+          ? Math.max(0, availableFromApi)
+          : Math.max(0, totalEarned - totalWithdrawn),
       pending_balance: pendingBalance,
       total_earned: totalEarned,
-      total_withdrawn: totalWithdrawn
+      total_withdrawn: totalWithdrawn,
     })
 
     const creditTxns: Transaction[] =
-      (completedOrders as OrderMoney[] | null)?.map((order: OrderMoney, i: number) => ({
-      id: `credit-${i}`,
-      type: 'credit' as const,
-      amount: sellerNet(order),
-      status: 'completed' as const,
-      description: 'Vente livrée',
-      reference: null,
-      created_at: new Date(Date.now() - i * 86400000).toISOString()
-    })) || []
+      (completedOrders as OrderMoney[] | null)
+        ?.filter((order) => {
+          const ps = (order.payout_status || "").toLowerCase()
+          return !["paid", "skipped_sim", "processing", "skipped_zero"].includes(ps)
+        })
+        .map((order, i) => ({
+          id: `credit-${i}`,
+          type: "credit" as const,
+          amount: sellerNet(order),
+          status: "completed" as const,
+          description: "Vente libérée (Wallet)",
+          reference: null,
+          created_at: new Date(Date.now() - i * 86400000).toISOString(),
+        })) || []
 
     setTransactions([...withdrawTxns, ...creditTxns])
     setLoading(false)

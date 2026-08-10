@@ -6,8 +6,12 @@ import {
 } from "@/lib/factoring/eligibility"
 
 describe("éligibilité affacturage (P11)", () => {
-  it("bancable → éligible quel que soit le score", () => {
-    expect(isFactoringEligible({ scg_bancable: true, scg_score: 0 })).toBe(true)
+  it("flag bancable seul avec score 0 → non éligible (anti-spéculation)", () => {
+    expect(isFactoringEligible({ scg_bancable: true, scg_score: 0 })).toBe(false)
+  })
+
+  it("flag bancable sans score (legacy) → éligible", () => {
+    expect(isFactoringEligible({ scg_bancable: true })).toBe(true)
   })
 
   it("score >= seuil → éligible", () => {

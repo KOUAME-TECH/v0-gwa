@@ -29,6 +29,8 @@ Business Unit de **KOUAME Corporation** — marketplace agroalimentaire PWA (Cô
 
 Ce dépôt = **code uniquement** + ce README. Pas de dossier `docs/`.
 
+**Juridique (projet) :** [`legal/CGU-CGV-notice-fonds-projet-2026-08.md`](./legal/CGU-CGV-notice-fonds-projet-2026-08.md) — CGU/CGV + notice détention fonds + analyse anti-spéculation (validation avocat obligatoire).
+
 ---
 
 ## Stack

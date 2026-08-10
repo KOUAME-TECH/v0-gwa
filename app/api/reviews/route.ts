@@ -29,7 +29,12 @@ export async function POST(request: NextRequest) {
     const orderId = String(body?.order_id || "").trim()
     const rating = Math.round(Number(body?.rating))
     const comment =
-      body?.comment != null ? String(body.comment).trim().slice(0, 2000) : null
+      body?.comment != null
+        ? String(body.comment)
+            .replace(/<[^>]*>/g, "")
+            .trim()
+            .slice(0, 2000)
+        : null
 
     if (!orderId) {
       return NextResponse.json(
@@ -105,7 +110,10 @@ export async function POST(request: NextRequest) {
       const data = await aggregateProducerData(order.seller_id)
       const result = calculateSCG(data)
       await admin.from("profiles").update({
-        scg_score: result.score_global,
+        scg_score: result.score_total,
+        scg_badge: result.badge,
+        scg_bancable: result.bancable,
+        scg_calculated_at: result.calculated_at,
         updated_at: new Date().toISOString(),
       }).eq("id", order.seller_id)
     } catch (scgErr) {

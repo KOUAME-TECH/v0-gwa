@@ -99,7 +99,8 @@ export async function POST(request: NextRequest) {
     if (!Number.isFinite(amount) || amount <= 0) {
       return NextResponse.json({ error: "Montant invalide" }, { status: 400 })
     }
-    if (amount > 500_000_000) {
+    // Plafond absolu bas — le plafond créances est appliqué après éligibilité
+    if (amount > 50_000_000) {
       return NextResponse.json({ error: "Montant trop élevé" }, { status: 400 })
     }
 
@@ -180,18 +181,65 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Plafond = créances GWA (commandes paid held/released net vendeur) — anti spéculation
+    const { data: receivableOrders } = await admin
+      .from("orders")
+      .select("vendeur_recoit_fcfa, total_amount, commission_fcfa, service_fee, escrow_status")
+      .eq("seller_id", user.id)
+      .eq("payment_status", "paid")
+      .in("escrow_status", ["held", "released", "frozen"])
+    const maxReceivable = (receivableOrders || []).reduce((s, o) => {
+      if (o.vendeur_recoit_fcfa != null) return s + (Number(o.vendeur_recoit_fcfa) || 0)
+      return (
+        s +
+        Math.max(
+          0,
+          (Number(o.total_amount) || 0) -
+            (Number(o.commission_fcfa) || 0) -
+            (Number(o.service_fee) || 0),
+        )
+      )
+    }, 0)
+    const cap = Math.max(0, Math.round(maxReceivable))
+    if (cap <= 0) {
+      return NextResponse.json(
+        {
+          error:
+            "Aucune créance GWA éligible. L’affacturage porte sur des commandes payées.",
+          code: "NO_RECEIVABLES",
+        },
+        { status: 400 },
+      )
+    }
+    if (amount > cap) {
+      return NextResponse.json(
+        {
+          error: `Montant plafonné à ${cap.toLocaleString("fr-FR")} FCFA (créances GWA)`,
+          code: "AMOUNT_ABOVE_RECEIVABLES",
+          max_fcfa: cap,
+        },
+        { status: 400 },
+      )
+    }
+
     const queuePriority = factoringQueuePriority(profile?.subscription_tier)
 
-    // order_id optionnel : doit appartenir au demandeur (vendeur ou acheteur)
+    // order_id optionnel : doit appartenir au demandeur vendeur
     if (orderId) {
       const { data: order } = await admin
         .from("orders")
-        .select("id, buyer_id, seller_id")
+        .select("id, buyer_id, seller_id, payment_status, escrow_status")
         .eq("id", orderId)
         .maybeSingle()
-      if (!order || (order.seller_id !== user.id && order.buyer_id !== user.id)) {
+      if (!order || order.seller_id !== user.id) {
         return NextResponse.json(
-          { error: "Commande invalide ou non associée à votre compte" },
+          { error: "Commande invalide ou non associée à votre compte vendeur" },
+          { status: 400 },
+        )
+      }
+      if (order.payment_status !== "paid") {
+        return NextResponse.json(
+          { error: "La commande liée doit être payée", code: "ORDER_NOT_PAID" },
           { status: 400 },
         )
       }

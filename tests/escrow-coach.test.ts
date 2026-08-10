@@ -67,7 +67,15 @@ describe("escrow-flow", () => {
     expect(mapLitigeDescriptionToReason("autre truc")).toBe("other")
   })
 
-  it("canBuyerConfirmReception exige held", () => {
+  it("canBuyerConfirmReception exige shipped + held", () => {
+    expect(
+      canBuyerConfirmReception({
+        isSeller: false,
+        payment_status: "paid",
+        escrow_status: "held",
+        status: "processing",
+      }),
+    ).toBe(false)
     expect(
       canBuyerConfirmReception({
         isSeller: false,
@@ -86,7 +94,14 @@ describe("escrow-flow", () => {
     ).toBe(true)
   })
 
-  it("canOpenLitige bloque frozen/released", () => {
+  it("canOpenLitige autorise held même si delivered", () => {
+    expect(
+      canOpenLitige({
+        payment_status: "paid",
+        escrow_status: "held",
+        status: "delivered",
+      }),
+    ).toBe(true)
     expect(
       canOpenLitige({
         payment_status: "paid",

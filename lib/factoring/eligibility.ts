@@ -22,11 +22,15 @@ export function roleCanRequestFactoring(userType: string | null | undefined): bo
   return (FACTORING_ELIGIBLE_ROLES as readonly string[]).includes(userType)
 }
 
-/**
- * Éligibilité SCG : bancable OU score >= seuil minimum.
- */
+/** Éligibilité SCG : score recalculé ≥ seuil (flag bancable seul insuffisant si score bas). */
 export function isFactoringEligible(input: FactoringScgInput | null | undefined): boolean {
   if (!input) return false
-  if (input.scg_bancable === true) return true
-  return typeof input.scg_score === "number" && input.scg_score >= FACTORING_MIN_SCORE
+  const score =
+    typeof input.scg_score === "number" && Number.isFinite(input.scg_score)
+      ? input.scg_score
+      : null
+  if (score != null && score >= FACTORING_MIN_SCORE) return true
+  // Flag bancable uniquement si score inconnu (legacy) — pas si score < seuil
+  if (score == null && input.scg_bancable === true) return true
+  return false
 }

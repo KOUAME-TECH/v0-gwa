@@ -7,13 +7,17 @@ import {
   getFeexPayCredentials,
   mapPaymentMethodToNetwork,
 } from "@/lib/feexpay/client"
+import {
+  canBuyerConfirmReception,
+  normalizeOrderStatus,
+} from "@/lib/orders/escrow-flow"
 
 type Ctx = { params: Promise<{ id: string }> }
 
 /**
  * POST /api/orders/[id]/confirm
- * Acheteur confirme réception → payout vendeur (net commission) + release escrow.
- * Si le payout échoue : commande livrée mais escrow reste held (file ops / retry).
+ * Acheteur confirme réception (après shipped) → claim atomique held → payout vendeur.
+ * Anti-spéculation : pas de confirm précoce ; claim WHERE escrow=held ; SCG score_total.
  */
 export async function POST(request: NextRequest, context: Ctx) {
   try {
@@ -50,15 +54,23 @@ export async function POST(request: NextRequest, context: Ctx) {
     if (order.buyer_id !== user.id) {
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 })
     }
-    if (order.escrow_status === "released") {
-      return NextResponse.json({ error: "Déjà libérée" }, { status: 400 })
-    }
-    if (order.payment_status !== "paid" || order.escrow_status !== "held") {
+
+    if (
+      !canBuyerConfirmReception({
+        isSeller: false,
+        payment_status: order.payment_status,
+        escrow_status: order.escrow_status,
+        status: order.status,
+      })
+    ) {
+      const st = normalizeOrderStatus(order.status || "")
       return NextResponse.json(
         {
           error:
-            "Impossible de libérer : paiement non confirmé ou fonds non en séquestre",
-          code: "ESCROW_NOT_HELD",
+            st !== "shipped" && st !== "delivered"
+              ? "Confirme la réception seulement après expédition (statut « En route »)."
+              : "Impossible de libérer : paiement non confirmé ou fonds non en séquestre",
+          code: "CONFIRM_NOT_ALLOWED",
         },
         { status: 400 },
       )
@@ -67,20 +79,43 @@ export async function POST(request: NextRequest, context: Ctx) {
     const admin = createAdminClient()
     const now = new Date().toISOString()
 
+    // Claim atomique anti double-confirm / double-payout
+    const { data: claimed, error: claimErr } = await admin
+      .from("orders")
+      .update({
+        payout_status: "processing",
+        updated_at: now,
+      })
+      .eq("id", id)
+      .eq("escrow_status", "held")
+      .eq("payment_status", "paid")
+      .select("*")
+      .maybeSingle()
+
+    if (claimErr || !claimed) {
+      return NextResponse.json(
+        {
+          error: "Commande déjà en cours de libération ou non disponible",
+          code: "ESCROW_CLAIM_FAILED",
+        },
+        { status: 409 },
+      )
+    }
+
     const { data: sellerProfile } = await admin
       .from("profiles")
       .select("phone, full_name")
-      .eq("id", order.seller_id)
+      .eq("id", claimed.seller_id)
       .maybeSingle()
 
     const payoutAmount =
-      order.vendeur_recoit_fcfa != null
-        ? Math.round(Number(order.vendeur_recoit_fcfa))
+      claimed.vendeur_recoit_fcfa != null
+        ? Math.round(Number(claimed.vendeur_recoit_fcfa))
         : Math.max(
             0,
-            Math.round(Number(order.total_amount) || 0) -
-              Math.round(Number(order.commission_fcfa) || 0) -
-              Math.round(Number(order.service_fee) || 0),
+            Math.round(Number(claimed.total_amount) || 0) -
+              Math.round(Number(claimed.commission_fcfa) || 0) -
+              Math.round(Number(claimed.service_fee) || 0),
           )
 
     let payoutStatus = "skipped_no_provider"
@@ -91,7 +126,7 @@ export async function POST(request: NextRequest, context: Ctx) {
     const creds = getFeexPayCredentials()
     const sellerPhone = String(sellerProfile?.phone || "").trim()
     const network = mapPaymentMethodToNetwork(
-      order.payment_method || order.payout_network || "orange",
+      claimed.payment_method || claimed.payout_network || "orange",
     )
 
     if (creds && payoutAmount > 0) {
@@ -99,13 +134,12 @@ export async function POST(request: NextRequest, context: Ctx) {
         payoutStatus = "failed"
         payoutError = "SELLER_PHONE_MISSING"
       } else {
-        payoutStatus = "processing"
         payoutNetwork = network
         const payout = await createFeexPayPayout({
           amountFcfa: payoutAmount,
           phone: sellerPhone,
           network,
-          description: `GWA release ${order.order_number}`,
+          description: `GWA release ${claimed.order_number}`,
         })
         if (payout.ok) {
           payoutStatus = "paid"
@@ -136,28 +170,40 @@ export async function POST(request: NextRequest, context: Ctx) {
       payoutStatus === "skipped_sim" ||
       payoutStatus === "skipped_zero"
 
+    // Si payout OK → released (exclu du wallet). Si KO → held + créditer plus tard via ops.
     const escrowStatus = payoutOk ? "released" : "held"
+    // Échec payout : repasser processing → null pour permettre retry ; rester held
+    const finalPayoutStatus = payoutOk
+      ? payoutStatus
+      : payoutStatus === "failed"
+        ? "failed"
+        : payoutStatus
 
     const orderPatch: Record<string, unknown> = {
       status: "delivered",
       escrow_status: escrowStatus,
       confirmed_by_buyer_at: now,
-      delivered_at: order.delivered_at || now,
+      delivered_at: claimed.delivered_at || now,
       updated_at: now,
-      payout_status: payoutStatus,
+      payout_status: finalPayoutStatus,
       payout_ref: payoutRef,
       payout_network: payoutNetwork,
       payout_at: payoutOk ? now : null,
       payout_error: payoutError,
     }
     if (receptionPhotoUrl) {
-      orderPatch.notes = [order.notes, `Photo réception: ${receptionPhotoUrl}`]
+      orderPatch.notes = [claimed.notes, `Photo réception: ${receptionPhotoUrl}`]
         .filter(Boolean)
         .join("\n")
         .slice(0, 2000)
     }
 
-    const { error: updErr } = await admin.from("orders").update(orderPatch).eq("id", id)
+    const { error: updErr } = await admin
+      .from("orders")
+      .update(orderPatch)
+      .eq("id", id)
+      .eq("payout_status", "processing")
+
     if (updErr) {
       console.warn("[api/orders/confirm] payout cols?", updErr.message)
       await admin
@@ -166,8 +212,9 @@ export async function POST(request: NextRequest, context: Ctx) {
           status: "delivered",
           escrow_status: escrowStatus,
           confirmed_by_buyer_at: now,
-          delivered_at: order.delivered_at || now,
+          delivered_at: claimed.delivered_at || now,
           updated_at: now,
+          payout_status: finalPayoutStatus,
         })
         .eq("id", id)
     }
@@ -187,7 +234,7 @@ export async function POST(request: NextRequest, context: Ctx) {
       new_value: escrowStatus,
       notes: [
         receptionPhotoUrl ? `Photo: ${receptionPhotoUrl}` : null,
-        `payout=${payoutStatus}`,
+        `payout=${finalPayoutStatus}`,
         payoutRef ? `ref=${payoutRef}` : null,
         payoutError ? `err=${payoutError}` : null,
         `amount=${payoutAmount}`,
@@ -197,14 +244,14 @@ export async function POST(request: NextRequest, context: Ctx) {
     })
 
     if (payoutOk) {
-      const invoiceNumber = `FA-${order.order_number}`
+      const invoiceNumber = `FA-${claimed.order_number}`
       await admin.from("invoices").upsert(
         {
           order_id: id,
           number: invoiceNumber,
-          buyer_id: order.buyer_id,
-          seller_id: order.seller_id,
-          total_fcfa: Math.round(Number(order.total_amount) || 0),
+          buyer_id: claimed.buyer_id,
+          seller_id: claimed.seller_id,
+          total_fcfa: Math.round(Number(claimed.total_amount) || 0),
           issued_at: now,
         },
         { onConflict: "order_id", ignoreDuplicates: true },
@@ -213,13 +260,13 @@ export async function POST(request: NextRequest, context: Ctx) {
 
     const sellerMsg =
       payoutStatus === "paid"
-        ? `Fonds versés (${payoutAmount} FCFA) — ${order.order_number}`
+        ? `Fonds versés (${payoutAmount} FCFA) — ${claimed.order_number}`
         : payoutStatus === "failed"
-          ? `Livraison confirmée — payout en file ops (${order.order_number})`
-          : `L'acheteur a confirmé ${order.order_number}`
+          ? `Livraison confirmée — payout en file ops (${claimed.order_number})`
+          : `L'acheteur a confirmé ${claimed.order_number}`
 
     await admin.from("notifications").insert({
-      user_id: order.seller_id,
+      user_id: claimed.seller_id,
       type: "order",
       title:
         payoutStatus === "paid"
@@ -234,7 +281,7 @@ export async function POST(request: NextRequest, context: Ctx) {
       read: false,
     })
 
-    void sendPushToUser(supabase as never, order.seller_id, {
+    void sendPushToUser(supabase as never, claimed.seller_id, {
       title:
         payoutStatus === "paid"
           ? "Argent versé"
@@ -245,19 +292,21 @@ export async function POST(request: NextRequest, context: Ctx) {
       url: "/wallet",
     })
 
-    // Recalcul SCG vendeur après livraison confirmée
     try {
       const { aggregateProducerData } = await import("@/lib/scg/aggregate")
       const { calculateSCG } = await import("@/lib/scg/engine")
-      const scgData = await aggregateProducerData(order.seller_id)
+      const scgData = await aggregateProducerData(claimed.seller_id)
       const scg = calculateSCG(scgData)
       await admin
         .from("profiles")
         .update({
-          scg_score: scg.score_global,
+          scg_score: scg.score_total,
+          scg_badge: scg.badge,
+          scg_bancable: scg.bancable,
+          scg_calculated_at: scg.calculated_at,
           updated_at: new Date().toISOString(),
         })
-        .eq("id", order.seller_id)
+        .eq("id", claimed.seller_id)
     } catch (scgErr) {
       console.warn("[api/orders/confirm] scg", scgErr)
     }
@@ -265,7 +314,7 @@ export async function POST(request: NextRequest, context: Ctx) {
     return NextResponse.json({
       success: true,
       escrow_status: escrowStatus,
-      payout_status: payoutStatus,
+      payout_status: finalPayoutStatus,
       payout_ref: payoutRef,
       payout_amount_fcfa: payoutAmount,
       payout_error: payoutError,

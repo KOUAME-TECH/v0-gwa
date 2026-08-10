@@ -85,8 +85,9 @@ export async function POST(request: NextRequest) {
         validation_status: "pending_validation",
         members_deadline_at: membersDeadline.toISOString(),
         docs_deadline_at: docsDeadline.toISOString(),
+        invite_code: `gwa-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
       })
-      .select("id, name, slug, validation_status")
+      .select("id, name, slug, validation_status, invite_code")
       .single()
 
     if (error || !coop) {

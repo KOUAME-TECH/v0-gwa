@@ -84,9 +84,10 @@ export function resolveEscrowStep(input: {
   if (esc === "released") return 4
   if (esc === "frozen" || st === "disputed") return 2
 
-  // Livré côté commande mais fonds encore en séquestre → étape Confirmé
+  // Livré côté commande mais fonds encore en séquestre → étape Confirmé (pas « Vendeur payé »)
   if (st === "delivered" && esc === "held") return 3
-  if (st === "delivered") return 4
+  if (st === "delivered" && esc === "released") return 4
+  if (st === "delivered") return 3
 
   if (st === "shipped") return 2
 
@@ -148,7 +149,7 @@ export function humanPaymentLabel(method?: string | null, status?: string | null
   return `${methodLabel} (${statusLabel})`
 }
 
-/** Acheteur peut confirmer réception seulement si fonds réellement en séquestre. */
+/** Acheteur peut confirmer réception seulement après expédition (CGU Art. 5). */
 export function canBuyerConfirmReception(input: {
   isSeller: boolean
   payment_status?: string | null
@@ -159,7 +160,8 @@ export function canBuyerConfirmReception(input: {
   if (input.payment_status !== "paid") return false
   if (input.escrow_status !== "held") return false
   const st = normalizeOrderStatus(input.status || "pending")
-  return ["shipped", "processing", "confirmed", "delivered"].includes(st)
+  // shipped uniquement — plus de confirm précoce (processing/confirmed)
+  return st === "shipped" || st === "delivered"
 }
 
 export function canOpenLitige(input: {
@@ -168,7 +170,14 @@ export function canOpenLitige(input: {
   status?: string | null
 }): boolean {
   const st = normalizeOrderStatus(input.status || "pending")
-  if (st === "disputed" || st === "cancelled" || st === "delivered") return false
-  if (input.escrow_status === "frozen" || input.escrow_status === "released") return false
+  if (st === "disputed" || st === "cancelled") return false
+  if (input.escrow_status === "frozen" || input.escrow_status === "released") {
+    return false
+  }
+  // Tant que fonds held : litige possible même si status delivered (payout fail)
+  if (input.escrow_status === "held" && input.payment_status === "paid") {
+    return true
+  }
+  if (st === "delivered") return false
   return input.payment_status === "paid"
 }

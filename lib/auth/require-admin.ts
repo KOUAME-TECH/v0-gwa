@@ -10,8 +10,8 @@ import {
   isSuperAdmin,
 } from "@/lib/auth/admin-permissions"
 
-/** Session utilisateur requise — API routes */
-export async function requireUser() {
+/** Session utilisateur requise — API routes. Refuse comptes suspendus. */
+export async function requireUser(opts?: { allowSuspended?: boolean }) {
   const supabase = await createClient()
   const {
     data: { user },
@@ -19,6 +19,21 @@ export async function requireUser() {
   } = await supabase.auth.getUser()
   if (error || !user) {
     return { user: null, supabase, error: "Non authentifié" as const }
+  }
+  if (!opts?.allowSuspended) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("is_suspended")
+      .eq("id", user.id)
+      .maybeSingle()
+    if (profile?.is_suspended) {
+      return {
+        user: null,
+        supabase,
+        error: "Compte suspendu" as const,
+        suspended: true as const,
+      }
+    }
   }
   return { user, supabase, error: null }
 }

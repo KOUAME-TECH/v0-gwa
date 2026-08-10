@@ -117,9 +117,21 @@ export async function POST(request: NextRequest) {
         )
       }
       const qty = Math.max(1, Math.min(999_999, Number(item.quantity) || 1))
+      const stock =
+        product.stock_quantity == null ? null : Number(product.stock_quantity)
+      if (stock != null && Number.isFinite(stock) && qty > stock) {
+        return NextResponse.json(
+          {
+            error: `Stock insuffisant pour « ${product.name || item.product_id} » (max ${stock})`,
+            code: "OUT_OF_STOCK",
+            product_id: item.product_id,
+          },
+          { status: 400 },
+        )
+      }
       // Prix toujours depuis la DB — ignorer unit_price client
       const unitPrice = Number(product.price)
-      if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+      if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
         return NextResponse.json(
           { error: `Prix invalide pour ${item.product_id}` },
           { status: 400 },
@@ -196,7 +208,21 @@ export async function POST(request: NextRequest) {
     )
     if (itemsError) {
       console.error("[api/orders items]", itemsError.message)
+      // Compense : supprimer order orpheline
+      await supabase.from("orders").delete().eq("id", order.id)
       return NextResponse.json({ error: itemsError.message }, { status: 400 })
+    }
+
+    // Décrémente stock (best-effort) — réservation soft jusqu'au pay
+    for (const li of lineItems) {
+      const product = priceMap.get(li.product_id)
+      if (!product || product.stock_quantity == null) continue
+      const next = Math.max(0, Number(product.stock_quantity) - li.quantity)
+      await supabase
+        .from("products")
+        .update({ stock_quantity: next, updated_at: new Date().toISOString() })
+        .eq("id", li.product_id)
+        .eq("seller_id", sellerId)
     }
 
     // Escrow tranche unique (100% à livraison) — pending jusqu'au pay

@@ -138,8 +138,16 @@ export async function POST(request: Request) {
         payload.amount ?? payload.paid_amount ?? payload.montant ?? NaN,
       )
       const expectedAmt = Number(order.total_amount)
+      if (!Number.isFinite(paidAmount)) {
+        console.error(
+          `[webhooks/feexpay] montant manquant ref=${ref} order=${order.id}`,
+        )
+        return NextResponse.json(
+          { error: "Montant manquant", received: true, matched: true },
+          { status: 422 },
+        )
+      }
       if (
-        Number.isFinite(paidAmount) &&
         Number.isFinite(expectedAmt) &&
         paidAmount + 1e-6 < expectedAmt
       ) {
