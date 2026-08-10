@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Home, MessageCircle, User, Plus, Bell, Search, Store } from "lucide-react"
+import { Home, MessageCircle, User, Plus, Bell, Search, Store, ShoppingBag } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { shouldShowBottomNav } from "@/lib/navigation/shell-routes"
 import { isSellerRole } from "@/lib/dashboard/routing"

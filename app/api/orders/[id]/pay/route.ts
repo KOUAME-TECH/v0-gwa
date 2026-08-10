@@ -226,8 +226,8 @@ export async function POST(request: NextRequest, context: Ctx) {
     await admin.from("notifications").insert({
       user_id: order.seller_id,
       type: "order",
-      title: "Paiement reçu (escrow)",
-      message: `Commande ${order.order_number} payée — fonds en séquestre`,
+      title: "Paiement reçu (argent protégé)",
+      message: `Commande ${order.order_number} payée — fonds sécurisés`,
       body: `Commande ${order.order_number} payée`,
       link: `/dashboard/commandes`,
       is_read: false,
@@ -235,7 +235,7 @@ export async function POST(request: NextRequest, context: Ctx) {
     })
 
     void sendPushToUser(supabase as never, order.seller_id, {
-      title: "Paiement escrow GWA",
+      title: "Paiement GWA — argent protégé",
       body: `${order.order_number} — fonds sécurisés`,
       url: "/dashboard/commandes",
     })

@@ -532,7 +532,7 @@ function MarketplaceContent() {
       return
     }
     if (digest.total === 0) {
-      toast.error("Aucun nouveau produit dans le digest")
+      toast.error("Aucune nouveauté près de toi pour le moment")
       return
     }
     if (parcours.active) parcours.stop()

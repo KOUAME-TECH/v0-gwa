@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "Seuls les producteurs et coopératives peuvent demander de l'affacturage.",
+            "Seuls les producteurs et coopératives peuvent demander une avance sur vente.",
           code: "ROLE_NOT_ELIGIBLE",
           user_type: profile?.user_type ?? null,
         },
@@ -172,7 +172,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "Profil non éligible à l'affacturage. Un score SCG suffisant (bancable) est requis.",
+            "Profil non éligible à l’avance sur vente. Un score de confiance d’au moins 500 est requis.",
           code: "SCG_NOT_ELIGIBLE",
           scg_score: score,
           seuil: SCG_SEUIL_ELIGIBILITE,
@@ -329,9 +329,9 @@ export async function POST(request: NextRequest) {
         admins.map((a) => ({
           user_id: a.user_id,
           type: "alert",
-          title: "Nouvelle demande d'affacturage",
+          title: "Nouvelle demande d'avance sur vente",
           message: `Demande de ${Math.round(amount)} FCFA à examiner`,
-          body: `Affacturage — ${Math.round(amount)} FCFA`,
+          body: `Avance sur vente — ${Math.round(amount)} FCFA`,
           link: "/admin/factoring",
           is_read: false,
           read: false,

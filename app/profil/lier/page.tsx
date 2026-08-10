@@ -277,7 +277,7 @@ export default function LierComptePage() {
               Vérification d&apos;identité
             </div>
             <p className="text-sm text-neutral-600">
-              Optionnel mais utile pour le badge et le SCG — pièce + selfie.
+              Optionnel mais utile pour le badge et le score de confiance — pièce + selfie.
             </p>
             <Link href="/profil/verification">
               <Button className="mt-2 w-full h-11 rounded-xl bg-[#F5A623] hover:bg-[#e09510] text-white">

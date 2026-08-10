@@ -426,7 +426,7 @@ export default function CooperativeDashboard() {
           </Link>
           <Link href="/scg" className="rounded-2xl bg-white p-4 ring-1 ring-black/5">
             <BarChart3 className="h-5 w-5 text-[#1F5C2E]" />
-            <p className="mt-2 text-sm font-semibold">Score SCG</p>
+            <p className="mt-2 text-sm font-semibold">Score de confiance</p>
             <p className="text-xs text-[#6B7280]">Confiance groupe</p>
           </Link>
         </div>
@@ -441,7 +441,7 @@ export default function CooperativeDashboard() {
           >
             <Banknote className="h-5 w-5" />
             <div className="flex-1">
-              <p className="text-sm font-semibold">Affacturage disponible</p>
+              <p className="text-sm font-semibold">Avance sur vente disponible</p>
               <p className="text-xs text-white/80">Avance sur trésorerie</p>
             </div>
             <ChevronRight className="h-4 w-4" />

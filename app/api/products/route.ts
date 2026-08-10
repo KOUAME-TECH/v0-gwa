@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
 
     if (!ville || !originCountry) {
       return NextResponse.json(
-        { error: "Ville et pays sont obligatoires pour apparaître dans le Digest local." },
+        { error: "Ville et pays sont obligatoires pour apparaître dans le Nouveautés locales." },
         { status: 400 },
       )
     }
