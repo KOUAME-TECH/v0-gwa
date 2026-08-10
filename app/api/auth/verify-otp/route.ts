@@ -1,4 +1,3 @@
-<<<<<<< Updated upstream
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -85,33 +84,10 @@ export async function POST(request: Request) {
         { error: "Le code doit contenir 6 chiffres" },
         { status: 400 },
       )
-=======
-/**
- * POST /api/auth/verify-otp
- * Vérifie le code OTP + crée/met à jour le profil si nouveau user
- * Body: { phone: string, otp: string }
- * Response: { user_id, access_token, is_new_user, is_admin }
- */
-import { type NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
-
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json()
-    const { phone, otp } = body as { phone: string; otp: string }
-
-    if (!phone || !otp) {
-      return NextResponse.json({ error: "Téléphone et code requis" }, { status: 400 })
-    }
-
-    if (!/^\d{6}$/.test(otp)) {
-      return NextResponse.json({ error: "Le code doit contenir 6 chiffres" }, { status: 400 })
->>>>>>> Stashed changes
     }
 
     const supabase = await createClient()
 
-<<<<<<< Updated upstream
     // 1) OTP custom (email lié / Twilio)
     const stored = await getOtp(formatted)
     if (stored) {
@@ -511,17 +487,10 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase.auth.verifyOtp({
       phone: formatted,
       token,
-=======
-    // Vérification OTP via Supabase Auth
-    const { data, error } = await supabase.auth.verifyOtp({
-      phone,
-      token: otp,
->>>>>>> Stashed changes
       type: "sms",
     })
 
     if (error || !data.user) {
-<<<<<<< Updated upstream
       return NextResponse.json(
         { error: "Code incorrect ou expiré" },
         { status: 400 },
@@ -593,49 +562,6 @@ export async function POST(request: NextRequest) {
     })
   } catch (err) {
     console.error("[auth/verify-otp]", err)
-=======
-      // Distinguer code incorrect vs expiré
-      const msg = error?.message?.includes("expired")
-        ? "Code expiré. Demandez un nouveau code."
-        : "Code incorrect. Vérifiez et réessayez."
-      return NextResponse.json({ error: msg }, { status: 400 })
-    }
-
-    const user = data.user
-
-    // Vérifier si le profil existe déjà
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("id, sub_type, full_name")
-      .eq("id", user.id)
-      .maybeSingle()
-
-    const isNewUser = !profile || !profile.sub_type || !profile.full_name
-
-    // Vérifier si admin
-    const { data: adminRole } = await supabase
-      .from("admin_roles")
-      .select("role")
-      .eq("user_id", user.id)
-      .eq("is_active", true)
-      .maybeSingle()
-
-    // Upsert profil minimal avec le téléphone
-    if (isNewUser) {
-      await supabase.from("profiles").upsert(
-        { id: user.id, phone, updated_at: new Date().toISOString() },
-        { onConflict: "id" }
-      )
-    }
-
-    return NextResponse.json({
-      user_id: user.id,
-      is_new_user: isNewUser,
-      is_admin: !!adminRole,
-    })
-  } catch (err) {
-    console.error("[GWA] verify-otp unexpected:", err)
->>>>>>> Stashed changes
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 })
   }
 }

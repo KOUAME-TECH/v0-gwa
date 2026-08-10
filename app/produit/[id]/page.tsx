@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   ArrowLeft,
-  Heart,
   Share2,
   MapPin,
   BadgeCheck,
@@ -18,6 +17,7 @@ import {
   Star,
   Minus,
   Plus,
+  Bookmark,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -26,6 +26,8 @@ import { buildProductListenText } from "@/lib/media/product-listen"
 import { shouldShowVerifiedBadge } from "@/lib/verification/badge"
 import { addOrIncrementCart } from "@/lib/cart/add"
 import { CartIconButton } from "@/components/cart/cart-icon-button"
+import { ProductLikeButton } from "@/components/products/product-like-button"
+import { normalizeLikesCount } from "@/lib/products/likes"
 import {
   cacheProductPreview,
   readProductPreview,
@@ -46,7 +48,9 @@ type Product = {
   origin_region: string | null
   product_type: string
   is_organic: boolean | null
+  is_fair_trade?: boolean | null
   seller_id: string
+  likes_count?: number | null
   profiles?: {
     id: string
     full_name: string
@@ -69,6 +73,8 @@ export default function ProduitPage() {
   const [quantity, setQuantity] = useState(1)
   const [selectedImage, setSelectedImage] = useState(0)
   const [isFavorite, setIsFavorite] = useState(false)
+  const [isLiked, setIsLiked] = useState(false)
+  const [likesCount, setLikesCount] = useState(0)
   const [adding, setAdding] = useState(false)
   const [user, setUser] = useState<{ id: string } | null>(null)
   const supabase = createClient()
@@ -136,7 +142,7 @@ export default function ProduitPage() {
           .select(
             `
           id, name, price, unit, images, video_url, audio_url, description, origin_country, origin_region,
-          is_organic, is_fair_trade, product_type, stock_quantity, min_order_quantity,
+          is_organic, is_fair_trade, product_type, stock_quantity, min_order_quantity, likes_count,
           seller_id, category_id, status, created_at, updated_at,
           profiles!products_seller_id_fkey(id, full_name, avatar_url, is_verified, city, country, rating),
           categories(name)
@@ -149,16 +155,26 @@ export default function ProduitPage() {
 
         if (data) {
           setProduct(data as Product)
+          setLikesCount(normalizeLikesCount((data as Product).likes_count))
           setQuantity(data.min_order_quantity || 1)
           cacheProductPreview(data as Product & Record<string, unknown>)
           if (currentUser) {
-            const { data: fav } = await supabase
-              .from("favorites")
-              .select("id")
-              .eq("product_id", params.id)
-              .eq("user_id", currentUser.id)
-              .maybeSingle()
-            setIsFavorite(!!fav)
+            const [favRes, likeRes] = await Promise.all([
+              supabase
+                .from("favorites")
+                .select("id")
+                .eq("product_id", params.id)
+                .eq("user_id", currentUser.id)
+                .maybeSingle(),
+              supabase
+                .from("product_likes")
+                .select("id")
+                .eq("product_id", params.id)
+                .eq("user_id", currentUser.id)
+                .maybeSingle(),
+            ])
+            setIsFavorite(!!favRes.data)
+            setIsLiked(!!likeRes.data)
           }
         }
       } catch (err) {
@@ -214,15 +230,35 @@ export default function ProduitPage() {
 
   const handleToggleFavorite = async () => {
     if (!user) {
-      router.push("/auth/login")
+      toast.error("Connecte-toi pour sauvegarder")
+      router.push(`/auth/login?redirect=${encodeURIComponent(`/produit/${params.id}`)}`)
       return
     }
-    if (isFavorite) {
-      await supabase.from("favorites").delete().eq("product_id", product?.id).eq("user_id", user.id)
+    const prev = isFavorite
+    setIsFavorite(!prev)
+    if (prev) {
+      const { error } = await supabase
+        .from("favorites")
+        .delete()
+        .eq("product_id", product?.id)
+        .eq("user_id", user.id)
+      if (error) {
+        setIsFavorite(prev)
+        toast.error("Impossible de retirer des favoris")
+        return
+      }
+      toast.success("Retiré des favoris")
     } else {
-      await supabase.from("favorites").insert({ product_id: product?.id, user_id: user.id })
+      const { error } = await supabase
+        .from("favorites")
+        .insert({ product_id: product?.id, user_id: user.id })
+      if (error) {
+        setIsFavorite(prev)
+        toast.error("Impossible d'ajouter aux favoris")
+        return
+      }
+      toast.success("Ajouté aux favoris")
     }
-    setIsFavorite(!isFavorite)
   }
 
   const handleShare = async () => {
@@ -363,13 +399,30 @@ export default function ProduitPage() {
           </button>
           <div className="flex items-center gap-2">
             <CartIconButton className="h-10 w-10 rounded-full bg-white shadow-md" />
+            {product ? (
+              <ProductLikeButton
+                productId={product.id}
+                initialLiked={isLiked}
+                initialCount={likesCount}
+                variant="detail"
+                onAuthRequired={() => {
+                  toast.error("Connecte-toi pour aimer")
+                  router.push(`/auth/login?redirect=${encodeURIComponent(`/produit/${params.id}`)}`)
+                }}
+                onChange={(liked, count) => {
+                  setIsLiked(liked)
+                  setLikesCount(count)
+                }}
+              />
+            ) : null}
             <button
               type="button"
               onClick={() => void handleToggleFavorite()}
               className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-md active:scale-95"
-              aria-label="Favori"
+              aria-label={isFavorite ? "Retirer des favoris" : "Ajouter aux favoris"}
+              aria-pressed={isFavorite}
             >
-              <Heart className={cn("h-5 w-5", isFavorite ? "fill-red-500 text-red-500" : "text-neutral-600")} />
+              <Bookmark className={cn("h-5 w-5", isFavorite ? "fill-[#2F7D32] text-[#2F7D32]" : "text-neutral-600")} />
             </button>
             <button
               type="button"
@@ -536,8 +589,28 @@ export default function ProduitPage() {
             </button>
             <div className="flex items-center gap-2">
               <CartIconButton className="bg-white shadow-sm ring-1 ring-[#E5E7EB]" />
-              <button type="button" onClick={() => void handleToggleFavorite()} className="rounded-xl bg-white p-2 shadow-sm ring-1 ring-[#E5E7EB]" aria-label="Favori">
-                <Heart className={cn("h-5 w-5", isFavorite ? "fill-red-500 text-red-500" : "text-[#4B5563]")} />
+              <ProductLikeButton
+                productId={product.id}
+                initialLiked={isLiked}
+                initialCount={likesCount}
+                variant="detail"
+                onAuthRequired={() => {
+                  toast.error("Connecte-toi pour aimer")
+                  router.push(`/auth/login?redirect=${encodeURIComponent(`/produit/${params.id}`)}`)
+                }}
+                onChange={(liked, count) => {
+                  setIsLiked(liked)
+                  setLikesCount(count)
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => void handleToggleFavorite()}
+                className="rounded-xl bg-white p-2 shadow-sm ring-1 ring-[#E5E7EB]"
+                aria-label={isFavorite ? "Retirer des favoris" : "Ajouter aux favoris"}
+                aria-pressed={isFavorite}
+              >
+                <Bookmark className={cn("h-5 w-5", isFavorite ? "fill-[#2F7D32] text-[#2F7D32]" : "text-[#4B5563]")} />
               </button>
               <button type="button" onClick={() => void handleShare()} className="rounded-xl bg-white p-2 shadow-sm ring-1 ring-[#E5E7EB]" aria-label="Partager">
                 <Share2 className="h-5 w-5 text-[#4B5563]" />

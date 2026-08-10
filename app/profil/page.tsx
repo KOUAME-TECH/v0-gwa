@@ -482,7 +482,6 @@ export default function ProfilPage() {
                       }`}
                     />
                   </div>
-<<<<<<< Updated upstream
                   <span className="flex-1 font-medium text-[15px]">
                     {item.label}
                   </span>
@@ -490,11 +489,6 @@ export default function ProfilPage() {
                     <span className="min-w-6 h-6 px-1.5 rounded-full bg-neutral-900 text-white text-xs font-semibold flex items-center justify-center">
                       {item.count > 99 ? "99+" : item.count}
                     </span>
-=======
-                  <span className="flex-1 font-medium text-[15px]">{item.label}</span>
-                  {(item as any).count !== undefined && (item as any).count > 0 && (
-                    <span className="text-sm text-neutral-500">{(item as any).count}</span>
->>>>>>> Stashed changes
                   )}
                   <ChevronRight className="h-5 w-5 text-neutral-300" />
                 </div>
