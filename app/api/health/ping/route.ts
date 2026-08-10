@@ -4,7 +4,11 @@ export const dynamic = "force-dynamic"
 
 /**
  * GET /api/health/ping
- * Probe légère UptimeRobot / cron-job.org — mot-clé `pong`.
+ *
+ * Endpoint ultra-léger pour UptimeRobot / cron-job.org / probes externes.
+ * Pas de DB, pas de secrets — réponse rapide HTTP 200 + mot-clé `pong`.
+ *
+ * Pour un check plus riche (DB, secrets booléens) → GET /api/health
  */
 export async function GET() {
   return NextResponse.json(
