@@ -116,7 +116,12 @@ export async function POST(request: NextRequest, context: Ctx) {
           console.error("[api/orders/confirm] payout", payout.error, payout.raw)
         }
       }
-    } else if (!creds && process.env.ALLOW_PAYMENT_SIMULATION === "true") {
+    } else if (
+      !creds &&
+      process.env.ALLOW_PAYMENT_SIMULATION === "true" &&
+      process.env.VERCEL_ENV !== "production" &&
+      process.env.NODE_ENV !== "production"
+    ) {
       payoutStatus = "skipped_sim"
       payoutRef = `SIM-OUT-${Date.now().toString(36).toUpperCase()}`
     } else if (!creds) {

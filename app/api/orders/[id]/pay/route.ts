@@ -13,6 +13,13 @@ import {
 type Ctx = { params: Promise<{ id: string }> }
 
 function allowPaymentSimulation(): boolean {
+  // Jamais en prod Vercel / NODE_ENV production — même avec le flag.
+  if (
+    process.env.VERCEL_ENV === "production" ||
+    process.env.NODE_ENV === "production"
+  ) {
+    return false
+  }
   if (process.env.ALLOW_PAYMENT_SIMULATION === "true") return true
   return process.env.NODE_ENV === "development" && !process.env.VERCEL_ENV
 }

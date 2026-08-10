@@ -10,9 +10,12 @@ import { yellyChatSchema } from "@/lib/security/validation"
 import { askYelly } from "@/lib/yelly/client"
 import {
   countYellyUserMessagesToday,
+  loadYellyConversationHistory,
   loadYellyProductHint,
+  loadYellyProfileContext,
   persistYellyTurn,
 } from "@/lib/yelly/context"
+import { formatYellyUserContext } from "@/lib/yelly/knowledge"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 30
@@ -29,6 +32,7 @@ function readGuestCount(request: NextRequest): number {
  * POST /api/yelly/chat
  * Auth (quota / jour selon palier abo) OU guest (max 3 / 24h cookie)
  * + CSRF + rate-limit IP + zod.
+ * Injecte fiche métier + profil + historique multi-tour.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -64,14 +68,33 @@ export async function POST(request: NextRequest) {
     let tier: string | null = "free"
     let yellyRemaining: number | null = null
     let yellyLimit: number | null = null
+    let userContext: string | undefined
+    let history: { role: "user" | "assistant"; content: string }[] = []
+
+    const body = await request.json().catch(() => null)
+    const parsed = yellyChatSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Message invalide", details: parsed.error.flatten() },
+        { status: 400 },
+      )
+    }
+
+    const { message, page, context } = parsed.data
+    const conversationId =
+      typeof body?.conversationId === "string" &&
+      /^[0-9a-f-]{36}$/i.test(body.conversationId)
+        ? body.conversationId
+        : null
+
+    const contextHint = await loadYellyProductHint(supabase, context?.productId)
+    const cityFromClient = context?.city
+      ? String(context.city).slice(0, 60)
+      : undefined
 
     if (user) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("subscription_tier")
-        .eq("id", user.id)
-        .maybeSingle()
-      tier = profile?.subscription_tier ?? "free"
+      const profileCtx = await loadYellyProfileContext(supabase, user.id)
+      tier = profileCtx.tier ?? "free"
       const usedToday = await countYellyUserMessagesToday(supabase, user.id, new Date(), {
         pageNeq: "admin-assist",
       })
@@ -92,33 +115,40 @@ export async function POST(request: NextRequest) {
           { status: 429 },
         )
       }
+
+      userContext = formatYellyUserContext({
+        userType: profileCtx.userType,
+        tier: profileCtx.tier,
+        city: cityFromClient || profileCtx.city,
+        scgScore: profileCtx.scgScore,
+        scgBancable: profileCtx.scgBancable,
+        page,
+        productHint: contextHint,
+        orderHint: profileCtx.orderHint,
+        coopHint: profileCtx.coopHint,
+      })
+
+      history = await loadYellyConversationHistory(supabase, {
+        userId: user.id,
+        conversationId,
+        limit: 6,
+      })
+    } else {
+      userContext = formatYellyUserContext({
+        userType: null,
+        tier: "free",
+        city: cityFromClient || null,
+        page,
+        productHint: contextHint,
+        extra: "Session invitée (pas de profil)",
+      })
     }
-
-    const body = await request.json().catch(() => null)
-    const parsed = yellyChatSchema.safeParse(body)
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: "Message invalide", details: parsed.error.flatten() },
-        { status: 400 },
-      )
-    }
-
-    const { message, page, context } = parsed.data
-    const conversationId =
-      typeof body?.conversationId === "string" &&
-      /^[0-9a-f-]{36}$/i.test(body.conversationId)
-        ? body.conversationId
-        : null
-
-    const contextHint = await loadYellyProductHint(supabase, context?.productId)
-    const cityHint = context?.city
-      ? `Ville utilisateur: ${context.city}`
-      : undefined
 
     const result = await askYelly({
       message,
       page,
-      contextHint: [contextHint, cityHint].filter(Boolean).join(" | ") || undefined,
+      history,
+      userContext,
     })
 
     let savedId: string | null = conversationId

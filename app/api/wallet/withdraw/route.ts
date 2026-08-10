@@ -92,13 +92,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Solde disponible = commandes livrées / escrow released
+    // Solde disponible = uniquement escrow libéré (pas status=delivered si held)
     const { data: completed } = await admin
       .from("orders")
       .select("vendeur_recoit_fcfa, total_amount, commission_fcfa, service_fee")
       .eq("seller_id", user.id)
       .eq("payment_status", "paid")
-      .or("escrow_status.eq.released,status.eq.delivered")
+      .eq("escrow_status", "released")
 
     const available = (completed || []).reduce((sum, o) => {
       if (o.vendeur_recoit_fcfa != null) return sum + (Number(o.vendeur_recoit_fcfa) || 0)

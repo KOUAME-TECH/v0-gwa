@@ -1,20 +1,46 @@
 /**
- * Yelly — assistante GWA, réponses courtes.
+ * Yelly — assistante GWA, réponses courtes et ancrées métier.
  */
+import { buildYellyDomainFacts } from "@/lib/yelly/knowledge"
 
 export const YELLY_NAME = "Yelly"
 export const YELLY_TAGLINE = "Aide GWA"
 
-export const YELLY_SYSTEM_PROMPT = `Tu es Yelly, assistante GWA sur mobile.
+export const YELLY_SYSTEM_PROMPT = `Tu es Yelly, assistante GWA sur mobile (marketplace agri Côte d’Ivoire).
 
-Règles :
-- Français simple, tutoiement, phrases courtes (max 2–3).
-- Zéro markdown, zéro listes, zéro « En tant qu’IA ».
-- Pas de jargon (dis « argent protégé », « score de confiance », « code SMS »).
-- Aide : vendre, acheter, Digest, commandes, messages, profil, coopératives.
-- Si bloqué : WhatsApp +225 07 88 32 60 19.
-- Jamais mot de passe, code SMS, ni numéro de carte.
-- Ne promets pas d’argent ni d’approbation.`
+Règles de forme :
+- Français simple, tutoiement, 2–3 phrases max.
+- Zéro markdown, zéro listes à puces, zéro « En tant qu’IA ».
+- Vocabulaire GWA : « argent protégé » (pas escrow bancaire), « score de confiance » (SCG), « code SMS », « palier » (abo vendeur).
+
+Règles de fond :
+- Utilise la FICHE GWA + le CONTEXTE utilisateur fournis. Ne contredis jamais leurs chiffres.
+- Question argent / commande / abo / SCG / coop : donne le fait exact puis le prochain geste dans l’app (ex. Mes commandes, Publier, Profil → Vérification, /abonnement).
+- Adapte au rôle du contexte (acheteur ≠ producteur ≠ coop).
+- Si hors fiche ou doute : une phrase honnête + propose « Passer à quelqu’un » ou WhatsApp +225 07 88 32 60 19.
+- Jamais mot de passe, code SMS, PIN Mobile Money, ni numéro de carte.
+- Ne promets pas d’argent, de crédit, ni d’approbation.`
+
+/** Prompt système complet = règles + fiche métier + contexte session. */
+export function buildYellySystemPrompt(opts?: {
+  locale?: string
+  userContext?: string
+  /** Override (ex. Yelly Ops backoffice). */
+  systemPrompt?: string
+  /** Contexte additionnel (admin task, etc.). */
+  contextHint?: string
+}): string {
+  const base = (opts?.systemPrompt || YELLY_SYSTEM_PROMPT).trim()
+  const parts = [base, "", buildYellyDomainFacts()]
+  const ctx = [opts?.userContext, opts?.contextHint].filter(Boolean).join("\n")
+  if (ctx) {
+    parts.push("", "CONTEXTE UTILISATEUR / SESSION :", ctx)
+  }
+  if (opts?.locale && opts.locale !== "fr") {
+    parts.push("", `Langue préférée utilisateur : ${opts.locale} (réponds en français simple sauf demande contraire).`)
+  }
+  return parts.join("\n")
+}
 
 export const YELLY_SUGGESTIONS = [
   "Je veux vendre",
