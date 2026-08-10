@@ -8,6 +8,8 @@ DROP POLICY IF EXISTS "Authenticated users can upload avatars" ON storage.object
 DROP POLICY IF EXISTS "Authenticated users can upload chat media" ON storage.objects;
 DROP POLICY IF EXISTS "Authenticated users can upload cooperatives" ON storage.objects;
 DROP POLICY IF EXISTS "Authenticated users can upload community" ON storage.objects;
+DROP POLICY IF EXISTS "Authenticated users can upload documents" ON storage.objects;
+DROP POLICY IF EXISTS "Authenticated users can upload orders" ON storage.objects;
 
 -- Drop prior hardening policies if re-run
 DROP POLICY IF EXISTS "products_insert_own_folder" ON storage.objects;
@@ -20,6 +22,8 @@ DROP POLICY IF EXISTS "avatars_delete_own_folder" ON storage.objects;
 DROP POLICY IF EXISTS "chat_media_insert_own_folder" ON storage.objects;
 DROP POLICY IF EXISTS "cooperatives_insert_own_folder" ON storage.objects;
 DROP POLICY IF EXISTS "community_insert_own_folder" ON storage.objects;
+DROP POLICY IF EXISTS "documents_insert_own_folder" ON storage.objects;
+DROP POLICY IF EXISTS "orders_insert_own_folder" ON storage.objects;
 
 CREATE POLICY "products_insert_own_folder" ON storage.objects
   FOR INSERT TO authenticated
@@ -74,6 +78,20 @@ CREATE POLICY "community_insert_own_folder" ON storage.objects
   FOR INSERT TO authenticated
   WITH CHECK (
     bucket_id = 'community'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+CREATE POLICY "documents_insert_own_folder" ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'documents'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+CREATE POLICY "orders_insert_own_folder" ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'orders'
     AND (storage.foldername(name))[1] = auth.uid()::text
   );
 
@@ -167,10 +185,29 @@ REVOKE ALL ON FUNCTION public.decrement_product_stock(uuid, integer) FROM PUBLIC
 GRANT EXECUTE ON FUNCTION public.decrement_product_stock(uuid, integer) TO service_role;
 GRANT EXECUTE ON FUNCTION public.decrement_product_stock(uuid, integer) TO authenticated;
 
--- ─── 4) At most one open withdrawal per user ────────────────────────────────
-CREATE UNIQUE INDEX IF NOT EXISTS wallet_withdrawals_one_open_per_user
-  ON public.wallet_withdrawals (user_id)
-  WHERE status IN ('pending', 'processing', 'queued');
+-- ─── 4) At most one open withdrawal per user (si table présente) ────────────
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'wallet_withdrawals'
+  ) THEN
+    EXECUTE $i$
+      CREATE UNIQUE INDEX IF NOT EXISTS wallet_withdrawals_one_open_per_user
+        ON public.wallet_withdrawals (user_id)
+        WHERE status IN ('pending', 'processing', 'queued')
+    $i$;
+  ELSIF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'withdrawals'
+  ) THEN
+    EXECUTE $i$
+      CREATE UNIQUE INDEX IF NOT EXISTS withdrawals_one_open_per_user
+        ON public.withdrawals (user_id)
+        WHERE status IN ('pending', 'processing', 'queued')
+    $i$;
+  END IF;
+END $$;
 
 -- ─── 5) Re-issue weak invite codes ───────────────────────────────────────────
 UPDATE public.cooperatives
