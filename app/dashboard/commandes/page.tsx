@@ -232,12 +232,12 @@ export default function OrdersPage() {
           input.click()
         })
         if (file && file.size < 8_000_000) {
-          const path = `reception/${user.id}/${orderId}-${Date.now()}.jpg`
+          const path = `${user.id}/reception/${orderId}-${Date.now()}.jpg`
           const { error: upErr } = await supabase.storage
-            .from("product-images")
+            .from("orders")
             .upload(path, file, { upsert: true, contentType: file.type || "image/jpeg" })
           if (!upErr) {
-            const { data: pub } = supabase.storage.from("product-images").getPublicUrl(path)
+            const { data: pub } = supabase.storage.from("orders").getPublicUrl(path)
             receptionPhotoUrl = pub?.publicUrl
           }
         }

@@ -408,7 +408,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     const toastId = toast.loading(type === "image" ? "Envoi de l'image..." : "Envoi du fichier...")
 
     const ext = file.name.split(".").pop()
-    const path = `chat/${conversation.id}/${Date.now()}.${ext}`
+    const path = `${userId}/chat/${conversation.id}/${Date.now()}.${ext}`
     const { error: upErr } = await supabase.storage.from("chat-media").upload(path, file)
 
     if (upErr) {
@@ -596,7 +596,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
 
     // Upload audio blob to storage
     const ext = audioPreview.blob.type.includes('webm') ? 'webm' : 'mp4'
-    const path = `chat/${conversation.id}/${Date.now()}.${ext}`
+    const path = `${userId}/chat/${conversation.id}/${Date.now()}.${ext}`
     const { error: upErr } = await supabase.storage.from("chat-media").upload(path, audioPreview.blob)
     if (upErr) {
       toast.error("Envoi vocal échoué, réessayez")
