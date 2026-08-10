@@ -11,11 +11,11 @@ export const YELLY_SYSTEM_PROMPT = `Tu es Yelly, assistante GWA sur mobile (mark
 Règles de forme :
 - Français simple, tutoiement, 2–3 phrases max.
 - Zéro markdown, zéro listes à puces, zéro « En tant qu’IA ».
-- Vocabulaire GWA : « argent protégé » (pas escrow bancaire), « score de confiance » (SCG), « code SMS », « palier » (abo vendeur).
+- Vocabulaire GWA : « argent protégé », « score de confiance », « avance sur vente », « nouveautés », « code SMS », « palier » (abo vendeur). Évite les sigles SCG / Digest / affacturage côté utilisateur.
 
 Règles de fond :
 - Utilise la FICHE GWA + le CONTEXTE utilisateur fournis. Ne contredis jamais leurs chiffres.
-- Question argent / commande / abo / SCG / coop : donne le fait exact puis le prochain geste dans l’app (ex. Mes commandes, Publier, Profil → Vérification, /abonnement).
+- Question argent / commande / abo / score / coop : donne le fait exact puis le prochain geste dans l’app (ex. Mes commandes, Publier, Profil → Vérification, /abonnement).
 - Adapte au rôle du contexte (acheteur ≠ producteur ≠ coop).
 - Si hors fiche ou doute : une phrase honnête + propose « Passer à quelqu’un » ou WhatsApp +225 07 88 32 60 19.
 - Jamais mot de passe, code SMS, PIN Mobile Money, ni numéro de carte.
@@ -44,7 +44,7 @@ export function buildYellySystemPrompt(opts?: {
 
 export const YELLY_SUGGESTIONS = [
   "Je veux vendre",
-  "C’est quoi le Digest ?",
+  "C’est quoi les nouveautés ?",
   "Où est mon argent ?",
   "Parler à quelqu’un",
 ] as const
@@ -77,20 +77,20 @@ export const YELLY_SUGGESTIONS_BY_ROLE: Record<string, readonly string[]> = {
   producteur: [
     "Comment publier ?",
     "Commission de mon palier",
-    "Monter mon score SCG",
-    "Demander affacturage",
+    "Monter mon score",
+    "Demander une avance sur vente",
   ],
   farmer: [
     "Comment publier ?",
     "Commission de mon palier",
-    "Monter mon score SCG",
-    "Demander affacturage",
+    "Monter mon score",
+    "Demander une avance sur vente",
   ],
   transformateur: [
     "Comment publier ?",
     "Commission de mon palier",
-    "Monter mon score SCG",
-    "Demander affacturage",
+    "Monter mon score",
+    "Demander une avance sur vente",
   ],
   cooperative: [
     "Inviter 15 membres",

@@ -75,15 +75,17 @@ async function handle(request: Request) {
       continue
     }
 
-    const amount =
+    const fromTotals = Math.max(
+      0,
+      Math.round(Number(claimed.total_amount) || 0) -
+        Math.round(Number(claimed.commission_fcfa) || 0) -
+        Math.round(Number(claimed.service_fee) || 0),
+    )
+    const claimedNet =
       claimed.vendeur_recoit_fcfa != null
         ? Math.round(Number(claimed.vendeur_recoit_fcfa))
-        : Math.max(
-            0,
-            Math.round(Number(claimed.total_amount) || 0) -
-              Math.round(Number(claimed.commission_fcfa) || 0) -
-              Math.round(Number(claimed.service_fee) || 0),
-          )
+        : fromTotals
+    const amount = Math.max(0, Math.min(claimedNet, fromTotals))
 
     const { data: seller } = await admin
       .from("profiles")

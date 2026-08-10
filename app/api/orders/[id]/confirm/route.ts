@@ -110,15 +110,18 @@ export async function POST(request: NextRequest, context: Ctx) {
       .eq("id", claimed.seller_id)
       .maybeSingle()
 
-    const payoutAmount =
+    const fromTotals = Math.max(
+      0,
+      Math.round(Number(claimed.total_amount) || 0) -
+        Math.round(Number(claimed.commission_fcfa) || 0) -
+        Math.round(Number(claimed.service_fee) || 0),
+    )
+    const claimedNet =
       claimed.vendeur_recoit_fcfa != null
         ? Math.round(Number(claimed.vendeur_recoit_fcfa))
-        : Math.max(
-            0,
-            Math.round(Number(claimed.total_amount) || 0) -
-              Math.round(Number(claimed.commission_fcfa) || 0) -
-              Math.round(Number(claimed.service_fee) || 0),
-          )
+        : fromTotals
+    // Jamais payer plus que total − commissions (défense en profondeur)
+    const payoutAmount = Math.max(0, Math.min(claimedNet, fromTotals))
 
     let payoutStatus = "skipped_no_provider"
     let payoutRef: string | null = null

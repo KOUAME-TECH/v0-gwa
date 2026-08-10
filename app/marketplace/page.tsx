@@ -528,7 +528,7 @@ function MarketplaceContent() {
   const handleDigestClick = () => {
     if (digest.active) {
       digest.stop()
-      toast.message("Digest arrêté")
+      toast.message("Écoute arrêtée")
       return
     }
     if (digest.total === 0) {
@@ -537,7 +537,7 @@ function MarketplaceContent() {
     }
     if (parcours.active) parcours.stop()
     const ok = digest.startTour()
-    if (ok) toast.success(`Digest · ${digest.total} nouveauté${digest.total > 1 ? "s" : ""}`)
+    if (ok) toast.success(`Nouveautés · ${digest.total} produit${digest.total > 1 ? "s" : ""}`)
     else if (digest.error) toast.error(digest.error)
   }
 
@@ -558,7 +558,7 @@ function MarketplaceContent() {
     } catch {
       /* ignore */
     }
-    toast.message("Digest prêt — tapez la bannière verte pour écouter.", { duration: 4000 })
+    toast.message("Nouveautés prêtes — tape la bannière verte pour écouter.", { duration: 4000 })
   }, [digestProducts.length, isDigest, isLoading])
 
   function productListenProps(p: Product) {
@@ -709,7 +709,7 @@ function MarketplaceContent() {
             }}
             className="mb-3 w-full rounded-2xl border border-dashed border-[#1F5C2E]/25 bg-white px-3 py-2.5 text-left text-xs text-[#4B5563]"
           >
-            Digest : aucun produit à écouter pour le moment
+            Pas encore de nouveautés à écouter près de toi
           </button>
         )}
         {(parcours.active || digest.active) && (
@@ -717,7 +717,7 @@ function MarketplaceContent() {
             <span className="truncate">
               {parcours.active
                 ? `Parcours ${parcours.index + 1}/${parcours.total}`
-                : `Digest ${digest.index + 1}/${digest.total}`}
+                : `Nouveautés ${digest.index + 1}/${digest.total}`}
               {" · "}
               {(parcours.active
                 ? parcoursProducts[parcours.index]?.name
@@ -752,8 +752,8 @@ function MarketplaceContent() {
             <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
               <Search className="h-7 w-7 text-muted-foreground" />
             </div>
-            <h3 className="font-semibold mb-1">{searchTerm ? "Aucun resultat" : "Pas encore de produits"}</h3>
-            <p className="text-muted-foreground text-sm mb-5">{searchTerm ? "Essayez d'autres mots-cles" : "Soyez le premier a vendre"}</p>
+            <h3 className="font-semibold mb-1">{searchTerm ? "Aucun résultat" : "Pas encore de produits"}</h3>
+            <p className="text-muted-foreground text-sm mb-5">{searchTerm ? "Essaie d’autres mots-clés" : "Sois le premier à vendre"}</p>
             {!searchTerm && <Link href="/publier"><Button className="rounded-xl bg-[#2F7D32]">Publier un produit</Button></Link>}
           </div>
         ) : (

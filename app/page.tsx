@@ -909,10 +909,10 @@ export default function HomePage() {
               <Link
                 href="/marketplace?digest=1"
                 className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-xl bg-[#1F5C2E]/8 text-[#1F5C2E] text-xs font-semibold active:scale-95 transition-transform"
-                aria-label="Écouter les nouveautés — Harmattan Digest"
-                title="Écouter les nouveautés près de chez vous"
+                aria-label="Écouter les nouveautés près de toi"
+                title="Écouter les nouveautés près de chez toi"
               >
-                Digest
+                Nouveautés
               </Link>
               <Link href="/recherche">
                 <Button variant="ghost" size="icon" className="rounded-full h-10 w-10">
@@ -1215,7 +1215,7 @@ export default function HomePage() {
 
         <aside className="hidden lg:block sticky top-20 space-y-5">
           <div className="rounded-2xl bg-white/90 p-5 ring-1 ring-[#1F5C2E]/10">
-            <p className="font-display text-lg text-[#1F5C2E]">Le Digest</p>
+            <p className="font-display text-lg text-[#1F5C2E]">Nouveautés</p>
             <p className="mt-2 text-sm leading-relaxed text-[#4B5563]">
               Les nouveautés près de chez toi, à écouter comme une radio du marché.
             </p>

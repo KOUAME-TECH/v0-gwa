@@ -197,19 +197,19 @@ export default function ProductsPage() {
         ) : filteredProducts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center bg-white rounded-2xl">
             <Package className="h-12 w-12 text-neutral-300 mb-4" />
-            <h3 className="text-lg font-medium mb-2">Aucun produit</h3>
+            <h3 className="text-lg font-medium mb-2">Pas encore d’annonce</h3>
             <p className="text-neutral-500 text-sm mb-5 px-6">
               {searchQuery
-                ? "Aucun produit ne correspond à votre recherche"
-                : "Vous n'avez pas encore mis de produit en vente"}
+                ? "Aucun produit ne correspond à ta recherche"
+                : "Ajoute ton premier produit pour le vendre."}
             </p>
             {!searchQuery && (
               <Link
                 href="/publier"
-                className="h-11 px-6 rounded-full bg-[#2F7D32] text-white font-medium inline-flex items-center gap-2"
+                className="h-11 px-6 rounded-full bg-[#1F5C2E] text-white font-medium inline-flex items-center gap-2"
               >
                 <Plus className="h-4 w-4" />
-                Publier un produit
+                Ajouter un produit
               </Link>
             )}
           </div>

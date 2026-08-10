@@ -4,7 +4,6 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
@@ -14,13 +13,13 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { 
-  Wallet, ArrowUpRight, ArrowDownLeft, Clock, CheckCircle2, 
-  XCircle, RefreshCw, Smartphone, Building2, History,
-  TrendingUp, AlertCircle
+  ArrowUpRight, ArrowDownLeft, Clock, RefreshCw, Smartphone, Building2, History,
+  AlertCircle
 } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { fr } from "date-fns/locale"
 import { isSellerRole } from "@/lib/dashboard/routing"
+import { ProducerSubnav } from "@/components/producer/producer-subnav"
 import Link from "next/link"
 
 interface Transaction {
@@ -303,10 +302,10 @@ export default function WalletPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-gradient-to-b from-[#FFF6E5] to-white pb-24">
         <div className="container mx-auto px-4 py-8">
           <div className="flex items-center justify-center h-64">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1F5C2E]"></div>
           </div>
         </div>
       </div>
@@ -316,10 +315,10 @@ export default function WalletPage() {
   if (!isSellerRole(profile?.user_type)) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-[#FFF6E5] to-white pb-24 px-4 pt-8">
-        <h1 className="text-2xl font-bold text-[#1F5C2E]">Mes paiements</h1>
+        <h1 className="text-2xl font-bold text-[#1F5C2E]">Mon argent</h1>
         <p className="mt-2 text-sm text-[#6B7280]">
-          Côté acheteur, suis tes commandes et confirme la réception pour libérer
-          le séquestre. Le portefeuille vendeur n’est pas utilisé ici.
+          Côté acheteur, suis tes commandes et confirme la réception. Les
+          revenus vendeur ne s’affichent pas ici.
         </p>
         <div className="mt-6 space-y-3">
           <Link
@@ -340,172 +339,154 @@ export default function WalletPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      
-      <main className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Mon Portefeuille</h1>
-          <p className="text-muted-foreground">
-            Gérez vos revenus et effectuez des retraits vers Mobile Money
+    <div className="min-h-screen bg-gradient-to-b from-[#FFF6E5] to-white pb-24">
+      <main className="container mx-auto px-4 py-6 max-w-3xl">
+        <ProducerSubnav />
+        <div className="mb-6">
+          <h1 className="font-display text-3xl text-[#1F5C2E]">Mon argent</h1>
+          <p className="mt-1 text-sm text-[#6B7280]">
+            Tes revenus et retraits Mobile Money, au même endroit.
           </p>
         </div>
 
-        {/* Balance Cards */}
-        <div className="grid md:grid-cols-4 gap-4 mb-8">
-          <Card className="bg-primary text-primary-foreground">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium opacity-90">Solde disponible</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between">
-                <span className="text-3xl font-bold">{formatAmount(wallet.balance)}</span>
-                <Wallet className="h-8 w-8 opacity-80" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">En attente</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between">
-                <span className="text-2xl font-bold">{formatAmount(wallet.pending_balance)}</span>
-                <Clock className="h-6 w-6 text-yellow-500" />
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">Commandes en cours</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Total gagné</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between">
-                <span className="text-2xl font-bold">{formatAmount(wallet.total_earned)}</span>
-                <TrendingUp className="h-6 w-6 text-green-500" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Total retiré</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between">
-                <span className="text-2xl font-bold">{formatAmount(wallet.total_withdrawn)}</span>
-                <ArrowUpRight className="h-6 w-6 text-blue-500" />
-              </div>
-            </CardContent>
-          </Card>
+        {/* Solde principal + argent gardé */}
+        <div className="mb-4 rounded-2xl bg-[#1F5C2E] px-5 py-5 text-white shadow-sm">
+          <p className="text-sm text-white/80">Disponible</p>
+          <p className="mt-1 text-3xl font-bold tabular-nums">{formatAmount(wallet.balance)}</p>
+        </div>
+        <div className="mb-6 grid grid-cols-2 gap-3">
+          <div className="rounded-2xl border border-[#1F5C2E]/10 bg-white/90 px-4 py-3">
+            <p className="text-xs text-[#6B7280]">Argent gardé</p>
+            <p className="mt-1 text-xl font-semibold tabular-nums text-[#111827]">
+              {formatAmount(wallet.pending_balance)}
+            </p>
+            <p className="text-[11px] text-[#9CA3AF]">En cours de livraison</p>
+          </div>
+          <div className="rounded-2xl border border-[#1F5C2E]/10 bg-white/90 px-4 py-3">
+            <p className="text-xs text-[#6B7280]">Total gagné</p>
+            <p className="mt-1 text-xl font-semibold tabular-nums text-[#111827]">
+              {formatAmount(wallet.total_earned)}
+            </p>
+            <p className="text-[11px] text-[#9CA3AF]">
+              Retiré {formatAmount(wallet.total_withdrawn)}
+            </p>
+          </div>
         </div>
 
         {/* Actions */}
-        <div className="flex gap-4 mb-8">
-          <Button 
-            size="lg" 
+        <div className="mb-6 flex flex-wrap gap-3">
+          <Button
+            size="lg"
+            className="rounded-full bg-[#1F5C2E] hover:bg-[#184a25]"
             onClick={() => setShowWithdrawDialog(true)}
             disabled={wallet.balance < 1000}
           >
             <ArrowUpRight className="h-5 w-5 mr-2" />
-            Retirer des fonds
+            Retirer
           </Button>
-          <Button variant="outline" size="lg" onClick={loadWalletData}>
+          <Button
+            variant="outline"
+            size="lg"
+            className="rounded-full border-[#1F5C2E]/25"
+            onClick={loadWalletData}
+          >
             <RefreshCw className="h-5 w-5 mr-2" />
             Actualiser
           </Button>
-          <Button variant="outline" size="lg" onClick={() => router.push("/affacturage")}>
+          <Button
+            variant="outline"
+            size="lg"
+            className="rounded-full border-[#1F5C2E]/25"
+            onClick={() => router.push("/affacturage")}
+          >
             <Building2 className="h-5 w-5 mr-2" />
-            Affacturage
+            Avance sur vente
           </Button>
         </div>
 
-        {/* Info Card */}
         {wallet.balance < 1000 && (
-          <Card className="mb-8 border-blue-200 bg-blue-50 dark:bg-blue-950/20">
-            <CardContent className="p-4 flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5" />
-              <div>
-                <p className="font-medium text-blue-900 dark:text-blue-100">Montant minimum de retrait</p>
-                <p className="text-sm text-blue-700 dark:text-blue-300">
-                  Vous devez avoir au moins 1,000 FCFA de solde disponible pour effectuer un retrait.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="mb-6 rounded-2xl border border-[#1F5C2E]/15 bg-white/80 p-4 flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-[#1F5C2E] mt-0.5 shrink-0" />
+            <div>
+              <p className="font-medium text-[#1F5C2E]">Minimum de retrait</p>
+              <p className="text-sm text-[#6B7280]">
+                Il te faut au moins 1&nbsp;000 FCFA disponibles pour retirer.
+              </p>
+            </div>
+          </div>
         )}
 
         {/* Transactions */}
         <Tabs defaultValue="all">
-          <TabsList>
-            <TabsTrigger value="all">Toutes les transactions</TabsTrigger>
-            <TabsTrigger value="credits">Entrées</TabsTrigger>
-            <TabsTrigger value="withdrawals">Retraits</TabsTrigger>
+          <TabsList className="bg-white/80 border border-[#E5E7EB] rounded-xl h-auto flex-wrap p-1">
+            <TabsTrigger value="all" className="rounded-lg">Toutes</TabsTrigger>
+            <TabsTrigger value="credits" className="rounded-lg">Entrées</TabsTrigger>
+            <TabsTrigger value="withdrawals" className="rounded-lg">Retraits</TabsTrigger>
           </TabsList>
 
           <TabsContent value="all" className="mt-6">
             {transactions.length === 0 ? (
-              <Card className="p-12 text-center">
-                <History className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold mb-2">Aucune transaction</h3>
-                <p className="text-muted-foreground">
-                  Vos transactions apparaîtront ici après vos premières ventes
+              <div className="rounded-2xl border border-dashed border-[#1F5C2E]/20 bg-white/60 px-6 py-14 text-center">
+                <History className="h-12 w-12 mx-auto text-[#1F5C2E]/40 mb-4" />
+                <h3 className="font-display text-lg text-[#1F5C2E]">Aucune transaction</h3>
+                <p className="mt-2 text-sm text-[#6B7280]">
+                  Tes mouvements apparaîtront ici après tes premières ventes.
                 </p>
-              </Card>
+              </div>
             ) : (
-              <Card>
-                <CardContent className="p-0">
-                  <div className="divide-y">
-                    {transactions.map((txn) => (
-                      <div key={txn.id} className="flex items-center justify-between p-4 hover:bg-muted/50">
-                        <div className="flex items-center gap-4">
-                          <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
-                            txn.type === 'credit' ? 'bg-green-100' : 
-                            txn.type === 'withdrawal' ? 'bg-red-100' : 'bg-blue-100'
-                          }`}>
-                            {getTransactionIcon(txn.type)}
-                          </div>
-                          <div>
-                            <p className="font-medium">{txn.description}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {formatDistanceToNow(new Date(txn.created_at), { addSuffix: true, locale: fr })}
-                            </p>
-                          </div>
+              <div className="rounded-2xl border border-[#1F5C2E]/10 bg-white/90 overflow-hidden">
+                <div className="divide-y divide-[#F3F4F6]">
+                  {transactions.map((txn) => (
+                    <div key={txn.id} className="flex items-center justify-between p-4">
+                      <div className="flex items-center gap-4">
+                        <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
+                          txn.type === 'credit' ? 'bg-green-100' :
+                          txn.type === 'withdrawal' ? 'bg-red-100' : 'bg-blue-100'
+                        }`}>
+                          {getTransactionIcon(txn.type)}
                         </div>
-                        <div className="text-right">
-                          <p className={`font-bold ${
-                            txn.type === 'credit' || txn.type === 'refund' 
-                              ? 'text-green-600' 
-                              : 'text-red-600'
-                          }`}>
-                            {txn.type === 'credit' || txn.type === 'refund' ? '+' : '-'}
-                            {formatAmount(txn.amount)}
+                        <div>
+                          <p className="font-medium text-[#111827]">{txn.description}</p>
+                          <p className="text-sm text-[#6B7280]">
+                            {formatDistanceToNow(new Date(txn.created_at), { addSuffix: true, locale: fr })}
                           </p>
-                          {getStatusBadge(txn.status)}
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+                      <div className="text-right">
+                        <p className={`font-bold ${
+                          txn.type === 'credit' || txn.type === 'refund'
+                            ? 'text-green-600'
+                            : 'text-red-600'
+                        }`}>
+                          {txn.type === 'credit' || txn.type === 'refund' ? '+' : '-'}
+                          {formatAmount(txn.amount)}
+                        </p>
+                        {getStatusBadge(txn.status)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </TabsContent>
 
           <TabsContent value="credits" className="mt-6">
-            <Card>
-              <CardContent className="p-0">
-                <div className="divide-y">
+            {transactions.filter(t => t.type === 'credit' || t.type === 'refund').length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-[#1F5C2E]/20 bg-white/60 px-6 py-14 text-center">
+                <p className="text-sm text-[#6B7280]">Pas encore d’entrée. Tes ventes apparaîtront ici.</p>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-[#1F5C2E]/10 bg-white/90 overflow-hidden">
+                <div className="divide-y divide-[#F3F4F6]">
                   {transactions.filter(t => t.type === 'credit' || t.type === 'refund').map((txn) => (
-                    <div key={txn.id} className="flex items-center justify-between p-4 hover:bg-muted/50">
+                    <div key={txn.id} className="flex items-center justify-between p-4">
                       <div className="flex items-center gap-4">
                         <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
                           {getTransactionIcon(txn.type)}
                         </div>
                         <div>
                           <p className="font-medium">{txn.description}</p>
-                          <p className="text-sm text-muted-foreground">
+                          <p className="text-sm text-[#6B7280]">
                             {formatDistanceToNow(new Date(txn.created_at), { addSuffix: true, locale: fr })}
                           </p>
                         </div>
@@ -517,45 +498,43 @@ export default function WalletPage() {
                     </div>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="withdrawals" className="mt-6">
             {transactions.filter(t => t.type === 'withdrawal').length === 0 ? (
-              <Card className="p-12 text-center">
-                <ArrowUpRight className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold mb-2">Aucun retrait</h3>
-                <p className="text-muted-foreground">
-                  Vos retraits apparaîtront ici
+              <div className="rounded-2xl border border-dashed border-[#1F5C2E]/20 bg-white/60 px-6 py-14 text-center">
+                <ArrowUpRight className="h-12 w-12 mx-auto text-[#1F5C2E]/40 mb-4" />
+                <h3 className="font-display text-lg text-[#1F5C2E]">Aucun retrait</h3>
+                <p className="mt-2 text-sm text-[#6B7280]">
+                  Tes retraits Mobile Money apparaîtront ici.
                 </p>
-              </Card>
+              </div>
             ) : (
-              <Card>
-                <CardContent className="p-0">
-                  <div className="divide-y">
-                    {transactions.filter(t => t.type === 'withdrawal').map((txn) => (
-                      <div key={txn.id} className="flex items-center justify-between p-4 hover:bg-muted/50">
-                        <div className="flex items-center gap-4">
-                          <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center">
-                            {getTransactionIcon(txn.type)}
-                          </div>
-                          <div>
-                            <p className="font-medium">{txn.description}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {formatDistanceToNow(new Date(txn.created_at), { addSuffix: true, locale: fr })}
-                            </p>
-                          </div>
+              <div className="rounded-2xl border border-[#1F5C2E]/10 bg-white/90 overflow-hidden">
+                <div className="divide-y divide-[#F3F4F6]">
+                  {transactions.filter(t => t.type === 'withdrawal').map((txn) => (
+                    <div key={txn.id} className="flex items-center justify-between p-4">
+                      <div className="flex items-center gap-4">
+                        <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center">
+                          {getTransactionIcon(txn.type)}
                         </div>
-                        <div className="text-right">
-                          <p className="font-bold text-red-600">-{formatAmount(txn.amount)}</p>
-                          {getStatusBadge(txn.status)}
+                        <div>
+                          <p className="font-medium">{txn.description}</p>
+                          <p className="text-sm text-[#6B7280]">
+                            {formatDistanceToNow(new Date(txn.created_at), { addSuffix: true, locale: fr })}
+                          </p>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+                      <div className="text-right">
+                        <p className="font-bold text-red-600">-{formatAmount(txn.amount)}</p>
+                        {getStatusBadge(txn.status)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </TabsContent>
         </Tabs>

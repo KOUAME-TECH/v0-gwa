@@ -95,7 +95,7 @@ export function Navigation() {
             tabIndex={scrollHidden ? -1 : undefined}
             className="text-sm font-semibold text-[#1F5C2E] underline-offset-4 hover:underline"
           >
-            Digest
+            Nouveautés
           </Link>
           <Link
             href="/publier"

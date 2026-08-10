@@ -3,20 +3,12 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 
-function bootstrapSecretRequired(): boolean {
-  return (
-    !!process.env.BOOTSTRAP_ADMIN_SECRET ||
-    process.env.VERCEL_ENV === "production"
-  )
-}
-
 function assertBootstrapSecret(request: NextRequest): NextResponse | null {
-  if (!bootstrapSecretRequired()) return null
   const expected = process.env.BOOTSTRAP_ADMIN_SECRET || ""
   if (!expected) {
     return NextResponse.json(
       {
-        error: "BOOTSTRAP_ADMIN_SECRET requis en production",
+        error: "BOOTSTRAP_ADMIN_SECRET requis",
         code: "BOOTSTRAP_SECRET_MISSING",
       },
       { status: 503 },

@@ -108,9 +108,13 @@ function OrdersPageInner() {
   )
   const defaultTab = useMemo(() => {
     const q = (searchParams?.get("tab") || "").toLowerCase()
-    if (q === "ventes" || q === "achats" || q === "all" || q === "active") return q
+    if (q === "ventes" || q === "achats" || q === "active" || q === "delivered") return q
+    // Legacy deep-links
+    if (q === "all" || q === "cancelled") {
+      return sellerMode ? "ventes" : "achats"
+    }
     if (sellerMode && salesCount > 0) return "ventes"
-    return "achats"
+    return sellerMode ? "ventes" : "achats"
   }, [searchParams, sellerMode, salesCount])
 
   useEffect(() => {
@@ -348,7 +352,7 @@ function OrdersPageInner() {
             </h1>
             <p className="text-[#4B5563] mt-1 text-sm md:text-base">
               {sellerMode
-                ? "Prépare, expédie, suis le séquestre — tout au même endroit."
+                ? "Prépare, expédie et suis tes ventes — tout au même endroit."
                 : "Suivi de tes achats et livraisons."}
             </p>
           </div>
@@ -371,34 +375,81 @@ function OrdersPageInner() {
 
         {/* Stats — une ligne claire, pas un dashboard froid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
-          {[
-            {
-              label: "Toutes",
-              value: orders.length,
-              hint: "depuis le début",
-            },
-            {
-              label: "En route",
-              value: orders.filter((o) =>
-                ["shipped", "shipping"].includes(normalizeOrderStatus(o.status)),
-              ).length,
-              hint: "bientôt chez toi",
-            },
-            {
-              label: "Reçues",
-              value: orders.filter((o) => o.status === "delivered").length,
-              hint: "merci !",
-            },
-            {
-              label: "En cours",
-              value: orders.filter((o) =>
-                ["pending", "confirmed", "processing", "shipped", "preparing", "shipping"].includes(
-                  normalizeOrderStatus(o.status),
-                ),
-              ).length,
-              hint: "à surveiller",
-            },
-          ].map((s) => (
+          {(sellerMode
+            ? [
+                {
+                  label: "Ventes",
+                  value: salesCount,
+                  hint: "depuis le début",
+                },
+                {
+                  label: "À préparer",
+                  value: orders.filter(
+                    (o) =>
+                      o.seller_id === user?.id &&
+                      ["pending", "confirmed", "processing", "preparing"].includes(
+                        normalizeOrderStatus(o.status),
+                      ),
+                  ).length,
+                  hint: "action requise",
+                },
+                {
+                  label: "En route",
+                  value: orders.filter(
+                    (o) =>
+                      o.seller_id === user?.id &&
+                      ["shipped", "shipping"].includes(normalizeOrderStatus(o.status)),
+                  ).length,
+                  hint: "vers l’acheteur",
+                },
+                {
+                  label: "Livrées",
+                  value: orders.filter(
+                    (o) => o.seller_id === user?.id && o.status === "delivered",
+                  ).length,
+                  hint: "terminées",
+                },
+              ]
+            : [
+                {
+                  label: "Achats",
+                  value: orders.filter((o) => o.seller_id !== user?.id).length,
+                  hint: "depuis le début",
+                },
+                {
+                  label: "En route",
+                  value: orders.filter(
+                    (o) =>
+                      o.seller_id !== user?.id &&
+                      ["shipped", "shipping"].includes(normalizeOrderStatus(o.status)),
+                  ).length,
+                  hint: "bientôt chez toi",
+                },
+                {
+                  label: "Reçues",
+                  value: orders.filter(
+                    (o) => o.seller_id !== user?.id && o.status === "delivered",
+                  ).length,
+                  hint: "merci !",
+                },
+                {
+                  label: "En cours",
+                  value: orders.filter(
+                    (o) =>
+                      o.seller_id !== user?.id &&
+                      [
+                        "pending",
+                        "confirmed",
+                        "processing",
+                        "shipped",
+                        "preparing",
+                        "shipping",
+                      ].includes(normalizeOrderStatus(o.status)),
+                  ).length,
+                  hint: "à surveiller",
+                },
+              ]
+          ).map((s) => (
             <div
               key={s.label}
               className="rounded-2xl border border-[#1F5C2E]/10 bg-white/80 px-4 py-3"
@@ -433,24 +484,41 @@ function OrdersPageInner() {
 
         <Tabs key={defaultTab} defaultValue={defaultTab}>
           <TabsList className="bg-white/80 border border-[#E5E7EB] rounded-xl h-auto flex-wrap p-1">
-            <TabsTrigger value="achats" className="rounded-lg">
-              Mes achats ({orders.filter((o) => o.seller_id !== user?.id).length})
-            </TabsTrigger>
-            <TabsTrigger value="ventes" className="rounded-lg">
-              Mes ventes ({salesCount})
-            </TabsTrigger>
-            <TabsTrigger value="all" className="rounded-lg">
-              Toutes ({orders.length})
-            </TabsTrigger>
-            <TabsTrigger value="active" className="rounded-lg">
-              En cours
-            </TabsTrigger>
-            <TabsTrigger value="delivered" className="rounded-lg">
-              Reçues
-            </TabsTrigger>
-            <TabsTrigger value="cancelled" className="rounded-lg">
-              Annulées
-            </TabsTrigger>
+            {sellerMode ? (
+              <>
+                <TabsTrigger value="ventes" className="rounded-lg">
+                  Mes ventes ({salesCount})
+                </TabsTrigger>
+                <TabsTrigger value="active" className="rounded-lg">
+                  En cours
+                </TabsTrigger>
+                <TabsTrigger value="delivered" className="rounded-lg">
+                  Terminées
+                </TabsTrigger>
+              </>
+            ) : (
+              <>
+                <TabsTrigger value="achats" className="rounded-lg">
+                  Mes achats ({orders.filter((o) => o.seller_id !== user?.id).length})
+                </TabsTrigger>
+                <TabsTrigger value="active" className="rounded-lg">
+                  En cours
+                </TabsTrigger>
+                <TabsTrigger value="delivered" className="rounded-lg">
+                  Reçues
+                </TabsTrigger>
+              </>
+            )}
+            {!sellerMode && salesCount > 0 ? (
+              <TabsTrigger value="ventes" className="rounded-lg">
+                Mes ventes ({salesCount})
+              </TabsTrigger>
+            ) : null}
+            {sellerMode && orders.some((o) => o.seller_id !== user?.id) ? (
+              <TabsTrigger value="achats" className="rounded-lg">
+                Mes achats
+              </TabsTrigger>
+            ) : null}
           </TabsList>
 
           <TabsContent value="achats" className="mt-6">
@@ -470,9 +538,12 @@ function OrdersPageInner() {
                   />
                 ))}
               {filteredOrders.filter((o) => o.seller_id !== user?.id).length === 0 ? (
-                <p className="text-center text-sm text-[#6B7280] py-10">
-                  Pas encore d’achat. Le marché t’attend.
-                </p>
+                <div className="rounded-2xl border border-dashed border-[#1F5C2E]/20 bg-white/60 px-6 py-14 text-center">
+                  <p className="text-sm text-[#6B7280]">Pas encore d’achat. Le marché t’attend.</p>
+                  <Button asChild className="mt-5 rounded-xl bg-[#1F5C2E] hover:bg-[#184a25]">
+                    <Link href="/marketplace">Parcourir le marché</Link>
+                  </Button>
+                </div>
               ) : null}
             </div>
           </TabsContent>
@@ -494,51 +565,36 @@ function OrdersPageInner() {
                   />
                 ))}
               {filteredOrders.filter((o) => o.seller_id === user?.id).length === 0 ? (
-                <p className="text-center text-sm text-[#6B7280] py-10">
-                  Aucune vente pour l’instant.
-                </p>
+                <div className="rounded-2xl border border-dashed border-[#1F5C2E]/20 bg-white/60 px-6 py-14 text-center">
+                  <p className="text-sm text-[#6B7280]">Aucune vente pour l’instant.</p>
+                  <Button asChild className="mt-5 rounded-xl bg-[#1F5C2E] hover:bg-[#184a25]">
+                    <Link href="/publier">Publier</Link>
+                  </Button>
+                </div>
               ) : null}
             </div>
-          </TabsContent>
-
-          <TabsContent value="all" className="mt-6">
-            {filteredOrders.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-[#1F5C2E]/20 bg-white/60 px-6 py-14 text-center">
-                <Package className="mx-auto mb-3 h-11 w-11 text-[#1F5C2E]/50" />
-                <h3 className="font-display text-lg text-[#1F5C2E]">Pas encore de commande</h3>
-                <p className="mx-auto mt-2 max-w-sm text-sm text-[#6B7280]">
-                  Quand tu achètes ou vends, le fil apparaît ici : paiement, route, réception.
-                </p>
-                <Button asChild className="mt-5 rounded-xl bg-[#1F5C2E] hover:bg-[#184a25]">
-                  <Link href="/marketplace">Parcourir le marché</Link>
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {filteredOrders.map((order) => (
-                  <OrderCard 
-                    key={order.id} 
-                    order={order} 
-                    onViewDetails={() => handleViewDetails(order)}
-                    onUpdateStatus={updateOrderStatus}
-                    onConfirmReception={confirmReception}
-                    onOpenLitige={openLitige}
-                    onLeaveReview={leaveReview}
-                    currentUserId={user?.id}
-                  />
-                ))}
-              </div>
-            )}
           </TabsContent>
 
           <TabsContent value="active" className="mt-6">
             <div className="space-y-4">
               {filteredOrders
-                .filter(o => ["pending", "confirmed", "processing", "shipped", "preparing", "shipping"].includes(normalizeOrderStatus(o.status)))
+                .filter((o) => {
+                  const active = [
+                    "pending",
+                    "confirmed",
+                    "processing",
+                    "shipped",
+                    "preparing",
+                    "shipping",
+                  ].includes(normalizeOrderStatus(o.status))
+                  if (!active) return false
+                  if (sellerMode) return o.seller_id === user?.id
+                  return o.seller_id !== user?.id
+                })
                 .map((order) => (
-                  <OrderCard 
-                    key={order.id} 
-                    order={order} 
+                  <OrderCard
+                    key={order.id}
+                    order={order}
                     onViewDetails={() => handleViewDetails(order)}
                     onUpdateStatus={updateOrderStatus}
                     onConfirmReception={confirmReception}
@@ -547,17 +603,38 @@ function OrdersPageInner() {
                     currentUserId={user?.id}
                   />
                 ))}
+              {filteredOrders.filter((o) => {
+                const active = [
+                  "pending",
+                  "confirmed",
+                  "processing",
+                  "shipped",
+                  "preparing",
+                  "shipping",
+                ].includes(normalizeOrderStatus(o.status))
+                if (!active) return false
+                if (sellerMode) return o.seller_id === user?.id
+                return o.seller_id !== user?.id
+              }).length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-[#1F5C2E]/20 bg-white/60 px-6 py-10 text-center">
+                  <p className="text-sm text-[#6B7280]">Rien en cours pour le moment.</p>
+                </div>
+              ) : null}
             </div>
           </TabsContent>
 
           <TabsContent value="delivered" className="mt-6">
             <div className="space-y-4">
               {filteredOrders
-                .filter(o => o.status === "delivered")
+                .filter((o) => {
+                  if (o.status !== "delivered") return false
+                  if (sellerMode) return o.seller_id === user?.id
+                  return o.seller_id !== user?.id
+                })
                 .map((order) => (
-                  <OrderCard 
-                    key={order.id} 
-                    order={order} 
+                  <OrderCard
+                    key={order.id}
+                    order={order}
                     onViewDetails={() => handleViewDetails(order)}
                     onUpdateStatus={updateOrderStatus}
                     onConfirmReception={confirmReception}
@@ -566,25 +643,17 @@ function OrdersPageInner() {
                     currentUserId={user?.id}
                   />
                 ))}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="cancelled" className="mt-6">
-            <div className="space-y-4">
-              {filteredOrders
-                .filter(o => o.status === "cancelled")
-                .map((order) => (
-                  <OrderCard 
-                    key={order.id} 
-                    order={order} 
-                    onViewDetails={() => handleViewDetails(order)}
-                    onUpdateStatus={updateOrderStatus}
-                    onConfirmReception={confirmReception}
-                    onOpenLitige={openLitige}
-                    onLeaveReview={leaveReview}
-                    currentUserId={user?.id}
-                  />
-                ))}
+              {filteredOrders.filter((o) => {
+                if (o.status !== "delivered") return false
+                if (sellerMode) return o.seller_id === user?.id
+                return o.seller_id !== user?.id
+              }).length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-[#1F5C2E]/20 bg-white/60 px-6 py-10 text-center">
+                  <p className="text-sm text-[#6B7280]">
+                    {sellerMode ? "Pas encore de vente terminée." : "Pas encore de commande reçue."}
+                  </p>
+                </div>
+              ) : null}
             </div>
           </TabsContent>
         </Tabs>

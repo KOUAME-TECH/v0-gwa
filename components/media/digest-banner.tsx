@@ -17,7 +17,7 @@ export type DigestBannerProps = {
   className?: string
 }
 
-/** Bannière Harmattan Digest — clic = écoute immédiate (pas de button imbriqué). */
+/** Bannière nouveautés audio — clic = écoute immédiate (pas de button imbriqué). */
 export function DigestBanner({
   count,
   city,
@@ -50,11 +50,11 @@ export function DigestBanner({
         "mb-3 flex w-full cursor-pointer items-center gap-3 rounded-2xl border border-[#1F5C2E]/15 bg-gradient-to-r from-[#1F5C2E]/8 to-[#FFF6E5] px-3 py-2.5 text-left active:scale-[0.99] transition-transform",
         className,
       )}
-      aria-label={tourActive ? "Arrêter le digest audio" : "Écouter le Harmattan Digest"}
+      aria-label={tourActive ? "Arrêter les nouveautés audio" : "Écouter les nouveautés"}
     >
       <AudioWaveIcon playing={tourActive} size="md" variant="recorded" className="shrink-0" />
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-[#1F5C2E]">Harmattan Digest</p>
+        <p className="text-sm font-semibold text-[#1F5C2E]">Nouveautés près de toi</p>
         <p className="text-xs text-[#4B5563] truncate">
           {tourActive
             ? `${tourIndex + 1}/${tourTotal} · ${place}`
@@ -67,9 +67,9 @@ export function DigestBanner({
         total={tourTotal}
         onClick={onStartTour}
         decorative
-        idleLabel="Digest"
-        ariaLabelStart="Écouter le Harmattan Digest"
-        ariaLabelStop="Arrêter le Harmattan Digest"
+        idleLabel="Écouter"
+        ariaLabelStart="Écouter les nouveautés"
+        ariaLabelStop="Arrêter les nouveautés"
         className="shrink-0"
       />
     </div>

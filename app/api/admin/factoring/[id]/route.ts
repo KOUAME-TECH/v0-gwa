@@ -76,10 +76,21 @@ export async function PATCH(request: NextRequest, context: Ctx) {
     }
 
     const now = new Date().toISOString()
-    const approvedAmount =
+    const requestedAmount = Math.round(Number(existing.amount_fcfa) || 0)
+    let approvedAmount =
       body?.approved_amount_fcfa != null
         ? Math.round(Number(body.approved_amount_fcfa))
         : null
+    if (approvedAmount != null) {
+      if (!Number.isFinite(approvedAmount) || approvedAmount <= 0) {
+        return NextResponse.json(
+          { error: "approved_amount_fcfa invalide" },
+          { status: 400 },
+        )
+      }
+      // Ne jamais approuver au-dessus de la demande
+      approvedAmount = Math.min(approvedAmount, Math.max(0, requestedAmount))
+    }
     const feeFcfa =
       body?.fee_fcfa != null ? Math.round(Number(body.fee_fcfa)) : null
     const externalRef =
@@ -107,7 +118,7 @@ export async function PATCH(request: NextRequest, context: Ctx) {
     if (approvedAmount != null && Number.isFinite(approvedAmount)) {
       patch.approved_amount_fcfa = approvedAmount
     }
-    if (feeFcfa != null && Number.isFinite(feeFcfa)) {
+    if (feeFcfa != null && Number.isFinite(feeFcfa) && feeFcfa >= 0) {
       patch.fee_fcfa = feeFcfa
     }
     if (externalRef) {
@@ -147,7 +158,7 @@ export async function PATCH(request: NextRequest, context: Ctx) {
     const labels: Record<string, string> = {
       approved: "approuvée",
       rejected: "refusée",
-      disbursed: "décaissée (hors plateforme)",
+      disbursed: "versée (hors plateforme)",
     }
     const amountNote =
       approvedAmount != null
@@ -156,9 +167,9 @@ export async function PATCH(request: NextRequest, context: Ctx) {
     await gate.admin.from("notifications").insert({
       user_id: existing.requester_id,
       type: "alert",
-      title: "Mise à jour affacturage",
-      message: `Votre demande d'affacturage a été ${labels[newStatus]}.${amountNote}`,
-      body: `Affacturage ${labels[newStatus]}`,
+      title: "Mise à jour avance sur vente",
+      message: `Ta demande d’avance sur vente a été ${labels[newStatus]}.${amountNote}`,
+      body: `Avance sur vente ${labels[newStatus]}`,
       link: "/affacturage",
       is_read: false,
       read: false,

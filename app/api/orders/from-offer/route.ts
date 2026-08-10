@@ -35,7 +35,6 @@ export async function POST(request: Request) {
 
     const body = await request.json().catch(() => ({}))
     const messageId = String(body.message_id || "")
-    const quantity = Math.max(1, Math.min(999_999, Number(body.quantity) || 1))
     if (!messageId) {
       return NextResponse.json({ error: "message_id requis" }, { status: 400 })
     }
@@ -197,7 +196,24 @@ export async function POST(request: Request) {
         )
       }
     }
-    if (stockQty != null && Number.isFinite(stockQty) && quantity > stockQty) {
+
+    // Quantité : liée à l’offre si présente ; sinon body plafonné (anti-inflation)
+    const offeredQtyRaw = (offer as { quantity?: unknown }).quantity
+    const offeredQty =
+      typeof offeredQtyRaw === "number" && Number.isFinite(offeredQtyRaw)
+        ? Math.max(1, Math.min(999_999, Math.round(offeredQtyRaw)))
+        : null
+    let quantity =
+      offeredQty != null
+        ? offeredQty
+        : Math.max(1, Math.min(100, Math.round(Number(body.quantity) || 1)))
+    if (stockQty == null || !Number.isFinite(stockQty) || stockQty < 1) {
+      return NextResponse.json(
+        { error: "Stock indisponible pour cette offre", code: "NO_STOCK" },
+        { status: 400 },
+      )
+    }
+    if (quantity > stockQty) {
       return NextResponse.json(
         { error: `Stock insuffisant (max ${stockQty})`, code: "OUT_OF_STOCK" },
         { status: 400 },

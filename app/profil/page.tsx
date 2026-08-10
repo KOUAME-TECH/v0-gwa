@@ -237,7 +237,7 @@ export default function ProfilPage() {
           href: "/dashboard/commandes",
           count: stats.orders,
         },
-        { icon: Wallet, label: "Portefeuille", href: "/wallet" },
+        { icon: Wallet, label: "Mon argent", href: "/wallet" },
         { icon: Crown, label: "Abonnement", href: "/abonnement" },
       ]
     }
@@ -250,7 +250,7 @@ export default function ProfilPage() {
           label: "Espace producteur",
           count: stats.orders || stats.products || undefined,
         },
-        { icon: Wallet, label: "Portefeuille", href: "/wallet" },
+        { icon: Wallet, label: "Mon argent", href: "/wallet" },
         { icon: Crown, label: "Abonnement", href: "/abonnement" },
         { icon: Star, label: "Mes avis", href: "/dashboard/reviews" },
       ]
@@ -298,7 +298,7 @@ export default function ProfilPage() {
             items: [
               {
                 icon: TrendingUp,
-                label: "Score de Confiance GWA",
+                label: "Mon score",
                 href: "/scg",
                 highlight: true,
               },

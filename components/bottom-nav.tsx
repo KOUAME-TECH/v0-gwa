@@ -81,7 +81,7 @@ export function BottomNav() {
     {
       href: "/marketplace",
       icon: Store,
-      label: "Shop",
+      label: "Marché",
       world: "commerce",
       badge: ordersCount > 0 ? ordersCount : undefined,
     },

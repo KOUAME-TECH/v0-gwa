@@ -47,15 +47,15 @@ export function coachBand(score: number): CoachBand {
 export function coachIntro(score: number): string {
   const band = coachBand(score)
   if (band === "low") {
-    return `Ton score est ${score}. On part de bas, c’est normal — trois gestes concrets pour remonter (seuil affacturage = 500).`
+    return `Ton score est ${score}. C’est un début — trois gestes simples pour monter. À 500, tu peux demander une avance sur vente.`
   }
   if (band === "mid") {
     if (score >= 500) {
-      return `Ton score est ${score} — tu es déjà au seuil bancable (500). Trois actions pour le consolider vers 700+.`
+      return `Ton score est ${score} — tu peux déjà demander une avance sur vente. Trois gestes pour le garder haut.`
     }
-    return `Ton score est ${score}. Encore ${500 - score} points pour le seuil bancable (500) — trois actions concrètes.`
+    return `Ton score est ${score}. Encore ${500 - score} points pour l’avance sur vente — trois gestes concrets.`
   }
-  return `Ton score est ${score} — excellent. Trois gestes pour le garder stable.`
+  return `Ton score est ${score} — très bien. Trois gestes pour le garder stable.`
 }
 
 /** Jusqu’à 3 actions sur les dimensions les plus faibles (ton coach, pas jugement). */

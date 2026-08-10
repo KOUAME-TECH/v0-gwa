@@ -9,11 +9,9 @@ import { Badge } from "@/components/ui/badge"
 import {
   Package,
   Plus,
-  Wallet,
-  Crown,
-  ChevronRight,
   Banknote,
   Eye,
+  ChevronRight,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { WeatherWidget } from "@/components/weather-widget"
@@ -26,6 +24,10 @@ import { entitlementsForTier } from "@/lib/pricing/entitlements"
 import { productDetailPath } from "@/lib/products/paths"
 import { ProducerSubnav } from "@/components/producer/producer-subnav"
 import { YellyAideButton } from "@/components/yelly/yelly-aide-button"
+import {
+  normalizeOrderStatus,
+  ORDER_STATUS_LABELS,
+} from "@/lib/orders/escrow-flow"
 
 interface Product {
   id: string
@@ -192,105 +194,51 @@ export default function FarmerDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#E8F5E9] to-[#FFF6E5] pb-24">
-      <header className="px-4 pt-6 pb-4">
+    <div className="min-h-screen bg-[#FFF6E5] pb-24">
+      <header className="px-4 pt-5 pb-3">
         <ProducerSubnav />
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-sm font-medium text-[#C27D10]">Espace producteur</p>
-            <h1 className="text-2xl font-bold tracking-tight text-[#1F5C2E]">
-              {firstName}
+            <h1 className="font-display text-2xl tracking-tight text-[#1F5C2E]">
+              Bonjour {firstName}
             </h1>
             <p className="mt-1 text-sm text-[#6B7280]">
-              Ici tu gères tes ventes, ton argent et tes produits.
+              Vends facilement. Suis ton argent ici.
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <YellyAideButton source="farmer_hub" className="rounded-full bg-white px-3 py-2 ring-1 ring-[#1F5C2E]/15" />
-            <Link
-              href="/wallet"
-              className="rounded-full bg-white p-2.5 ring-1 ring-[#1F5C2E]/15"
-              aria-label="Portefeuille"
-            >
-              <Wallet className="h-5 w-5 text-[#1F5C2E]" />
-            </Link>
-            <Link
-              href="/abonnement"
-              className="rounded-full bg-white p-2.5 ring-1 ring-[#1F5C2E]/15"
-              aria-label="Abonnement"
-            >
-              <Crown className="h-5 w-5 text-[#C27D10]" />
-            </Link>
-          </div>
+          <YellyAideButton
+            source="farmer_hub"
+            className="rounded-full bg-white px-3 py-2 text-sm ring-1 ring-[#1F5C2E]/12"
+          />
         </div>
 
-        <div className="mt-4 flex gap-2">
-          <Button asChild className="flex-1 rounded-full bg-[#1F5C2E] hover:bg-[#174824]">
-            <Link href="/publier">
-              <Plus className="mr-2 h-4 w-4" />
-              Publier
-            </Link>
-          </Button>
-          <Button
-            asChild
-            variant="outline"
-            className="relative flex-1 rounded-full border-[#1F5C2E]/30"
-          >
-            <Link href="/dashboard/commandes?tab=ventes">
-              Mes ventes
-              {pendingOrders > 0 ? (
-                <span className="ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#C27D10] px-1.5 text-[10px] font-bold text-white">
-                  {pendingOrders}
-                </span>
-              ) : null}
-            </Link>
-          </Button>
-        </div>
-
-        {/* P1 — prochaine action unique */}
-        <div className="mt-3 rounded-xl bg-white/90 px-3 py-2.5 text-sm text-[#1F5C2E] ring-1 ring-[#1F5C2E]/15">
+        {/* Une seule action claire — pas de double bouton + bandeau */}
+        <div className="mt-4">
           {products.length === 0 ? (
-            <Link href="/publier" className="font-semibold underline">
-              Prochaine étape : publie ta première annonce
-            </Link>
+            <Button asChild className="h-12 w-full rounded-full bg-[#1F5C2E] text-base hover:bg-[#174824]">
+              <Link href="/publier">
+                <Plus className="mr-2 h-5 w-5" />
+                Publier mon premier produit
+              </Link>
+            </Button>
           ) : pendingOrders > 0 ? (
-            <Link href="/dashboard/commandes?tab=ventes" className="font-semibold underline">
-              Prochaine étape : traite {pendingOrders} vente
-              {pendingOrders > 1 ? "s" : ""}
-            </Link>
+            <Button asChild className="h-12 w-full rounded-full bg-[#1F5C2E] text-base hover:bg-[#174824]">
+              <Link href="/dashboard/commandes?tab=ventes">
+                Traiter {pendingOrders} vente{pendingOrders > 1 ? "s" : ""}
+              </Link>
+            </Button>
           ) : lowStock.length > 0 ? (
-            <Link href="/dashboard/products" className="font-semibold underline">
-              Prochaine étape : mets à jour le stock ({lowStock.length})
-            </Link>
+            <Button asChild className="h-12 w-full rounded-full bg-[#1F5C2E] text-base hover:bg-[#174824]">
+              <Link href="/dashboard/products">Mettre à jour le stock</Link>
+            </Button>
           ) : (
-            <Link href="/dashboard/products" className="font-semibold underline">
-              Prochaine étape : partage ta boutique
-            </Link>
+            <Button asChild className="h-12 w-full rounded-full bg-[#1F5C2E] text-base hover:bg-[#174824]">
+              <Link href="/publier">
+                <Plus className="mr-2 h-4 w-4" />
+                Publier une offre
+              </Link>
+            </Button>
           )}
-        </div>
-
-        {entitlements.tier === "free" ? (
-          <Link
-            href="/abonnement"
-            className="mt-3 block rounded-xl bg-[#C27D10]/10 px-3 py-2.5 text-sm ring-1 ring-[#C27D10]/25"
-          >
-            <p className="font-semibold text-[#92400E]">Passe Starter</p>
-            <p className="text-xs text-[#6B7280]">
-              Débloque stats vendeur + 40 requêtes Yelly / jour + boost catalogue
-            </p>
-          </Link>
-        ) : null}
-
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[#6B7280]">
-          <Badge variant="secondary" className="capitalize">
-            {entitlements.tier}
-          </Badge>
-          <span>
-            Yelly{" "}
-            {entitlements.yellyRequestsPerDay == null
-              ? "illimité"
-              : `${entitlements.yellyRequestsPerDay}/j`}
-          </span>
         </div>
       </header>
 
@@ -306,28 +254,29 @@ export default function FarmerDashboard() {
       </div>
 
       <section className="grid grid-cols-2 gap-3 px-4">
-        <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-[#1F5C2E]/8">
+        <Link
+          href="/wallet"
+          className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-[#1F5C2E]/8"
+        >
           <p className="text-xs text-[#6B7280]">
-            {statsLocked ? "Net (Starter+)" : "Net vendeur"}
+            {statsLocked ? "Gains (abonnement)" : "Argent gagné"}
           </p>
           {statsLocked ? (
-            <Link href="/abonnement" className="mt-1 block text-sm font-semibold text-[#1F5C2E]">
-              Débloquer les stats →
-            </Link>
+            <p className="mt-1 text-sm font-semibold text-[#1F5C2E]">Voir l’abonnement →</p>
           ) : (
-            <p className="mt-1 text-2xl font-bold text-[#1a1a1a]">
+            <p className="mt-1 text-2xl font-bold text-[#1a1a1a] tabular-nums">
               {sellerStats ? formatFcfa(sellerStats.net_fcfa) : "—"}
             </p>
           )}
-        </div>
+        </Link>
         <Link
           href="/dashboard/products"
           className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-[#1F5C2E]/8"
         >
-          <p className="text-xs text-[#6B7280]">Produits</p>
-          <p className="mt-1 text-2xl font-bold">{products.length}</p>
+          <p className="text-xs text-[#6B7280]">Mes produits</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums">{products.length}</p>
           {lowStock.length > 0 ? (
-            <p className="text-[11px] text-amber-700">{lowStock.length} stock bas</p>
+            <p className="text-[11px] text-amber-700">{lowStock.length} à mettre à jour</p>
           ) : null}
         </Link>
       </section>
@@ -340,8 +289,8 @@ export default function FarmerDashboard() {
           >
             <Banknote className="h-5 w-5" />
             <div className="flex-1">
-              <p className="text-sm font-semibold">Affacturage disponible</p>
-              <p className="text-xs text-white/80">Demande un avance sur commande</p>
+              <p className="text-sm font-semibold">Avance sur vente</p>
+              <p className="text-xs text-white/80">Demander de l’argent avant la fin de vente</p>
             </div>
             <ChevronRight className="h-4 w-4" />
           </Link>
@@ -350,7 +299,7 @@ export default function FarmerDashboard() {
 
       <section className="mt-6 px-4">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-base font-semibold">À traiter</h2>
+          <h2 className="text-base font-semibold text-[#1F5C2E]">À faire</h2>
           <Link
             href="/dashboard/commandes?tab=ventes"
             className="flex items-center gap-0.5 text-xs font-medium text-[#1F5C2E]"
@@ -361,17 +310,27 @@ export default function FarmerDashboard() {
         {orders.length === 0 ? (
           <EmptyState
             icon={Package}
-            title="Pas encore de commandes"
-            description="Partage ton annonce pour démarrer les ventes."
-            actionLabel="Voir mes produits"
-            actionHref="/dashboard/products"
+            title="Pas encore de vente"
+            description="Publie un produit pour commencer à vendre."
+            actionLabel="Publier un produit"
+            actionHref="/publier"
           />
         ) : (
           <ul className="space-y-2">
-            {orders.slice(0, 4).map((order) => (
+            {orders.slice(0, 4).map((order) => {
+              const moneyHint =
+                order.escrow_status === "held"
+                  ? " · argent gardé"
+                  : order.escrow_status === "released"
+                    ? " · payé"
+                    : ""
+              const statusLabel =
+                ORDER_STATUS_LABELS[normalizeOrderStatus(order.status)] ||
+                order.status
+              return (
               <li key={order.id}>
                 <Link
-                  href="/dashboard/commandes"
+                  href="/dashboard/commandes?tab=ventes"
                   className="flex items-center justify-between rounded-xl bg-white p-3 ring-1 ring-black/5"
                 >
                   <div>
@@ -380,17 +339,14 @@ export default function FarmerDashboard() {
                     </p>
                     <p className="text-xs text-[#6B7280]">
                       {formatFcfa(order.total_amount || 0)}
-                      {order.escrow_status === "held"
-                        ? " · en séquestre"
-                        : order.escrow_status === "released"
-                          ? " · libéré"
-                          : ""}
+                      {moneyHint}
                     </p>
                   </div>
-                  <Badge variant="secondary">{order.status}</Badge>
+                  <Badge variant="secondary">{statusLabel}</Badge>
                 </Link>
               </li>
-            ))}
+              )
+            })}
           </ul>
         )}
       </section>
@@ -409,7 +365,7 @@ export default function FarmerDashboard() {
           <EmptyState
             icon={Plus}
             title="Aucune annonce active"
-            description={`Palier ${entitlements.tier} — publie ta première annonce.`}
+            description="Publie ta première annonce pour apparaître sur le marché."
             actionLabel="Publier"
             actionHref="/publier"
           />
@@ -445,7 +401,7 @@ export default function FarmerDashboard() {
                     href={`/dashboard/products/${p.id}/edit`}
                     className="text-[11px] font-medium text-amber-800 underline px-1"
                   >
-                    Maj stock
+                    Mettre à jour le stock
                   </Link>
                 ) : null}
               </li>
