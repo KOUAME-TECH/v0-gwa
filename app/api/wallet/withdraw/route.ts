@@ -10,6 +10,7 @@ import {
 import {
   sumWalletAvailableFcfa,
 } from "@/lib/wallet/balance"
+import { normalizePhoneDigits } from "@/lib/auth/phone"
 
 /**
  * GET /api/wallet/withdraw — historique demandes
@@ -89,7 +90,8 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json().catch(() => ({}))
     const amount = Math.round(Number(body?.amount_fcfa ?? body?.amount))
-    const phone = String(body?.phone || "").trim()
+    const phoneRaw = String(body?.phone || "").trim()
+    const phone = normalizePhoneDigits(phoneRaw) || phoneRaw.replace(/\s/g, "")
     const network = mapPaymentMethodToNetwork(
       String(body?.network || body?.method || "orange"),
     )
@@ -153,7 +155,7 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       )
     }
-    if (phone.length < 8) {
+    if (!/^\+?\d{8,15}$/.test(phone) || phone.replace(/\D/g, "").length < 8) {
       return NextResponse.json(
         { error: "Numéro Mobile Money invalide", code: "INVALID_PHONE" },
         { status: 400 },

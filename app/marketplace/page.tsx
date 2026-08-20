@@ -33,6 +33,8 @@ import { addOrIncrementCart } from "@/lib/cart/add"
 import { prefetchProduct } from "@/lib/products/prefetch"
 import { cn } from "@/lib/utils"
 import { useHideOnScroll } from "@/hooks/use-hide-on-scroll"
+import { ProductReactionButtons } from "@/components/products/product-reaction-buttons"
+import { normalizeCount } from "@/lib/products/likes"
 import {
   feedPriorityForTier,
   hasProBadge,
@@ -56,6 +58,8 @@ type Product = {
   product_type: string
   category_id: string | null
   seller_id: string
+  likes_count?: number
+  dislikes_count?: number
   feedPriority?: number
   profiles: {
     full_name: string
@@ -72,9 +76,15 @@ function MarketplaceGridCard({
   product: p,
   listening,
   favorited,
+  liked,
+  disliked,
+  likesCount,
+  dislikesCount,
   listenProps,
   onToggleFavorite,
+  onReactionChange,
   onAddToCart,
+  onAuthRequired,
   formatPrice,
   imageQuality,
   priority = false,
@@ -83,6 +93,10 @@ function MarketplaceGridCard({
   product: Product
   listening: boolean
   favorited: boolean
+  liked: boolean
+  disliked: boolean
+  likesCount: number
+  dislikesCount: number
   listenProps: {
     text: string
     audioUrl?: string | null
@@ -91,7 +105,12 @@ function MarketplaceGridCard({
     highlight?: boolean
   }
   onToggleFavorite: (id: string, e: React.MouseEvent) => void
+  onReactionChange: (
+    id: string,
+    state: { reaction: "like" | "dislike" | null; likes_count: number; dislikes_count: number },
+  ) => void
   onAddToCart: (id: string, e: React.MouseEvent) => void
+  onAuthRequired: () => void
   formatPrice: (n: number) => string
   imageQuality: number
   priority?: boolean
@@ -132,6 +151,16 @@ function MarketplaceGridCard({
             <ShoppingBag className="h-10 w-10 text-[#2F7D32]/40" />
           </div>
         )}
+        <ProductReactionButtons
+          productId={p.id}
+          initialLiked={liked}
+          initialDisliked={disliked}
+          initialLikesCount={likesCount}
+          initialDislikesCount={dislikesCount}
+          variant="compact"
+          onAuthRequired={onAuthRequired}
+          onChange={(state) => onReactionChange(p.id, state)}
+        />
         <button
           type="button"
           onClick={(e) => onToggleFavorite(p.id, e)}
@@ -222,6 +251,10 @@ function MarketplaceContent() {
   const [selectedType, setSelectedType] = useState<string>("all")
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
+  const [likedIds, setLikedIds] = useState<Set<string>>(new Set())
+  const [dislikedIds, setDislikedIds] = useState<Set<string>>(new Set())
+  const [likeCounts, setLikeCounts] = useState<Record<string, number>>({})
+  const [dislikeCounts, setDislikeCounts] = useState<Record<string, number>>({})
   const [showFilters, setShowFilters] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
   const [userCity, setUserCity] = useState<string | null>(null)
@@ -332,7 +365,7 @@ function MarketplaceContent() {
         .select(`
           id, name, price, unit, description, audio_url, audio_lang, created_at, images,
           origin_country, origin_region,
-          is_organic, is_fair_trade, product_type, category_id, seller_id,
+          is_organic, is_fair_trade, product_type, category_id, seller_id, likes_count, dislikes_count,
           profiles:seller_id(full_name, avatar_url, is_verified, subscription_tier),
           categories:category_id(name, slug)
         `)
@@ -347,7 +380,7 @@ function MarketplaceContent() {
               .select(`
           id, name, price, unit, description, audio_url, audio_lang, created_at, images,
           origin_country, origin_region,
-          is_organic, is_fair_trade, product_type, category_id, seller_id,
+          is_organic, is_fair_trade, product_type, category_id, seller_id, likes_count, dislikes_count,
           profiles:seller_id(full_name, avatar_url, is_verified, subscription_tier),
           categories:category_id(name, slug)
         `)
@@ -355,28 +388,61 @@ function MarketplaceContent() {
               .in("id", digestIds)
           : Promise.resolve({ data: [] as Product[] })
 
-      const [productsRes, digestIdsRes, categoriesRes, favsRes, profileRes] = await Promise.all([
-        catalogQuery,
-        digestIdsQuery,
-        supabase.from("categories").select("id, name, slug, category_type").eq("category_type", "agriculture").is("parent_id", null).order("name"),
-        user ? supabase.from("favorites").select("product_id").eq("user_id", user.id).limit(200) : Promise.resolve({ data: [] as { product_id: string }[] }),
-        profilePromise,
-      ])
+      const [productsRes, digestIdsRes, categoriesRes, favsRes, likesRes, dislikesRes, profileRes] =
+        await Promise.all([
+          catalogQuery,
+          digestIdsQuery,
+          supabase
+            .from("categories")
+            .select("id, name, slug, category_type")
+            .eq("category_type", "agriculture")
+            .is("parent_id", null)
+            .order("name"),
+          user
+            ? supabase.from("favorites").select("product_id").eq("user_id", user.id).limit(200)
+            : Promise.resolve({ data: [] as { product_id: string }[] }),
+          user
+            ? supabase.from("product_likes").select("product_id").eq("user_id", user.id).limit(200)
+            : Promise.resolve({ data: [] as { product_id: string }[] }),
+          user
+            ? supabase.from("product_dislikes").select("product_id").eq("user_id", user.id).limit(200)
+            : Promise.resolve({ data: [] as { product_id: string }[] }),
+          profilePromise,
+        ])
 
       const catalog = (productsRes.data || []) as Product[]
       const digestExtra = (digestIdsRes.data || []) as Product[]
       const byId = new Map<string, Product>()
+      const counts: Record<string, number> = {}
+      const dCounts: Record<string, number> = {}
       for (const p of [...digestExtra, ...catalog]) {
         const tier = p.profiles?.subscription_tier
+        const likes = normalizeCount(p.likes_count)
+        const dislikes = normalizeCount(p.dislikes_count)
+        counts[p.id] = likes
+        dCounts[p.id] = dislikes
         byId.set(p.id, {
           ...p,
+          likes_count: likes,
+          dislikes_count: dislikes,
           feedPriority: feedPriorityForTier(tier),
         })
       }
       const merged = sortByFeedPriority([...byId.values()]).slice(0, 24)
       setProducts(merged)
+      setLikeCounts(counts)
+      setDislikeCounts(dCounts)
       if (categoriesRes.data) setCategories(categoriesRes.data)
-      if (favsRes.data) setFavorites(new Set((favsRes.data as { product_id: string }[]).map(f => f.product_id)))
+      if (favsRes.data)
+        setFavorites(new Set((favsRes.data as { product_id: string }[]).map((f) => f.product_id)))
+      if (likesRes.data) {
+        setLikedIds(new Set((likesRes.data as { product_id: string }[]).map((l) => l.product_id)))
+      }
+      if (dislikesRes.data) {
+        setDislikedIds(
+          new Set((dislikesRes.data as { product_id: string }[]).map((l) => l.product_id)),
+        )
+      }
       if (!geoCity && profileRes.data?.city) setUserCity(profileRes.data.city)
       if (!geoCountry && profileRes.data?.country) setUserCountry(profileRes.data.country)
 
@@ -423,6 +489,33 @@ function MarketplaceContent() {
       }
       toast.success("Ajouté aux favoris")
     }
+  }
+
+  function onReactionChange(
+    id: string,
+    state: { reaction: "like" | "dislike" | null; likes_count: number; dislikes_count: number },
+  ) {
+    setLikedIds((prev) => {
+      const next = new Set(prev)
+      if (state.reaction === "like") next.add(id)
+      else next.delete(id)
+      return next
+    })
+    setDislikedIds((prev) => {
+      const next = new Set(prev)
+      if (state.reaction === "dislike") next.add(id)
+      else next.delete(id)
+      return next
+    })
+    setLikeCounts((prev) => ({ ...prev, [id]: state.likes_count }))
+    setDislikeCounts((prev) => ({ ...prev, [id]: state.dislikes_count }))
+    setProducts((prev) =>
+      prev.map((p) =>
+        p.id === id
+          ? { ...p, likes_count: state.likes_count, dislikes_count: state.dislikes_count }
+          : p,
+      ),
+    )
   }
 
   async function addToCart(id: string, e: React.MouseEvent) {
@@ -826,9 +919,18 @@ function MarketplaceContent() {
                   product={p}
                   listening={listeningId === p.id}
                   favorited={favorites.has(p.id)}
+                  liked={likedIds.has(p.id)}
+                  disliked={dislikedIds.has(p.id)}
+                  likesCount={likeCounts[p.id] ?? normalizeCount(p.likes_count)}
+                  dislikesCount={dislikeCounts[p.id] ?? normalizeCount(p.dislikes_count)}
                   listenProps={productListenProps(p)}
                   onToggleFavorite={toggleFavorite}
+                  onReactionChange={onReactionChange}
                   onAddToCart={addToCart}
+                  onAuthRequired={() => {
+                    toast.error("Connecte-toi pour réagir")
+                    router.push(`/auth/login?redirect=${encodeURIComponent("/marketplace")}`)
+                  }}
                   formatPrice={fmt}
                   imageQuality={imageQuality}
                   priority={idx < 4}

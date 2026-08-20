@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { PLACE_TYPES, type PlaceType } from "@/lib/location/places"
+import { checkRateLimit } from "@/lib/security/rate-limiter"
 
 const PLACE_TYPE_SET = new Set<string>(PLACE_TYPES.map((p) => p.value))
 
@@ -10,6 +11,11 @@ const PLACE_TYPE_SET = new Set<string>(PLACE_TYPES.map((p) => p.value))
  */
 export async function GET() {
   try {
+    const rate = await checkRateLimit("API_GENERAL")
+    if (!rate.success) {
+      return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })
+    }
+
     const supabase = await createClient()
     const {
       data: { user },
@@ -48,6 +54,11 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const rate = await checkRateLimit("API_CREATE")
+    if (!rate.success) {
+      return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })
+    }
+
     const supabase = await createClient()
     const {
       data: { user },

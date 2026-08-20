@@ -24,7 +24,7 @@ import {
   Heart, MessageCircle, Share2, UserPlus, Search, Bell,
   ShoppingBag, BadgeCheck, MapPin, Bookmark, MoreHorizontal,
   ChevronLeft, ChevronRight, X, Flag, EyeOff, LinkIcon,
-  Trash2, UserCheck
+  Trash2, UserCheck, ThumbsDown
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -82,6 +82,8 @@ type Product = {
   origin_country: string | null
   product_type: string
   seller_id: string
+  likes_count: number
+  dislikes_count: number
   comments_count: number
   created_at: string
   is_organic?: boolean | null
@@ -133,8 +135,8 @@ type Comment = {
   } | null
 }
 
-type FeedItem = 
-  | { type: "product"; data: Product; isLiked: boolean; isSaved: boolean }
+type FeedItem =
+  | { type: "product"; data: Product; isLiked: boolean; isDisliked: boolean; isSaved: boolean }
   | { type: "post"; data: Post; isLiked: boolean; isSaved: boolean }
 
 const categories = FEED_FILTER_CHIPS.map((c) => ({ id: c.id, name: c.name }))
@@ -270,7 +272,7 @@ export default function HomePage() {
         .from("products")
         .select(`
           id, name, description, price, unit, images, audio_url, origin_region, origin_country, product_type, seller_id,
-          comments_count, created_at, is_organic,
+          likes_count, dislikes_count, comments_count, created_at, is_organic,
           profiles:seller_id(id, full_name, avatar_url, is_verified, city, subscription_tier),
           categories:category_id(name, slug)
         `)
@@ -298,6 +300,8 @@ export default function HomePage() {
         setOfflineMode(false)
 
         let userLikes: string[] = []
+        let userProductLikes: string[] = []
+        let userProductDislikes: string[] = []
         let userFavorites: string[] = []
 
         const authorIds = [...new Set((rawPosts || []).map((p) => p.author_id).filter(Boolean))]
@@ -305,6 +309,8 @@ export default function HomePage() {
         const metaPromise = currentUser
           ? Promise.all([
               supabase.from("post_likes").select("post_id").eq("user_id", currentUser.id).limit(200),
+              supabase.from("product_likes").select("product_id").eq("user_id", currentUser.id).limit(200),
+              supabase.from("product_dislikes").select("product_id").eq("user_id", currentUser.id).limit(200),
               supabase.from("favorites").select("product_id").eq("user_id", currentUser.id).limit(200),
               supabase.from("profiles").select("user_type").eq("id", currentUser.id).maybeSingle(),
               supabase.from("followers").select("following_id").eq("follower_id", currentUser.id).limit(200),
@@ -322,7 +328,8 @@ export default function HomePage() {
         const [metaRes, authorsRes] = await Promise.all([metaPromise, authorsPromise])
 
         if (metaRes) {
-          const [likesRes, favsRes, profileRes, followsRes] = metaRes
+          const [likesRes, productLikesRes, productDislikesRes, favsRes, profileRes, followsRes] =
+            metaRes
           if (profileRes.data) {
             setUserType(profileRes.data.user_type)
           }
@@ -330,6 +337,8 @@ export default function HomePage() {
             setFollowingIds(new Set(followsRes.data.map((f) => f.following_id)))
           }
           userLikes = likesRes.data?.map((l) => l.post_id) || []
+          userProductLikes = productLikesRes.data?.map((l) => l.product_id) || []
+          userProductDislikes = productDislikesRes.data?.map((l) => l.product_id) || []
           userFavorites = favsRes.data?.map((f) => f.product_id) || []
         }
 
@@ -354,8 +363,13 @@ export default function HomePage() {
           if (rankedProducts[i]) {
             feedItems.push({
               type: "product",
-              data: rankedProducts[i],
-              isLiked: false,
+              data: {
+                ...rankedProducts[i],
+                likes_count: Number(rankedProducts[i].likes_count) || 0,
+                dislikes_count: Number(rankedProducts[i].dislikes_count) || 0,
+              },
+              isLiked: userProductLikes.includes(rankedProducts[i].id),
+              isDisliked: userProductDislikes.includes(rankedProducts[i].id),
               isSaved: userFavorites.includes(rankedProducts[i].id),
             })
           }
@@ -431,7 +445,7 @@ export default function HomePage() {
         .from("products")
         .select(`
           id, name, description, price, unit, images, audio_url, origin_region, origin_country, product_type, seller_id,
-          comments_count, created_at, is_organic,
+          likes_count, dislikes_count, comments_count, created_at, is_organic,
           profiles:seller_id(id, full_name, avatar_url, is_verified, city),
           categories:category_id(name, slug)
         `)
@@ -463,8 +477,10 @@ export default function HomePage() {
       const postIds = posts.map((p) => p.id)
       let moreFavs: string[] = []
       let moreLikes: string[] = []
+      let moreProductLikes: string[] = []
+      let moreProductDislikes: string[] = []
       if (user?.id) {
-        const [favRes, likeRes] = await Promise.all([
+        const [favRes, likeRes, pLikeRes, pDislikeRes] = await Promise.all([
           productIds.length
             ? supabase
                 .from("favorites")
@@ -479,9 +495,25 @@ export default function HomePage() {
                 .eq("user_id", user.id)
                 .in("post_id", postIds)
             : Promise.resolve({ data: [] as { post_id: string }[] }),
+          productIds.length
+            ? supabase
+                .from("product_likes")
+                .select("product_id")
+                .eq("user_id", user.id)
+                .in("product_id", productIds)
+            : Promise.resolve({ data: [] as { product_id: string }[] }),
+          productIds.length
+            ? supabase
+                .from("product_dislikes")
+                .select("product_id")
+                .eq("user_id", user.id)
+                .in("product_id", productIds)
+            : Promise.resolve({ data: [] as { product_id: string }[] }),
         ])
         moreFavs = (favRes.data || []).map((f: { product_id: string }) => f.product_id)
         moreLikes = (likeRes.data || []).map((l: { post_id: string }) => l.post_id)
+        moreProductLikes = (pLikeRes.data || []).map((l: { product_id: string }) => l.product_id)
+        moreProductDislikes = (pDislikeRes.data || []).map((l: { product_id: string }) => l.product_id)
       }
 
       const more: FeedItem[] = []
@@ -489,12 +521,16 @@ export default function HomePage() {
       for (let i = 0; i < maxLen; i++) {
         if (products?.[i]) {
           const pid = products[i].id
-          const saved = moreFavs.includes(pid)
           more.push({
             type: "product",
-            data: products[i] as Product,
-            isLiked: saved,
-            isSaved: saved,
+            data: {
+              ...(products[i] as Product),
+              likes_count: Number((products[i] as Product).likes_count) || 0,
+              dislikes_count: Number((products[i] as Product).dislikes_count) || 0,
+            },
+            isLiked: moreProductLikes.includes(pid),
+            isDisliked: moreProductDislikes.includes(pid),
+            isSaved: moreFavs.includes(pid),
           })
         }
         if (posts[i]) {
@@ -560,15 +596,81 @@ export default function HomePage() {
     return new Date(date).toLocaleDateString("fr-FR")
   }
 
-  // Like = publications uniquement (jamais sur produit — produit = favoris)
+  // Like : posts via post_likes ; produits via API /like (mutex dislike)
   const handleLike = async (item: FeedItem) => {
-    if (item.type === "product") return
     if (!user) {
       toast.error("Connecte-toi pour aimer")
       return
     }
 
     const itemId = item.data.id
+
+    if (item.type === "product") {
+      const prevLiked = item.isLiked
+      const prevDisliked = item.isDisliked
+      const prevLikes = item.data.likes_count || 0
+      const prevDislikes = item.data.dislikes_count || 0
+      const willLike = !prevLiked
+      setFeed((prev) =>
+        prev.map((f) =>
+          f.data.id === itemId && f.type === "product"
+            ? {
+                ...f,
+                isLiked: willLike,
+                isDisliked: willLike ? false : f.isDisliked,
+                data: {
+                  ...f.data,
+                  likes_count: willLike ? prevLikes + 1 : Math.max(0, prevLikes - 1),
+                  dislikes_count: willLike && prevDisliked
+                    ? Math.max(0, prevDislikes - 1)
+                    : prevDislikes,
+                },
+              }
+            : f,
+        ),
+      )
+      try {
+        const res = await fetch(`/api/products/${itemId}/like`, { method: "POST" })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data.error || "Like impossible")
+        setFeed((prev) =>
+          prev.map((f) =>
+            f.data.id === itemId && f.type === "product"
+              ? {
+                  ...f,
+                  isLiked: !!data.liked,
+                  isDisliked: !!data.disliked,
+                  data: {
+                    ...f.data,
+                    likes_count: Number(data.likes_count) || 0,
+                    dislikes_count: Number(data.dislikes_count) || 0,
+                  },
+                }
+              : f,
+          ),
+        )
+      } catch {
+        setFeed((prev) =>
+          prev.map((f) =>
+            f.data.id === itemId && f.type === "product"
+              ? {
+                  ...f,
+                  isLiked: prevLiked,
+                  isDisliked: prevDisliked,
+                  data: {
+                    ...f.data,
+                    likes_count: prevLikes,
+                    dislikes_count: prevDislikes,
+                  },
+                }
+              : f,
+          ),
+        )
+        toast.error("Erreur lors de l'enregistrement")
+      }
+      return
+    }
+
     const isLiked = item.isLiked
     const prevCount = item.data.likes_count || 0
 
@@ -618,7 +720,79 @@ export default function HomePage() {
     }
   }
 
-  // Gérer la sauvegarde (favoris) — distinct du like
+  const handleDislike = async (item: FeedItem) => {
+    if (item.type !== "product") return
+    if (!user) {
+      toast.error("Connecte-toi pour réagir")
+      return
+    }
+    const itemId = item.data.id
+    const prevLiked = item.isLiked
+    const prevDisliked = item.isDisliked
+    const prevLikes = item.data.likes_count || 0
+    const prevDislikes = item.data.dislikes_count || 0
+    const willDislike = !prevDisliked
+    setFeed((prev) =>
+      prev.map((f) =>
+        f.data.id === itemId && f.type === "product"
+          ? {
+              ...f,
+              isDisliked: willDislike,
+              isLiked: willDislike ? false : f.isLiked,
+              data: {
+                ...f.data,
+                dislikes_count: willDislike
+                  ? prevDislikes + 1
+                  : Math.max(0, prevDislikes - 1),
+                likes_count:
+                  willDislike && prevLiked ? Math.max(0, prevLikes - 1) : prevLikes,
+              },
+            }
+          : f,
+      ),
+    )
+    try {
+      const res = await fetch(`/api/products/${itemId}/dislike`, { method: "POST" })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || "Dislike impossible")
+      setFeed((prev) =>
+        prev.map((f) =>
+          f.data.id === itemId && f.type === "product"
+            ? {
+                ...f,
+                isLiked: !!data.liked,
+                isDisliked: !!data.disliked,
+                data: {
+                  ...f.data,
+                  likes_count: Number(data.likes_count) || 0,
+                  dislikes_count: Number(data.dislikes_count) || 0,
+                },
+              }
+            : f,
+        ),
+      )
+    } catch {
+      setFeed((prev) =>
+        prev.map((f) =>
+          f.data.id === itemId && f.type === "product"
+            ? {
+                ...f,
+                isLiked: prevLiked,
+                isDisliked: prevDisliked,
+                data: {
+                  ...f.data,
+                  likes_count: prevLikes,
+                  dislikes_count: prevDislikes,
+                },
+              }
+            : f,
+        ),
+      )
+      toast.error("Erreur lors de l'enregistrement")
+    }
+  }
+
+  // Gérer la sauvegarde (favoris) — distinct du like/dislike
   const handleSave = async (item: FeedItem) => {
     if (!user) {
       toast.error("Connecte-toi pour sauvegarder")
@@ -1268,6 +1442,7 @@ export default function HomePage() {
                 }
               }}
               onLike={() => handleLike(item)}
+              onDislike={() => handleDislike(item)}
               onComment={() => openComments(item)}
               onShare={() => openShare(item)}
               onSave={() => handleSave(item)}
@@ -1529,7 +1704,8 @@ export default function HomePage() {
 // Composant FeedCard
 const FeedCard = memo(function FeedCard({ 
   item, 
-  onLike, 
+  onLike,
+  onDislike,
   onComment, 
   onShare, 
   onSave,
@@ -1547,6 +1723,7 @@ const FeedCard = memo(function FeedCard({
 }: { 
   item: FeedItem
   onLike: () => void
+  onDislike: () => void
   onComment: () => void
   onShare: () => void
   onSave: () => void
@@ -1774,9 +1951,8 @@ const FeedCard = memo(function FeedCard({
               const now = Date.now()
               if (now - lastTapRef.current < 280) {
                 lastTapRef.current = 0
-                // Double-tap : like = posts ; favoris = produits (pas de like produit)
-                if (isProduct) onSave()
-                else onLike()
+                // Double-tap : like (post ou produit)
+                onLike()
                 return
               }
               lastTapRef.current = now
@@ -1954,22 +2130,67 @@ const FeedCard = memo(function FeedCard({
         </div>
       )}
 
-      {/* Actions : favoris (produit) OU j’aime (post) — jamais de like produit */}
+      {/* Actions : like/dislike + favoris (produit) | j’aime (post) */}
       <div className="flex items-center gap-1 px-2.5 py-2.5">
         {isProduct ? (
-          <button
-            type="button"
-            onClick={onSave}
-            className="flex min-h-11 items-center gap-1.5 px-2.5 py-2 rounded-full active:bg-[#FFF6E5] transition-colors"
-            aria-label={item.isSaved ? "Retirer des favoris" : "Ajouter aux favoris"}
-          >
-            <Bookmark
-              className={cn(
-                "h-6 w-6 transition-colors",
-                item.isSaved ? "fill-[#1F5C2E] text-[#1F5C2E]" : "text-[#4B5563]",
+          <>
+            <button
+              type="button"
+              onClick={onLike}
+              className="flex min-h-11 items-center gap-1.5 px-2.5 py-2 rounded-full active:bg-[#FFF6E5] transition-colors"
+              aria-label="J'aime"
+            >
+              <Heart
+                className={cn(
+                  "h-6 w-6 transition-colors",
+                  item.isLiked ? "fill-[#F39A1F] text-[#F39A1F]" : "text-[#4B5563]",
+                )}
+              />
+              {(data.likes_count || 0) > 0 && (
+                <span
+                  className={cn(
+                    "text-sm font-medium tabular-nums",
+                    item.isLiked ? "text-[#F39A1F]" : "text-[#4B5563]",
+                  )}
+                >
+                  {data.likes_count}
+                </span>
               )}
-            />
-          </button>
+            </button>
+            <button
+              type="button"
+              onClick={onDislike}
+              className="flex min-h-11 items-center gap-1.5 px-2.5 py-2 rounded-full active:bg-[#FFF6E5] transition-colors"
+              aria-label="Je n'aime pas"
+            >
+              <ThumbsDown
+                className={cn(
+                  "h-6 w-6 transition-colors",
+                  item.type === "product" && item.isDisliked
+                    ? "fill-[#9CA3AF] text-[#374151]"
+                    : "text-[#4B5563]",
+                )}
+              />
+              {item.type === "product" && (item.data.dislikes_count || 0) > 0 && (
+                <span className="text-sm font-medium tabular-nums text-[#4B5563]">
+                  {item.data.dislikes_count}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={onSave}
+              className="flex min-h-11 items-center gap-1.5 px-2.5 py-2 rounded-full active:bg-[#FFF6E5] transition-colors"
+              aria-label={item.isSaved ? "Retirer des favoris" : "Ajouter aux favoris"}
+            >
+              <Bookmark
+                className={cn(
+                  "h-6 w-6 transition-colors",
+                  item.isSaved ? "fill-[#1F5C2E] text-[#1F5C2E]" : "text-[#4B5563]",
+                )}
+              />
+            </button>
+          </>
         ) : (
           <button
             type="button"

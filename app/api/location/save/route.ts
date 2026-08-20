@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { checkRateLimit } from "@/lib/security/rate-limiter"
 
 /**
  * POST /api/location/save
@@ -8,6 +9,11 @@ import { createClient } from "@/lib/supabase/server"
  */
 export async function POST(request: Request) {
   try {
+    const rate = await checkRateLimit("API_GENERAL")
+    if (!rate.success) {
+      return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })
+    }
+
     const supabase = await createClient()
     const {
       data: { user },

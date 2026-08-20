@@ -1,29 +1,72 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { createClient } from "@/lib/supabase/server"
+import { checkRateLimit } from "@/lib/security/rate-limiter"
+import {
+  getProductReactionState,
+  isProductId,
+  toggleProductReaction,
+} from "@/lib/products/reactions"
 
 type Ctx = { params: Promise<{ id: string }> }
 
 /**
- * Like produit désactivé — les produits utilisent uniquement les favoris (Bookmark).
- * Les j’aime restent réservés aux publications (posts).
+ * POST /api/products/[id]/like — toggle j'aime produit (retire dislike si présent).
+ * Compteurs via triggers BD — pas de write client.
  */
-export async function POST(_request: NextRequest, _context: Ctx) {
-  return NextResponse.json(
-    {
-      error: "Les likes produit sont désactivés. Utilise les favoris.",
-      code: "PRODUCT_LIKES_DISABLED",
-    },
-    { status: 410 },
-  )
+export async function POST(_request: NextRequest, context: Ctx) {
+  try {
+    const rate = await checkRateLimit("API_CREATE")
+    if (!rate.success) {
+      return NextResponse.json(
+        { error: "Trop de réactions. Réessaie dans une minute." },
+        { status: 429 },
+      )
+    }
+
+    const { id } = await context.params
+    if (!id || !isProductId(id)) {
+      return NextResponse.json({ error: "Produit invalide" }, { status: 400 })
+    }
+
+    const supabase = await createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
+    }
+
+    const result = await toggleProductReaction(supabase, user.id, id, "like")
+    if ("error" in result) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+    return NextResponse.json(result)
+  } catch (err) {
+    console.error("[api/products/id/like POST]", err)
+    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 })
+  }
 }
 
-export async function GET(_request: NextRequest, _context: Ctx) {
-  return NextResponse.json(
-    {
-      error: "Les likes produit sont désactivés. Utilise les favoris.",
-      code: "PRODUCT_LIKES_DISABLED",
-      liked: false,
-      likes_count: 0,
-    },
-    { status: 410 },
-  )
+/** GET — état like/dislike + compteurs. */
+export async function GET(_request: NextRequest, context: Ctx) {
+  try {
+    const { id } = await context.params
+    if (!id || !isProductId(id)) {
+      return NextResponse.json({ error: "Produit invalide" }, { status: 400 })
+    }
+
+    const supabase = await createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    const result = await getProductReactionState(supabase, id, user?.id)
+    if ("error" in result) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+    return NextResponse.json(result)
+  } catch (err) {
+    console.error("[api/products/id/like GET]", err)
+    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 })
+  }
 }
