@@ -13,7 +13,7 @@ const LINKS = [
   { href: "/", label: "Accueil", match: (p: string) => p === "/" },
   {
     href: "/marketplace",
-    label: "Boutique",
+    label: "Marché",
     match: (p: string) => p.startsWith("/marketplace") || p.startsWith("/produit"),
   },
   {

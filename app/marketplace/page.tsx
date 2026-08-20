@@ -33,8 +33,6 @@ import { addOrIncrementCart } from "@/lib/cart/add"
 import { prefetchProduct } from "@/lib/products/prefetch"
 import { cn } from "@/lib/utils"
 import { useHideOnScroll } from "@/hooks/use-hide-on-scroll"
-import { ProductLikeButton } from "@/components/products/product-like-button"
-import { normalizeLikesCount } from "@/lib/products/likes"
 import {
   feedPriorityForTier,
   hasProBadge,
@@ -58,7 +56,6 @@ type Product = {
   product_type: string
   category_id: string | null
   seller_id: string
-  likes_count?: number
   feedPriority?: number
   profiles: {
     full_name: string
@@ -75,13 +72,9 @@ function MarketplaceGridCard({
   product: p,
   listening,
   favorited,
-  liked,
-  likesCount,
   listenProps,
   onToggleFavorite,
-  onLikeChange,
   onAddToCart,
-  onAuthRequired,
   formatPrice,
   imageQuality,
   priority = false,
@@ -90,8 +83,6 @@ function MarketplaceGridCard({
   product: Product
   listening: boolean
   favorited: boolean
-  liked: boolean
-  likesCount: number
   listenProps: {
     text: string
     audioUrl?: string | null
@@ -100,9 +91,7 @@ function MarketplaceGridCard({
     highlight?: boolean
   }
   onToggleFavorite: (id: string, e: React.MouseEvent) => void
-  onLikeChange: (id: string, liked: boolean, count: number) => void
   onAddToCart: (id: string, e: React.MouseEvent) => void
-  onAuthRequired: () => void
   formatPrice: (n: number) => string
   imageQuality: number
   priority?: boolean
@@ -143,20 +132,12 @@ function MarketplaceGridCard({
             <ShoppingBag className="h-10 w-10 text-[#2F7D32]/40" />
           </div>
         )}
-        <ProductLikeButton
-          productId={p.id}
-          initialLiked={liked}
-          initialCount={likesCount}
-          variant="compact"
-          onAuthRequired={onAuthRequired}
-          onChange={(nextLiked, nextCount) => onLikeChange(p.id, nextLiked, nextCount)}
-        />
         <button
           type="button"
           onClick={(e) => onToggleFavorite(p.id, e)}
           aria-label={favorited ? "Retirer des favoris" : "Ajouter aux favoris"}
           aria-pressed={favorited}
-          className="absolute top-2 left-2 min-h-11 min-w-11 flex items-center justify-center"
+          className="absolute top-2 right-2 min-h-11 min-w-11 flex items-center justify-center"
         >
           <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/85 backdrop-blur-sm shadow-sm">
             <Bookmark
@@ -198,7 +179,7 @@ function MarketplaceGridCard({
           </p>
         )}
         <div className="flex items-center justify-between mt-1.5">
-          <span className="text-sm font-bold text-red-600">
+          <span className="text-sm font-bold text-[#1F5C2E]">
             {formatPrice(p.price)}{" "}
             <span className="text-[10px] font-normal text-gray-500">FCFA/{p.unit}</span>
           </span>
@@ -241,8 +222,6 @@ function MarketplaceContent() {
   const [selectedType, setSelectedType] = useState<string>("all")
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
-  const [likedIds, setLikedIds] = useState<Set<string>>(new Set())
-  const [likeCounts, setLikeCounts] = useState<Record<string, number>>({})
   const [showFilters, setShowFilters] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
   const [userCity, setUserCity] = useState<string | null>(null)
@@ -353,7 +332,7 @@ function MarketplaceContent() {
         .select(`
           id, name, price, unit, description, audio_url, audio_lang, created_at, images,
           origin_country, origin_region,
-          is_organic, is_fair_trade, product_type, category_id, seller_id, likes_count,
+          is_organic, is_fair_trade, product_type, category_id, seller_id,
           profiles:seller_id(full_name, avatar_url, is_verified, subscription_tier),
           categories:category_id(name, slug)
         `)
@@ -368,7 +347,7 @@ function MarketplaceContent() {
               .select(`
           id, name, price, unit, description, audio_url, audio_lang, created_at, images,
           origin_country, origin_region,
-          is_organic, is_fair_trade, product_type, category_id, seller_id, likes_count,
+          is_organic, is_fair_trade, product_type, category_id, seller_id,
           profiles:seller_id(full_name, avatar_url, is_verified, subscription_tier),
           categories:category_id(name, slug)
         `)
@@ -376,35 +355,28 @@ function MarketplaceContent() {
               .in("id", digestIds)
           : Promise.resolve({ data: [] as Product[] })
 
-      const [productsRes, digestIdsRes, categoriesRes, favsRes, likesRes, profileRes] = await Promise.all([
+      const [productsRes, digestIdsRes, categoriesRes, favsRes, profileRes] = await Promise.all([
         catalogQuery,
         digestIdsQuery,
         supabase.from("categories").select("id, name, slug, category_type").eq("category_type", "agriculture").is("parent_id", null).order("name"),
         user ? supabase.from("favorites").select("product_id").eq("user_id", user.id).limit(200) : Promise.resolve({ data: [] as { product_id: string }[] }),
-        user ? supabase.from("product_likes").select("product_id").eq("user_id", user.id).limit(200) : Promise.resolve({ data: [] as { product_id: string }[] }),
         profilePromise,
       ])
 
       const catalog = (productsRes.data || []) as Product[]
       const digestExtra = (digestIdsRes.data || []) as Product[]
       const byId = new Map<string, Product>()
-      const counts: Record<string, number> = {}
       for (const p of [...digestExtra, ...catalog]) {
         const tier = p.profiles?.subscription_tier
-        const likes = normalizeLikesCount(p.likes_count)
-        counts[p.id] = likes
         byId.set(p.id, {
           ...p,
-          likes_count: likes,
           feedPriority: feedPriorityForTier(tier),
         })
       }
       const merged = sortByFeedPriority([...byId.values()]).slice(0, 24)
       setProducts(merged)
-      setLikeCounts(counts)
       if (categoriesRes.data) setCategories(categoriesRes.data)
       if (favsRes.data) setFavorites(new Set((favsRes.data as { product_id: string }[]).map(f => f.product_id)))
-      if (likesRes.data) setLikedIds(new Set((likesRes.data as { product_id: string }[]).map(l => l.product_id)))
       if (!geoCity && profileRes.data?.city) setUserCity(profileRes.data.city)
       if (!geoCountry && profileRes.data?.country) setUserCountry(profileRes.data.country)
 
@@ -451,19 +423,6 @@ function MarketplaceContent() {
       }
       toast.success("Ajouté aux favoris")
     }
-  }
-
-  function onLikeChange(id: string, liked: boolean, count: number) {
-    setLikedIds((prev) => {
-      const next = new Set(prev)
-      if (liked) next.add(id)
-      else next.delete(id)
-      return next
-    })
-    setLikeCounts((prev) => ({ ...prev, [id]: count }))
-    setProducts((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, likes_count: count } : p)),
-    )
   }
 
   async function addToCart(id: string, e: React.MouseEvent) {
@@ -668,7 +627,7 @@ function MarketplaceContent() {
           <Link href="/" className="lg:hidden"><ChevronLeft className="h-6 w-6" /></Link>
           <div className="flex-1 min-w-0">
             <h1 className="text-lg font-semibold text-[#111827] lg:font-display lg:text-2xl lg:text-[#1F5C2E]">
-              Boutique
+              Marché
             </h1>
             <p className="hidden lg:block text-sm text-[#4B5563] mt-0.5">
               Produits frais près de toi — écoute ou parcours
@@ -867,16 +826,9 @@ function MarketplaceContent() {
                   product={p}
                   listening={listeningId === p.id}
                   favorited={favorites.has(p.id)}
-                  liked={likedIds.has(p.id)}
-                  likesCount={likeCounts[p.id] ?? normalizeLikesCount(p.likes_count)}
                   listenProps={productListenProps(p)}
                   onToggleFavorite={toggleFavorite}
-                  onLikeChange={onLikeChange}
                   onAddToCart={addToCart}
-                  onAuthRequired={() => {
-                    toast.error("Connecte-toi pour aimer ce produit")
-                    router.push(`/auth/login?redirect=${encodeURIComponent("/marketplace")}`)
-                  }}
                   formatPrice={fmt}
                   imageQuality={imageQuality}
                   priority={idx < 4}

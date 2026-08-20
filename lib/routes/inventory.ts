@@ -103,7 +103,7 @@ export const API_ROUTES: RouteEntry[] = [
   { path: "/api/onesignal/register", status: "complete" },
   { path: "/api/products", status: "complete", note: "CRUD F2" },
   { path: "/api/products/[id]", status: "complete" },
-  { path: "/api/products/[id]/like", status: "complete", note: "Toggle j'aime produit (séparé des favoris)" },
+  { path: "/api/products/[id]/like", status: "partial", note: "410 — likes produit désactivés (favoris Bookmark uniquement)" },
   { path: "/api/orders", status: "complete", note: "F3 + escrow pending" },
   { path: "/api/orders/[id]/pay", status: "complete", note: "Live FeexPay + idempotence ; simu hors prod" },
   { path: "/api/orders/[id]/payment-status", status: "complete" },

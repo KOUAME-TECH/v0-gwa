@@ -82,9 +82,7 @@ type Product = {
   origin_country: string | null
   product_type: string
   seller_id: string
-  likes_count: number
   comments_count: number
-  shares_count: number
   created_at: string
   is_organic?: boolean | null
   categories?: { name: string; slug?: string | null } | null
@@ -272,7 +270,7 @@ export default function HomePage() {
         .from("products")
         .select(`
           id, name, description, price, unit, images, audio_url, origin_region, origin_country, product_type, seller_id,
-          likes_count, comments_count, shares_count, created_at, is_organic,
+          comments_count, created_at, is_organic,
           profiles:seller_id(id, full_name, avatar_url, is_verified, city, subscription_tier),
           categories:category_id(name, slug)
         `)
@@ -307,7 +305,6 @@ export default function HomePage() {
         const metaPromise = currentUser
           ? Promise.all([
               supabase.from("post_likes").select("post_id").eq("user_id", currentUser.id).limit(200),
-              supabase.from("product_likes").select("product_id").eq("user_id", currentUser.id).limit(200),
               supabase.from("favorites").select("product_id").eq("user_id", currentUser.id).limit(200),
               supabase.from("profiles").select("user_type").eq("id", currentUser.id).maybeSingle(),
               supabase.from("followers").select("following_id").eq("follower_id", currentUser.id).limit(200),
@@ -324,9 +321,8 @@ export default function HomePage() {
 
         const [metaRes, authorsRes] = await Promise.all([metaPromise, authorsPromise])
 
-        let userProductLikes: string[] = []
         if (metaRes) {
-          const [likesRes, productLikesRes, favsRes, profileRes, followsRes] = metaRes
+          const [likesRes, favsRes, profileRes, followsRes] = metaRes
           if (profileRes.data) {
             setUserType(profileRes.data.user_type)
           }
@@ -334,7 +330,6 @@ export default function HomePage() {
             setFollowingIds(new Set(followsRes.data.map((f) => f.following_id)))
           }
           userLikes = likesRes.data?.map((l) => l.post_id) || []
-          userProductLikes = productLikesRes.data?.map((l) => l.product_id) || []
           userFavorites = favsRes.data?.map((f) => f.product_id) || []
         }
 
@@ -360,7 +355,7 @@ export default function HomePage() {
             feedItems.push({
               type: "product",
               data: rankedProducts[i],
-              isLiked: userProductLikes.includes(rankedProducts[i].id),
+              isLiked: false,
               isSaved: userFavorites.includes(rankedProducts[i].id),
             })
           }
@@ -436,7 +431,7 @@ export default function HomePage() {
         .from("products")
         .select(`
           id, name, description, price, unit, images, audio_url, origin_region, origin_country, product_type, seller_id,
-          likes_count, comments_count, shares_count, created_at, is_organic,
+          comments_count, created_at, is_organic,
           profiles:seller_id(id, full_name, avatar_url, is_verified, city),
           categories:category_id(name, slug)
         `)
@@ -565,8 +560,9 @@ export default function HomePage() {
     return new Date(date).toLocaleDateString("fr-FR")
   }
 
-  // Gérer le like (posts → post_likes ; produits → product_likes via API)
+  // Like = publications uniquement (jamais sur produit — produit = favoris)
   const handleLike = async (item: FeedItem) => {
+    if (item.type === "product") return
     if (!user) {
       toast.error("Connecte-toi pour aimer")
       return
@@ -592,27 +588,6 @@ export default function HomePage() {
     )
 
     try {
-      if (item.type === "product") {
-        const res = await fetch(`/api/products/${itemId}/like`, { method: "POST" })
-        const data = await res.json().catch(() => ({}))
-        if (!res.ok) throw new Error(data.error || "Like impossible")
-        setFeed((prev) =>
-          prev.map((f) =>
-            f.data.id === itemId
-              ? ({
-                  ...f,
-                  isLiked: !!data.liked,
-                  data: {
-                    ...f.data,
-                    likes_count: Number(data.likes_count) || 0,
-                  },
-                } as FeedItem)
-              : f,
-          ),
-        )
-        return
-      }
-
       // Posts : trigger BD gère likes_count — pas de .update client
       if (isLiked) {
         const { error } = await supabase
@@ -866,21 +841,7 @@ export default function HomePage() {
       ? `Découvrez ${(shareItem.data as Product).name} sur GWA`
       : `${(shareItem.data as Post).content?.slice(0, 100)}...`
 
-    // Compteur partages : pas d'UPDATE client (anti-inflation) — UI optimiste locale
-    setFeed((prev) =>
-      prev.map((f) =>
-        f.data.id === shareItem.data.id
-          ? {
-              ...f,
-              data: {
-                ...f.data,
-                shares_count: (f.data.shares_count || 0) + 1,
-              },
-            }
-          : f,
-      ),
-    )
-
+    // Pas d’UPDATE ni d’incrément client de shares_count (anti-inflation)
     switch (platform) {
       case "whatsapp":
         window.open(`https://wa.me/?text=${encodeURIComponent(text + " " + url)}`, "_blank")
@@ -1813,7 +1774,9 @@ const FeedCard = memo(function FeedCard({
               const now = Date.now()
               if (now - lastTapRef.current < 280) {
                 lastTapRef.current = 0
-                onLike()
+                // Double-tap : like = posts ; favoris = produits (pas de like produit)
+                if (isProduct) onSave()
+                else onLike()
                 return
               }
               lastTapRef.current = now
@@ -1991,42 +1954,47 @@ const FeedCard = memo(function FeedCard({
         </div>
       )}
 
-      {/* Actions : favoris (produit) / j’aime (post) + commenter + partager */}
+      {/* Actions : favoris (produit) OU j’aime (post) — jamais de like produit */}
       <div className="flex items-center gap-1 px-2.5 py-2.5">
-        <button
-          type="button"
-          onClick={onLike}
-          className="flex min-h-11 items-center gap-1.5 px-2.5 py-2 rounded-full active:bg-[#FFF6E5] transition-colors"
-          aria-label={isProduct ? (item.isSaved ? "Retirer des favoris" : "Ajouter aux favoris") : "J'aime"}
-        >
-          {isProduct ? (
+        {isProduct ? (
+          <button
+            type="button"
+            onClick={onSave}
+            className="flex min-h-11 items-center gap-1.5 px-2.5 py-2 rounded-full active:bg-[#FFF6E5] transition-colors"
+            aria-label={item.isSaved ? "Retirer des favoris" : "Ajouter aux favoris"}
+          >
             <Bookmark
               className={cn(
                 "h-6 w-6 transition-colors",
-                item.isSaved || item.isLiked
-                  ? "fill-[#1F5C2E] text-[#1F5C2E]"
-                  : "text-[#4B5563]",
+                item.isSaved ? "fill-[#1F5C2E] text-[#1F5C2E]" : "text-[#4B5563]",
               )}
             />
-          ) : (
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={onLike}
+            className="flex min-h-11 items-center gap-1.5 px-2.5 py-2 rounded-full active:bg-[#FFF6E5] transition-colors"
+            aria-label="J'aime"
+          >
             <Heart
               className={cn(
                 "h-6 w-6 transition-colors",
                 item.isLiked ? "fill-[#F39A1F] text-[#F39A1F]" : "text-[#4B5563]",
               )}
             />
-          )}
-          {!isProduct && (data.likes_count || 0) > 0 && (
-            <span
-              className={cn(
-                "text-sm font-medium tabular-nums",
-                item.isLiked ? "text-[#F39A1F]" : "text-[#4B5563]",
-              )}
-            >
-              {data.likes_count}
-            </span>
-          )}
-        </button>
+            {(data.likes_count || 0) > 0 && (
+              <span
+                className={cn(
+                  "text-sm font-medium tabular-nums",
+                  item.isLiked ? "text-[#F39A1F]" : "text-[#4B5563]",
+                )}
+              >
+                {data.likes_count}
+              </span>
+            )}
+          </button>
+        )}
 
         <button
           type="button"

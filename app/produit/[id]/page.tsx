@@ -26,8 +26,6 @@ import { buildProductListenText } from "@/lib/media/product-listen"
 import { shouldShowVerifiedBadge } from "@/lib/verification/badge"
 import { addOrIncrementCart } from "@/lib/cart/add"
 import { CartIconButton } from "@/components/cart/cart-icon-button"
-import { ProductLikeButton } from "@/components/products/product-like-button"
-import { normalizeLikesCount } from "@/lib/products/likes"
 import {
   cacheProductPreview,
   readProductPreview,
@@ -50,7 +48,6 @@ type Product = {
   is_organic: boolean | null
   is_fair_trade?: boolean | null
   seller_id: string
-  likes_count?: number | null
   profiles?: {
     id: string
     full_name: string
@@ -73,8 +70,6 @@ export default function ProduitPage() {
   const [quantity, setQuantity] = useState(1)
   const [selectedImage, setSelectedImage] = useState(0)
   const [isFavorite, setIsFavorite] = useState(false)
-  const [isLiked, setIsLiked] = useState(false)
-  const [likesCount, setLikesCount] = useState(0)
   const [adding, setAdding] = useState(false)
   const [user, setUser] = useState<{ id: string } | null>(null)
   const supabase = createClient()
@@ -142,7 +137,7 @@ export default function ProduitPage() {
           .select(
             `
           id, name, price, unit, images, video_url, audio_url, description, origin_country, origin_region,
-          is_organic, is_fair_trade, product_type, stock_quantity, min_order_quantity, likes_count,
+          is_organic, is_fair_trade, product_type, stock_quantity, min_order_quantity,
           seller_id, category_id, status, created_at, updated_at,
           profiles!products_seller_id_fkey(id, full_name, avatar_url, is_verified, city, country, rating),
           categories(name)
@@ -155,26 +150,16 @@ export default function ProduitPage() {
 
         if (data) {
           setProduct(data as Product)
-          setLikesCount(normalizeLikesCount((data as Product).likes_count))
           setQuantity(data.min_order_quantity || 1)
           cacheProductPreview(data as Product & Record<string, unknown>)
           if (currentUser) {
-            const [favRes, likeRes] = await Promise.all([
-              supabase
-                .from("favorites")
-                .select("id")
-                .eq("product_id", params.id)
-                .eq("user_id", currentUser.id)
-                .maybeSingle(),
-              supabase
-                .from("product_likes")
-                .select("id")
-                .eq("product_id", params.id)
-                .eq("user_id", currentUser.id)
-                .maybeSingle(),
-            ])
-            setIsFavorite(!!favRes.data)
-            setIsLiked(!!likeRes.data)
+            const { data: fav } = await supabase
+              .from("favorites")
+              .select("id")
+              .eq("product_id", params.id)
+              .eq("user_id", currentUser.id)
+              .maybeSingle()
+            setIsFavorite(!!fav)
           }
         }
       } catch (err) {
@@ -399,22 +384,6 @@ export default function ProduitPage() {
           </button>
           <div className="flex items-center gap-2">
             <CartIconButton className="h-10 w-10 rounded-full bg-white shadow-md" />
-            {product ? (
-              <ProductLikeButton
-                productId={product.id}
-                initialLiked={isLiked}
-                initialCount={likesCount}
-                variant="detail"
-                onAuthRequired={() => {
-                  toast.error("Connecte-toi pour aimer")
-                  router.push(`/auth/login?redirect=${encodeURIComponent(`/produit/${params.id}`)}`)
-                }}
-                onChange={(liked, count) => {
-                  setIsLiked(liked)
-                  setLikesCount(count)
-                }}
-              />
-            ) : null}
             <button
               type="button"
               onClick={() => void handleToggleFavorite()}
@@ -589,20 +558,6 @@ export default function ProduitPage() {
             </button>
             <div className="flex items-center gap-2">
               <CartIconButton className="bg-white shadow-sm ring-1 ring-[#E5E7EB]" />
-              <ProductLikeButton
-                productId={product.id}
-                initialLiked={isLiked}
-                initialCount={likesCount}
-                variant="detail"
-                onAuthRequired={() => {
-                  toast.error("Connecte-toi pour aimer")
-                  router.push(`/auth/login?redirect=${encodeURIComponent(`/produit/${params.id}`)}`)
-                }}
-                onChange={(liked, count) => {
-                  setIsLiked(liked)
-                  setLikesCount(count)
-                }}
-              />
               <button
                 type="button"
                 onClick={() => void handleToggleFavorite()}
