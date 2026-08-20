@@ -115,6 +115,28 @@ export async function GET(request: NextRequest) {
       created_at: o.created_at,
     }))
 
+    // Retraits + payouts en échec (ops)
+    const { data: withdrawals } = await admin
+      .from("withdrawal_requests")
+      .select("id, user_id, amount_fcfa, status, created_at")
+      .gte("created_at", daysAgo.toISOString())
+      .order("created_at", { ascending: false })
+      .limit(30)
+
+    const withdrawalRows = withdrawals || []
+    const pendingWithdrawals = withdrawalRows
+      .filter((w) => w.status === "pending" || w.status === "processing")
+      .reduce((s, w) => s + (Number(w.amount_fcfa) || 0), 0)
+    const paidWithdrawals = withdrawalRows
+      .filter((w) => w.status === "paid")
+      .reduce((s, w) => s + (Number(w.amount_fcfa) || 0), 0)
+
+    const { data: payoutFailed } = await admin
+      .from("orders")
+      .select("id, order_number, total_amount, payout_status, escrow_status, status")
+      .eq("payout_status", "failed")
+      .limit(20)
+
     return NextResponse.json({
       period: periodDays,
       stats: {
@@ -122,13 +144,18 @@ export async function GET(request: NextRequest) {
         totalCommissions,
         pendingPayouts,
         completedPayouts: completedCount,
-        walletBalance: 0,
+        walletBalance: pendingWithdrawals,
         escrowBalance,
         ordersCount: rows.length,
+        pendingWithdrawalsFcfa: pendingWithdrawals,
+        paidWithdrawalsFcfa: paidWithdrawals,
+        payoutFailuresCount: (payoutFailed || []).length,
       },
       byPaymentStatus,
       byEscrowStatus,
       transactions,
+      withdrawals: withdrawalRows,
+      payoutFailures: payoutFailed || [],
     })
   } catch (err) {
     console.error("[api/admin/finances]", err)

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { requireUser } from "@/lib/auth/require-admin"
 import { parseOfferContent } from "@/lib/chat/offer"
+import { assertSameOrigin } from "@/lib/security/csrf"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { sendPushToUser } from "@/lib/notifications/push"
 
@@ -9,25 +10,31 @@ import { sendPushToUser } from "@/lib/notifications/push"
  * POST /api/orders/from-offer
  * Crée une commande au prix négocié d'une offre chat acceptée.
  * Body: { message_id: string, quantity?: number }
+ *
+ * Exige accepted_by (contrepartie) — jamais auto-accept par l'offreur.
  */
 export async function POST(request: Request) {
   try {
+    const csrf = assertSameOrigin(request)
+    if (csrf) return csrf
+
     const rate = await checkRateLimit("API_CREATE")
     if (!rate.success) {
       return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })
     }
 
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
+    const gate = await requireUser()
+    if (!gate.user) {
+      return NextResponse.json(
+        { error: gate.error || "Non authentifié" },
+        { status: gate.suspended ? 403 : 401 },
+      )
     }
+    const user = gate.user
+    const supabase = gate.supabase
 
     const body = await request.json().catch(() => ({}))
     const messageId = String(body.message_id || "")
-    const quantity = Math.max(1, Math.min(999_999, Number(body.quantity) || 1))
     if (!messageId) {
       return NextResponse.json({ error: "message_id requis" }, { status: 400 })
     }
@@ -46,6 +53,21 @@ export async function POST(request: Request) {
     if (!offer || offer.status !== "accepted") {
       return NextResponse.json(
         { error: "L'offre doit être acceptée avant commande" },
+        { status: 400 },
+      )
+    }
+    // Contrepartie + marqueur serveur (059 : clients ne peuvent plus UPDATE les offers)
+    if (
+      !offer.accepted_by ||
+      offer.accepted_by === msg.sender_id ||
+      typeof offer.accepted_by !== "string" ||
+      (offer as { accepted_via?: string }).accepted_via !== "api_offers_respond"
+    ) {
+      return NextResponse.json(
+        {
+          error: "Acceptation contrepartie manquante — utilise /api/offers/respond",
+          code: "OFFER_NOT_COUNTERPARTY_ACCEPTED",
+        },
         { status: 400 },
       )
     }
@@ -154,14 +176,44 @@ export async function POST(request: Request) {
     }
 
     let unitPrice = Math.round(Number(offer.amount))
-    if (!Number.isFinite(unitPrice) || unitPrice < 1) {
-      return NextResponse.json({ error: "Montant négocié invalide" }, { status: 400 })
+    if (!Number.isFinite(unitPrice) || unitPrice < 100) {
+      return NextResponse.json(
+        { error: "Montant négocié invalide (min 100 FCFA)" },
+        { status: 400 },
+      )
     }
-    // Garde anti-inflation : le prix négocié ne peut pas dépasser le catalogue
+    // Anti-inflation + anti-dump extrême (plancher 30 % catalogue)
     if (catalogPrice != null && Number.isFinite(catalogPrice) && catalogPrice > 0) {
       unitPrice = Math.min(unitPrice, catalogPrice)
+      const floor = Math.max(100, Math.floor(catalogPrice * 0.3))
+      if (unitPrice < floor) {
+        return NextResponse.json(
+          {
+            error: `Prix trop bas vs catalogue (min ${floor} FCFA)`,
+            code: "PRICE_FLOOR",
+          },
+          { status: 400 },
+        )
+      }
     }
-    if (stockQty != null && Number.isFinite(stockQty) && quantity > stockQty) {
+
+    // Quantité : liée à l’offre si présente ; sinon body plafonné (anti-inflation)
+    const offeredQtyRaw = (offer as { quantity?: unknown }).quantity
+    const offeredQty =
+      typeof offeredQtyRaw === "number" && Number.isFinite(offeredQtyRaw)
+        ? Math.max(1, Math.min(999_999, Math.round(offeredQtyRaw)))
+        : null
+    let quantity =
+      offeredQty != null
+        ? offeredQty
+        : Math.max(1, Math.min(100, Math.round(Number(body.quantity) || 1)))
+    if (stockQty == null || !Number.isFinite(stockQty) || stockQty < 1) {
+      return NextResponse.json(
+        { error: "Stock indisponible pour cette offre", code: "NO_STOCK" },
+        { status: 400 },
+      )
+    }
+    if (quantity > stockQty) {
       return NextResponse.json(
         { error: `Stock insuffisant (max ${stockQty})`, code: "OUT_OF_STOCK" },
         { status: 400 },
@@ -230,7 +282,24 @@ export async function POST(request: Request) {
 
     if (itemsErr) {
       console.error("[orders/from-offer] items", itemsErr.message)
+      await admin.from("orders").delete().eq("id", order.id)
       return NextResponse.json({ error: itemsErr.message }, { status: 400 })
+    }
+
+    // Stock atomique (RPC 058) — annule la commande si rupture concurrente
+    if (stockQty != null) {
+      const { error: stockErr } = await admin.rpc("decrement_product_stock", {
+        p_product_id: productId,
+        p_qty: quantity,
+      })
+      if (stockErr) {
+        await admin.from("order_items").delete().eq("order_id", order.id)
+        await admin.from("orders").delete().eq("id", order.id)
+        return NextResponse.json(
+          { error: "Stock insuffisant", code: "OUT_OF_STOCK" },
+          { status: 400 },
+        )
+      }
     }
 
     // Escrow aligné sur POST /api/orders

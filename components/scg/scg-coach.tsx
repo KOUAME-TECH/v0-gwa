@@ -40,7 +40,7 @@ export function ScgCoachPanel({
     <div className={cn("rounded-2xl border border-[#1F5C2E]/15 bg-[#F0F7F2] p-4 space-y-3", className)}>
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="font-semibold text-[#1F5C2E] text-sm">Coach SCG</p>
+          <p className="font-semibold text-[#1F5C2E] text-sm">Comment bien vendre</p>
           <p className="text-xs text-[#4B5563] mt-0.5">
             {coachIntro(score)}
           </p>

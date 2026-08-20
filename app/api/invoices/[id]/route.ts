@@ -3,6 +3,9 @@ import { createClient } from "@/lib/supabase/server"
 
 type Ctx = { params: Promise<{ id: string }> }
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
 /**
  * GET /api/invoices/[id]
  * Renvoie la facture (JSON) — accessible à l'acheteur ou au vendeur (RLS).
@@ -11,6 +14,10 @@ type Ctx = { params: Promise<{ id: string }> }
 export async function GET(_request: Request, context: Ctx) {
   try {
     const { id } = await context.params
+    if (!UUID_RE.test(id)) {
+      return NextResponse.json({ error: "Identifiant invalide" }, { status: 400 })
+    }
+
     const supabase = await createClient()
     const {
       data: { user },
@@ -19,11 +26,21 @@ export async function GET(_request: Request, context: Ctx) {
       return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
     }
 
-    const { data: invoice } = await supabase
+    const { data: byId } = await supabase
       .from("invoices")
       .select("*")
-      .or(`id.eq.${id},order_id.eq.${id}`)
+      .eq("id", id)
       .maybeSingle()
+
+    let invoice = byId
+    if (!invoice) {
+      const { data: byOrder } = await supabase
+        .from("invoices")
+        .select("*")
+        .eq("order_id", id)
+        .maybeSingle()
+      invoice = byOrder
+    }
 
     if (!invoice) {
       return NextResponse.json({ error: "Facture introuvable" }, { status: 404 })

@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Home, ShoppingBag, MessageCircle, User, Plus, Bell, Search, Store } from "lucide-react"
+import { Home, MessageCircle, User, Plus, Bell, Search, Store, ShoppingBag } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { shouldShowBottomNav } from "@/lib/navigation/shell-routes"
 import { isSellerRole } from "@/lib/dashboard/routing"
@@ -48,7 +48,11 @@ export function BottomNav() {
       pathname?.startsWith("/panier") ||
       pathname?.startsWith("/agriculture") ||
       pathname?.startsWith("/dashboard/products") ||
-      pathname?.startsWith("/dashboard/commandes")
+      pathname?.startsWith("/dashboard/commandes") ||
+      pathname?.startsWith("/dashboard/farmer") ||
+      pathname?.startsWith("/wallet") ||
+      pathname?.startsWith("/scg") ||
+      pathname?.startsWith("/affacturage")
     )
       return "commerce"
     if (pathname?.startsWith("/messages")) return "messaging"
@@ -57,10 +61,7 @@ export function BottomNav() {
       pathname?.startsWith("/notifications") ||
       pathname?.startsWith("/favoris") ||
       pathname?.startsWith("/dashboard") ||
-      pathname?.startsWith("/wallet") ||
-      pathname?.startsWith("/abonnement") ||
-      pathname?.startsWith("/scg") ||
-      pathname?.startsWith("/affacturage")
+      pathname?.startsWith("/abonnement")
     )
       return "profile"
     return null
@@ -76,25 +77,25 @@ export function BottomNav() {
   }
 
   const navItems: NavItem[] = [
-    { href: "/", icon: Home, label: "Feed", world: "social" },
+    { href: "/", icon: Home, label: "Accueil", world: "social" },
     {
       href: "/marketplace",
       icon: Store,
-      label: "Shop",
+      label: "Marché",
       world: "commerce",
       badge: ordersCount > 0 ? ordersCount : undefined,
     },
     {
       href: isSeller ? "/publier" : "/recherche",
       icon: isSeller ? Plus : Search,
-      label: isSeller ? "Publier" : "Explorer",
+      label: isSeller ? "Publier" : "Chercher",
       world: "social",
       isCenter: true,
     },
     {
       href: "/messages",
       icon: MessageCircle,
-      label: "Chat",
+      label: "Messages",
       world: "messaging",
       badge: unreadMessages > 0 ? unreadMessages : undefined,
     },

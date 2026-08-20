@@ -1,5 +1,6 @@
 import "server-only"
-import { YELLY_SYSTEM_PROMPT } from "@/lib/yelly/prompt"
+import { buildYellySystemPrompt } from "@/lib/yelly/prompt"
+import { keywordFallback } from "@/lib/yelly/fallback"
 import { sanitizePlainText } from "@/lib/security/validation"
 import { resolvePlatformSecret } from "@/lib/ops/platform-secrets"
 
@@ -11,37 +12,20 @@ export type YellyChatResult = {
   model?: string
 }
 
-function keywordFallback(message: string, page?: string): string {
-  const m = message.toLowerCase()
-  if (/digest|harmattan|écouter|parcours/.test(m)) {
-    return "Le Digest : Boutique → Écouter. Les nouveautés près de chez toi."
-  }
-  if (/kyc|vérif|identit|badge|document/.test(m)) {
-    return "Badge vérifié : Profil → Vérification. Photo nette de ta pièce."
-  }
-  if (/scg|score|confiance|bancable/.test(m)) {
-    return "Ton score de confiance monte avec un profil complet et des livraisons correctes."
-  }
-  if (/commande|escrow|paiement|payer|feex|argent/.test(m)) {
-    return "Tu paies, l’argent est protégé jusqu’à confirmation de réception. Suivi dans Mes commandes."
-  }
-  if (/publier|offre|vendre|produit/.test(m)) {
-    return "Pour vendre : Publier → nom, prix, photos, ville."
-  }
-  if (/panier|acheter|marketplace|boutique/.test(m)) {
-    return "Boutique → choisis → panier → valide. Tu peux aussi écrire au vendeur."
-  }
-  if (/whatsapp|contact|aide|humain|support|quelqu.?un/.test(m)) {
-    return "WhatsApp support : +225 07 88 32 60 19."
-  }
-  if (/coopérat|cooperative/.test(m)) {
-    return "Coopérative : ajoute tes membres, puis les documents. Espace Coopérative dans le menu."
-  }
-  if (page?.includes("profil")) {
-    return "Sur Profil : photo, bio, lieux. Type de compte : contacte le support pour le changer."
-  }
-  return "Dis-moi : vendre, acheter, une commande, ou parler à quelqu’un ?"
+export type AskYellyInput = {
+  message: string
+  page?: string
+  /** Contexte profil / commandes (formaté). */
+  userContext?: string
+  /** Alias legacy / admin task — fusionné dans le prompt. */
+  contextHint?: string
+  history?: YellyMessage[]
+  /** Remplace le prompt Yelly mobile (ex. Yelly Ops backoffice). */
+  systemPrompt?: string
+  locale?: string
 }
+
+export { keywordFallback } from "@/lib/yelly/fallback"
 
 async function resolveGeminiKey(): Promise<string> {
   return resolvePlatformSecret("GEMINI_API_KEY", [
@@ -54,7 +38,6 @@ function resolveModel(): string {
   return (
     process.env.YELLY_MODEL ||
     process.env.GEMINI_MODEL ||
-    // flash-lite : réponses complètes sans « thinking » qui mange le budget tokens
     "gemini-3.1-flash-lite"
   ).trim()
 }
@@ -93,8 +76,8 @@ async function askGemini(opts: {
       system_instruction: { parts: [{ text: opts.system }] },
       contents: toGeminiContents(opts.history, opts.userMsg),
       generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 512,
+        temperature: 0.4,
+        maxOutputTokens: 640,
       },
     }),
     signal: AbortSignal.timeout(20_000),
@@ -124,23 +107,24 @@ async function askGemini(opts: {
 }
 
 async function askOpenAICompat(opts: {
-  system: string
   messages: YellyMessage[]
   apiKey: string
   model: string
   baseUrl: string
+  extraHeaders?: Record<string, string>
 }): Promise<YellyChatResult | null> {
   const res = await fetch(`${opts.baseUrl}/chat/completions`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${opts.apiKey}`,
       "Content-Type": "application/json",
+      ...(opts.extraHeaders || {}),
     },
     body: JSON.stringify({
       model: opts.model,
       messages: opts.messages,
-      temperature: 0.7,
-      max_tokens: 200,
+      temperature: 0.4,
+      max_tokens: 400,
     }),
     signal: AbortSignal.timeout(20_000),
   })
@@ -160,34 +144,51 @@ async function askOpenAICompat(opts: {
   }
 }
 
-export async function askYelly(opts: {
-  message: string
-  page?: string
-  contextHint?: string
-  history?: YellyMessage[]
-  /** Remplace le prompt Yelly mobile (ex. Yelly Ops backoffice) */
-  systemPrompt?: string
-}): Promise<YellyChatResult> {
+export async function askYelly(opts: AskYellyInput): Promise<YellyChatResult> {
   const userMsg = sanitizePlainText(opts.message, 800)
   const geminiKey = await resolveGeminiKey()
   const model = resolveModel()
+  const gatewayKey = (process.env.AI_GATEWAY_API_KEY || "").trim()
   const openAiKey = process.env.OPENAI_API_KEY || ""
   const baseUrl = (process.env.YELLY_BASE_URL || "https://api.openai.com/v1").replace(
     /\/$/,
     "",
   )
 
-  const systemParts = [opts.systemPrompt || YELLY_SYSTEM_PROMPT]
-  if (opts.page) systemParts.push(`Page actuelle : ${opts.page}`)
-  if (opts.contextHint) systemParts.push(`Contexte : ${opts.contextHint}`)
-  const system = systemParts.join("\n\n")
-  const history = opts.history || []
+  const system = buildYellySystemPrompt({
+    locale: opts.locale,
+    userContext: opts.userContext,
+    contextHint: [opts.page ? `Page actuelle : ${opts.page}` : null, opts.contextHint]
+      .filter(Boolean)
+      .join("\n") || undefined,
+    systemPrompt: opts.systemPrompt,
+  })
+  const history = (opts.history || []).filter((h) => h.role !== "system").slice(-8)
+  const messages: YellyMessage[] = [
+    { role: "system", content: system },
+    ...history.slice(-6),
+    { role: "user", content: userMsg },
+  ]
 
-  if (!geminiKey && !openAiKey) {
+  if (!gatewayKey && !geminiKey && !openAiKey) {
     return { reply: keywordFallback(userMsg, opts.page), source: "fallback" }
   }
 
   try {
+    // Prefer Vercel AI Gateway when configured (before direct Gemini/OpenAI)
+    if (gatewayKey) {
+      const gateway = await askOpenAICompat({
+        messages,
+        apiKey: gatewayKey,
+        model: process.env.YELLY_GATEWAY_MODEL || "google/gemini-2.5-flash",
+        baseUrl: "https://ai-gateway.vercel.sh/v1",
+        extraHeaders: {
+          "ai-reporting-tags": "yelly,gwa",
+        },
+      })
+      if (gateway) return gateway
+    }
+
     if (geminiKey) {
       const gemini = await askGemini({
         system,
@@ -200,13 +201,7 @@ export async function askYelly(opts: {
     }
 
     if (openAiKey) {
-      const messages: YellyMessage[] = [
-        { role: "system", content: system },
-        ...history.slice(-6),
-        { role: "user", content: userMsg },
-      ]
       const openai = await askOpenAICompat({
-        system,
         messages,
         apiKey: openAiKey,
         model: process.env.YELLY_OPENAI_MODEL || "gpt-4o-mini",

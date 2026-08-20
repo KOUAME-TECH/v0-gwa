@@ -2,6 +2,20 @@
   "framework": "nextjs",
   "installCommand": "npm install --legacy-peer-deps",
   "regions": ["cdg1"],
+  "crons": [
+    {
+      "path": "/api/cron/harmattan-digest",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/escrow-auto-release",
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/self-heal",
+      "schedule": "30 7 * * *"
+    }
+  ],
   "headers": [
     {
       "source": "/sw.js",

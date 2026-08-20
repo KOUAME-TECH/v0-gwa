@@ -1,5 +1,4 @@
-import { withSentryConfig } from '@sentry/nextjs'
-
+/** @type {import('next').NextConfig} */
 const securityHeaders = [
   { key: 'X-DNS-Prefetch-Control', value: 'on' },
   { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
@@ -32,7 +31,6 @@ const securityHeaders = [
 ]
 
 const nextConfig = {
-<<<<<<< Updated upstream
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -49,10 +47,6 @@ const nextConfig = {
       },
     ],
   },
-=======
-  typescript: { ignoreBuildErrors: true },
-  images: { unoptimized: true },
->>>>>>> Stashed changes
   poweredByHeader: false,
   compress: true,
   experimental: {
@@ -111,6 +105,8 @@ const nextConfig = {
     { source: '/b2b', destination: '/marketplace', permanent: false },
     { source: '/business', destination: '/agriculture', permanent: false },
     { source: '/dashboard/business', destination: '/dashboard/farmer', permanent: false },
+    // Création produit unique → /publier
+    { source: '/dashboard/products/new', destination: '/publier', permanent: false },
     { source: '/network', destination: '/messages', permanent: false },
     { source: '/network/profile/:id', destination: '/profil/:id', permanent: false },
     { source: '/communaute', destination: '/messages', permanent: false },
@@ -120,11 +116,4 @@ const nextConfig = {
   ],
 }
 
-export default withSentryConfig(nextConfig, {
-  silent: true,
-  org: 'gwa-platform',
-  project: 'gwa-web',
-  hideSourceMaps: true,
-  widenClientFileUpload: true,
-  disableLogger: true,
-})
+export default nextConfig

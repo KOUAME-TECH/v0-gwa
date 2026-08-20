@@ -12,10 +12,18 @@ export function assertSameOrigin(request: Request): NextResponse | null {
     return null
   }
 
-  // Auth non-cookie (Bearer, API keys) → hors scope CSRF navigateur
-  const auth = request.headers.get("authorization") || ""
-  if (/^Bearer\s+\S+/i.test(auth)) return null
-  if (request.headers.get("x-vercel-cron") === "1") return null
+  // Cron Vercel : le header seul ne bypass PAS le CSRF ici —
+  // les routes /api/cron sont exemptées dans middleware + exigent CRON_SECRET.
+  if (request.headers.get("x-vercel-cron") === "1") {
+    const cronSecret = (process.env.CRON_SECRET || "").replace(/^"|"$/g, "").trim()
+    const auth = request.headers.get("authorization") || ""
+    if (cronSecret && auth === `Bearer ${cronSecret}`) return null
+    // Sans Bearer valide : ne pas court-circuiter Origin (défense en profondeur)
+  }
+
+  // Pas de bypass Bearer JWT-shaped : un token forgeable (3 segments) ne doit
+  // jamais court-circuiter Origin/Referer. Les routes cron/webhook sont
+  // exemptées dans middleware + secrets dédiés.
 
   // Clé interne : valeur obligatoire + match secret env (pas juste présence)
   const internalHeader = (request.headers.get("x-gwa-internal-key") || "").trim()
@@ -35,10 +43,8 @@ export function assertSameOrigin(request: Request): NextResponse | null {
 
   const origin = request.headers.get("origin")
   const referer = request.headers.get("referer")
-  const host =
-    request.headers.get("x-forwarded-host") ||
-    request.headers.get("host") ||
-    ""
+  // Ne jamais faire confiance à X-Forwarded-Host pour CSRF (spoofable).
+  const host = (request.headers.get("host") || "").trim()
 
   if (!host) {
     return NextResponse.json({ error: "Origine invalide" }, { status: 403 })
@@ -51,9 +57,21 @@ export function assertSameOrigin(request: Request): NextResponse | null {
       .filter(Boolean),
   )
 
-  // Preview / prod Vercel aliases
   const requestUrl = new URL(request.url)
   allowedHosts.add(requestUrl.host.toLowerCase())
+
+  // Origines explicites (prod + preview) via env
+  const extra = (process.env.ALLOWED_ORIGINS || process.env.NEXT_PUBLIC_APP_URL || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+  for (const raw of extra) {
+    try {
+      allowedHosts.add(new URL(raw).host.toLowerCase())
+    } catch {
+      /* ignore */
+    }
+  }
 
   const checkUrl = (raw: string | null): boolean => {
     if (!raw) return false

@@ -528,7 +528,7 @@ export default function EditProfilPage() {
         </div>
 
         <div className="bg-white rounded-2xl p-4 space-y-3">
-          <h2 className="font-semibold text-[#111827]">Écoute & Digest</h2>
+          <h2 className="font-semibold text-[#111827]">Écoute & Nouveautés</h2>
           <div className="flex items-center justify-between gap-3 rounded-xl border border-[#E5E7EB] px-3 py-2.5">
             <div className="min-w-0">
               <p className="text-sm text-[#374151]">Mode écoute (feed)</p>
@@ -541,12 +541,12 @@ export default function EditProfilPage() {
           </div>
           <div className="flex items-center justify-between gap-3 rounded-xl border border-[#E5E7EB] px-3 py-2.5">
             <div className="min-w-0">
-              <p className="text-sm text-[#374151]">Digest quotidien</p>
+              <p className="text-sm text-[#374151]">Nouveautés quotidiennes</p>
             </div>
             <Switch
               checked={formData.digest_enabled}
               onCheckedChange={(checked) => setFormData({ ...formData, digest_enabled: checked })}
-              aria-label="Activer Harmattan Digest"
+              aria-label="Activer les nouveautés audio"
             />
           </div>
           <div className="flex items-center justify-between gap-3 rounded-xl border border-[#E5E7EB] px-3 py-2.5">

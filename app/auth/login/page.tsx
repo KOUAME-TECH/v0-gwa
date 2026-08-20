@@ -91,9 +91,16 @@ function LoginForm() {
       })
       const data = await res.json()
       if (!res.ok) {
-        if (data.code === "SMS_SEND_FAILED") {
+        if (
+          data.code === "SMS_SEND_FAILED" ||
+          data.code === "SMS_DELIVERY_NOT_READY" ||
+          data.code === "AT_SENDER_ID_MISSING" ||
+          data.code === "AT_SANDBOX" ||
+          data.code === "SMS_PROVIDER_MISSING"
+        ) {
           setError(
-            "SMS indisponible pour le moment. Connectez-vous par email, ou réessayez plus tard.",
+            data.error ||
+              "SMS non prêt pour le moment. Connectez-vous par email, ou réessayez plus tard.",
           )
         } else {
           setError(data.error || "Envoi impossible")

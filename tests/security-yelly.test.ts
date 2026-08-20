@@ -55,7 +55,7 @@ describe("assertSameOrigin CSRF", () => {
     expect(assertSameOrigin(req)).toBeNull()
   })
 
-  it("allows Bearer auth without origin", () => {
+  it("refuse Bearer court forgeable without origin", () => {
     const req = new Request("https://v0-gwa-mu.vercel.app/api/cron/x", {
       method: "POST",
       headers: {
@@ -63,7 +63,23 @@ describe("assertSameOrigin CSRF", () => {
         Host: "v0-gwa-mu.vercel.app",
       },
     })
-    expect(assertSameOrigin(req)).toBeNull()
+    const res = assertSameOrigin(req)
+    expect(res).not.toBeNull()
+    expect(res?.status).toBe(403)
+  })
+
+  it("rejects JWT-shaped Bearer without origin (no CSRF bypass)", () => {
+    const jwt = `eyJhbGciOiJIUzI1NiJ9.${"a".repeat(40)}.${"b".repeat(40)}`
+    const req = new Request("https://v0-gwa-mu.vercel.app/api/x", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${jwt}`,
+        Host: "v0-gwa-mu.vercel.app",
+      },
+    })
+    const res = assertSameOrigin(req)
+    expect(res).not.toBeNull()
+    expect(res?.status).toBe(403)
   })
 })
 

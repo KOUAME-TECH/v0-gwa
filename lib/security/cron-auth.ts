@@ -1,7 +1,7 @@
 /**
  * Auth cron résiliente :
- * 1. Bearer CRON_SECRET (recommandé Vercel)
- * 2. Header natif x-vercel-cron=1 (secours si secret mal synchronisé)
+ * 1. Bearer CRON_SECRET (obligatoire en production)
+ * 2. Header natif x-vercel-cron=1 UNIQUEMENT en complément du Bearer
  * 3. Dev local sans secret
  */
 
@@ -15,19 +15,25 @@ export function getCronSecret(): string {
 
 export function authorizeCronRequest(request: Request): {
   ok: boolean
-  via: "bearer" | "vercel-cron" | "dev" | null
+  via: "bearer" | "vercel-cron+bearer" | "dev" | null
 } {
   const secret = getCronSecret()
   const auth = request.headers.get("authorization") || ""
   const vercelCron = request.headers.get("x-vercel-cron") === "1"
+  const isProd =
+    process.env.VERCEL_ENV === "production" ||
+    process.env.NODE_ENV === "production"
 
   if (secret && auth === `Bearer ${secret}`) {
-    return { ok: true, via: "bearer" }
+    return {
+      ok: true,
+      via: vercelCron ? "vercel-cron+bearer" : "bearer",
+    }
   }
 
-  // Secours : invocation Vercel Cron (ne doit pas laisser le digest down)
-  if (vercelCron) {
-    return { ok: true, via: "vercel-cron" }
+  // En prod : jamais le header Vercel seul (forgeable hors edge)
+  if (isProd) {
+    return { ok: false, via: null }
   }
 
   if (process.env.NODE_ENV === "development" && !secret) {

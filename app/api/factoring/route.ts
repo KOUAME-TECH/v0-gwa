@@ -99,7 +99,8 @@ export async function POST(request: NextRequest) {
     if (!Number.isFinite(amount) || amount <= 0) {
       return NextResponse.json({ error: "Montant invalide" }, { status: 400 })
     }
-    if (amount > 500_000_000) {
+    // Plafond absolu bas — le plafond créances est appliqué après éligibilité
+    if (amount > 50_000_000) {
       return NextResponse.json({ error: "Montant trop élevé" }, { status: 400 })
     }
 
@@ -118,7 +119,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "Seuls les producteurs et coopératives peuvent demander de l'affacturage.",
+            "Seuls les producteurs et coopératives peuvent demander une avance sur vente.",
           code: "ROLE_NOT_ELIGIBLE",
           user_type: profile?.user_type ?? null,
         },
@@ -151,7 +152,7 @@ export async function POST(request: NextRequest) {
           return NextResponse.json(
             {
               error:
-                "Affacturage réservé aux coopératives qualifiées (membres + docs). Fonctions de base restent ouvertes.",
+                "Avance sur vente réservée aux coopératives qualifiées (membres + docs). Les fonctions de base restent ouvertes.",
               code: "COOP_ADVANCED_RESTRICTED",
               access,
             },
@@ -171,7 +172,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "Profil non éligible à l'affacturage. Un score SCG suffisant (bancable) est requis.",
+            "Profil non éligible à l’avance sur vente. Un score de confiance d’au moins 500 est requis.",
           code: "SCG_NOT_ELIGIBLE",
           scg_score: score,
           seuil: SCG_SEUIL_ELIGIBILITE,
@@ -180,19 +181,104 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Plafond = créances held non déjà payées — hors litige, hors avances déjà demandées
+    const { data: receivableOrders } = await admin
+      .from("orders")
+      .select(
+        "id, vendeur_recoit_fcfa, total_amount, commission_fcfa, service_fee, escrow_status, payout_status",
+      )
+      .eq("seller_id", user.id)
+      .eq("payment_status", "paid")
+      .eq("escrow_status", "held")
+    const eligibleOrders = (receivableOrders || []).filter((o) => {
+      const ps = o.payout_status
+      return ps == null || !["paid", "skipped_sim", "processing"].includes(String(ps))
+    })
+    const maxReceivable = eligibleOrders.reduce((s, o) => {
+      if (o.vendeur_recoit_fcfa != null) return s + (Number(o.vendeur_recoit_fcfa) || 0)
+      return (
+        s +
+        Math.max(
+          0,
+          (Number(o.total_amount) || 0) -
+            (Number(o.commission_fcfa) || 0) -
+            (Number(o.service_fee) || 0),
+        )
+      )
+    }, 0)
+
+    const { data: openReq } = await admin
+      .from("factoring_requests")
+      .select("amount_fcfa, approved_amount_fcfa, status, order_id")
+      .eq("requester_id", user.id)
+      .in("status", ["pending", "approved", "disbursed"])
+
+    const reserved = (openReq || []).reduce(
+      (s, r) =>
+        s + Math.round(Number(r.approved_amount_fcfa ?? r.amount_fcfa) || 0),
+      0,
+    )
+    const cap = Math.max(0, Math.round(maxReceivable) - reserved)
+    if (cap <= 0) {
+      return NextResponse.json(
+        {
+          error:
+            "Aucune créance éligible pour une avance. Il faut des ventes payées encore gardées.",
+          code: "NO_RECEIVABLES",
+        },
+        { status: 400 },
+      )
+    }
+    if (amount > cap) {
+      return NextResponse.json(
+        {
+          error: `Montant plafonné à ${cap.toLocaleString("fr-FR")} FCFA (créances disponibles)`,
+          code: "AMOUNT_ABOVE_RECEIVABLES",
+          max_fcfa: cap,
+        },
+        { status: 400 },
+      )
+    }
+
     const queuePriority = factoringQueuePriority(profile?.subscription_tier)
 
-    // order_id optionnel : doit appartenir au demandeur (vendeur ou acheteur)
+    // order_id optionnel : doit appartenir au demandeur vendeur
     if (orderId) {
       const { data: order } = await admin
         .from("orders")
-        .select("id, buyer_id, seller_id")
+        .select("id, buyer_id, seller_id, payment_status, escrow_status, payout_status")
         .eq("id", orderId)
         .maybeSingle()
-      if (!order || (order.seller_id !== user.id && order.buyer_id !== user.id)) {
+      if (!order || order.seller_id !== user.id) {
         return NextResponse.json(
-          { error: "Commande invalide ou non associée à votre compte" },
+          { error: "Commande invalide ou non associée à votre compte vendeur" },
           { status: 400 },
+        )
+      }
+      if (order.payment_status !== "paid") {
+        return NextResponse.json(
+          { error: "La commande liée doit être payée", code: "ORDER_NOT_PAID" },
+          { status: 400 },
+        )
+      }
+      if (order.escrow_status !== "held") {
+        return NextResponse.json(
+          { error: "Cette vente n’a plus d’argent gardé éligible", code: "ORDER_NOT_HELD" },
+          { status: 400 },
+        )
+      }
+      const existingOpen = (openReq || []).find(
+        (r) =>
+          r.order_id === orderId &&
+          ["pending", "approved"].includes(String(r.status)),
+      )
+      if (existingOpen) {
+        return NextResponse.json(
+          {
+            error: "Une avance est déjà en cours pour cette commande",
+            code: "FACTORING_ORDER_OPEN",
+          },
+          { status: 409 },
         )
       }
     }
@@ -243,9 +329,9 @@ export async function POST(request: NextRequest) {
         admins.map((a) => ({
           user_id: a.user_id,
           type: "alert",
-          title: "Nouvelle demande d'affacturage",
+          title: "Nouvelle demande d'avance sur vente",
           message: `Demande de ${Math.round(amount)} FCFA à examiner`,
-          body: `Affacturage — ${Math.round(amount)} FCFA`,
+          body: `Avance sur vente — ${Math.round(amount)} FCFA`,
           link: "/admin/factoring",
           is_read: false,
           read: false,

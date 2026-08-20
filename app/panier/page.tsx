@@ -47,7 +47,6 @@ const paymentMethods = [
   { id: "mtn", name: "MTN MoMo", icon: Smartphone, color: "text-yellow-500" },
   { id: "wave", name: "Wave", icon: Smartphone, color: "text-cyan-500" },
   { id: "moov", name: "Moov Money", icon: Smartphone, color: "text-blue-500" },
-  { id: "bank", name: "Virement", icon: Building2, color: "text-gray-500" },
 ]
 
 export default function CartPage() {
@@ -231,6 +230,20 @@ export default function CartPage() {
     setIsProcessing(true)
 
     try {
+      // Bloquer le checkout si FeexPay n'est pas prêt (évite commandes orphelines unpaid)
+      const healthRes = await fetch("/api/health")
+      const health = await healthRes.json().catch(() => ({}))
+      const payinReady = health?.feexpay?.payin_ready === true
+      const simOk =
+        process.env.NODE_ENV === "development" &&
+        typeof window !== "undefined" &&
+        window.location.hostname === "localhost"
+      if (!payinReady && !simOk) {
+        throw new Error(
+          "Paiement Mobile Money pas encore prêt. Réessaie dès que FeexPay est activé, ou contacte le support WhatsApp GWA.",
+        )
+      }
+
       // Grouper les articles par vendeur : une commande par vendeur (marketplace)
       const itemsBySeller = new Map<string, CartItem[]>()
       for (const item of cart) {
@@ -243,6 +256,13 @@ export default function CartPage() {
 
       if (itemsBySeller.size === 0) {
         throw new Error("Aucun vendeur valide dans le panier")
+      }
+
+      // Beta : 1 vendeur à la fois pour éviter N commandes unpaid si pay échoue
+      if (itemsBySeller.size > 1) {
+        throw new Error(
+          "Pour l’instant, paie un vendeur à la fois. Retire les articles des autres vendeurs, puis recommence.",
+        )
       }
 
       const createdOrderIds: string[] = []
@@ -305,7 +325,8 @@ export default function CartPage() {
         const code = String(payPayload?.code || "")
         if (
           payRes.status === 503 ||
-          code === "PAYMENT_PROVIDER_MISSING"
+          code === "PAYMENT_PROVIDER_MISSING" ||
+          code === "PAYMENT_WEBHOOK_MISSING"
         ) {
           throw new Error(
             "Paiement Mobile Money indisponible pour le moment. Réessaie plus tard ou contacte le support WhatsApp GWA. Ta commande n’a pas été finalisée.",

@@ -30,10 +30,7 @@ import {
 } from "lucide-react"
 import { shouldShowVerifiedBadge } from "@/lib/verification/badge"
 import { dashboardPathForUserType, isSellerRole } from "@/lib/dashboard/routing"
-import {
-  isDualIdentity,
-  productEspaceLabel,
-} from "@/lib/auth/dual-identity"
+import { productEspaceLabel } from "@/lib/auth/dual-identity"
 type Profile = {
   id: string
   full_name: string
@@ -215,7 +212,6 @@ export default function ProfilPage() {
   const isSeller = isSellerRole(profile.user_type)
   const isCooperative = profile.user_type === "cooperative"
   const roleHome = dashboardPathForUserType(profile.user_type)
-  const dual = isDualIdentity(isAdmin, profile.user_type)
 
   const getMainMenuItems = (): MenuItem[] => {
     const espaceLabel = productEspaceLabel(profile.user_type)
@@ -241,27 +237,20 @@ export default function ProfilPage() {
           href: "/dashboard/commandes",
           count: stats.orders,
         },
-        { icon: Wallet, label: "Portefeuille", href: "/wallet" },
+        { icon: Wallet, label: "Mon argent", href: "/wallet" },
         { icon: Crown, label: "Abonnement", href: "/abonnement" },
       ]
     }
 
     if (isSeller) {
+      // Hub unique — évite la duplication Mes produits / Mes ventes
       return [
-        espace,
         {
-          icon: Package,
-          label: "Mes produits",
-          href: "/dashboard/products",
-          count: stats.products,
+          ...espace,
+          label: "Espace producteur",
+          count: stats.orders || stats.products || undefined,
         },
-        {
-          icon: ShoppingBag,
-          label: "Mes ventes",
-          href: "/dashboard/commandes",
-          count: stats.orders,
-        },
-        { icon: Wallet, label: "Portefeuille", href: "/wallet" },
+        { icon: Wallet, label: "Mon argent", href: "/wallet" },
         { icon: Crown, label: "Abonnement", href: "/abonnement" },
         { icon: Star, label: "Mes avis", href: "/dashboard/reviews" },
       ]
@@ -292,15 +281,12 @@ export default function ProfilPage() {
     ...(isAdmin
       ? [
           {
-            title: dual ? "Backoffice (séparé)" : "Administration",
+            title: "Administration",
             items: [
               {
                 icon: Shield,
-                label: dual
-                  ? `Backoffice admin${adminRoleLabel ? ` · ${adminRoleLabel}` : ""}`
-                  : "Backoffice admin",
+                label: "Administration",
                 href: "/admin",
-                highlight: true,
               },
             ],
           },
@@ -312,7 +298,7 @@ export default function ProfilPage() {
             items: [
               {
                 icon: TrendingUp,
-                label: "Score de Confiance GWA",
+                label: "Mon score",
                 href: "/scg",
                 highlight: true,
               },
@@ -389,7 +375,6 @@ export default function ProfilPage() {
             </div>
             <p className="text-sm text-neutral-500 mb-1">
               {getUserTypeLabel(profile.user_type)}
-              {dual ? " · aussi admin backoffice" : ""}
             </p>
             {(profile.city || profile.country) && (
               <div className="flex items-center gap-1 text-sm text-neutral-500">
@@ -408,15 +393,7 @@ export default function ProfilPage() {
           </p>
         )}
 
-        {dual ? (
-          <div className="mt-4 rounded-xl border border-[#1F5C2E]/20 bg-[#1F5C2E]/5 px-3 py-2.5 text-sm text-[#1F5C2E]">
-            <p className="font-medium">Double identité</p>
-            <p className="text-xs text-[#1F5C2E]/80 mt-0.5 leading-relaxed">
-              Votre espace {getUserTypeLabel(profile.user_type).toLowerCase()} et le
-              backoffice sont séparés. Utilisez le menu ci-dessous pour basculer.
-            </p>
-          </div>
-        ) : null}
+        {/* Admin : lien discret dans le menu uniquement — pas de bandeau double identité */}
 
         <Link href="/profil/edit" className="block mt-4">
           <Button
@@ -482,7 +459,6 @@ export default function ProfilPage() {
                       }`}
                     />
                   </div>
-<<<<<<< Updated upstream
                   <span className="flex-1 font-medium text-[15px]">
                     {item.label}
                   </span>
@@ -490,11 +466,6 @@ export default function ProfilPage() {
                     <span className="min-w-6 h-6 px-1.5 rounded-full bg-neutral-900 text-white text-xs font-semibold flex items-center justify-center">
                       {item.count > 99 ? "99+" : item.count}
                     </span>
-=======
-                  <span className="flex-1 font-medium text-[15px]">{item.label}</span>
-                  {(item as any).count !== undefined && (item as any).count > 0 && (
-                    <span className="text-sm text-neutral-500">{(item as any).count}</span>
->>>>>>> Stashed changes
                   )}
                   <ChevronRight className="h-5 w-5 text-neutral-300" />
                 </div>

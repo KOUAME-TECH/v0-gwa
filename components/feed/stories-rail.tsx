@@ -116,16 +116,16 @@ export function StoriesRail({
   if (items.length === 0) return null
 
   return (
-    <section className={cn("px-3 py-3", className)} aria-label="Aujourd’hui près de toi">
-      <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-[#1F5C2E]/80">
-        Aujourd’hui
+    <section className={cn("px-3 py-2", className)} aria-label="Nouveautés du jour">
+      <p className="mb-2 px-1 font-display text-sm text-[#1F5C2E]">
+        Aujourd’hui près de toi
       </p>
       <div className="flex gap-3 overflow-x-auto scrollbar-none pb-1">
         {items.map((s) => (
           <Link
             key={s.id}
             href={`/produit/${s.id}`}
-            className="flex w-[4.5rem] shrink-0 flex-col items-center gap-1.5 active:opacity-80"
+            className="flex w-[4.5rem] shrink-0 flex-col items-center gap-1.5 min-h-11 active:opacity-80"
           >
             <span className="rounded-full bg-gradient-to-br from-[#C27D10] via-[#1F5C2E] to-[#2d7a3e] p-[2.5px]">
               <span className="block rounded-full bg-[#FFF6E5] p-[2px]">

@@ -61,21 +61,49 @@ describe("OneSignal App ID", () => {
 describe("cron auth", () => {
   it("accepte Bearer secret", () => {
     const prev = process.env.CRON_SECRET
+    const prevEnv = process.env.NODE_ENV
+    const prevVercel = process.env.VERCEL_ENV
     process.env.CRON_SECRET = "test-secret"
+    process.env.NODE_ENV = "production"
+    process.env.VERCEL_ENV = "production"
     const req = new Request("https://x/api/cron", {
       headers: { authorization: "Bearer test-secret" },
     })
     expect(authorizeCronRequest(req)).toEqual({ ok: true, via: "bearer" })
     process.env.CRON_SECRET = prev
+    process.env.NODE_ENV = prevEnv
+    process.env.VERCEL_ENV = prevVercel
   })
 
-  it("accepte x-vercel-cron en secours", () => {
+  it("refuse x-vercel-cron seul en production", () => {
     const prev = process.env.CRON_SECRET
+    const prevEnv = process.env.NODE_ENV
+    const prevVercel = process.env.VERCEL_ENV
     process.env.CRON_SECRET = "other"
+    process.env.NODE_ENV = "production"
+    process.env.VERCEL_ENV = "production"
     const req = new Request("https://x/api/cron", {
       headers: { "x-vercel-cron": "1" },
     })
-    expect(authorizeCronRequest(req)).toEqual({ ok: true, via: "vercel-cron" })
+    expect(authorizeCronRequest(req).ok).toBe(false)
+    process.env.CRON_SECRET = prev
+    process.env.NODE_ENV = prevEnv
+    process.env.VERCEL_ENV = prevVercel
+  })
+
+  it("accepte Bearer + x-vercel-cron", () => {
+    const prev = process.env.CRON_SECRET
+    process.env.CRON_SECRET = "test-secret"
+    const req = new Request("https://x/api/cron", {
+      headers: {
+        authorization: "Bearer test-secret",
+        "x-vercel-cron": "1",
+      },
+    })
+    expect(authorizeCronRequest(req)).toEqual({
+      ok: true,
+      via: "vercel-cron+bearer",
+    })
     process.env.CRON_SECRET = prev
   })
 

@@ -217,7 +217,7 @@ export default function AbonnementPage() {
 
         <p className="text-[11px] text-[#9CA3AF] text-center pb-4">
           Chaque palier débloque des services réels (annonces, commission, boost, stats,
-          priorité feed / affacturage). Paiement Mobile Money via WhatsApp — activation sous 24 h.
+          priorité nouveautés / avance sur vente). Paiement Mobile Money via WhatsApp — activation sous 24 h.
         </p>
       </main>
     </div>

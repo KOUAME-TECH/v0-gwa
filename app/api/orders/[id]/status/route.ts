@@ -1,8 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { requireUser } from "@/lib/auth/require-admin"
 import { sendPushToUser } from "@/lib/notifications/push"
 import { normalizeOrderStatus } from "@/lib/orders/escrow-flow"
+import { checkRateLimit } from "@/lib/security/rate-limiter"
+import { assertSameOrigin } from "@/lib/security/csrf"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -22,14 +24,23 @@ const SELLER_TRANSITIONS: Record<string, string[]> = {
  */
 export async function PATCH(request: NextRequest, context: Ctx) {
   try {
-    const { id } = await context.params
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
+    const csrf = assertSameOrigin(request)
+    if (csrf) return csrf
+    const rate = await checkRateLimit("API_CREATE")
+    if (!rate.success) {
+      return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })
     }
+
+    const { id } = await context.params
+    const gate = await requireUser()
+    if (!gate.user) {
+      return NextResponse.json(
+        { error: gate.error || "Non authentifié" },
+        { status: gate.suspended ? 403 : 401 },
+      )
+    }
+    const user = gate.user
+    const supabase = gate.supabase
 
     const body = await request.json()
     const nextStatus = normalizeOrderStatus(String(body?.status || ""))

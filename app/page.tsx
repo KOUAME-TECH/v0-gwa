@@ -24,7 +24,7 @@ import {
   Heart, MessageCircle, Share2, UserPlus, Search, Bell,
   ShoppingBag, BadgeCheck, MapPin, Bookmark, MoreHorizontal,
   ChevronLeft, ChevronRight, X, Flag, EyeOff, LinkIcon,
-  Trash2, UserCheck
+  Trash2, UserCheck, ThumbsDown
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -83,8 +83,8 @@ type Product = {
   product_type: string
   seller_id: string
   likes_count: number
+  dislikes_count: number
   comments_count: number
-  shares_count: number
   created_at: string
   is_organic?: boolean | null
   categories?: { name: string; slug?: string | null } | null
@@ -135,8 +135,8 @@ type Comment = {
   } | null
 }
 
-type FeedItem = 
-  | { type: "product"; data: Product; isLiked: boolean; isSaved: boolean }
+type FeedItem =
+  | { type: "product"; data: Product; isLiked: boolean; isDisliked: boolean; isSaved: boolean }
   | { type: "post"; data: Post; isLiked: boolean; isSaved: boolean }
 
 const categories = FEED_FILTER_CHIPS.map((c) => ({ id: c.id, name: c.name }))
@@ -177,11 +177,43 @@ export default function HomePage() {
   const [hasMoreFeed, setHasMoreFeed] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [offlineMode, setOfflineMode] = useState(false)
+  const [feedError, setFeedError] = useState(false)
+  const [showFilters, setShowFilters] = useState(false)
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set())
   const pullStartY = useRef<number | null>(null)
   const feedSentinelRef = useRef<HTMLDivElement | null>(null)
   const headerHidden = useHideOnScroll(true)
 
   const supabase = createClient()
+
+  useEffect(() => {
+    try {
+      const next = new Set<string>()
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i)
+        if (k?.startsWith("gwa_hide_") && localStorage.getItem(k) === "1") {
+          next.add(k.replace(/^gwa_hide_(product|post)_/, ""))
+        }
+      }
+      if (next.size) setHiddenIds(next)
+    } catch {
+      /* private mode */
+    }
+  }, [])
+
+  useEffect(() => {
+    const onHide = (ev: Event) => {
+      const id = (ev as CustomEvent<{ id?: string }>).detail?.id
+      if (!id) return
+      setHiddenIds((prev) => {
+        const n = new Set(prev)
+        n.add(id)
+        return n
+      })
+    }
+    window.addEventListener("gwa:feed-hide", onHide as EventListener)
+    return () => window.removeEventListener("gwa:feed-hide", onHide as EventListener)
+  }, [])
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -222,6 +254,7 @@ export default function HomePage() {
   // Charger l'utilisateur et le feed (parallèle : auth + catalogue + offline)
   useEffect(() => {
     const loadData = async () => {
+      setFeedError(false)
       const offline = typeof navigator !== "undefined" && !navigator.onLine
       const cached = loadFeedCache()
 
@@ -231,7 +264,7 @@ export default function HomePage() {
         setHasMoreFeed(false)
         setIsLoading(false)
         setRefreshing(false)
-        toast.message(`Feed hors ligne · ${feedCacheAgeLabel(cached.at)}`)
+        toast.message(`Contenu enregistré · ${feedCacheAgeLabel(cached.at)}`)
         return
       }
 
@@ -239,7 +272,7 @@ export default function HomePage() {
         .from("products")
         .select(`
           id, name, description, price, unit, images, audio_url, origin_region, origin_country, product_type, seller_id,
-          likes_count, comments_count, shares_count, created_at, is_organic,
+          likes_count, dislikes_count, comments_count, created_at, is_organic,
           profiles:seller_id(id, full_name, avatar_url, is_verified, city, subscription_tier),
           categories:category_id(name, slug)
         `)
@@ -267,6 +300,8 @@ export default function HomePage() {
         setOfflineMode(false)
 
         let userLikes: string[] = []
+        let userProductLikes: string[] = []
+        let userProductDislikes: string[] = []
         let userFavorites: string[] = []
 
         const authorIds = [...new Set((rawPosts || []).map((p) => p.author_id).filter(Boolean))]
@@ -274,6 +309,8 @@ export default function HomePage() {
         const metaPromise = currentUser
           ? Promise.all([
               supabase.from("post_likes").select("post_id").eq("user_id", currentUser.id).limit(200),
+              supabase.from("product_likes").select("product_id").eq("user_id", currentUser.id).limit(200),
+              supabase.from("product_dislikes").select("product_id").eq("user_id", currentUser.id).limit(200),
               supabase.from("favorites").select("product_id").eq("user_id", currentUser.id).limit(200),
               supabase.from("profiles").select("user_type").eq("id", currentUser.id).maybeSingle(),
               supabase.from("followers").select("following_id").eq("follower_id", currentUser.id).limit(200),
@@ -291,7 +328,8 @@ export default function HomePage() {
         const [metaRes, authorsRes] = await Promise.all([metaPromise, authorsPromise])
 
         if (metaRes) {
-          const [likesRes, favsRes, profileRes, followsRes] = metaRes
+          const [likesRes, productLikesRes, productDislikesRes, favsRes, profileRes, followsRes] =
+            metaRes
           if (profileRes.data) {
             setUserType(profileRes.data.user_type)
           }
@@ -299,6 +337,8 @@ export default function HomePage() {
             setFollowingIds(new Set(followsRes.data.map((f) => f.following_id)))
           }
           userLikes = likesRes.data?.map((l) => l.post_id) || []
+          userProductLikes = productLikesRes.data?.map((l) => l.product_id) || []
+          userProductDislikes = productDislikesRes.data?.map((l) => l.product_id) || []
           userFavorites = favsRes.data?.map((f) => f.product_id) || []
         }
 
@@ -310,7 +350,6 @@ export default function HomePage() {
           profiles: profileMap.get(post.author_id) || null,
         }))
 
-<<<<<<< Updated upstream
         const feedItems: FeedItem[] = []
         const rankedProducts = ([...(products || [])] as Product[]).sort((a, b) => {
           const pa = feedPriorityForTier(a.profiles?.subscription_tier)
@@ -319,37 +358,18 @@ export default function HomePage() {
           return Date.parse(b.created_at || "0") - Date.parse(a.created_at || "0")
         })
         const maxLen = Math.max(rankedProducts.length, posts.length)
-=======
-      // Melanger produits et posts dans le feed
-      const feedItems: FeedItem[] = []
-      const maxLen = Math.max(products?.length || 0, posts?.length || 0)
-      
-      for (let i = 0; i < maxLen; i++) {
-        if (products?.[i]) {
-          feedItems.push({ 
-            type: "product", 
-            data: products[i] as unknown as Product,
-            isLiked: userFavorites.includes(products[i].id),
-            isSaved: userFavorites.includes(products[i].id)
-          })
-        }
-        if (posts?.[i]) {
-          feedItems.push({ 
-            type: "post", 
-            data: posts[i] as Post,
-            isLiked: userLikes.includes(posts[i].id),
-            isSaved: false
-          })
-        }
-      }
->>>>>>> Stashed changes
 
         for (let i = 0; i < maxLen; i++) {
           if (rankedProducts[i]) {
             feedItems.push({
               type: "product",
-              data: rankedProducts[i],
-              isLiked: userFavorites.includes(rankedProducts[i].id),
+              data: {
+                ...rankedProducts[i],
+                likes_count: Number(rankedProducts[i].likes_count) || 0,
+                dislikes_count: Number(rankedProducts[i].dislikes_count) || 0,
+              },
+              isLiked: userProductLikes.includes(rankedProducts[i].id),
+              isDisliked: userProductDislikes.includes(rankedProducts[i].id),
               isSaved: userFavorites.includes(rankedProducts[i].id),
             })
           }
@@ -385,7 +405,10 @@ export default function HomePage() {
           setFeed(cached.items as FeedItem[])
           setOfflineMode(true)
           setHasMoreFeed(false)
-          toast.message(`Feed hors ligne · ${feedCacheAgeLabel(cached.at)}`)
+          toast.message(`Contenu enregistré · ${feedCacheAgeLabel(cached.at)}`)
+        } else {
+          setFeedError(true)
+          toast.error("Impossible de charger l’accueil")
         }
         setIsLoading(false)
         setRefreshing(false)
@@ -422,7 +445,7 @@ export default function HomePage() {
         .from("products")
         .select(`
           id, name, description, price, unit, images, audio_url, origin_region, origin_country, product_type, seller_id,
-          likes_count, comments_count, shares_count, created_at, is_organic,
+          likes_count, dislikes_count, comments_count, created_at, is_organic,
           profiles:seller_id(id, full_name, avatar_url, is_verified, city),
           categories:category_id(name, slug)
         `)
@@ -450,22 +473,71 @@ export default function HomePage() {
         profiles: profileMap.get(post.author_id) || null,
       }))
 
+      const productIds = (products || []).map((p) => p.id)
+      const postIds = posts.map((p) => p.id)
+      let moreFavs: string[] = []
+      let moreLikes: string[] = []
+      let moreProductLikes: string[] = []
+      let moreProductDislikes: string[] = []
+      if (user?.id) {
+        const [favRes, likeRes, pLikeRes, pDislikeRes] = await Promise.all([
+          productIds.length
+            ? supabase
+                .from("favorites")
+                .select("product_id")
+                .eq("user_id", user.id)
+                .in("product_id", productIds)
+            : Promise.resolve({ data: [] as { product_id: string }[] }),
+          postIds.length
+            ? supabase
+                .from("post_likes")
+                .select("post_id")
+                .eq("user_id", user.id)
+                .in("post_id", postIds)
+            : Promise.resolve({ data: [] as { post_id: string }[] }),
+          productIds.length
+            ? supabase
+                .from("product_likes")
+                .select("product_id")
+                .eq("user_id", user.id)
+                .in("product_id", productIds)
+            : Promise.resolve({ data: [] as { product_id: string }[] }),
+          productIds.length
+            ? supabase
+                .from("product_dislikes")
+                .select("product_id")
+                .eq("user_id", user.id)
+                .in("product_id", productIds)
+            : Promise.resolve({ data: [] as { product_id: string }[] }),
+        ])
+        moreFavs = (favRes.data || []).map((f: { product_id: string }) => f.product_id)
+        moreLikes = (likeRes.data || []).map((l: { post_id: string }) => l.post_id)
+        moreProductLikes = (pLikeRes.data || []).map((l: { product_id: string }) => l.product_id)
+        moreProductDislikes = (pDislikeRes.data || []).map((l: { product_id: string }) => l.product_id)
+      }
+
       const more: FeedItem[] = []
       const maxLen = Math.max(products?.length || 0, posts.length)
       for (let i = 0; i < maxLen; i++) {
         if (products?.[i]) {
+          const pid = products[i].id
           more.push({
             type: "product",
-            data: products[i] as Product,
-            isLiked: false,
-            isSaved: false,
+            data: {
+              ...(products[i] as Product),
+              likes_count: Number((products[i] as Product).likes_count) || 0,
+              dislikes_count: Number((products[i] as Product).dislikes_count) || 0,
+            },
+            isLiked: moreProductLikes.includes(pid),
+            isDisliked: moreProductDislikes.includes(pid),
+            isSaved: moreFavs.includes(pid),
           })
         }
         if (posts[i]) {
           more.push({
             type: "post",
             data: posts[i] as Post,
-            isLiked: false,
+            isLiked: moreLikes.includes(posts[i].id),
             isSaved: false,
           })
         }
@@ -524,57 +596,203 @@ export default function HomePage() {
     return new Date(date).toLocaleDateString("fr-FR")
   }
 
-  // Gérer le like
+  // Like : posts via post_likes ; produits via API /like (mutex dislike)
   const handleLike = async (item: FeedItem) => {
     if (!user) {
-      toast.error("Connecte-toi pour aimer cette publication")
+      toast.error("Connecte-toi pour aimer")
       return
     }
 
     const itemId = item.data.id
-    const isLiked = item.isLiked
-    const table = item.type === "post" ? "post_likes" : "favorites"
-    const idField = item.type === "post" ? "post_id" : "product_id"
-    const countTable = item.type === "post" ? "posts" : "products"
 
-    // Mise à jour optimiste
-    setFeed(prev => prev.map(f => 
-      f.data.id === itemId 
-        ? { 
-            ...f, 
-            isLiked: !isLiked,
-            data: {
-              ...f.data,
-              likes_count: isLiked ? f.data.likes_count - 1 : f.data.likes_count + 1
-            }
-          } as FeedItem
-        : f
-    ))
+    if (item.type === "product") {
+      const prevLiked = item.isLiked
+      const prevDisliked = item.isDisliked
+      const prevLikes = item.data.likes_count || 0
+      const prevDislikes = item.data.dislikes_count || 0
+      const willLike = !prevLiked
+      setFeed((prev) =>
+        prev.map((f) =>
+          f.data.id === itemId && f.type === "product"
+            ? {
+                ...f,
+                isLiked: willLike,
+                isDisliked: willLike ? false : f.isDisliked,
+                data: {
+                  ...f.data,
+                  likes_count: willLike ? prevLikes + 1 : Math.max(0, prevLikes - 1),
+                  dislikes_count: willLike && prevDisliked
+                    ? Math.max(0, prevDislikes - 1)
+                    : prevDislikes,
+                },
+              }
+            : f,
+        ),
+      )
+      try {
+        const res = await fetch(`/api/products/${itemId}/like`, { method: "POST" })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data.error || "Like impossible")
+        setFeed((prev) =>
+          prev.map((f) =>
+            f.data.id === itemId && f.type === "product"
+              ? {
+                  ...f,
+                  isLiked: !!data.liked,
+                  isDisliked: !!data.disliked,
+                  data: {
+                    ...f.data,
+                    likes_count: Number(data.likes_count) || 0,
+                    dislikes_count: Number(data.dislikes_count) || 0,
+                  },
+                }
+              : f,
+          ),
+        )
+      } catch {
+        setFeed((prev) =>
+          prev.map((f) =>
+            f.data.id === itemId && f.type === "product"
+              ? {
+                  ...f,
+                  isLiked: prevLiked,
+                  isDisliked: prevDisliked,
+                  data: {
+                    ...f.data,
+                    likes_count: prevLikes,
+                    dislikes_count: prevDislikes,
+                  },
+                }
+              : f,
+          ),
+        )
+        toast.error("Erreur lors de l'enregistrement")
+      }
+      return
+    }
+
+    const isLiked = item.isLiked
+    const prevCount = item.data.likes_count || 0
+
+    setFeed((prev) =>
+      prev.map((f) =>
+        f.data.id === itemId
+          ? ({
+              ...f,
+              isLiked: !isLiked,
+              data: {
+                ...f.data,
+                likes_count: isLiked ? Math.max(0, prevCount - 1) : prevCount + 1,
+              },
+            } as FeedItem)
+          : f,
+      ),
+    )
 
     try {
+      // Posts : trigger BD gère likes_count — pas de .update client
       if (isLiked) {
-        await supabase.from(table).delete().eq("user_id", user.id).eq(idField, itemId)
+        const { error } = await supabase
+          .from("post_likes")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("post_id", itemId)
+        if (error) throw error
       } else {
-        await supabase.from(table).insert({ user_id: user.id, [idField]: itemId })
+        const { error } = await supabase
+          .from("post_likes")
+          .insert({ user_id: user.id, post_id: itemId })
+        if (error) throw error
       }
-
-      // Mettre à jour le compteur en BD
-      await supabase
-        .from(countTable)
-        .update({ likes_count: isLiked ? item.data.likes_count - 1 : item.data.likes_count + 1 })
-        .eq("id", itemId)
-
-      toast.success(isLiked ? "J'aime retiré" : "J'aime ajouté")
-    } catch (error) {
-      // Annuler en cas d'erreur
-      setFeed(prev => prev.map(f => 
-        f.data.id === itemId ? { ...f, isLiked, data: { ...f.data, likes_count: item.data.likes_count } } as FeedItem : f
-      ))
+    } catch {
+      setFeed((prev) =>
+        prev.map((f) =>
+          f.data.id === itemId
+            ? ({
+                ...f,
+                isLiked,
+                data: { ...f.data, likes_count: prevCount },
+              } as FeedItem)
+            : f,
+        ),
+      )
       toast.error("Erreur lors de l'enregistrement")
     }
   }
 
-  // Gérer la sauvegarde (favoris)
+  const handleDislike = async (item: FeedItem) => {
+    if (item.type !== "product") return
+    if (!user) {
+      toast.error("Connecte-toi pour réagir")
+      return
+    }
+    const itemId = item.data.id
+    const prevLiked = item.isLiked
+    const prevDisliked = item.isDisliked
+    const prevLikes = item.data.likes_count || 0
+    const prevDislikes = item.data.dislikes_count || 0
+    const willDislike = !prevDisliked
+    setFeed((prev) =>
+      prev.map((f) =>
+        f.data.id === itemId && f.type === "product"
+          ? {
+              ...f,
+              isDisliked: willDislike,
+              isLiked: willDislike ? false : f.isLiked,
+              data: {
+                ...f.data,
+                dislikes_count: willDislike
+                  ? prevDislikes + 1
+                  : Math.max(0, prevDislikes - 1),
+                likes_count:
+                  willDislike && prevLiked ? Math.max(0, prevLikes - 1) : prevLikes,
+              },
+            }
+          : f,
+      ),
+    )
+    try {
+      const res = await fetch(`/api/products/${itemId}/dislike`, { method: "POST" })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || "Dislike impossible")
+      setFeed((prev) =>
+        prev.map((f) =>
+          f.data.id === itemId && f.type === "product"
+            ? {
+                ...f,
+                isLiked: !!data.liked,
+                isDisliked: !!data.disliked,
+                data: {
+                  ...f.data,
+                  likes_count: Number(data.likes_count) || 0,
+                  dislikes_count: Number(data.dislikes_count) || 0,
+                },
+              }
+            : f,
+        ),
+      )
+    } catch {
+      setFeed((prev) =>
+        prev.map((f) =>
+          f.data.id === itemId && f.type === "product"
+            ? {
+                ...f,
+                isLiked: prevLiked,
+                isDisliked: prevDisliked,
+                data: {
+                  ...f.data,
+                  likes_count: prevLikes,
+                  dislikes_count: prevDislikes,
+                },
+              }
+            : f,
+        ),
+      )
+      toast.error("Erreur lors de l'enregistrement")
+    }
+  }
+
+  // Gérer la sauvegarde (favoris) — distinct du like/dislike
   const handleSave = async (item: FeedItem) => {
     if (!user) {
       toast.error("Connecte-toi pour sauvegarder")
@@ -584,22 +802,34 @@ export default function HomePage() {
 
     const isSaved = item.isSaved
 
-    setFeed(prev => prev.map(f => 
-      f.data.id === item.data.id ? { ...f, isSaved: !isSaved } : f
-    ))
+    setFeed((prev) =>
+      prev.map((f) =>
+        f.data.id === item.data.id ? { ...f, isSaved: !isSaved } : f,
+      ),
+    )
 
     try {
       if (isSaved) {
-        await supabase.from("favorites").delete().eq("user_id", user.id).eq("product_id", item.data.id)
+        const { error } = await supabase
+          .from("favorites")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("product_id", item.data.id)
+        if (error) throw error
         toast.success("Retiré des favoris")
       } else {
-        await supabase.from("favorites").insert({ user_id: user.id, product_id: item.data.id })
+        const { error } = await supabase
+          .from("favorites")
+          .insert({ user_id: user.id, product_id: item.data.id })
+        if (error) throw error
         toast.success("Ajouté aux favoris")
       }
-    } catch (error) {
-      setFeed(prev => prev.map(f => 
-        f.data.id === item.data.id ? { ...f, isSaved } : f
-      ))
+    } catch {
+      setFeed((prev) =>
+        prev.map((f) =>
+          f.data.id === item.data.id ? { ...f, isSaved } : f,
+        ),
+      )
       toast.error("Erreur lors de la sauvegarde")
     }
   }
@@ -726,7 +956,6 @@ export default function HomePage() {
         voiceStored: boolean
       }
 
-<<<<<<< Updated upstream
       if (replyTo) {
         const inject = (list: Comment[]): Comment[] =>
           list.map((c) => {
@@ -751,30 +980,6 @@ export default function HomePage() {
           prev ? { ...prev, data: { ...prev.data, comments_count: newCount } } : prev,
         )
       }
-=======
-      if (error) throw error
-
-      // Charger le profil de l'utilisateur
-      const { data: profile } = await supabase.from("profiles").select("id, full_name, avatar_url").eq("id", user.id).single()
-
-      // Ajouter le commentaire
-      setComments(prev => [{
-        id: data.id,
-        content: data.content || data.comment,
-        created_at: data.created_at,
-        author: profile
-      }, ...prev])
-
-      // Mettre à jour le compteur
-      const newCount = selectedItem.data.comments_count + 1
-      setFeed(prev => prev.map(f => 
-        f.data.id === selectedItem.data.id 
-          ? { ...f, data: { ...f.data, comments_count: newCount } } as FeedItem
-          : f
-      ))
-
-      await supabase.from(countTable).update({ comments_count: newCount }).eq("id", selectedItem.data.id)
->>>>>>> Stashed changes
 
       setNewComment("")
       setReplyTo(null)
@@ -810,21 +1015,7 @@ export default function HomePage() {
       ? `Découvrez ${(shareItem.data as Product).name} sur GWA`
       : `${(shareItem.data as Post).content?.slice(0, 100)}...`
 
-    try {
-      const countTable = shareItem.type === "post" ? "posts" : "products"
-      const newCount = shareItem.data.shares_count + 1
-      
-      await supabase.from(countTable).update({ shares_count: newCount }).eq("id", shareItem.data.id)
-
-      setFeed(prev => prev.map(f => 
-        f.data.id === shareItem.data.id 
-          ? { ...f, data: { ...f.data, shares_count: newCount } } as FeedItem
-          : f
-      ))
-    } catch (error) {
-      console.error("Erreur mise à jour partages:", error)
-    }
-
+    // Pas d’UPDATE ni d’incrément client de shares_count (anti-inflation)
     switch (platform) {
       case "whatsapp":
         window.open(`https://wa.me/?text=${encodeURIComponent(text + " " + url)}`, "_blank")
@@ -900,6 +1091,7 @@ export default function HomePage() {
 
   // Filtrer le feed
   const filteredFeed = feed.filter(item => {
+    if (hiddenIds.has(item.data.id)) return false
     // Filtre par onglet
     if (activeTab === "produits" && item.type !== "product") return false
     if (activeTab === "publications" && item.type !== "post") return false
@@ -931,98 +1123,130 @@ export default function HomePage() {
   })
 
   return (
-    <div className="min-h-screen bg-[#FFF6E5]">
-      {/* Météo — mobile / tablette */}
-      {userType && ["farmer", "cooperative"].includes(userType) && (
-        <div className="gwa-shell-feed px-4 pt-3 lg:hidden">
-          <WeatherWidget />
-        </div>
-      )}
-
-      {/* Header mobile — disparaît au scroll bas comme bottom nav */}
+    <div className="min-h-screen gwa-home-atmosphere">
+      {/* Header mobile — brand first, chrome léger */}
       <header
         className={cn(
-          "sticky top-0 z-40 bg-white border-b border-[#E5E7EB] lg:hidden",
+          "sticky top-0 z-40 border-b border-[#1F5C2E]/10 bg-[#FFF6E5]/92 backdrop-blur-md lg:hidden",
           "transition-transform duration-300 ease-out will-change-transform",
-          headerHidden && "-translate-y-full",
+          headerHidden && "-translate-y-full pointer-events-none",
         )}
-        aria-hidden={headerHidden}
+        aria-hidden={headerHidden || undefined}
       >
-        <div className="px-4 py-3">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-2" aria-label="GWA accueil">
-              <GwaMark size={36} showWordmark wordmarkClassName="font-display text-2xl" />
+        <div className="px-4 pt-3 pb-2">
+          <div className="flex items-center justify-between gap-2">
+            <Link href="/" className="flex min-h-11 items-center gap-2" aria-label="GWA accueil">
+              <GwaMark size={40} showWordmark wordmarkClassName="font-display text-[1.65rem] tracking-tight" />
             </Link>
-            <div className="flex items-center gap-2">
-              <ListenRitualBadge streak={listenStreak} />
-              <YellyAideButton source="mobile_feed_header" compact className="text-[#1F5C2E]" />
+            <div className="flex items-center gap-1">
+              <YellyAideButton source="mobile_feed_header" compact className="text-[#1F5C2E] min-h-11 min-w-11" />
               <Link
                 href="/marketplace?digest=1"
-                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-xl bg-[#1F5C2E]/8 text-[#1F5C2E] text-xs font-semibold active:scale-95 transition-transform"
-                aria-label="Écouter les nouveautés — Harmattan Digest"
-                title="Écouter les nouveautés près de chez vous"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-[#1F5C2E] px-3.5 text-sm font-semibold text-white active:scale-95 transition-transform"
+                aria-label="Écouter les nouveautés près de toi"
               >
-                Digest
+                Nouveautés
               </Link>
-              <Link href="/recherche">
-                <Button variant="ghost" size="icon" className="rounded-full h-10 w-10">
+              <Link href="/recherche" aria-label="Rechercher">
+                <Button variant="ghost" size="icon" className="rounded-full h-11 w-11">
                   <Search className="h-5 w-5 text-[#4B5563]" />
                 </Button>
               </Link>
-              <Link href="/notifications" aria-label="Notifications">
-                <Button variant="ghost" size="icon" className="rounded-full h-10 w-10 relative">
+              <Link
+                href="/notifications"
+                aria-label={
+                  unreadNotifications > 0
+                    ? `Notifications, ${unreadNotifications} non lues`
+                    : "Notifications"
+                }
+              >
+                <Button variant="ghost" size="icon" className="rounded-full h-11 w-11 relative">
                   <Bell className="h-5 w-5 text-[#4B5563]" />
                   {unreadNotifications > 0 && (
-                    <span className="absolute top-1 right-1 min-w-[8px] h-2 px-0.5 bg-[#F39A1F] rounded-full" />
+                    <span className="absolute top-1.5 right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#F39A1F] px-1 text-[10px] font-bold text-white">
+                      {unreadNotifications > 9 ? "9+" : unreadNotifications}
+                    </span>
                   )}
                 </Button>
               </Link>
             </div>
           </div>
+          <p className="mt-1 font-display text-sm text-[#1F5C2E]/80 animate-fadeIn">
+            Le marché près de toi
+          </p>
+          {listenStreak > 0 ? (
+            <div className="mt-1.5">
+              <ListenRitualBadge streak={listenStreak} />
+            </div>
+          ) : null}
         </div>
-        
+
         {/* Onglets */}
-        <div className="flex border-t border-[#E5E7EB]">
+        <div className="flex border-t border-[#1F5C2E]/8">
           {[
-            { key: "tout", label: "Pour vous" },
+            { key: "tout", label: "Pour toi" },
             { key: "suivis", label: "Suivis" },
             { key: "produits", label: "Produits" },
-            { key: "publications", label: "Pubs" },
+            { key: "publications", label: "Publications" },
           ].map(tab => (
             <button
               key={tab.key}
+              type="button"
               onClick={() => startTransition(() => setActiveTab(tab.key as typeof activeTab))}
               className={cn(
-                "flex-1 py-3 text-sm font-medium transition-colors",
+                "flex-1 min-h-11 py-2.5 text-sm font-medium transition-colors",
                 activeTab === tab.key
-                  ? "text-[#2F7D32] border-b-2 border-[#2F7D32]"
-                  : "text-[#4B5563]"
+                  ? "text-[#1F5C2E] border-b-2 border-[#1F5C2E]"
+                  : "text-[#6B7280]"
               )}
             >
               {tab.label}
             </button>
           ))}
         </div>
-        
-        {/* Catégories */}
-        <div className="flex gap-2 overflow-x-auto scrollbar-none px-4 py-3">
-          {categories.map((cat) => (
-            <button
-              key={cat.id}
-              type="button"
-              onClick={() => startTransition(() => setActiveCategory(cat.id))}
-              className={cn(
-                "px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-colors",
-                activeCategory === cat.id
-                  ? "bg-[#2F7D32] text-white"
-                  : "bg-white text-[#4B5563] border border-[#E5E7EB]"
-              )}
-            >
-              {cat.name}
-            </button>
-          ))}
+
+        <div className="flex items-center gap-2 px-4 py-2">
+          <button
+            type="button"
+            onClick={() => setShowFilters((v) => !v)}
+            className={cn(
+              "inline-flex min-h-10 items-center rounded-full border px-3.5 text-sm font-medium transition-colors",
+              showFilters || activeCategory !== "all"
+                ? "border-[#1F5C2E] bg-[#1F5C2E] text-white"
+                : "border-[#1F5C2E]/20 bg-white/70 text-[#1F5C2E]",
+            )}
+            aria-expanded={showFilters}
+          >
+            Filtrer{activeCategory !== "all" ? " · actif" : ""}
+          </button>
         </div>
+
+        {showFilters ? (
+          <div className="flex gap-2 overflow-x-auto scrollbar-none px-4 pb-3 animate-fadeIn">
+            {categories.map((cat) => (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => startTransition(() => setActiveCategory(cat.id))}
+                className={cn(
+                  "min-h-10 px-4 rounded-full text-sm font-medium whitespace-nowrap transition-colors",
+                  activeCategory === cat.id
+                    ? "bg-[#1F5C2E] text-white"
+                    : "bg-white/80 text-[#4B5563] border border-[#E5E7EB]"
+                )}
+              >
+                {cat.name}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </header>
+
+      {userType && ["farmer", "cooperative", "producteur"].includes(userType) && (
+        <div className="gwa-shell-feed px-4 pt-3 lg:hidden">
+          <WeatherWidget />
+        </div>
+      )}
 
       {/* Desktop composition */}
       <div className="gwa-feed-desktop">
@@ -1052,7 +1276,7 @@ export default function HomePage() {
           </div>
           <div className="mt-6 flex flex-col gap-1 border-t border-[#1F5C2E]/10 pt-4">
             {[
-              { key: "tout", label: "Pour vous" },
+              { key: "tout", label: "Pour toi" },
               { key: "suivis", label: "Suivis" },
               { key: "produits", label: "Produits" },
               { key: "publications", label: "Publications" },
@@ -1103,7 +1327,7 @@ export default function HomePage() {
         )}
         {isLoading ? (
           Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="bg-white p-4 rounded-2xl shadow-sm">
+            <div key={i} className="bg-white/80 p-4 rounded-2xl ring-1 ring-[#1F5C2E]/8 animate-fadeIn">
               <div className="flex items-center gap-3 mb-4">
                 <Skeleton className="h-11 w-11 rounded-full" />
                 <div className="space-y-2">
@@ -1118,68 +1342,79 @@ export default function HomePage() {
               </div>
             </div>
           ))
+        ) : feedError ? (
+          <div className="rounded-2xl border border-dashed border-[#1F5C2E]/25 bg-white/70 px-6 py-14 text-center">
+            <h3 className="font-display text-lg text-[#1F5C2E]">Pas de connexion</h3>
+            <p className="mt-2 text-sm text-[#6B7280]">
+              Impossible de charger l’accueil. Réessaie quand le réseau revient.
+            </p>
+            <Button
+              className="mt-5 rounded-full bg-[#1F5C2E] hover:bg-[#184a25]"
+              onClick={() => {
+                setRefreshing(true)
+                setRefreshKey((k) => k + 1)
+              }}
+            >
+              Réessayer
+            </Button>
+          </div>
         ) : filteredFeed.length === 0 ? (
-          <div className="bg-white p-8 text-center rounded-2xl shadow-sm">
-            <div className="w-20 h-20 rounded-full bg-[#2F7D32]/10 flex items-center justify-center mx-auto mb-4">
-              <ShoppingBag className="h-10 w-10 text-[#2F7D32]" />
+          <div className="rounded-2xl border border-dashed border-[#1F5C2E]/20 bg-white/70 p-8 text-center">
+            <div className="w-16 h-16 rounded-full bg-[#1F5C2E]/10 flex items-center justify-center mx-auto mb-4">
+              <ShoppingBag className="h-8 w-8 text-[#1F5C2E]" />
             </div>
             {user ? (
               <>
-                <h3 className="font-semibold text-lg text-[#111827] mb-2">
+                <h3 className="font-display text-lg text-[#1F5C2E] mb-2">
                   {activeTab === "suivis"
                     ? followingIds.size === 0
                       ? "Suis des producteurs"
                       : "Rien de nouveau chez tes suivis"
-                    : "Aucune publication pour le moment"}
+                    : "Rien à afficher pour l’instant"}
                 </h3>
-                <p className="text-[#4B5563] text-sm mb-6">
+                <p className="text-[#6B7280] text-sm mb-6">
                   {activeTab === "suivis"
                     ? "Appuie sur Suivre sous une publication pour remplir cet onglet."
-                    : ["producteur", "cooperative", "transformateur", "entreprise", "farmer", "processor"].includes(userType || "")
-                    ? "Publiez votre premier produit pour commencer a vendre"
-                    : userType === "entreprise" || userType === "business"
-                    ? "Explorez le marketplace pour trouver des fournisseurs"
-                    : "Decouvrez les produits des producteurs agricoles africains"
-                  }
+                    : ["producteur", "cooperative", "transformateur", "farmer", "processor"].includes(userType || "")
+                    ? "Publie ton premier produit pour commencer à vendre."
+                    : "Découvre les produits des producteurs près de toi."}
                 </p>
                 <div className="flex flex-col gap-3">
-                  {["producteur", "cooperative", "transformateur", "entreprise", "farmer", "processor"].includes(userType || "") ? (
+                  {["producteur", "cooperative", "transformateur", "farmer", "processor"].includes(userType || "") ? (
                     <Link href="/publier">
-                      <Button className="w-full rounded-full bg-[#2F7D32] hover:bg-[#256427]">
+                      <Button className="w-full rounded-full bg-[#1F5C2E] hover:bg-[#184a25]">
                         Publier un produit
                       </Button>
                     </Link>
                   ) : (
                     <Link href="/marketplace">
-                      <Button className="w-full rounded-full bg-[#2F7D32] hover:bg-[#256427]">
-                        Explorer le marketplace
+                      <Button className="w-full rounded-full bg-[#1F5C2E] hover:bg-[#184a25]">
+                        Voir le marché
                       </Button>
                     </Link>
                   )}
-                  {["producteur", "cooperative", "transformateur", "entreprise", "farmer", "processor"].includes(userType || "") && (
-                    <Link href="/dashboard">
-                      <Button variant="outline" className="w-full rounded-full bg-transparent">
-                        Mon tableau de bord
-                      </Button>
-                    </Link>
-                  )}
+                  <Link href="/marketplace">
+                    <Button variant="outline" className="w-full rounded-full border-[#1F5C2E]/25 bg-transparent">
+                      Parcourir le marché
+                    </Button>
+                  </Link>
                 </div>
               </>
             ) : (
               <>
-                <h3 className="font-semibold text-lg text-[#111827] mb-2">Bienvenue sur GWA</h3>
-                <p className="text-[#4B5563] text-sm mb-6">
-                  Découvrez et connectez-vous avec des producteurs agricoles africains
+                <h3 className="font-display text-lg text-[#1F5C2E] mb-2">Bienvenue sur GWA</h3>
+                <p className="text-[#6B7280] text-sm mb-6">
+                  Le marché agri de Côte d’Ivoire — produits frais, argent protégé.
                 </p>
                 <div className="flex flex-col gap-3">
                   <Link href="/auth/signup">
-                    <Button className="w-full rounded-full bg-[#2F7D32] hover:bg-[#256427]">
+                    <Button className="w-full rounded-full bg-[#1F5C2E] hover:bg-[#184a25]">
                       Créer un compte
                     </Button>
                   </Link>
                   <Link href="/marketplace">
-                    <Button variant="outline" className="w-full rounded-full bg-transparent">
-                      Explorer le marketplace
+                    <Button variant="outline" className="w-full rounded-full border-[#1F5C2E]/25 bg-transparent">
+                      Voir le marché
                     </Button>
                   </Link>
                 </div>
@@ -1207,6 +1442,7 @@ export default function HomePage() {
                 }
               }}
               onLike={() => handleLike(item)}
+              onDislike={() => handleDislike(item)}
               onComment={() => openComments(item)}
               onShare={() => openShare(item)}
               onSave={() => handleSave(item)}
@@ -1256,7 +1492,7 @@ export default function HomePage() {
           ) : null}
           {offlineMode ? (
             <p className="px-4 pb-4 text-center text-xs text-amber-700">
-              Mode hors ligne — contenu en cache
+              Hors ligne — tu vois le contenu enregistré
             </p>
           ) : null}
           </>
@@ -1265,7 +1501,7 @@ export default function HomePage() {
 
         <aside className="hidden lg:block sticky top-20 space-y-5">
           <div className="rounded-2xl bg-white/90 p-5 ring-1 ring-[#1F5C2E]/10">
-            <p className="font-display text-lg text-[#1F5C2E]">Le Digest</p>
+            <p className="font-display text-lg text-[#1F5C2E]">Nouveautés</p>
             <p className="mt-2 text-sm leading-relaxed text-[#4B5563]">
               Les nouveautés près de chez toi, à écouter comme une radio du marché.
             </p>
@@ -1468,7 +1704,8 @@ export default function HomePage() {
 // Composant FeedCard
 const FeedCard = memo(function FeedCard({ 
   item, 
-  onLike, 
+  onLike,
+  onDislike,
   onComment, 
   onShare, 
   onSave,
@@ -1486,6 +1723,7 @@ const FeedCard = memo(function FeedCard({
 }: { 
   item: FeedItem
   onLike: () => void
+  onDislike: () => void
   onComment: () => void
   onShare: () => void
   onSave: () => void
@@ -1530,7 +1768,7 @@ const FeedCard = memo(function FeedCard({
   const hasMultipleImages = medias && medias.length > 1
 
   return (
-    <article className="bg-white rounded-2xl overflow-hidden shadow-sm ring-1 ring-black/[0.04]" onMouseEnter={() => onPrefetch?.()} onFocusCapture={() => onPrefetch?.()} onTouchStart={() => onPrefetch?.()}>
+    <article className="bg-white/90 rounded-2xl overflow-hidden ring-1 ring-[#1F5C2E]/8 transition-shadow duration-300 hover:ring-[#1F5C2E]/20" onMouseEnter={() => onPrefetch?.()} onFocusCapture={() => onPrefetch?.()} onTouchStart={() => onPrefetch?.()}>
       {/* Header auteur — actions secondaires dans le menu */}
       <div className="flex items-center justify-between px-3.5 py-3">
         <Link 
@@ -1561,13 +1799,8 @@ const FeedCard = memo(function FeedCard({
             <p className="text-[11px] text-[#6B7280] flex items-center gap-1 truncate">
               {isProduct ? (
                 <>
-<<<<<<< Updated upstream
                   <MapPin className="h-3 w-3 shrink-0" />
                   {(data as Product).origin_region || (data as Product).origin_country || ("city" in (profile || {}) ? (profile as { city?: string }).city : null) || "Afrique"}
-=======
-                  <MapPin className="h-3 w-3" />
-                  {(data as Product).origin_region || (data as Product).origin_country || (profile as { city?: string })?.city || "Afrique"}
->>>>>>> Stashed changes
                 </>
               ) : (
                 <>{formatTimeAgo(data.created_at)}</>
@@ -1611,7 +1844,18 @@ const FeedCard = memo(function FeedCard({
               <LinkIcon className="h-4 w-4 mr-2" />
               Copier le lien
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => toast.success("Publication masquée")}>
+            <DropdownMenuItem
+              onClick={() => {
+                try {
+                  const key = `gwa_hide_${item.type}_${data.id}`
+                  localStorage.setItem(key, "1")
+                  toast.success("Publication masquée sur cet appareil")
+                  window.dispatchEvent(new CustomEvent("gwa:feed-hide", { detail: { id: data.id } }))
+                } catch {
+                  toast.success("Publication masquée")
+                }
+              }}
+            >
               <EyeOff className="h-4 w-4 mr-2" />
               Masquer
             </DropdownMenuItem>
@@ -1624,7 +1868,40 @@ const FeedCard = memo(function FeedCard({
                 Supprimer
               </DropdownMenuItem>
             ) : (
-              <DropdownMenuItem onClick={() => toast.success("Signalement envoyé")} className="text-destructive">
+              <DropdownMenuItem
+                onClick={() => {
+                  void (async () => {
+                    if (!currentUserId) {
+                      toast.error("Connecte-toi pour signaler")
+                      return
+                    }
+                    const reason =
+                      window.prompt(
+                        "Pourquoi signales-tu ce contenu ? (spam, arnaque, inapproprié…)",
+                      ) || ""
+                    if (reason.trim().length < 3) {
+                      toast.error("Motif trop court")
+                      return
+                    }
+                    const res = await fetch("/api/reports", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        reported_type: isProduct ? "product" : "post",
+                        reported_id: data.id,
+                        reason: reason.trim(),
+                      }),
+                    })
+                    if (!res.ok) {
+                      const err = await res.json().catch(() => ({}))
+                      toast.error(err.error || "Signalement impossible")
+                      return
+                    }
+                    toast.success("Signalement envoyé à la modération")
+                  })()
+                }}
+                className="text-destructive"
+              >
                 <Flag className="h-4 w-4 mr-2" />
                 Signaler
               </DropdownMenuItem>
@@ -1674,6 +1951,7 @@ const FeedCard = memo(function FeedCard({
               const now = Date.now()
               if (now - lastTapRef.current < 280) {
                 lastTapRef.current = 0
+                // Double-tap : like (post ou produit)
                 onLike()
                 return
               }
@@ -1841,7 +2119,7 @@ const FeedCard = memo(function FeedCard({
               <h3 className="font-semibold text-[#111827] text-[15px] leading-snug line-clamp-2">
                 {(data as Product).name}
               </h3>
-              <p className="text-base font-bold text-red-600 tabular-nums shrink-0">
+              <p className="text-base font-bold text-[#1F5C2E] tabular-nums shrink-0">
                 {formatPrice((data as Product).price)}
                 <span className="text-[10px] font-medium text-[#6B7280] ml-0.5">
                   /{(data as Product).unit}
@@ -1852,32 +2130,97 @@ const FeedCard = memo(function FeedCard({
         </div>
       )}
 
-      {/* Actions prioritaires : like + comment + partager (+ acheter pour produit) */}
+      {/* Actions : like/dislike + favoris (produit) | j’aime (post) */}
       <div className="flex items-center gap-1 px-2.5 py-2.5">
-        <button
-          type="button"
-          onClick={onLike}
-          className="flex items-center gap-1.5 px-2.5 py-2 rounded-full active:bg-[#FFF6E5] transition-colors"
-          aria-label="J'aime"
-        >
-          <Heart className={cn(
-            "h-6 w-6 transition-colors",
-            item.isLiked ? "fill-[#F39A1F] text-[#F39A1F]" : "text-[#4B5563]"
-          )} />
-          {(data.likes_count || 0) > 0 && (
-            <span className={cn(
-              "text-sm font-medium tabular-nums",
-              item.isLiked ? "text-[#F39A1F]" : "text-[#4B5563]"
-            )}>
-              {data.likes_count}
-            </span>
-          )}
-        </button>
+        {isProduct ? (
+          <>
+            <button
+              type="button"
+              onClick={onLike}
+              className="flex min-h-11 items-center gap-1.5 px-2.5 py-2 rounded-full active:bg-[#FFF6E5] transition-colors"
+              aria-label="J'aime"
+            >
+              <Heart
+                className={cn(
+                  "h-6 w-6 transition-colors",
+                  item.isLiked ? "fill-[#F39A1F] text-[#F39A1F]" : "text-[#4B5563]",
+                )}
+              />
+              {(data.likes_count || 0) > 0 && (
+                <span
+                  className={cn(
+                    "text-sm font-medium tabular-nums",
+                    item.isLiked ? "text-[#F39A1F]" : "text-[#4B5563]",
+                  )}
+                >
+                  {data.likes_count}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={onDislike}
+              className="flex min-h-11 items-center gap-1.5 px-2.5 py-2 rounded-full active:bg-[#FFF6E5] transition-colors"
+              aria-label="Je n'aime pas"
+            >
+              <ThumbsDown
+                className={cn(
+                  "h-6 w-6 transition-colors",
+                  item.type === "product" && item.isDisliked
+                    ? "fill-[#9CA3AF] text-[#374151]"
+                    : "text-[#4B5563]",
+                )}
+              />
+              {item.type === "product" && (item.data.dislikes_count || 0) > 0 && (
+                <span className="text-sm font-medium tabular-nums text-[#4B5563]">
+                  {item.data.dislikes_count}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={onSave}
+              className="flex min-h-11 items-center gap-1.5 px-2.5 py-2 rounded-full active:bg-[#FFF6E5] transition-colors"
+              aria-label={item.isSaved ? "Retirer des favoris" : "Ajouter aux favoris"}
+            >
+              <Bookmark
+                className={cn(
+                  "h-6 w-6 transition-colors",
+                  item.isSaved ? "fill-[#1F5C2E] text-[#1F5C2E]" : "text-[#4B5563]",
+                )}
+              />
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={onLike}
+            className="flex min-h-11 items-center gap-1.5 px-2.5 py-2 rounded-full active:bg-[#FFF6E5] transition-colors"
+            aria-label="J'aime"
+          >
+            <Heart
+              className={cn(
+                "h-6 w-6 transition-colors",
+                item.isLiked ? "fill-[#F39A1F] text-[#F39A1F]" : "text-[#4B5563]",
+              )}
+            />
+            {(data.likes_count || 0) > 0 && (
+              <span
+                className={cn(
+                  "text-sm font-medium tabular-nums",
+                  item.isLiked ? "text-[#F39A1F]" : "text-[#4B5563]",
+                )}
+              >
+                {data.likes_count}
+              </span>
+            )}
+          </button>
+        )}
 
         <button
           type="button"
           onClick={onComment}
-          className="flex items-center gap-1.5 px-2.5 py-2 rounded-full text-[#4B5563] active:bg-[#FFF6E5] transition-colors"
+          className="flex min-h-11 items-center gap-1.5 px-2.5 py-2 rounded-full text-[#4B5563] active:bg-[#FFF6E5] transition-colors"
           aria-label="Commenter"
         >
           <MessageCircle className="h-6 w-6" />
@@ -1889,7 +2232,7 @@ const FeedCard = memo(function FeedCard({
         <button
           type="button"
           onClick={onShare}
-          className="flex items-center gap-1.5 px-2.5 py-2 rounded-full text-[#4B5563] active:bg-[#FFF6E5] transition-colors"
+          className="flex min-h-11 items-center gap-1.5 px-2.5 py-2 rounded-full text-[#4B5563] active:bg-[#FFF6E5] transition-colors"
           aria-label="Partager"
         >
           <Share2 className="h-6 w-6" />
@@ -2036,7 +2379,7 @@ function CommentThread({
               type="button"
               onClick={() => onLike(comment.id)}
               className={cn(
-                "inline-flex items-center gap-1 font-medium",
+                "inline-flex min-h-11 items-center gap-1 px-1 font-medium",
                 comment.liked_by_me ? "text-[#F39A1F]" : "text-[#4B5563]",
               )}
             >
@@ -2047,7 +2390,7 @@ function CommentThread({
               <button
                 type="button"
                 onClick={() => onReply(comment)}
-                className="font-medium text-[#4B5563]"
+                className="min-h-11 px-1 font-medium text-[#4B5563]"
               >
                 Répondre
               </button>
@@ -2061,7 +2404,7 @@ function CommentThread({
                     setEditText(comment.content || "")
                     setEditing(true)
                   }}
-                  className="font-medium text-[#4B5563]"
+                  className="min-h-11 px-1 font-medium text-[#4B5563]"
                 >
                   Modifier
                 </button>

@@ -76,39 +76,112 @@ export async function PATCH(request: NextRequest, context: Ctx) {
     }
 
     const now = new Date().toISOString()
+    const requestedAmount = Math.round(Number(existing.amount_fcfa) || 0)
+    let approvedAmount =
+      body?.approved_amount_fcfa != null
+        ? Math.round(Number(body.approved_amount_fcfa))
+        : null
+    if (approvedAmount != null) {
+      if (!Number.isFinite(approvedAmount) || approvedAmount <= 0) {
+        return NextResponse.json(
+          { error: "approved_amount_fcfa invalide" },
+          { status: 400 },
+        )
+      }
+      // Ne jamais approuver au-dessus de la demande
+      approvedAmount = Math.min(approvedAmount, Math.max(0, requestedAmount))
+    }
+    const feeFcfa =
+      body?.fee_fcfa != null ? Math.round(Number(body.fee_fcfa)) : null
+    const externalRef =
+      body?.external_ref != null
+        ? String(body.external_ref).trim().slice(0, 200)
+        : null
+
+    if (newStatus === "disbursed" && !externalRef) {
+      return NextResponse.json(
+        {
+          error:
+            "external_ref requis pour le décaissement (réf. WhatsApp / virement / MM hors plateforme)",
+          code: "EXTERNAL_REF_REQUIRED",
+        },
+        { status: 400 },
+      )
+    }
+
+    const patch: Record<string, unknown> = {
+      status: newStatus,
+      admin_notes: body?.notes ? String(body.notes).slice(0, 1000) : null,
+      decided_by: gate.user.id,
+      decided_at: now,
+    }
+    if (approvedAmount != null && Number.isFinite(approvedAmount)) {
+      patch.approved_amount_fcfa = approvedAmount
+    }
+    if (feeFcfa != null && Number.isFinite(feeFcfa) && feeFcfa >= 0) {
+      patch.fee_fcfa = feeFcfa
+    }
+    if (externalRef) {
+      patch.external_ref = externalRef
+      patch.disbursed_at = now
+    }
+
     const { data, error } = await gate.admin
       .from("factoring_requests")
-      .update({
-        status: newStatus,
-        admin_notes: body?.notes ? String(body.notes).slice(0, 1000) : null,
-        decided_by: gate.user.id,
-        decided_at: now,
-      })
+      .update(patch)
       .eq("id", id)
       .select()
       .single()
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 })
+      // Retry minimal si colonnes audit absentes
+      const { data: fallback, error: err2 } = await gate.admin
+        .from("factoring_requests")
+        .update({
+          status: newStatus,
+          admin_notes: body?.notes ? String(body.notes).slice(0, 1000) : null,
+          decided_by: gate.user.id,
+          decided_at: now,
+        })
+        .eq("id", id)
+        .select()
+        .single()
+      if (err2) {
+        return NextResponse.json({ error: err2.message }, { status: 400 })
+      }
+      return NextResponse.json({
+        request: fallback,
+        warning: "Colonnes audit avancées absentes — statut mis à jour seulement",
+      })
     }
 
     const labels: Record<string, string> = {
       approved: "approuvée",
       rejected: "refusée",
-      disbursed: "décaissée",
+      disbursed: "versée (hors plateforme)",
     }
+    const amountNote =
+      approvedAmount != null
+        ? ` Montant retenu : ${approvedAmount.toLocaleString("fr-FR")} FCFA.`
+        : ""
     await gate.admin.from("notifications").insert({
       user_id: existing.requester_id,
       type: "alert",
-      title: "Mise à jour affacturage",
-      message: `Votre demande d'affacturage a été ${labels[newStatus]}.`,
-      body: `Affacturage ${labels[newStatus]}`,
+      title: "Mise à jour avance sur vente",
+      message: `Ta demande d’avance sur vente a été ${labels[newStatus]}.${amountNote}`,
+      body: `Avance sur vente ${labels[newStatus]}`,
       link: "/affacturage",
       is_read: false,
       read: false,
     })
 
-    return NextResponse.json({ request: data })
+    return NextResponse.json({
+      request: data,
+      note:
+        newStatus === "disbursed"
+          ? "Décaissement manuel hors GWA — aucun payout FeexPay automatique"
+          : undefined,
+    })
   } catch (err) {
     console.error("[api/admin/factoring]", err)
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 })

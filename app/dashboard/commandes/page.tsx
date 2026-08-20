@@ -1,8 +1,11 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useMemo, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Navigation } from "@/components/navigation"
+import { ProducerSubnav } from "@/components/producer/producer-subnav"
+import { isSellerRole } from "@/lib/dashboard/routing"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -66,12 +69,9 @@ interface AuditLog {
   action: string
   old_value: string | null
   new_value: string | null
-<<<<<<< Updated upstream
-=======
   old_status?: string
   new_status?: string
   change_reason?: string | null
->>>>>>> Stashed changes
   performed_by: string | null
   notes: string | null
   created_at: string
@@ -91,7 +91,8 @@ const orderStatuses: Record<string, { label: string; color: string; icon: typeof
   disputed: { label: ORDER_STATUS_LABELS.disputed, color: "bg-red-600", icon: AlertTriangle },
 }
 
-export default function OrdersPage() {
+function OrdersPageInner() {
+  const searchParams = useSearchParams()
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
@@ -99,9 +100,25 @@ export default function OrdersPage() {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
   const [loadingAudit, setLoadingAudit] = useState(false)
   const [user, setUser] = useState<any>(null)
+  const [userType, setUserType] = useState<string | null>(null)
   const [litigeOrderId, setLitigeOrderId] = useState<string | null>(null)
   
   const supabase = createClient()
+  const sellerMode = isSellerRole(userType)
+  const salesCount = useMemo(
+    () => orders.filter((o) => o.seller_id === user?.id).length,
+    [orders, user?.id],
+  )
+  const defaultTab = useMemo(() => {
+    const q = (searchParams?.get("tab") || "").toLowerCase()
+    if (q === "ventes" || q === "achats" || q === "active" || q === "delivered") return q
+    // Legacy deep-links
+    if (q === "all" || q === "cancelled") {
+      return sellerMode ? "ventes" : "achats"
+    }
+    if (sellerMode && salesCount > 0) return "ventes"
+    return sellerMode ? "ventes" : "achats"
+  }, [searchParams, sellerMode, salesCount])
 
   useEffect(() => {
     loadOrders()
@@ -115,6 +132,13 @@ export default function OrdersPage() {
       setLoading(false)
       return
     }
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("user_type")
+      .eq("id", user.id)
+      .maybeSingle()
+    setUserType(profile?.user_type || null)
 
     // Load orders as buyer
     const { data: buyerOrders } = await supabase
@@ -197,6 +221,29 @@ export default function OrdersPage() {
     if (selectedOrder?.id === orderId) loadAuditLog(orderId)
   }
 
+  async function leaveReview(orderId: string) {
+    const raw = window.prompt("Note de 1 à 5 pour ce vendeur ?")
+    if (raw == null) return
+    const rating = Math.round(Number(raw))
+    if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+      toast.error("Entre une note entre 1 et 5")
+      return
+    }
+    const comment =
+      window.prompt("Commentaire (optionnel)")?.trim().slice(0, 500) || undefined
+    const res = await fetch("/api/reviews", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ order_id: orderId, rating, comment }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      toast.error(data.error || "Avis non enregistré")
+      return
+    }
+    toast.success("Merci pour ton avis — ça aide le score confiance vendeur")
+  }
+
   async function confirmReception(orderId: string) {
     let receptionPhotoUrl: string | undefined
     try {
@@ -215,12 +262,12 @@ export default function OrdersPage() {
           input.click()
         })
         if (file && file.size < 8_000_000) {
-          const path = `reception/${user.id}/${orderId}-${Date.now()}.jpg`
+          const path = `${user.id}/reception/${orderId}-${Date.now()}.jpg`
           const { error: upErr } = await supabase.storage
-            .from("product-images")
+            .from("orders")
             .upload(path, file, { upsert: true, contentType: file.type || "image/jpeg" })
           if (!upErr) {
-            const { data: pub } = supabase.storage.from("product-images").getPublicUrl(path)
+            const { data: pub } = supabase.storage.from("orders").getPublicUrl(path)
             receptionPhotoUrl = pub?.publicUrl
           }
         }
@@ -300,51 +347,112 @@ export default function OrdersPage() {
       <Navigation />
 
       <div className="gwa-shell-wide w-full px-4 py-6 md:px-6 lg:py-10">
+        {sellerMode ? <ProducerSubnav /> : null}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-8">
           <div>
-            <h1 className="font-display text-2xl md:text-3xl text-[#1F5C2E]">Mes commandes</h1>
+            <h1 className="font-display text-2xl md:text-3xl text-[#1F5C2E]">
+              {sellerMode ? "Mes ventes" : "Mes commandes"}
+            </h1>
             <p className="text-[#4B5563] mt-1 text-sm md:text-base">
-              Suivi des achats et ventes.
+              {sellerMode
+                ? "Prépare, expédie et suis tes ventes — tout au même endroit."
+                : "Suivi de tes achats et livraisons."}
             </p>
           </div>
-          <Link href="/marketplace">
-            <Button className="rounded-xl bg-[#1F5C2E] hover:bg-[#184a25]">
-              Continuer les courses
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          </Link>
+          {sellerMode ? (
+            <Link href="/publier">
+              <Button className="rounded-xl bg-[#1F5C2E] hover:bg-[#184a25]">
+                Publier une offre
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
+          ) : (
+            <Link href="/marketplace">
+              <Button className="rounded-xl bg-[#1F5C2E] hover:bg-[#184a25]">
+                Continuer les courses
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
+          )}
         </div>
 
         {/* Stats — une ligne claire, pas un dashboard froid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
-          {[
-            {
-              label: "Toutes",
-              value: orders.length,
-              hint: "depuis le début",
-            },
-            {
-              label: "En route",
-              value: orders.filter((o) =>
-                ["shipped", "shipping"].includes(normalizeOrderStatus(o.status)),
-              ).length,
-              hint: "bientôt chez toi",
-            },
-            {
-              label: "Reçues",
-              value: orders.filter((o) => o.status === "delivered").length,
-              hint: "merci !",
-            },
-            {
-              label: "En cours",
-              value: orders.filter((o) =>
-                ["pending", "confirmed", "processing", "shipped", "preparing", "shipping"].includes(
-                  normalizeOrderStatus(o.status),
-                ),
-              ).length,
-              hint: "à surveiller",
-            },
-          ].map((s) => (
+          {(sellerMode
+            ? [
+                {
+                  label: "Ventes",
+                  value: salesCount,
+                  hint: "depuis le début",
+                },
+                {
+                  label: "À préparer",
+                  value: orders.filter(
+                    (o) =>
+                      o.seller_id === user?.id &&
+                      ["pending", "confirmed", "processing", "preparing"].includes(
+                        normalizeOrderStatus(o.status),
+                      ),
+                  ).length,
+                  hint: "action requise",
+                },
+                {
+                  label: "En route",
+                  value: orders.filter(
+                    (o) =>
+                      o.seller_id === user?.id &&
+                      ["shipped", "shipping"].includes(normalizeOrderStatus(o.status)),
+                  ).length,
+                  hint: "vers l’acheteur",
+                },
+                {
+                  label: "Livrées",
+                  value: orders.filter(
+                    (o) => o.seller_id === user?.id && o.status === "delivered",
+                  ).length,
+                  hint: "terminées",
+                },
+              ]
+            : [
+                {
+                  label: "Achats",
+                  value: orders.filter((o) => o.seller_id !== user?.id).length,
+                  hint: "depuis le début",
+                },
+                {
+                  label: "En route",
+                  value: orders.filter(
+                    (o) =>
+                      o.seller_id !== user?.id &&
+                      ["shipped", "shipping"].includes(normalizeOrderStatus(o.status)),
+                  ).length,
+                  hint: "bientôt chez toi",
+                },
+                {
+                  label: "Reçues",
+                  value: orders.filter(
+                    (o) => o.seller_id !== user?.id && o.status === "delivered",
+                  ).length,
+                  hint: "merci !",
+                },
+                {
+                  label: "En cours",
+                  value: orders.filter(
+                    (o) =>
+                      o.seller_id !== user?.id &&
+                      [
+                        "pending",
+                        "confirmed",
+                        "processing",
+                        "shipped",
+                        "preparing",
+                        "shipping",
+                      ].includes(normalizeOrderStatus(o.status)),
+                  ).length,
+                  hint: "à surveiller",
+                },
+              ]
+          ).map((s) => (
             <div
               key={s.label}
               className="rounded-2xl border border-[#1F5C2E]/10 bg-white/80 px-4 py-3"
@@ -377,26 +485,43 @@ export default function OrdersPage() {
           </Button>
         </div>
 
-        <Tabs defaultValue="achats">
+        <Tabs key={defaultTab} defaultValue={defaultTab}>
           <TabsList className="bg-white/80 border border-[#E5E7EB] rounded-xl h-auto flex-wrap p-1">
-            <TabsTrigger value="achats" className="rounded-lg">
-              Mes achats ({orders.filter((o) => o.seller_id !== user?.id).length})
-            </TabsTrigger>
-            <TabsTrigger value="ventes" className="rounded-lg">
-              Mes ventes ({orders.filter((o) => o.seller_id === user?.id).length})
-            </TabsTrigger>
-            <TabsTrigger value="all" className="rounded-lg">
-              Toutes ({orders.length})
-            </TabsTrigger>
-            <TabsTrigger value="active" className="rounded-lg">
-              En cours
-            </TabsTrigger>
-            <TabsTrigger value="delivered" className="rounded-lg">
-              Reçues
-            </TabsTrigger>
-            <TabsTrigger value="cancelled" className="rounded-lg">
-              Annulées
-            </TabsTrigger>
+            {sellerMode ? (
+              <>
+                <TabsTrigger value="ventes" className="rounded-lg">
+                  Mes ventes ({salesCount})
+                </TabsTrigger>
+                <TabsTrigger value="active" className="rounded-lg">
+                  En cours
+                </TabsTrigger>
+                <TabsTrigger value="delivered" className="rounded-lg">
+                  Terminées
+                </TabsTrigger>
+              </>
+            ) : (
+              <>
+                <TabsTrigger value="achats" className="rounded-lg">
+                  Mes achats ({orders.filter((o) => o.seller_id !== user?.id).length})
+                </TabsTrigger>
+                <TabsTrigger value="active" className="rounded-lg">
+                  En cours
+                </TabsTrigger>
+                <TabsTrigger value="delivered" className="rounded-lg">
+                  Reçues
+                </TabsTrigger>
+              </>
+            )}
+            {!sellerMode && salesCount > 0 ? (
+              <TabsTrigger value="ventes" className="rounded-lg">
+                Mes ventes ({salesCount})
+              </TabsTrigger>
+            ) : null}
+            {sellerMode && orders.some((o) => o.seller_id !== user?.id) ? (
+              <TabsTrigger value="achats" className="rounded-lg">
+                Mes achats
+              </TabsTrigger>
+            ) : null}
           </TabsList>
 
           <TabsContent value="achats" className="mt-6">
@@ -411,13 +536,17 @@ export default function OrdersPage() {
                     onUpdateStatus={updateOrderStatus}
                     onConfirmReception={confirmReception}
                     onOpenLitige={openLitige}
+                    onLeaveReview={leaveReview}
                     currentUserId={user?.id}
                   />
                 ))}
               {filteredOrders.filter((o) => o.seller_id !== user?.id).length === 0 ? (
-                <p className="text-center text-sm text-[#6B7280] py-10">
-                  Pas encore d’achat. Le marché t’attend.
-                </p>
+                <div className="rounded-2xl border border-dashed border-[#1F5C2E]/20 bg-white/60 px-6 py-14 text-center">
+                  <p className="text-sm text-[#6B7280]">Pas encore d’achat. Le marché t’attend.</p>
+                  <Button asChild className="mt-5 rounded-xl bg-[#1F5C2E] hover:bg-[#184a25]">
+                    <Link href="/marketplace">Parcourir le marché</Link>
+                  </Button>
+                </div>
               ) : null}
             </div>
           </TabsContent>
@@ -434,97 +563,100 @@ export default function OrdersPage() {
                     onUpdateStatus={updateOrderStatus}
                     onConfirmReception={confirmReception}
                     onOpenLitige={openLitige}
+                    onLeaveReview={leaveReview}
                     currentUserId={user?.id}
                   />
                 ))}
               {filteredOrders.filter((o) => o.seller_id === user?.id).length === 0 ? (
-                <p className="text-center text-sm text-[#6B7280] py-10">
-                  Aucune vente pour l’instant.
-                </p>
+                <div className="rounded-2xl border border-dashed border-[#1F5C2E]/20 bg-white/60 px-6 py-14 text-center">
+                  <p className="text-sm text-[#6B7280]">Aucune vente pour l’instant.</p>
+                  <Button asChild className="mt-5 rounded-xl bg-[#1F5C2E] hover:bg-[#184a25]">
+                    <Link href="/publier">Publier</Link>
+                  </Button>
+                </div>
               ) : null}
             </div>
-          </TabsContent>
-
-          <TabsContent value="all" className="mt-6">
-            {filteredOrders.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-[#1F5C2E]/20 bg-white/60 px-6 py-14 text-center">
-                <Package className="mx-auto mb-3 h-11 w-11 text-[#1F5C2E]/50" />
-                <h3 className="font-display text-lg text-[#1F5C2E]">Pas encore de commande</h3>
-                <p className="mx-auto mt-2 max-w-sm text-sm text-[#6B7280]">
-                  Quand tu achètes ou vends, le fil apparaît ici : paiement, route, réception.
-                </p>
-                <Button asChild className="mt-5 rounded-xl bg-[#1F5C2E] hover:bg-[#184a25]">
-                  <Link href="/marketplace">Parcourir le marché</Link>
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {filteredOrders.map((order) => (
-                  <OrderCard 
-                    key={order.id} 
-                    order={order} 
-                    onViewDetails={() => handleViewDetails(order)}
-                    onUpdateStatus={updateOrderStatus}
-                    onConfirmReception={confirmReception}
-                    onOpenLitige={openLitige}
-                    currentUserId={user?.id}
-                  />
-                ))}
-              </div>
-            )}
           </TabsContent>
 
           <TabsContent value="active" className="mt-6">
             <div className="space-y-4">
               {filteredOrders
-                .filter(o => ["pending", "confirmed", "processing", "shipped", "preparing", "shipping"].includes(normalizeOrderStatus(o.status)))
+                .filter((o) => {
+                  const active = [
+                    "pending",
+                    "confirmed",
+                    "processing",
+                    "shipped",
+                    "preparing",
+                    "shipping",
+                  ].includes(normalizeOrderStatus(o.status))
+                  if (!active) return false
+                  if (sellerMode) return o.seller_id === user?.id
+                  return o.seller_id !== user?.id
+                })
                 .map((order) => (
-                  <OrderCard 
-                    key={order.id} 
-                    order={order} 
+                  <OrderCard
+                    key={order.id}
+                    order={order}
                     onViewDetails={() => handleViewDetails(order)}
                     onUpdateStatus={updateOrderStatus}
                     onConfirmReception={confirmReception}
                     onOpenLitige={openLitige}
+                    onLeaveReview={leaveReview}
                     currentUserId={user?.id}
                   />
                 ))}
+              {filteredOrders.filter((o) => {
+                const active = [
+                  "pending",
+                  "confirmed",
+                  "processing",
+                  "shipped",
+                  "preparing",
+                  "shipping",
+                ].includes(normalizeOrderStatus(o.status))
+                if (!active) return false
+                if (sellerMode) return o.seller_id === user?.id
+                return o.seller_id !== user?.id
+              }).length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-[#1F5C2E]/20 bg-white/60 px-6 py-10 text-center">
+                  <p className="text-sm text-[#6B7280]">Rien en cours pour le moment.</p>
+                </div>
+              ) : null}
             </div>
           </TabsContent>
 
           <TabsContent value="delivered" className="mt-6">
             <div className="space-y-4">
               {filteredOrders
-                .filter(o => o.status === "delivered")
+                .filter((o) => {
+                  if (o.status !== "delivered") return false
+                  if (sellerMode) return o.seller_id === user?.id
+                  return o.seller_id !== user?.id
+                })
                 .map((order) => (
-                  <OrderCard 
-                    key={order.id} 
-                    order={order} 
+                  <OrderCard
+                    key={order.id}
+                    order={order}
                     onViewDetails={() => handleViewDetails(order)}
                     onUpdateStatus={updateOrderStatus}
                     onConfirmReception={confirmReception}
                     onOpenLitige={openLitige}
+                    onLeaveReview={leaveReview}
                     currentUserId={user?.id}
                   />
                 ))}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="cancelled" className="mt-6">
-            <div className="space-y-4">
-              {filteredOrders
-                .filter(o => o.status === "cancelled")
-                .map((order) => (
-                  <OrderCard 
-                    key={order.id} 
-                    order={order} 
-                    onViewDetails={() => handleViewDetails(order)}
-                    onUpdateStatus={updateOrderStatus}
-                    onConfirmReception={confirmReception}
-                    onOpenLitige={openLitige}
-                    currentUserId={user?.id}
-                  />
-                ))}
+              {filteredOrders.filter((o) => {
+                if (o.status !== "delivered") return false
+                if (sellerMode) return o.seller_id === user?.id
+                return o.seller_id !== user?.id
+              }).length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-[#1F5C2E]/20 bg-white/60 px-6 py-10 text-center">
+                  <p className="text-sm text-[#6B7280]">
+                    {sellerMode ? "Pas encore de vente terminée." : "Pas encore de commande reçue."}
+                  </p>
+                </div>
+              ) : null}
             </div>
           </TabsContent>
         </Tabs>
@@ -691,6 +823,7 @@ function OrderCard({
   onUpdateStatus,
   onConfirmReception,
   onOpenLitige,
+  onLeaveReview,
   currentUserId,
 }: {
   order: Order
@@ -698,6 +831,7 @@ function OrderCard({
   onUpdateStatus: (orderId: string, status: string, reason?: string) => void
   onConfirmReception: (orderId: string) => void
   onOpenLitige: (orderId: string) => void
+  onLeaveReview?: (orderId: string) => void
   currentUserId?: string
 }) {
   const status = normalizeOrderStatus(order.status)
@@ -828,6 +962,16 @@ function OrderCard({
                   J’ai bien reçu
                 </Button>
               )}
+              {!isSeller && status === "delivered" && onLeaveReview && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="rounded-xl border-[#1F5C2E]/30 text-[#1F5C2E]"
+                  onClick={() => onLeaveReview(order.id)}
+                >
+                  Laisser un avis
+                </Button>
+              )}
               {canLitige && (
                 <Button
                   variant="outline"
@@ -852,5 +996,19 @@ function OrderCard({
           </div>
         )}
     </div>
+  )
+}
+
+export default function OrdersPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-[#FFF6E5] text-sm text-[#6B7280]">
+          Chargement des commandes…
+        </div>
+      }
+    >
+      <OrdersPageInner />
+    </Suspense>
   )
 }

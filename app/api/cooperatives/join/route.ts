@@ -3,13 +3,12 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { assertSameOrigin } from "@/lib/security/csrf"
+import { timingSafeEqual } from "crypto"
 
 /**
  * POST /api/cooperatives/join
- * Un utilisateur authentifié rejoint une coopérative via un lien d'invitation.
- * Body: { coop_id: string }
- * Effet : membre actif (rôle member) + profiles.coop_id via service_role
- * (coop_id est gelé en self-service — trigger 049).
+ * Body: { coop_id, invite_code }
+ * Anti-spéculation : code d’invitation obligatoire (slug ou invite_code).
  */
 export async function POST(request: Request) {
   try {
@@ -31,20 +30,45 @@ export async function POST(request: Request) {
 
     const body = await request.json().catch(() => null)
     const coopId = String(body?.coop_id || "")
+    const inviteCode = String(body?.invite_code || body?.code || "")
+      .trim()
+      .toLowerCase()
     if (!coopId) {
       return NextResponse.json({ error: "coop_id requis" }, { status: 400 })
+    }
+    if (!inviteCode || inviteCode.length < 4) {
+      return NextResponse.json(
+        {
+          error: "Code d’invitation requis",
+          code: "INVITE_REQUIRED",
+        },
+        { status: 400 },
+      )
     }
 
     const admin = createAdminClient()
 
     const { data: coop } = await admin
       .from("cooperatives")
-      .select("id, name")
+      .select("id, name, slug, invite_code")
       .eq("id", coopId)
       .maybeSingle()
 
     if (!coop) {
       return NextResponse.json({ error: "Coopérative introuvable" }, { status: 404 })
+    }
+
+    const expected = String(
+      (coop as { invite_code?: string | null }).invite_code || "",
+    )
+      .trim()
+      .toLowerCase()
+    // Jamais de fallback slug (public) — invite_code obligatoire
+    if (!expected || expected.length < 16 || !safeEqualCode(inviteCode, expected)) {
+      return NextResponse.json(
+        { error: "Code d’invitation invalide", code: "INVITE_INVALID" },
+        { status: 403 },
+      )
     }
 
     const { data: existing } = await admin
@@ -72,12 +96,25 @@ export async function POST(request: Request) {
         .eq("id", existing.id)
     }
 
-    // service_role requis : trigger 049 gèle coop_id en self-service
     await admin.from("profiles").update({ coop_id: coopId }).eq("id", user.id)
 
-    return NextResponse.json({ success: true, cooperative: coop })
+    return NextResponse.json({
+      success: true,
+      cooperative: { id: coop.id, name: coop.name },
+    })
   } catch (err) {
     console.error("[api/cooperatives/join]", err)
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 })
+  }
+}
+
+function safeEqualCode(a: string, b: string): boolean {
+  try {
+    const ba = Buffer.from(a)
+    const bb = Buffer.from(b)
+    if (ba.length !== bb.length) return false
+    return timingSafeEqual(ba, bb)
+  } catch {
+    return a === b
   }
 }

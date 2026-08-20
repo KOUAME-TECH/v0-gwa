@@ -25,10 +25,10 @@ export function ListenRitualBadge({ streak, className }: ListenRitualBadgeProps)
           : "bg-[#C27D10]/10 text-[#C27D10]",
         className,
       )}
-      title={done ? "Rituel Harmattan accompli" : `${streak}/${LISTEN_RITUAL_GOAL} jours d'écoute`}
+      title={done ? "Écoute du jour accomplie" : `${streak}/${LISTEN_RITUAL_GOAL} jours d’écoute`}
     >
       <AudioWaveIcon playing={done} size="xs" variant={done ? "recorded" : "synth"} />
-      {done ? "Harmattan" : `${streak}j`}
+      {done ? "Écoute OK" : `${streak}j d’écoute`}
     </span>
   )
 }

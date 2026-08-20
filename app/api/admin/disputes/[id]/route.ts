@@ -127,14 +127,19 @@ export async function PATCH(request: NextRequest, context: Ctx) {
 
       if (order) {
         if (escrowOutcomeRaw === "release_seller") {
+          // Crédit Wallet uniquement — PAS de double payout confirm.
+          // payout_status=credited_wallet → entre dans le solde withdraw.
           await gate.admin
             .from("orders")
             .update({
               status: "delivered",
               escrow_status: "released",
+              payout_status: "credited_wallet",
+              payout_error: null,
               updated_at: now,
             })
             .eq("id", order.id)
+            .in("escrow_status", ["held", "frozen"])
           await gate.admin
             .from("escrow_transactions")
             .update({ status: "released", released_at: now })
@@ -144,27 +149,31 @@ export async function PATCH(request: NextRequest, context: Ctx) {
           await gate.admin.from("notifications").insert({
             user_id: order.seller_id,
             type: "order",
-            title: "Litige résolu — fonds libérés",
-            message: `Fonds libérés pour ${order.order_number}`,
+            title: "Litige résolu — fonds au Wallet",
+            message: `Solde crédité pour ${order.order_number} — retire depuis Wallet`,
             link: "/wallet",
             is_read: false,
             read: false,
           })
           void sendPushToUser(gate.admin as never, order.seller_id, {
             title: "Litige résolu",
-            body: `${order.order_number} — fonds libérés`,
+            body: `${order.order_number} — fonds au Wallet`,
             url: "/wallet",
           })
         } else if (escrowOutcomeRaw === "refund_buyer") {
+          // Flag ops — remboursement PSP manuel / file finances (pas un cash auto)
           await gate.admin
             .from("orders")
             .update({
               status: "cancelled",
               escrow_status: "released",
               payment_status: "refunded",
+              payout_status: "refund_ops",
+              payout_error: "REFUND_PENDING_OPS",
               updated_at: now,
             })
             .eq("id", order.id)
+            .in("escrow_status", ["held", "frozen"])
           await gate.admin
             .from("escrow_transactions")
             .update({ status: "refunded", released_at: now })
@@ -174,15 +183,15 @@ export async function PATCH(request: NextRequest, context: Ctx) {
           await gate.admin.from("notifications").insert({
             user_id: order.buyer_id,
             type: "order",
-            title: "Litige résolu — remboursement",
-            message: `Remboursement prévu pour ${order.order_number}`,
+            title: "Litige résolu — remboursement en cours",
+            message: `Remboursement en file ops pour ${order.order_number}`,
             link: "/dashboard/commandes",
             is_read: false,
             read: false,
           })
           void sendPushToUser(gate.admin as never, order.buyer_id, {
             title: "Litige résolu",
-            body: `${order.order_number} — remboursement`,
+            body: `${order.order_number} — remboursement en cours`,
             url: "/dashboard/commandes",
           })
         } else {

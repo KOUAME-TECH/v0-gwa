@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Search, SlidersHorizontal, MapPin, Heart, X, ChevronLeft, Plus, ShoppingBag } from "lucide-react"
+import { Search, SlidersHorizontal, X, ChevronLeft, Plus, ShoppingBag, Bookmark } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
@@ -33,6 +33,8 @@ import { addOrIncrementCart } from "@/lib/cart/add"
 import { prefetchProduct } from "@/lib/products/prefetch"
 import { cn } from "@/lib/utils"
 import { useHideOnScroll } from "@/hooks/use-hide-on-scroll"
+import { ProductReactionButtons } from "@/components/products/product-reaction-buttons"
+import { normalizeCount } from "@/lib/products/likes"
 import {
   feedPriorityForTier,
   hasProBadge,
@@ -56,6 +58,8 @@ type Product = {
   product_type: string
   category_id: string | null
   seller_id: string
+  likes_count?: number
+  dislikes_count?: number
   feedPriority?: number
   profiles: {
     full_name: string
@@ -72,9 +76,15 @@ function MarketplaceGridCard({
   product: p,
   listening,
   favorited,
+  liked,
+  disliked,
+  likesCount,
+  dislikesCount,
   listenProps,
   onToggleFavorite,
+  onReactionChange,
   onAddToCart,
+  onAuthRequired,
   formatPrice,
   imageQuality,
   priority = false,
@@ -83,6 +93,10 @@ function MarketplaceGridCard({
   product: Product
   listening: boolean
   favorited: boolean
+  liked: boolean
+  disliked: boolean
+  likesCount: number
+  dislikesCount: number
   listenProps: {
     text: string
     audioUrl?: string | null
@@ -91,12 +105,21 @@ function MarketplaceGridCard({
     highlight?: boolean
   }
   onToggleFavorite: (id: string, e: React.MouseEvent) => void
+  onReactionChange: (
+    id: string,
+    state: { reaction: "like" | "dislike" | null; likes_count: number; dislikes_count: number },
+  ) => void
   onAddToCart: (id: string, e: React.MouseEvent) => void
+  onAuthRequired: () => void
   formatPrice: (n: number) => string
   imageQuality: number
   priority?: boolean
   onPrefetch?: (p: Product) => void
 }) {
+  const isNew =
+    !!p.created_at &&
+    Date.now() - new Date(p.created_at).getTime() < 24 * 60 * 60 * 1000
+
   return (
     <Link
       href={`/produit/${p.id}`}
@@ -128,27 +151,43 @@ function MarketplaceGridCard({
             <ShoppingBag className="h-10 w-10 text-[#2F7D32]/40" />
           </div>
         )}
+        <ProductReactionButtons
+          productId={p.id}
+          initialLiked={liked}
+          initialDisliked={disliked}
+          initialLikesCount={likesCount}
+          initialDislikesCount={dislikesCount}
+          variant="compact"
+          onAuthRequired={onAuthRequired}
+          onChange={(state) => onReactionChange(p.id, state)}
+        />
         <button
           type="button"
           onClick={(e) => onToggleFavorite(p.id, e)}
-          className="absolute top-2 right-2 w-8 h-8 bg-white/80 backdrop-blur-sm rounded-full flex items-center justify-center"
+          aria-label={favorited ? "Retirer des favoris" : "Ajouter aux favoris"}
+          aria-pressed={favorited}
+          className="absolute top-2 right-2 min-h-11 min-w-11 flex items-center justify-center"
         >
-          <Heart className={`h-4 w-4 ${favorited ? "fill-red-500 text-red-500" : "text-gray-500"}`} />
+          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/85 backdrop-blur-sm shadow-sm">
+            <Bookmark
+              className={`h-4 w-4 ${favorited ? "fill-[#2F7D32] text-[#2F7D32]" : "text-[#4B5563]"}`}
+            />
+          </span>
         </button>
-        {p.is_organic && (
-          <Badge className="absolute top-2 left-2 bg-[#2F7D32] text-white text-[10px] px-1.5 py-0.5">Bio</Badge>
-        )}
-        {p.created_at &&
-          Date.now() - new Date(p.created_at).getTime() < 24 * 60 * 60 * 1000 && (
-            <Badge
-              className={cn(
-                "absolute top-2 text-white text-[10px] px-1.5 py-0.5 bg-[#C27D10]",
-                p.is_organic ? "left-12" : "left-2",
-              )}
-            >
-              Nouveau
-            </Badge>
-          )}
+        {/* Un seul badge prioritaire pour éviter le clutter */}
+        {p.is_organic ? (
+          <Badge className="absolute bottom-2 left-2 bg-[#2F7D32] text-white text-[10px] px-1.5 py-0.5">
+            Bio
+          </Badge>
+        ) : p.is_fair_trade ? (
+          <Badge className="absolute bottom-2 left-2 bg-[#C27D10] text-white text-[10px] px-1.5 py-0.5">
+            Équitable
+          </Badge>
+        ) : isNew ? (
+          <Badge className="absolute bottom-2 left-2 bg-[#1F5C2E] text-white text-[10px] px-1.5 py-0.5">
+            Nouveau
+          </Badge>
+        ) : null}
       </div>
       <div className="pt-2.5 px-0.5">
         <div className="flex items-start gap-1">
@@ -156,25 +195,32 @@ function MarketplaceGridCard({
           <ListenMicButton size="sm" {...listenProps} />
         </div>
         {p.profiles && (
-          <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
+          <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1 truncate">
             {p.profiles.full_name}
-            {p.profiles.is_verified && <span className="text-[#2F7D32]">{"✓"}</span>}
+            {p.profiles.is_verified && (
+              <span className="text-[#2F7D32]" aria-label="Vérifié">
+                ✓
+              </span>
+            )}
             {hasProBadge(p.profiles.subscription_tier) && (
               <Badge className="bg-[#C27D10]/15 text-[#8B5A00] text-[9px] px-1 py-0 h-4">Pro</Badge>
             )}
           </p>
         )}
         <div className="flex items-center justify-between mt-1.5">
-          <span className="text-sm font-bold text-red-600">
+          <span className="text-sm font-bold text-[#1F5C2E]">
             {formatPrice(p.price)}{" "}
             <span className="text-[10px] font-normal text-gray-500">FCFA/{p.unit}</span>
           </span>
           <button
             type="button"
             onClick={(e) => onAddToCart(p.id, e)}
-            className="w-8 h-8 rounded-full bg-[#2F7D32] text-white flex items-center justify-center"
+            aria-label="Ajouter au panier"
+            className="min-h-11 min-w-11 rounded-full flex items-center justify-center"
           >
-            <Plus className="h-4 w-4" />
+            <span className="w-8 h-8 rounded-full bg-[#2F7D32] text-white flex items-center justify-center">
+              <Plus className="h-4 w-4" />
+            </span>
           </button>
         </div>
       </div>
@@ -205,6 +251,10 @@ function MarketplaceContent() {
   const [selectedType, setSelectedType] = useState<string>("all")
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
+  const [likedIds, setLikedIds] = useState<Set<string>>(new Set())
+  const [dislikedIds, setDislikedIds] = useState<Set<string>>(new Set())
+  const [likeCounts, setLikeCounts] = useState<Record<string, number>>({})
+  const [dislikeCounts, setDislikeCounts] = useState<Record<string, number>>({})
   const [showFilters, setShowFilters] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
   const [userCity, setUserCity] = useState<string | null>(null)
@@ -315,7 +365,7 @@ function MarketplaceContent() {
         .select(`
           id, name, price, unit, description, audio_url, audio_lang, created_at, images,
           origin_country, origin_region,
-          is_organic, is_fair_trade, product_type, category_id, seller_id,
+          is_organic, is_fair_trade, product_type, category_id, seller_id, likes_count, dislikes_count,
           profiles:seller_id(full_name, avatar_url, is_verified, subscription_tier),
           categories:category_id(name, slug)
         `)
@@ -323,7 +373,6 @@ function MarketplaceContent() {
         .order("created_at", { ascending: false })
         .limit(48)
 
-<<<<<<< Updated upstream
       const digestIdsQuery =
         digestIds.length > 0
           ? supabase
@@ -331,36 +380,69 @@ function MarketplaceContent() {
               .select(`
           id, name, price, unit, description, audio_url, audio_lang, created_at, images,
           origin_country, origin_region,
-          is_organic, is_fair_trade, product_type, category_id, seller_id,
-          profiles:seller_id(full_name, avatar_url, is_verified),
+          is_organic, is_fair_trade, product_type, category_id, seller_id, likes_count, dislikes_count,
+          profiles:seller_id(full_name, avatar_url, is_verified, subscription_tier),
           categories:category_id(name, slug)
         `)
               .eq("status", "active")
               .in("id", digestIds)
           : Promise.resolve({ data: [] as Product[] })
 
-      const [productsRes, digestIdsRes, categoriesRes, favsRes, profileRes] = await Promise.all([
-        catalogQuery,
-        digestIdsQuery,
-        supabase.from("categories").select("id, name, slug, category_type").eq("category_type", "agriculture").is("parent_id", null).order("name"),
-        user ? supabase.from("favorites").select("product_id").eq("user_id", user.id).limit(200) : Promise.resolve({ data: [] as { product_id: string }[] }),
-        profilePromise,
-      ])
+      const [productsRes, digestIdsRes, categoriesRes, favsRes, likesRes, dislikesRes, profileRes] =
+        await Promise.all([
+          catalogQuery,
+          digestIdsQuery,
+          supabase
+            .from("categories")
+            .select("id, name, slug, category_type")
+            .eq("category_type", "agriculture")
+            .is("parent_id", null)
+            .order("name"),
+          user
+            ? supabase.from("favorites").select("product_id").eq("user_id", user.id).limit(200)
+            : Promise.resolve({ data: [] as { product_id: string }[] }),
+          user
+            ? supabase.from("product_likes").select("product_id").eq("user_id", user.id).limit(200)
+            : Promise.resolve({ data: [] as { product_id: string }[] }),
+          user
+            ? supabase.from("product_dislikes").select("product_id").eq("user_id", user.id).limit(200)
+            : Promise.resolve({ data: [] as { product_id: string }[] }),
+          profilePromise,
+        ])
 
       const catalog = (productsRes.data || []) as Product[]
       const digestExtra = (digestIdsRes.data || []) as Product[]
       const byId = new Map<string, Product>()
+      const counts: Record<string, number> = {}
+      const dCounts: Record<string, number> = {}
       for (const p of [...digestExtra, ...catalog]) {
         const tier = p.profiles?.subscription_tier
+        const likes = normalizeCount(p.likes_count)
+        const dislikes = normalizeCount(p.dislikes_count)
+        counts[p.id] = likes
+        dCounts[p.id] = dislikes
         byId.set(p.id, {
           ...p,
+          likes_count: likes,
+          dislikes_count: dislikes,
           feedPriority: feedPriorityForTier(tier),
         })
       }
       const merged = sortByFeedPriority([...byId.values()]).slice(0, 24)
       setProducts(merged)
+      setLikeCounts(counts)
+      setDislikeCounts(dCounts)
       if (categoriesRes.data) setCategories(categoriesRes.data)
-      if (favsRes.data) setFavorites(new Set((favsRes.data as { product_id: string }[]).map(f => f.product_id)))
+      if (favsRes.data)
+        setFavorites(new Set((favsRes.data as { product_id: string }[]).map((f) => f.product_id)))
+      if (likesRes.data) {
+        setLikedIds(new Set((likesRes.data as { product_id: string }[]).map((l) => l.product_id)))
+      }
+      if (dislikesRes.data) {
+        setDislikedIds(
+          new Set((dislikesRes.data as { product_id: string }[]).map((l) => l.product_id)),
+        )
+      }
       if (!geoCity && profileRes.data?.city) setUserCity(profileRes.data.city)
       if (!geoCountry && profileRes.data?.country) setUserCountry(profileRes.data.country)
 
@@ -379,24 +461,61 @@ function MarketplaceContent() {
     } finally {
       setIsLoading(false)
     }
-=======
-    if (productsRes.data) setProducts(productsRes.data as unknown as Product[])
-    if (categoriesRes.data) setCategories(categoriesRes.data)
-    if (favsRes.data) setFavorites(new Set((favsRes.data as { product_id: string }[]).map(f => f.product_id)))
-    setIsLoading(false)
->>>>>>> Stashed changes
   }
 
   async function toggleFavorite(id: string, e: React.MouseEvent) {
     e.preventDefault(); e.stopPropagation()
-    if (!userId) { toast.error("Connecte-toi pour ajouter aux favoris"); return }
+    if (!userId) {
+      toast.error("Connecte-toi pour ajouter aux favoris")
+      router.push(`/auth/login?redirect=${encodeURIComponent("/marketplace")}`)
+      return
+    }
     const isFav = favorites.has(id)
     setFavorites(prev => { const s = new Set(prev); isFav ? s.delete(id) : s.add(id); return s })
     if (isFav) {
-      await supabase.from("favorites").delete().eq("user_id", userId).eq("product_id", id)
+      const { error } = await supabase.from("favorites").delete().eq("user_id", userId).eq("product_id", id)
+      if (error) {
+        setFavorites(prev => { const s = new Set(prev); s.add(id); return s })
+        toast.error("Impossible de retirer des favoris")
+        return
+      }
+      toast.success("Retiré des favoris")
     } else {
-      await supabase.from("favorites").insert({ user_id: userId, product_id: id })
+      const { error } = await supabase.from("favorites").insert({ user_id: userId, product_id: id })
+      if (error) {
+        setFavorites(prev => { const s = new Set(prev); s.delete(id); return s })
+        toast.error("Impossible d'ajouter aux favoris")
+        return
+      }
+      toast.success("Ajouté aux favoris")
     }
+  }
+
+  function onReactionChange(
+    id: string,
+    state: { reaction: "like" | "dislike" | null; likes_count: number; dislikes_count: number },
+  ) {
+    setLikedIds((prev) => {
+      const next = new Set(prev)
+      if (state.reaction === "like") next.add(id)
+      else next.delete(id)
+      return next
+    })
+    setDislikedIds((prev) => {
+      const next = new Set(prev)
+      if (state.reaction === "dislike") next.add(id)
+      else next.delete(id)
+      return next
+    })
+    setLikeCounts((prev) => ({ ...prev, [id]: state.likes_count }))
+    setDislikeCounts((prev) => ({ ...prev, [id]: state.dislikes_count }))
+    setProducts((prev) =>
+      prev.map((p) =>
+        p.id === id
+          ? { ...p, likes_count: state.likes_count, dislikes_count: state.dislikes_count }
+          : p,
+      ),
+    )
   }
 
   async function addToCart(id: string, e: React.MouseEvent) {
@@ -535,16 +654,16 @@ function MarketplaceContent() {
   const handleDigestClick = () => {
     if (digest.active) {
       digest.stop()
-      toast.message("Digest arrêté")
+      toast.message("Écoute arrêtée")
       return
     }
     if (digest.total === 0) {
-      toast.error("Aucun nouveau produit dans le digest")
+      toast.error("Aucune nouveauté près de toi pour le moment")
       return
     }
     if (parcours.active) parcours.stop()
     const ok = digest.startTour()
-    if (ok) toast.success(`Digest · ${digest.total} nouveauté${digest.total > 1 ? "s" : ""}`)
+    if (ok) toast.success(`Nouveautés · ${digest.total} produit${digest.total > 1 ? "s" : ""}`)
     else if (digest.error) toast.error(digest.error)
   }
 
@@ -565,7 +684,7 @@ function MarketplaceContent() {
     } catch {
       /* ignore */
     }
-    toast.message("Digest prêt — tapez la bannière verte pour écouter.", { duration: 4000 })
+    toast.message("Nouveautés prêtes — tape la bannière verte pour écouter.", { duration: 4000 })
   }, [digestProducts.length, isDigest, isLoading])
 
   function productListenProps(p: Product) {
@@ -601,7 +720,7 @@ function MarketplaceContent() {
           <Link href="/" className="lg:hidden"><ChevronLeft className="h-6 w-6" /></Link>
           <div className="flex-1 min-w-0">
             <h1 className="text-lg font-semibold text-[#111827] lg:font-display lg:text-2xl lg:text-[#1F5C2E]">
-              Boutique
+              Marché
             </h1>
             <p className="hidden lg:block text-sm text-[#4B5563] mt-0.5">
               Produits frais près de toi — écoute ou parcours
@@ -716,7 +835,7 @@ function MarketplaceContent() {
             }}
             className="mb-3 w-full rounded-2xl border border-dashed border-[#1F5C2E]/25 bg-white px-3 py-2.5 text-left text-xs text-[#4B5563]"
           >
-            Digest : aucun produit à écouter pour le moment
+            Pas encore de nouveautés à écouter près de toi
           </button>
         )}
         {(parcours.active || digest.active) && (
@@ -724,7 +843,7 @@ function MarketplaceContent() {
             <span className="truncate">
               {parcours.active
                 ? `Parcours ${parcours.index + 1}/${parcours.total}`
-                : `Digest ${digest.index + 1}/${digest.total}`}
+                : `Nouveautés ${digest.index + 1}/${digest.total}`}
               {" · "}
               {(parcours.active
                 ? parcoursProducts[parcours.index]?.name
@@ -759,9 +878,34 @@ function MarketplaceContent() {
             <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
               <Search className="h-7 w-7 text-muted-foreground" />
             </div>
-            <h3 className="font-semibold mb-1">{searchTerm ? "Aucun resultat" : "Pas encore de produits"}</h3>
-            <p className="text-muted-foreground text-sm mb-5">{searchTerm ? "Essayez d'autres mots-cles" : "Soyez le premier a vendre"}</p>
-            {!searchTerm && <Link href="/publier"><Button className="rounded-xl bg-[#2F7D32]">Publier un produit</Button></Link>}
+            <h3 className="font-semibold mb-1">
+              {searchTerm || activeFiltersCount > 0
+                ? "Aucun résultat"
+                : "Pas encore de produits"}
+            </h3>
+            <p className="text-muted-foreground text-sm mb-5">
+              {searchTerm || activeFiltersCount > 0
+                ? "Élargis ta recherche — le catalogue chargé est limité"
+                : "Sois le premier à vendre"}
+            </p>
+            {(searchTerm || activeFiltersCount > 0) ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-xl"
+                onClick={() => {
+                  setSearchTerm("")
+                  setSelectedType("all")
+                  setSelectedCategory("all")
+                }}
+              >
+                Réinitialiser filtres
+              </Button>
+            ) : (
+              <Link href="/publier">
+                <Button className="rounded-xl bg-[#2F7D32]">Publier un produit</Button>
+              </Link>
+            )}
           </div>
         ) : (
           <>
@@ -775,9 +919,18 @@ function MarketplaceContent() {
                   product={p}
                   listening={listeningId === p.id}
                   favorited={favorites.has(p.id)}
+                  liked={likedIds.has(p.id)}
+                  disliked={dislikedIds.has(p.id)}
+                  likesCount={likeCounts[p.id] ?? normalizeCount(p.likes_count)}
+                  dislikesCount={dislikeCounts[p.id] ?? normalizeCount(p.dislikes_count)}
                   listenProps={productListenProps(p)}
                   onToggleFavorite={toggleFavorite}
+                  onReactionChange={onReactionChange}
                   onAddToCart={addToCart}
+                  onAuthRequired={() => {
+                    toast.error("Connecte-toi pour réagir")
+                    router.push(`/auth/login?redirect=${encodeURIComponent("/marketplace")}`)
+                  }}
                   formatPrice={fmt}
                   imageQuality={imageQuality}
                   priority={idx < 4}

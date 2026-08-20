@@ -1,31 +1,45 @@
-<<<<<<< Updated upstream
 import { type NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { requireUser } from "@/lib/auth/require-admin"
 import { sendPushToUser } from "@/lib/notifications/push"
 import {
   createFeexPayPayout,
   getFeexPayCredentials,
   mapPaymentMethodToNetwork,
 } from "@/lib/feexpay/client"
+import {
+  canBuyerConfirmReception,
+  normalizeOrderStatus,
+} from "@/lib/orders/escrow-flow"
+import { checkRateLimit } from "@/lib/security/rate-limiter"
+import { assertSameOrigin } from "@/lib/security/csrf"
 
 type Ctx = { params: Promise<{ id: string }> }
 
 /**
  * POST /api/orders/[id]/confirm
- * Acheteur confirme réception → payout vendeur (net commission) + release escrow.
- * Si le payout échoue : commande livrée mais escrow reste held (file ops / retry).
+ * Acheteur confirme réception (après shipped) → claim atomique held → payout vendeur.
+ * Anti-spéculation : pas de confirm précoce ; claim WHERE escrow=held ; SCG score_total.
  */
 export async function POST(request: NextRequest, context: Ctx) {
   try {
-    const { id } = await context.params
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
+    const csrf = assertSameOrigin(request)
+    if (csrf) return csrf
+    const rate = await checkRateLimit("PAYMENT")
+    if (!rate.success) {
+      return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })
     }
+
+    const { id } = await context.params
+    const gate = await requireUser()
+    if (!gate.user) {
+      return NextResponse.json(
+        { error: gate.error || "Non authentifié" },
+        { status: gate.suspended ? 403 : 401 },
+      )
+    }
+    const user = gate.user
+    const supabase = gate.supabase
 
     let receptionPhotoUrl: string | null = null
     try {
@@ -51,15 +65,23 @@ export async function POST(request: NextRequest, context: Ctx) {
     if (order.buyer_id !== user.id) {
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 })
     }
-    if (order.escrow_status === "released") {
-      return NextResponse.json({ error: "Déjà libérée" }, { status: 400 })
-    }
-    if (order.payment_status !== "paid" || order.escrow_status !== "held") {
+
+    if (
+      !canBuyerConfirmReception({
+        isSeller: false,
+        payment_status: order.payment_status,
+        escrow_status: order.escrow_status,
+        status: order.status,
+      })
+    ) {
+      const st = normalizeOrderStatus(order.status || "")
       return NextResponse.json(
         {
           error:
-            "Impossible de libérer : paiement non confirmé ou fonds non en séquestre",
-          code: "ESCROW_NOT_HELD",
+            st !== "shipped" && st !== "delivered"
+              ? "Confirme la réception seulement après expédition (statut « En route »)."
+              : "Impossible de libérer : paiement non confirmé ou fonds non protégés",
+          code: "CONFIRM_NOT_ALLOWED",
         },
         { status: 400 },
       )
@@ -68,21 +90,49 @@ export async function POST(request: NextRequest, context: Ctx) {
     const admin = createAdminClient()
     const now = new Date().toISOString()
 
+    // Claim atomique anti double-confirm / double-payout
+    // Seulement si pas déjà en payout (null ou failed)
+    const { data: claimed, error: claimErr } = await admin
+      .from("orders")
+      .update({
+        payout_status: "processing",
+        updated_at: now,
+      })
+      .eq("id", id)
+      .eq("escrow_status", "held")
+      .eq("payment_status", "paid")
+      .or("payout_status.is.null,payout_status.eq.failed")
+      .select("*")
+      .maybeSingle()
+
+    if (claimErr || !claimed) {
+      return NextResponse.json(
+        {
+          error: "Commande déjà en cours de libération ou non disponible",
+          code: "ESCROW_CLAIM_FAILED",
+        },
+        { status: 409 },
+      )
+    }
+
     const { data: sellerProfile } = await admin
       .from("profiles")
       .select("phone, full_name")
-      .eq("id", order.seller_id)
+      .eq("id", claimed.seller_id)
       .maybeSingle()
 
-    const payoutAmount =
-      order.vendeur_recoit_fcfa != null
-        ? Math.round(Number(order.vendeur_recoit_fcfa))
-        : Math.max(
-            0,
-            Math.round(Number(order.total_amount) || 0) -
-              Math.round(Number(order.commission_fcfa) || 0) -
-              Math.round(Number(order.service_fee) || 0),
-          )
+    const fromTotals = Math.max(
+      0,
+      Math.round(Number(claimed.total_amount) || 0) -
+        Math.round(Number(claimed.commission_fcfa) || 0) -
+        Math.round(Number(claimed.service_fee) || 0),
+    )
+    const claimedNet =
+      claimed.vendeur_recoit_fcfa != null
+        ? Math.round(Number(claimed.vendeur_recoit_fcfa))
+        : fromTotals
+    // Jamais payer plus que total − commissions (défense en profondeur)
+    const payoutAmount = Math.max(0, Math.min(claimedNet, fromTotals))
 
     let payoutStatus = "skipped_no_provider"
     let payoutRef: string | null = null
@@ -92,7 +142,7 @@ export async function POST(request: NextRequest, context: Ctx) {
     const creds = getFeexPayCredentials()
     const sellerPhone = String(sellerProfile?.phone || "").trim()
     const network = mapPaymentMethodToNetwork(
-      order.payment_method || order.payout_network || "orange",
+      claimed.payment_method || claimed.payout_network || "orange",
     )
 
     if (creds && payoutAmount > 0) {
@@ -100,13 +150,12 @@ export async function POST(request: NextRequest, context: Ctx) {
         payoutStatus = "failed"
         payoutError = "SELLER_PHONE_MISSING"
       } else {
-        payoutStatus = "processing"
         payoutNetwork = network
         const payout = await createFeexPayPayout({
           amountFcfa: payoutAmount,
           phone: sellerPhone,
           network,
-          description: `GWA release ${order.order_number}`,
+          description: `GWA release ${claimed.order_number}`,
         })
         if (payout.ok) {
           payoutStatus = "paid"
@@ -117,7 +166,12 @@ export async function POST(request: NextRequest, context: Ctx) {
           console.error("[api/orders/confirm] payout", payout.error, payout.raw)
         }
       }
-    } else if (!creds && process.env.ALLOW_PAYMENT_SIMULATION === "true") {
+    } else if (
+      !creds &&
+      process.env.ALLOW_PAYMENT_SIMULATION === "true" &&
+      process.env.VERCEL_ENV !== "production" &&
+      process.env.NODE_ENV !== "production"
+    ) {
       payoutStatus = "skipped_sim"
       payoutRef = `SIM-OUT-${Date.now().toString(36).toUpperCase()}`
     } else if (!creds) {
@@ -132,40 +186,66 @@ export async function POST(request: NextRequest, context: Ctx) {
       payoutStatus === "skipped_sim" ||
       payoutStatus === "skipped_zero"
 
+    // Si payout OK → released (exclu du wallet). Si KO → held + créditer plus tard via ops.
     const escrowStatus = payoutOk ? "released" : "held"
+    // Échec payout : repasser processing → null pour permettre retry ; rester held
+    const finalPayoutStatus = payoutOk
+      ? payoutStatus
+      : payoutStatus === "failed"
+        ? "failed"
+        : payoutStatus
 
     const orderPatch: Record<string, unknown> = {
       status: "delivered",
       escrow_status: escrowStatus,
       confirmed_by_buyer_at: now,
-      delivered_at: order.delivered_at || now,
+      delivered_at: claimed.delivered_at || now,
       updated_at: now,
-      payout_status: payoutStatus,
+      payout_status: finalPayoutStatus,
       payout_ref: payoutRef,
       payout_network: payoutNetwork,
       payout_at: payoutOk ? now : null,
       payout_error: payoutError,
     }
     if (receptionPhotoUrl) {
-      orderPatch.notes = [order.notes, `Photo réception: ${receptionPhotoUrl}`]
+      orderPatch.notes = [claimed.notes, `Photo réception: ${receptionPhotoUrl}`]
         .filter(Boolean)
         .join("\n")
         .slice(0, 2000)
     }
 
-    const { error: updErr } = await admin.from("orders").update(orderPatch).eq("id", id)
-    if (updErr) {
-      console.warn("[api/orders/confirm] payout cols?", updErr.message)
+    const { data: finalized, error: updErr } = await admin
+      .from("orders")
+      .update(orderPatch)
+      .eq("id", id)
+      .eq("payout_status", "processing")
+      .eq("escrow_status", "held")
+      .select("id")
+      .maybeSingle()
+
+    if (updErr || !finalized) {
+      // Litige ouvert pendant le payout, ou claim concurrent — ne pas forcer release
+      console.warn(
+        "[api/orders/confirm] finalize skipped",
+        updErr?.message || "not held/processing",
+      )
       await admin
         .from("orders")
         .update({
-          status: "delivered",
-          escrow_status: escrowStatus,
-          confirmed_by_buyer_at: now,
-          delivered_at: order.delivered_at || now,
+          payout_status: "failed",
+          payout_error: payoutError || "FINALIZE_BLOCKED_FROZEN_OR_RACE",
           updated_at: now,
         })
         .eq("id", id)
+        .eq("payout_status", "processing")
+      return NextResponse.json(
+        {
+          error:
+            "Impossible de finaliser : litige ouvert ou libération déjà en cours",
+          code: "ESCROW_FINALIZE_BLOCKED",
+        },
+        { status: 409 },
+      )
     }
 
     if (payoutOk) {
@@ -183,7 +263,7 @@ export async function POST(request: NextRequest, context: Ctx) {
       new_value: escrowStatus,
       notes: [
         receptionPhotoUrl ? `Photo: ${receptionPhotoUrl}` : null,
-        `payout=${payoutStatus}`,
+        `payout=${finalPayoutStatus}`,
         payoutRef ? `ref=${payoutRef}` : null,
         payoutError ? `err=${payoutError}` : null,
         `amount=${payoutAmount}`,
@@ -193,14 +273,14 @@ export async function POST(request: NextRequest, context: Ctx) {
     })
 
     if (payoutOk) {
-      const invoiceNumber = `FA-${order.order_number}`
+      const invoiceNumber = `FA-${claimed.order_number}`
       await admin.from("invoices").upsert(
         {
           order_id: id,
           number: invoiceNumber,
-          buyer_id: order.buyer_id,
-          seller_id: order.seller_id,
-          total_fcfa: Math.round(Number(order.total_amount) || 0),
+          buyer_id: claimed.buyer_id,
+          seller_id: claimed.seller_id,
+          total_fcfa: Math.round(Number(claimed.total_amount) || 0),
           issued_at: now,
         },
         { onConflict: "order_id", ignoreDuplicates: true },
@@ -209,13 +289,13 @@ export async function POST(request: NextRequest, context: Ctx) {
 
     const sellerMsg =
       payoutStatus === "paid"
-        ? `Fonds versés (${payoutAmount} FCFA) — ${order.order_number}`
+        ? `Fonds versés (${payoutAmount} FCFA) — ${claimed.order_number}`
         : payoutStatus === "failed"
-          ? `Livraison confirmée — payout en file ops (${order.order_number})`
-          : `L'acheteur a confirmé ${order.order_number}`
+          ? `Livraison confirmée — payout en file ops (${claimed.order_number})`
+          : `L'acheteur a confirmé ${claimed.order_number}`
 
     await admin.from("notifications").insert({
-      user_id: order.seller_id,
+      user_id: claimed.seller_id,
       type: "order",
       title:
         payoutStatus === "paid"
@@ -230,7 +310,7 @@ export async function POST(request: NextRequest, context: Ctx) {
       read: false,
     })
 
-    void sendPushToUser(supabase as never, order.seller_id, {
+    void sendPushToUser(supabase as never, claimed.seller_id, {
       title:
         payoutStatus === "paid"
           ? "Argent versé"
@@ -241,90 +321,37 @@ export async function POST(request: NextRequest, context: Ctx) {
       url: "/wallet",
     })
 
+    try {
+      const { aggregateProducerData } = await import("@/lib/scg/aggregate")
+      const { calculateSCG } = await import("@/lib/scg/engine")
+      const scgData = await aggregateProducerData(claimed.seller_id)
+      const scg = calculateSCG(scgData)
+      await admin
+        .from("profiles")
+        .update({
+          scg_score: scg.score_total,
+          scg_badge: scg.badge,
+          scg_bancable: scg.bancable,
+          scg_calculated_at: scg.calculated_at,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", claimed.seller_id)
+    } catch (scgErr) {
+      console.warn("[api/orders/confirm] scg", scgErr)
+    }
+
     return NextResponse.json({
       success: true,
       escrow_status: escrowStatus,
-      payout_status: payoutStatus,
+      payout_status: finalPayoutStatus,
       payout_ref: payoutRef,
       payout_amount_fcfa: payoutAmount,
       payout_error: payoutError,
       payout_pending: !payoutOk,
+      review_cta: true,
     })
   } catch (err) {
     console.error("[api/orders/confirm]", err)
-=======
-/**
- * POST /api/orders/[id]/confirm — Vendeur confirme la commande
- * Body optionnel: { delivery_deadline?: string (ISO date) }
- */
-import { type NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
-import { sendPushNotification } from "@/lib/notifications/push"
-
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id: orderId } = await params
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
-
-    // Seul le vendeur peut confirmer
-    const { data: order } = await supabase
-      .from("orders")
-      .select("*")
-      .eq("id", orderId)
-      .eq("seller_id", user.id)
-      .single()
-
-    if (!order) return NextResponse.json({ error: "Commande introuvable" }, { status: 404 })
-    if (!["en_attente", "paiement_escrow"].includes(order.status)) {
-      return NextResponse.json(
-        { error: `Impossible de confirmer une commande en statut "${order.status}"` },
-        { status: 400 }
-      )
-    }
-
-    let body: { delivery_deadline?: string } = {}
-    try {
-      const text = await request.text()
-      if (text) body = JSON.parse(text)
-    } catch {
-      // body optionnel — ignorer l'erreur de parsing
-    }
-
-    const now = new Date().toISOString()
-    const updates: Record<string, unknown> = {
-      status: "confirme",
-      updated_at: now,
-    }
-    if (body.delivery_deadline) {
-      updates.delivery_deadline = body.delivery_deadline
-    }
-
-    const { error: updateError } = await supabase
-      .from("orders")
-      .update(updates)
-      .eq("id", orderId)
-
-    if (updateError) {
-      console.error("[GWA] confirm order update error:", updateError)
-      return NextResponse.json({ error: updateError.message }, { status: 500 })
-    }
-
-    // Notifier l'acheteur
-    await sendPushNotification(order.buyer_id, {
-      title: "Commande confirmée ✓",
-      body: `Le vendeur a confirmé votre commande ${order.order_number}. Préparation en cours.`,
-      data: { type: "order_status", order_id: orderId },
-    }).catch(() => null)
-
-    return NextResponse.json({ success: true, order_id: orderId })
-  } catch (err) {
-    console.error("[GWA] POST /api/orders/[id]/confirm exception:", err)
->>>>>>> Stashed changes
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 })
   }
 }

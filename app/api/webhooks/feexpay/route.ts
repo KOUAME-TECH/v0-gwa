@@ -1,6 +1,11 @@
 import { createHmac, timingSafeEqual } from "crypto"
 import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import {
+  isFeexPayFailedStatus,
+  isFeexPayPaidStatus,
+  verifyFeexPayTransaction,
+} from "@/lib/feexpay/client"
 
 /**
  * POST /api/webhooks/feexpay
@@ -46,43 +51,131 @@ export async function POST(request: Request) {
       payload.reference || payload.feexpay_ref || payload.ref || "",
     )
     const status = String(payload.status || payload.payment_status || "")
-    if (!ref) {
-      return NextResponse.json({ error: "reference manquante" }, { status: 400 })
+
+    // callback_info peut être string JSON ou objet
+    let callbackOrderId: string | null = null
+    const cb = payload.callback_info ?? payload.callbackInfo
+    if (typeof cb === "string" && cb.trim()) {
+      try {
+        const parsed = JSON.parse(cb) as { order_id?: string }
+        if (parsed?.order_id) callbackOrderId = String(parsed.order_id)
+      } catch {
+        /* ignore */
+      }
+    } else if (cb && typeof cb === "object" && "order_id" in (cb as object)) {
+      callbackOrderId = String((cb as { order_id: string }).order_id)
+    }
+    if (!callbackOrderId && payload.order_id) {
+      callbackOrderId = String(payload.order_id)
+    }
+
+    if (!ref && !callbackOrderId) {
+      return NextResponse.json(
+        { error: "reference ou order_id manquant" },
+        { status: 400 },
+      )
     }
 
     const admin = createAdminClient()
-    const { data: order } = await admin
-      .from("orders")
-      .select("id, seller_id, order_number, total_amount, payment_status")
-      .eq("feexpay_ref", ref)
-      .maybeSingle()
+    let order: {
+      id: string
+      seller_id: string
+      order_number: string
+      total_amount: number
+      payment_status: string
+      feexpay_ref: string | null
+    } | null = null
+
+    if (ref) {
+      const { data } = await admin
+        .from("orders")
+        .select(
+          "id, seller_id, order_number, total_amount, payment_status, feexpay_ref",
+        )
+        .eq("feexpay_ref", ref)
+        .maybeSingle()
+      order = data
+    }
+
+    if (!order && callbackOrderId) {
+      // Uniquement si ref absente ET commande encore processing sans feexpay_ref
+      // sinon exiger le match ref (anti marquage paid arbitraire)
+      const { data } = await admin
+        .from("orders")
+        .select(
+          "id, seller_id, order_number, total_amount, payment_status, feexpay_ref",
+        )
+        .eq("id", callbackOrderId)
+        .maybeSingle()
+      if (data && (!ref || !data.feexpay_ref || data.feexpay_ref === ref)) {
+        order = data
+      }
+    }
 
     if (!order) {
       return NextResponse.json({ received: true, matched: false })
     }
 
-    const paid =
-      status === "success" ||
-      status === "paid" ||
-      status === "successful" ||
-      status === "completed"
+    // Re-vérification auprès de FeexPay (anti-spoof payload)
+    let effectiveStatus = status
+    let verifiedRaw: Record<string, unknown> = {}
+    if (ref) {
+      const verified = await verifyFeexPayTransaction(ref)
+      if (verified.ok) {
+        verifiedRaw = verified.raw || {}
+        if (verified.status) effectiveStatus = verified.status
+      } else if (isFeexPayPaidStatus(status)) {
+        // Ne pas marquer paid si le provider ne confirme pas
+        return NextResponse.json(
+          { error: "Vérification FeexPay échouée", received: true, matched: true },
+          { status: 422 },
+        )
+      }
+    } else if (isFeexPayPaidStatus(status)) {
+      return NextResponse.json(
+        { error: "Référence FeexPay manquante", received: true, matched: true },
+        { status: 422 },
+      )
+    }
+
+    const paid = isFeexPayPaidStatus(effectiveStatus)
+    const failed = isFeexPayFailedStatus(effectiveStatus)
 
     if (paid) {
       if (order.payment_status === "paid") {
-        return NextResponse.json({ received: true, matched: true, paid: true, idempotent: true })
+        return NextResponse.json({
+          received: true,
+          matched: true,
+          paid: true,
+          idempotent: true,
+        })
       }
 
       const paidAmount = Number(
-        payload.amount ?? payload.paid_amount ?? payload.montant ?? NaN,
+        verifiedRaw.amount ??
+          verifiedRaw.paid_amount ??
+          verifiedRaw.montant ??
+          payload.amount ??
+          payload.paid_amount ??
+          payload.montant ??
+          NaN,
       )
-      const expectedAmount = Number(order.total_amount)
+      const expectedAmt = Number(order.total_amount)
+      if (!Number.isFinite(paidAmount)) {
+        console.error(
+          `[webhooks/feexpay] montant manquant ref=${ref} order=${order.id}`,
+        )
+        return NextResponse.json(
+          { error: "Montant manquant", received: true, matched: true },
+          { status: 422 },
+        )
+      }
       if (
-        Number.isFinite(paidAmount) &&
-        Number.isFinite(expectedAmount) &&
-        paidAmount + 1e-6 < expectedAmount
+        Number.isFinite(expectedAmt) &&
+        paidAmount + 1e-6 < expectedAmt
       ) {
         console.error(
-          `[webhooks/feexpay] montant insuffisant ref=${ref} paid=${paidAmount} expected=${expectedAmount}`,
+          `[webhooks/feexpay] montant insuffisant ref=${ref} paid=${paidAmount} expected=${expectedAmt}`,
         )
         return NextResponse.json(
           { error: "Montant insuffisant", received: true, matched: true },
@@ -90,13 +183,15 @@ export async function POST(request: Request) {
         )
       }
 
+      const now = new Date().toISOString()
       await admin
         .from("orders")
         .update({
           payment_status: "paid",
           escrow_status: "held",
           status: "confirmed",
-          updated_at: new Date().toISOString(),
+          feexpay_ref: ref || order.feexpay_ref,
+          updated_at: now,
         })
         .eq("id", order.id)
 
@@ -104,8 +199,8 @@ export async function POST(request: Request) {
         .from("escrow_transactions")
         .update({
           status: "held",
-          feexpay_ref: ref,
-          paid_at: new Date().toISOString(),
+          feexpay_ref: ref || order.feexpay_ref,
+          paid_at: now,
         })
         .eq("order_id", order.id)
 
@@ -114,11 +209,47 @@ export async function POST(request: Request) {
         performed_by: null,
         action: "feexpay_webhook_paid",
         new_value: "held",
-        notes: `Webhook Feexpay ${ref}`,
+        notes: `Webhook FeexPay ${ref || callbackOrderId}`,
+      })
+
+      return NextResponse.json({
+        received: true,
+        matched: true,
+        paid: true,
       })
     }
 
-    return NextResponse.json({ received: true, matched: true, paid })
+    if (failed && order.payment_status !== "paid") {
+      await admin
+        .from("orders")
+        .update({
+          payment_status: "failed",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", order.id)
+
+      await admin.from("order_audit_log").insert({
+        order_id: order.id,
+        performed_by: null,
+        action: "feexpay_webhook_failed",
+        new_value: "failed",
+        notes: `Webhook FeexPay status=${effectiveStatus} ref=${ref}`,
+      })
+
+      return NextResponse.json({
+        received: true,
+        matched: true,
+        paid: false,
+        failed: true,
+      })
+    }
+
+    return NextResponse.json({
+      received: true,
+      matched: true,
+      paid: false,
+      status: effectiveStatus,
+    })
   } catch (err) {
     console.error("[webhooks/feexpay]", err)
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 })

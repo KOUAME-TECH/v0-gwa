@@ -28,10 +28,16 @@ async function flushProduct(item: PublishQueueItem): Promise<void> {
   }
 }
 
+const MAX_PUBLISH_ATTEMPTS = 5
+
 async function flushPost(item: PublishQueueItem): Promise<void> {
   const supabase = createClient()
   const content = String(item.payload.content || "").trim()
   if (!content) throw new Error("Post vide")
+  // Hors-ligne = texte seulement (médias trop lourds pour IDB v1)
+  if (Array.isArray(item.payload.media_urls) && item.payload.media_urls.length > 0) {
+    throw new Error("Médias : republier en ligne")
+  }
   const { error } = await supabase.from("posts").insert({
     author_id: item.userId,
     content,
@@ -62,6 +68,10 @@ export async function flushPublishQueue(userId?: string): Promise<SyncResult> {
   let failed = 0
 
   for (const item of queue) {
+    if ((item.attempts || 0) >= MAX_PUBLISH_ATTEMPTS) {
+      failed += 1
+      continue
+    }
     try {
       if (item.kind === "product") await flushProduct(item)
       else await flushPost(item)

@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
 
     if (!ville || !originCountry) {
       return NextResponse.json(
-        { error: "Ville et pays sont obligatoires pour apparaître dans le Digest local." },
+        { error: "Ville et pays sont obligatoires pour apparaître dans le Nouveautés locales." },
         { status: 400 },
       )
     }
@@ -160,22 +160,31 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Entitlements abo : Free = max 5 actives ; Starter+ = illimité
+    // Entitlements abo : Free = max 5 actives ; Starter+ = illimité (expiry appliquée)
     const { data: sellerProfile } = await supabase
       .from("profiles")
-      .select("subscription_tier")
+      .select("subscription_tier, subscription_expires_at, is_suspended")
       .eq("id", user.id)
       .maybeSingle()
+    if ((sellerProfile as { is_suspended?: boolean } | null)?.is_suspended) {
+      return NextResponse.json(
+        { error: "Compte suspendu", code: "SUSPENDED" },
+        { status: 403 },
+      )
+    }
+    const { effectiveSubscriptionTier } = await import("@/lib/pricing/effective-tier")
     const { canPublishAnotherListing } = await import("@/lib/pricing/entitlements")
+    const effectiveTier = effectiveSubscriptionTier(
+      (sellerProfile as { subscription_tier?: string } | null)?.subscription_tier,
+      (sellerProfile as { subscription_expires_at?: string } | null)
+        ?.subscription_expires_at,
+    )
     const { count } = await supabase
       .from("products")
       .select("id", { count: "exact", head: true })
       .eq("seller_id", user.id)
       .eq("status", "active")
-    const listingGate = canPublishAnotherListing(
-      (sellerProfile as { subscription_tier?: string } | null)?.subscription_tier,
-      count || 0,
-    )
+    const listingGate = canPublishAnotherListing(effectiveTier, count || 0)
     if (!listingGate.ok) {
       return NextResponse.json(
         {

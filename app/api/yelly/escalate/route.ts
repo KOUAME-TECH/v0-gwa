@@ -26,6 +26,17 @@ export async function POST(request: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser()
 
+    // Escalade = ticket support — réservé aux comptes connectés (anti-spam anonyme).
+    if (!user) {
+      return NextResponse.json(
+        {
+          error: "Connecte-toi pour parler à quelqu’un, ou WhatsApp +225 07 88 32 60 19.",
+          code: "AUTH_REQUIRED",
+        },
+        { status: 401 },
+      )
+    }
+
     const body = await request.json().catch(() => ({}))
     const summary = sanitizePlainText(String(body?.summary || ""), 3500)
     const page = sanitizePlainText(String(body?.page || ""), 120)
@@ -34,17 +45,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Résumé trop court" }, { status: 400 })
     }
 
-    let email = "invite@gwa.local"
-    let name = "Invité Yelly"
-    if (user) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("full_name, email")
-        .eq("id", user.id)
-        .maybeSingle()
-      name = profile?.full_name || "Utilisateur GWA"
-      email = profile?.email || user.email || email
-    }
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("full_name, email")
+      .eq("id", user.id)
+      .maybeSingle()
+    const name = profile?.full_name || "Utilisateur GWA"
+    const email = profile?.email || user.email || "user@gwa.local"
 
     const admin = createAdminClient()
     const { error } = await admin.from("contact_messages").insert({
@@ -52,7 +59,7 @@ export async function POST(request: NextRequest) {
       email: email.slice(0, 255),
       subject: `Yelly → agent (${page || "app"})`,
       message: summary,
-      user_id: user?.id || null,
+      user_id: user.id,
       status: "open",
     })
 

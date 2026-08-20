@@ -1,4 +1,3 @@
-<<<<<<< Updated upstream
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -19,6 +18,7 @@ import {
   hasAfricasTalkingProvider,
   hasSmsProvider,
   hasTwilioProvider,
+  isSmsDeliveryReady,
   sendSmsOtp,
 } from "@/lib/auth/sms"
 
@@ -80,46 +80,26 @@ export async function POST(request: Request) {
           code: "SMS_PROVIDER_MISSING",
         },
         { status: 503 },
-=======
-/**
- * POST /api/auth/send-otp
- * Envoie un OTP SMS via Supabase Auth (provider Twilio configuré dans le dashboard)
- * Body: { phone: string }  — format E.164 : +22507XXXXXXXX
- */
-import { type NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
-import { validateCIPhone, checkOtpRateLimit } from "@/lib/auth/otp"
-
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json()
-    const { phone } = body as { phone: string }
-
-    if (!phone) {
-      return NextResponse.json({ error: "Numéro de téléphone requis" }, { status: 400 })
-    }
-
-    // Validation format CI (accepte le format E.164 +225...)
-    const localPhone = phone.replace(/^\+225/, "")
-    if (!validateCIPhone(localPhone)) {
-      return NextResponse.json(
-        { error: "Numéro invalide. Format CI requis (ex: +22507XXXXXXXX)" },
-        { status: 400 }
       )
     }
 
-    // Rate limit : 5 tentatives / 15 min par numéro
-    const { allowed, waitSeconds } = checkOtpRateLimit(phone)
-    if (!allowed) {
+    if (
+      process.env.VERCEL_ENV === "production" &&
+      hasAfricasTalkingProvider() &&
+      !hasTwilioProvider() &&
+      !isSmsDeliveryReady()
+    ) {
       return NextResponse.json(
-        { error: `Trop de tentatives. Réessayez dans ${waitSeconds} secondes.` },
-        { status: 429 }
->>>>>>> Stashed changes
+        {
+          error:
+            "SMS non prêt (config opérateur). Utilisez l'email ou réessayez après configuration AT_SENDER_ID.",
+          code: "SMS_DELIVERY_NOT_READY",
+        },
+        { status: 503 },
       )
     }
 
     const supabase = await createClient()
-<<<<<<< Updated upstream
     const {
       data: { user: sessionUser },
     } = await supabase.auth.getUser()
@@ -216,13 +196,9 @@ export async function POST(request: NextRequest) {
           message: "Code SMS envoyé",
           expires_in: 600,
           resend_after: 60,
-          linked_email_masked: linkedEmail
-            ? maskEmail(linkedEmail)
-            : undefined,
           otp_mode: "supabase",
-          account_hint: accountHint,
-          phone_verified: profileByPhone?.phone_verified === true,
-        })
+          account_hint: "ok",
+                  })
       }
 
       supabasePhoneError = smsError.message
@@ -284,7 +260,9 @@ export async function POST(request: NextRequest) {
 
     const sms = await sendSmsOtp(formatted, code)
     if (!sms.success) {
-      console.error("[auth/send-otp] sms", sms.error)
+      console.error("[auth/send-otp] sms", sms.error, sms.code)
+      // Ne pas laisser un OTP fantôme si le SMS n'est pas parti
+      await clearOtp(formatted).catch(() => {})
       // Pas de fallback Supabase Phone si AT est le provider choisi :
       // sinon l'UI dit « envoyé » alors que le SMS n'arrive jamais.
       if (mode === "login" && !hasAfricasTalkingProvider()) {
@@ -293,7 +271,6 @@ export async function POST(request: NextRequest) {
           options: { shouldCreateUser: false },
         })
         if (!smsError) {
-          await clearOtp(formatted).catch(() => {})
           return NextResponse.json({
             success: true,
             phone: formatted,
@@ -302,17 +279,21 @@ export async function POST(request: NextRequest) {
             message: "Code SMS envoyé",
             expires_in: 600,
             resend_after: 60,
-            linked_email_masked: linkedEmail
-              ? maskEmail(linkedEmail)
-              : undefined,
             otp_mode: "supabase_fallback",
-            account_hint: accountHint,
+            account_hint: "ok",
           })
         }
         supabasePhoneError = smsError.message
         console.warn("[auth/send-otp] supabase fallback:", smsError.message)
       }
+      const userMessage =
+        sms.code === "AT_SENDER_ID_MISSING"
+          ? "SMS non prêt (Sender ID manquant). Utilisez l'email ou contactez le support."
+          : sms.code === "AT_SANDBOX"
+            ? "SMS encore en mode test opérateur. Utilisez l'email pour l'instant."
+            : "Impossible d'envoyer le SMS pour le moment. Réessayez plus tard ou utilisez l'email."
       const hintParts = [
+        sms.code || null,
         sms.provider
           ? `${sms.provider}:${(sms.error || "fail").slice(0, 120)}`
           : null,
@@ -323,9 +304,8 @@ export async function POST(request: NextRequest) {
       ].filter(Boolean)
       return NextResponse.json(
         {
-          error:
-            "Impossible d'envoyer le SMS pour le moment. Réessayez plus tard.",
-          code: "SMS_SEND_FAILED",
+          error: userMessage,
+          code: sms.code || "SMS_SEND_FAILED",
           hint: hintParts.join(" | ") || undefined,
         },
         { status: 502 },
@@ -341,35 +321,12 @@ export async function POST(request: NextRequest) {
       message: "Code SMS envoyé",
       expires_in: 600,
       resend_after: 60,
-      linked_email_masked: linkedEmail ? maskEmail(linkedEmail) : undefined,
       otp_mode: mode,
-      account_hint: accountHint,
-      phone_verified: profileByPhone?.phone_verified === true,
+      account_hint: "ok",
       ...(sms.warning ? { delivery_warning: sms.warning } : {}),
     })
   } catch (err) {
     console.error("[auth/send-otp]", err)
-=======
-
-    // Supabase Auth envoie l'OTP via le provider SMS configuré (Twilio)
-    const { error } = await supabase.auth.signInWithOtp({
-      phone,
-      options: { shouldCreateUser: true },
-    })
-
-    if (error) {
-      console.error("[GWA] send-otp error:", error.message)
-      // Message générique pour ne pas exposer les détails
-      return NextResponse.json(
-        { error: "Impossible d'envoyer le code. Vérifiez votre numéro." },
-        { status: 400 }
-      )
-    }
-
-    return NextResponse.json({ success: true, expires_in: 600 })
-  } catch (err) {
-    console.error("[GWA] send-otp unexpected:", err)
->>>>>>> Stashed changes
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 })
   }
 }

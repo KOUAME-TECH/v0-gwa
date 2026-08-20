@@ -1,28 +1,33 @@
-<<<<<<< Updated upstream
 import { type NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { requireUser } from "@/lib/auth/require-admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { sendPushToUser } from "@/lib/notifications/push"
 import {
   createFeexPayPayIn,
   getFeexPayCredentials,
+  getFeexPayReadiness,
   mapPaymentMethodToNetwork,
 } from "@/lib/feexpay/client"
 
 type Ctx = { params: Promise<{ id: string }> }
 
 function allowPaymentSimulation(): boolean {
+  // Jamais en prod Vercel / NODE_ENV production — même avec le flag.
+  if (
+    process.env.VERCEL_ENV === "production" ||
+    process.env.NODE_ENV === "production"
+  ) {
+    return false
+  }
   if (process.env.ALLOW_PAYMENT_SIMULATION === "true") return true
   return process.env.NODE_ENV === "development" && !process.env.VERCEL_ENV
 }
 
-function appOrigin(request: NextRequest): string {
+function appOrigin(_request: NextRequest): string {
+  // Jamais X-Forwarded-Host (spoof → return_url phishing)
   const env = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "")
   if (env) return env
-  const host = request.headers.get("x-forwarded-host") || request.headers.get("host")
-  const proto = request.headers.get("x-forwarded-proto") || "https"
-  if (host) return `${proto}://${host}`
   return "https://v0-gwa-mu.vercel.app"
 }
 
@@ -39,13 +44,15 @@ export async function POST(request: NextRequest, context: Ctx) {
     }
 
     const { id } = await context.params
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
+    const gate = await requireUser()
+    if (!gate.user) {
+      return NextResponse.json(
+        { error: gate.error || "Non authentifié" },
+        { status: gate.suspended ? 403 : 401 },
+      )
     }
+    const user = gate.user
+    const supabase = gate.supabase
 
     const { data: order } = await supabase
       .from("orders")
@@ -63,6 +70,24 @@ export async function POST(request: NextRequest, context: Ctx) {
       return NextResponse.json({ error: "Déjà payée" }, { status: 400 })
     }
 
+    // Idempotence : pay-in déjà lancé → renvoyer le même état
+    if (
+      order.payment_status === "processing" &&
+      order.feexpay_ref &&
+      !String(order.feexpay_ref).startsWith("SIM-")
+    ) {
+      return NextResponse.json({
+        status: "ussd_pending",
+        feexpay_ref: order.feexpay_ref,
+        payment_url: null,
+        network: mapPaymentMethodToNetwork(
+          String(order.payment_method || "orange"),
+        ),
+        message: "Paiement déjà initié — valide sur ton téléphone ou attends la confirmation",
+        idempotent: true,
+      })
+    }
+
     const body = await request.json().catch(() => ({}))
     const paymentMethod =
       String(body?.payment_method || order.payment_method || "orange").trim()
@@ -78,10 +103,13 @@ export async function POST(request: NextRequest, context: Ctx) {
       String(body?.phone || order.shipping_phone || buyerProfile?.phone || "").trim()
 
     const admin = createAdminClient()
-    const creds = getFeexPayCredentials()
+    const readiness = getFeexPayReadiness()
+    const creds = readiness.payin_ready ? getFeexPayCredentials() : null
     const amount = Math.round(Number(order.total_amount) || 0)
     const origin = appOrigin(request)
-    const returnUrl = `${origin}/commandes/confirmation?order=${id}`
+    const returnUrl = `${origin}/commandes/confirmation?order=${id}&pending=1`
+    const exposeDetails =
+      process.env.NODE_ENV !== "production" && process.env.VERCEL_ENV !== "production"
 
     if (creds) {
       if (!phone) {
@@ -112,7 +140,7 @@ export async function POST(request: NextRequest, context: Ctx) {
           {
             error: "Échec initiation paiement FeexPay",
             code: payIn.error || "PAYIN_FAILED",
-            details: payIn.raw,
+            ...(exposeDetails ? { details: payIn.raw } : {}),
           },
           { status: 502 },
         )
@@ -154,8 +182,11 @@ export async function POST(request: NextRequest, context: Ctx) {
       return NextResponse.json(
         {
           error:
-            "Paiements live non configurés. Définissez FEEXPAY_API_KEY + FEEXPAY_SHOP_ID.",
-          code: "PAYMENT_PROVIDER_MISSING",
+            readiness.live_blocked_reason ||
+            "Paiements live non prêts. Définissez FEEXPAY_API_KEY + FEEXPAY_SHOP_ID + FEEXPAY_WEBHOOK_SECRET (mode live).",
+          code: readiness.configured
+            ? "PAYMENT_WEBHOOK_MISSING"
+            : "PAYMENT_PROVIDER_MISSING",
         },
         { status: 503 },
       )
@@ -195,8 +226,8 @@ export async function POST(request: NextRequest, context: Ctx) {
     await admin.from("notifications").insert({
       user_id: order.seller_id,
       type: "order",
-      title: "Paiement reçu (escrow)",
-      message: `Commande ${order.order_number} payée — fonds en séquestre`,
+      title: "Paiement reçu (argent protégé)",
+      message: `Commande ${order.order_number} payée — fonds sécurisés`,
       body: `Commande ${order.order_number} payée`,
       link: `/dashboard/commandes`,
       is_read: false,
@@ -204,7 +235,7 @@ export async function POST(request: NextRequest, context: Ctx) {
     })
 
     void sendPushToUser(supabase as never, order.seller_id, {
-      title: "Paiement escrow GWA",
+      title: "Paiement GWA — argent protégé",
       body: `${order.order_number} — fonds sécurisés`,
       url: "/dashboard/commandes",
     })
@@ -218,107 +249,6 @@ export async function POST(request: NextRequest, context: Ctx) {
     })
   } catch (err) {
     console.error("[api/orders/pay]", err)
-=======
-/**
- * POST /api/orders/[id]/pay
- * Initie le paiement escrow via Feexpay
- * Body: { paiement_type, phone_paiement }
- */
-import { type NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
-import { capturePayment, type FeexpayNetwork } from "@/lib/payment/feexpay"
-import { sendPushNotification } from "@/lib/notifications/push"
-
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id: orderId } = await params
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
-
-    const body = await request.json()
-    const { paiement_type, phone_paiement } = body as {
-      paiement_type: FeexpayNetwork
-      phone_paiement: string
-    }
-
-    // Charger la commande
-    const { data: order } = await supabase
-      .from("orders")
-      .select("*, profiles!orders_seller_id_fkey(full_name)")
-      .eq("id", orderId)
-      .eq("buyer_id", user.id)
-      .single()
-
-    if (!order) return NextResponse.json({ error: "Commande introuvable" }, { status: 404 })
-    if (order.escrow_status !== "pending") {
-      return NextResponse.json({ error: "Cette commande a déjà été payée" }, { status: 400 })
-    }
-
-    // Charger profil acheteur pour le nom
-    const { data: buyer } = await supabase
-      .from("profiles")
-      .select("full_name, phone")
-      .eq("id", user.id)
-      .single()
-
-    const nameParts = (buyer?.full_name ?? "").split(" ")
-
-    // Appel Feexpay
-    const result = await capturePayment({
-      amount: order.total_amount,
-      phoneNumber: phone_paiement,
-      network: paiement_type,
-      motif: `Commande GWA ${order.order_number}`,
-      orderId: order.id,
-      buyerEmail: user.email,
-      buyerFirstName: nameParts[0],
-      buyerLastName: nameParts.slice(1).join(" "),
-    })
-
-    if (!result.success) {
-      return NextResponse.json({ error: result.message ?? "Échec du paiement" }, { status: 400 })
-    }
-
-    // Mettre à jour la commande — statut en attente webhook
-    await supabase
-      .from("orders")
-      .update({
-        feexpay_ref: result.feexpay_ref,
-        paiement_type,
-        status: "paiement_escrow",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", orderId)
-
-    // Mettre à jour escrow_transaction tranche 1
-    await supabase
-      .from("escrow_transactions")
-      .update({
-        feexpay_ref: result.feexpay_ref,
-        paid_at: new Date().toISOString(),
-      })
-      .eq("order_id", orderId)
-      .eq("tranche_numero", 1)
-
-    // Notif acheteur
-    await sendPushNotification(user.id, {
-      title: "Paiement en cours...",
-      body: `Validez le paiement de ${order.total_amount.toLocaleString("fr-FR")} FCFA sur votre téléphone.`,
-      data: { type: "payment", order_id: orderId },
-    }).catch(() => null)
-
-    return NextResponse.json({
-      success: true,
-      feexpay_ref: result.feexpay_ref,
-      message: "Confirmez le paiement sur votre téléphone.",
-    })
-  } catch (err) {
-    console.error("[GWA] /api/orders/[id]/pay error:", err)
->>>>>>> Stashed changes
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 })
   }
 }

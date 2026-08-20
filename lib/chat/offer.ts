@@ -12,14 +12,24 @@ export type PriceOfferPayload = {
   currency: "XOF"
   productName?: string
   productId?: string
+  /** Quantité négociée (optionnelle) — lie from-offer */
+  quantity?: number
   status: OfferStatus
   note?: string
+  /** Set only by server /api/offers/respond — never trust client. */
+  accepted_by?: string
+  accepted_at?: string
+  accepted_via?: "api_offers_respond"
+  declined_by?: string
+  declined_at?: string
+  declined_via?: "api_offers_respond"
 }
 
 export function buildOfferContent(input: {
   amount: number
   productName?: string
   productId?: string
+  quantity?: number
   note?: string
   status?: OfferStatus
 }): string {
@@ -36,6 +46,13 @@ export function buildOfferContent(input: {
   }
   if (input.productName) payload.productName = input.productName
   if (input.productId) payload.productId = input.productId
+  if (
+    typeof input.quantity === "number" &&
+    Number.isFinite(input.quantity) &&
+    input.quantity >= 1
+  ) {
+    payload.quantity = Math.min(999_999, Math.round(input.quantity))
+  }
   if (input.note) payload.note = input.note
   return JSON.stringify(payload)
 }

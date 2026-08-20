@@ -408,7 +408,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     const toastId = toast.loading(type === "image" ? "Envoi de l'image..." : "Envoi du fichier...")
 
     const ext = file.name.split(".").pop()
-    const path = `chat/${conversation.id}/${Date.now()}.${ext}`
+    const path = `${userId}/chat/${conversation.id}/${Date.now()}.${ext}`
     const { error: upErr } = await supabase.storage.from("chat-media").upload(path, file)
 
     if (upErr) {
@@ -596,7 +596,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
 
     // Upload audio blob to storage
     const ext = audioPreview.blob.type.includes('webm') ? 'webm' : 'mp4'
-    const path = `chat/${conversation.id}/${Date.now()}.${ext}`
+    const path = `${userId}/chat/${conversation.id}/${Date.now()}.${ext}`
     const { error: upErr } = await supabase.storage.from("chat-media").upload(path, audioPreview.blob)
     if (upErr) {
       toast.error("Envoi vocal échoué, réessayez")
@@ -792,57 +792,69 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     offer: PriceOfferPayload,
     status: "accepted" | "declined",
   ) {
-    const next = { ...offer, status }
-    const content = JSON.stringify(next)
-    const { error } = await supabase
-      .from("messages")
-      .update({ content, is_edited: true })
-      .eq("id", msg.id)
-    if (error) {
-      toast.error("Mise à jour impossible")
-      return
-    }
-    setMessages((prev) =>
-      prev.map((m) => (m.id === msg.id ? { ...m, content, is_edited: true } : m)),
-    )
-    const replyText =
-      status === "accepted"
-        ? `J'accepte l'offre de ${formatOfferAmount(offer.amount)} FCFA`
-        : `Je refuse l'offre de ${formatOfferAmount(offer.amount)} FCFA`
-    await supabase.from("messages").insert({
-      conversation_id: conversation.id,
-      sender_id: userId,
-      content: replyText,
-      message_type: "text",
-      reply_to_id: msg.id,
-    })
-
-    if (status === "accepted") {
-      const toastId = toast.loading("Création de la commande au prix négocié…")
-      try {
-        const res = await fetch("/api/orders/from-offer", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message_id: msg.id, quantity: 1 }),
-        })
-        const data = await res.json().catch(() => ({}))
-        toast.dismiss(toastId)
-        if (!res.ok) {
-          toast.error(data.error || "Offre acceptée, commande à finaliser")
-        } else {
-          toast.success("Commande créée au prix négocié")
-          if (data.redirect_to) {
-            window.setTimeout(() => {
-              window.location.href = data.redirect_to
-            }, 600)
-          }
-        }
-      } catch {
-        toast.dismiss(toastId)
-        toast.error("Erreur réseau commande")
+    try {
+      const res = await fetch("/api/offers/respond", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message_id: msg.id, action: status }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(data.error || "Mise à jour impossible")
+        return
       }
-    } else {
-      toast.success("Offre refusée")
+      const content = typeof data.content === "string" ? data.content : JSON.stringify({ ...offer, status })
+      setMessages((prev) =>
+        prev.map((m) => (m.id === msg.id ? { ...m, content, is_edited: true } : m)),
+      )
+      const replyText =
+        status === "accepted"
+          ? `J'accepte l'offre de ${formatOfferAmount(offer.amount)} FCFA`
+          : `Je refuse l'offre de ${formatOfferAmount(offer.amount)} FCFA`
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `local-${Date.now()}`,
+          conversation_id: conversation.id,
+          sender_id: userId,
+          content: replyText,
+          message_type: "text",
+          created_at: new Date().toISOString(),
+          is_edited: false,
+          is_read: false,
+          reply_to_id: msg.id,
+        },
+      ])
+
+      if (status === "accepted") {
+        const toastId = toast.loading("Création de la commande au prix négocié…")
+        try {
+          const orderRes = await fetch("/api/orders/from-offer", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message_id: msg.id, quantity: 1 }),
+          })
+          const orderData = await orderRes.json().catch(() => ({}))
+          toast.dismiss(toastId)
+          if (!orderRes.ok) {
+            toast.error(orderData.error || "Offre acceptée, commande à finaliser")
+          } else {
+            toast.success("Commande créée au prix négocié")
+            if (orderData.redirect_to) {
+              window.setTimeout(() => {
+                window.location.href = orderData.redirect_to
+              }, 600)
+            }
+          }
+        } catch {
+          toast.dismiss(toastId)
+          toast.error("Erreur réseau commande")
+        }
+      } else {
+        toast.success("Offre refusée")
+      }
+    } catch {
+      toast.error("Erreur réseau")
     }
   }
 

@@ -42,9 +42,11 @@ interface Order {
 function ConfirmationContent() {
   const searchParams = useSearchParams()
   const orderId = searchParams.get('order')
+  const pendingFlag = searchParams.get('pending')
   
   const [order, setOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(true)
+  const [polling, setPolling] = useState(false)
   const [deliveryMap, setDeliveryMap] = useState<{
     lat: number
     lon: number
@@ -62,6 +64,48 @@ function ConfirmationContent() {
       setLoading(false)
     }
   }, [orderId])
+
+  // Poll paiement USSD / processing jusqu'à paid|failed
+  useEffect(() => {
+    if (!orderId || !order) return
+    const needsPoll =
+      order.payment_status === "processing" ||
+      pendingFlag === "1" ||
+      pendingFlag === "ussd"
+    if (!needsPoll || order.payment_status === "paid") return
+
+    setPolling(true)
+    let cancelled = false
+    let ticks = 0
+    const timer = setInterval(() => {
+      ticks += 1
+      void fetch(`/api/orders/${orderId}/payment-status`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (cancelled || !data) return
+          if (
+            data.payment_status === "paid" ||
+            data.payment_status === "failed"
+          ) {
+            void loadOrder(orderId)
+            setPolling(false)
+            clearInterval(timer)
+          }
+        })
+        .catch(() => undefined)
+      if (ticks >= 40) {
+        // ~2 min
+        setPolling(false)
+        clearInterval(timer)
+      }
+    }, 3000)
+
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+      setPolling(false)
+    }
+  }, [orderId, order?.payment_status, pendingFlag])
 
   useEffect(() => {
     if (!order) {
@@ -128,7 +172,7 @@ function ConfirmationContent() {
 
   const orderStatuses = [
     { status: "pending", label: "Commande reçue", icon: CheckCircle2, completed: true },
-    { status: "confirmed", label: "Confirmée", icon: Package, completed: ["confirmed", "processing", "shipped", "delivered"].includes(order?.status || "") },
+    { status: "confirmed", label: "Payée", icon: Package, completed: ["confirmed", "processing", "shipped", "delivered"].includes(order?.status || "") },
     { status: "shipped", label: "En livraison", icon: Truck, completed: order?.status === "shipped" || order?.status === "delivered" },
     { status: "delivered", label: "Livrée", icon: MapPin, completed: order?.status === "delivered" },
   ]
@@ -144,19 +188,19 @@ function ConfirmationContent() {
     )
   }
 
-  // If no order found or no order ID, show a generic success
+  // If no order found or no order ID
   if (!order) {
     return (
       <div className="flex min-h-screen flex-col">
         <Navigation />
         <div className="container px-4 py-8">
           <div className="max-w-2xl mx-auto text-center">
-            <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-              <CheckCircle2 className="h-10 w-10 text-primary" />
+            <div className="h-20 w-20 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
+              <Package className="h-10 w-10 text-muted-foreground" />
             </div>
-            <h1 className="text-3xl font-bold mb-2">Commande Confirmée !</h1>
+            <h1 className="text-3xl font-bold mb-2">Commande introuvable</h1>
             <p className="text-muted-foreground mb-8">
-              Merci pour votre commande. Vous recevrez un SMS de confirmation sous peu.
+              Vérifie le lien ou ouvre tes commandes depuis le tableau de bord.
             </p>
             <div className="flex gap-4 justify-center">
               <Button variant="outline" asChild>
@@ -178,20 +222,53 @@ function ConfirmationContent() {
     )
   }
 
+  const paymentPending =
+    order.payment_status === "processing" ||
+    order.payment_status === "pending"
+  const paymentFailed = order.payment_status === "failed"
+  const paymentOk =
+    order.payment_status === "paid" || order.escrow_status === "held"
+
   return (
     <div className="flex min-h-screen flex-col">
       <Navigation />
 
       <div className="container px-4 py-8">
         <div className="max-w-2xl mx-auto">
-          {/* Success Message */}
+          {/* Status Message */}
           <div className="text-center mb-8">
-            <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-              <CheckCircle2 className="h-10 w-10 text-primary" />
+            <div
+              className={`h-20 w-20 rounded-full flex items-center justify-center mx-auto mb-4 ${
+                paymentFailed
+                  ? "bg-destructive/10"
+                  : paymentPending
+                    ? "bg-amber-500/10"
+                    : "bg-primary/10"
+              }`}
+            >
+              {paymentPending || polling ? (
+                <Loader2 className="h-10 w-10 animate-spin text-amber-600" />
+              ) : (
+                <CheckCircle2
+                  className={`h-10 w-10 ${
+                    paymentFailed ? "text-destructive" : "text-primary"
+                  }`}
+                />
+              )}
             </div>
-            <h1 className="text-3xl font-bold mb-2">Commande Confirmée !</h1>
+            <h1 className="text-3xl font-bold mb-2">
+              {paymentFailed
+                ? "Paiement échoué"
+                : paymentPending
+                  ? "En attente de validation Mobile Money"
+                  : "Paiement reçu"}
+            </h1>
             <p className="text-muted-foreground">
-              Merci. Ton paiement est protégé : le vendeur touche l’argent après confirmation de livraison.
+              {paymentFailed
+                ? "Le paiement n’a pas abouti. Réessaie depuis tes commandes."
+                : paymentPending
+                  ? "Valide sur ton téléphone (USSD / push). Cette page se met à jour automatiquement."
+                  : "Ton argent est protégé : le vendeur est payé après que tu confirmes la réception."}
             </p>
           </div>
 

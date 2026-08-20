@@ -6,7 +6,7 @@ type Ctx = { params: Promise<{ id: string }> }
 
 /**
  * PATCH /api/admin/reports/[id]
- * Body: { action: "resolved"|"dismissed", notes? } — idempotent
+ * Body: { action: "resolved"|"dismissed", notes?, takedown?: boolean }
  */
 export async function PATCH(request: NextRequest, context: Ctx) {
   try {
@@ -27,6 +27,7 @@ export async function PATCH(request: NextRequest, context: Ctx) {
     const body = await request.json().catch(() => ({}))
     const action = String(body?.action || "")
     const notes = body?.notes != null ? String(body.notes).slice(0, 1000) : null
+    const takedown = body?.takedown === true || body?.moderation === "takedown"
 
     if (action !== "resolved" && action !== "dismissed") {
       return NextResponse.json(
@@ -37,7 +38,7 @@ export async function PATCH(request: NextRequest, context: Ctx) {
 
     const { data: existing, error: findErr } = await gate.admin
       .from("reports")
-      .select("id, status")
+      .select("id, status, reported_type, reported_id")
       .eq("id", id)
       .maybeSingle()
 
@@ -45,12 +46,40 @@ export async function PATCH(request: NextRequest, context: Ctx) {
       return NextResponse.json({ error: "Signalement introuvable" }, { status: 404 })
     }
 
-    if (existing.status === action) {
+    if (existing.status === action && !takedown) {
       return NextResponse.json({
         success: true,
         idempotent: true,
         report: existing,
       })
+    }
+
+    let takedownApplied: string | null = null
+    if (takedown && action === "resolved" && existing.reported_id) {
+      const type = String(existing.reported_type || "")
+      if (type === "post") {
+        const { error } = await gate.admin
+          .from("posts")
+          .update({ visibility: "private" })
+          .eq("id", existing.reported_id)
+        if (!error) takedownApplied = "post:private"
+      } else if (type === "product") {
+        const { error } = await gate.admin
+          .from("products")
+          .update({
+            moderation_status: "rejected",
+            status: "archived",
+          })
+          .eq("id", existing.reported_id)
+        if (!error) takedownApplied = "product:rejected"
+      } else if (type === "comment") {
+        // Soft-delete best-effort (colonnes variables)
+        const { error } = await gate.admin
+          .from("post_comments")
+          .update({ content: "[contenu retiré par modération]" })
+          .eq("id", existing.reported_id)
+        if (!error) takedownApplied = "comment:redacted"
+      }
     }
 
     const { data, error } = await gate.admin
@@ -74,10 +103,15 @@ export async function PATCH(request: NextRequest, context: Ctx) {
       action: `${action}_report`,
       entity_type: "report",
       entity_id: id,
-      new_data: { status: action, notes },
+      new_data: { status: action, notes, takedown: takedownApplied },
     })
 
-    return NextResponse.json({ success: true, idempotent: false, report: data })
+    return NextResponse.json({
+      success: true,
+      idempotent: false,
+      report: data,
+      takedown: takedownApplied,
+    })
   } catch (err) {
     console.error("[api/admin/reports/id]", err)
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 })

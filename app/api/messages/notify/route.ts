@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+import { requireUser } from "@/lib/auth/require-admin"
 import { sendPushToUser } from "@/lib/notifications/push"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
+import { sanitizePlainText } from "@/lib/security/validation"
 
 /**
  * POST /api/messages/notify
@@ -14,17 +15,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Trop de messages" }, { status: 429 })
     }
 
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
+    const gate = await requireUser()
+    if (!gate.user) {
+      return NextResponse.json(
+        { error: gate.error || "Non authentifié" },
+        { status: gate.suspended ? 403 : 401 },
+      )
     }
+    const user = gate.user
+    const supabase = gate.supabase
 
     const body = await request.json()
     const conversationId = String(body?.conversation_id || "")
-    const preview = String(body?.preview || "Nouveau message").slice(0, 120)
+    const preview = sanitizePlainText(
+      String(body?.preview || "Nouveau message"),
+      120,
+    )
 
     if (!conversationId) {
       return NextResponse.json(
@@ -44,6 +50,26 @@ export async function POST(request: Request) {
         { error: "Conversation introuvable" },
         { status: 404 },
       )
+    }
+
+    // Best-effort : s'assurer qu'un message récent de l'émetteur existe dans la conv
+    try {
+      const { data: latest, error: msgErr } = await supabase
+        .from("messages")
+        .select("id")
+        .eq("conversation_id", conversationId)
+        .eq("sender_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (!msgErr && !latest) {
+        return NextResponse.json(
+          { error: "Aucun message de l'émetteur dans cette conversation" },
+          { status: 400 },
+        )
+      }
+    } catch {
+      // non bloquant si la vérif échoue techniquement
     }
 
     const recipientId =

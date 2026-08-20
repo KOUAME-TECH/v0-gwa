@@ -106,46 +106,79 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const now = new Date().toISOString()
+    const now = new Date()
+    const nowIso = now.toISOString()
+    const expires = new Date(now)
+    expires.setDate(expires.getDate() + 30)
+    const expiresIso = expires.toISOString()
+    const paymentProof =
+      body?.payment_proof_url != null
+        ? String(body.payment_proof_url).trim().slice(0, 800)
+        : body?.whatsapp_note != null
+          ? String(body.whatsapp_note).trim().slice(0, 500)
+          : null
+
+    const profilePatch: Record<string, unknown> = {
+      subscription_tier: tier,
+      updated_at: nowIso,
+    }
+    // Colonnes optionnelles (migrations variables)
+    profilePatch.subscription_expires_at = expiresIso
+
     const { error: updErr } = await admin
       .from("profiles")
-      .update({ subscription_tier: tier, updated_at: now })
+      .update(profilePatch)
       .eq("id", targetUserId)
 
     if (updErr) {
-      console.error("[api/subscriptions/activate] profile", updErr.message)
-      return NextResponse.json({ error: "Activation impossible" }, { status: 500 })
+      // Retry sans expires si colonne absente
+      const { error: retryErr } = await admin
+        .from("profiles")
+        .update({ subscription_tier: tier, updated_at: nowIso })
+        .eq("id", targetUserId)
+      if (retryErr) {
+        console.error("[api/subscriptions/activate] profile", retryErr.message)
+        return NextResponse.json({ error: "Activation impossible" }, { status: 500 })
+      }
     }
 
+    const reqPatch: Record<string, unknown> = {
+      status: "activated",
+      activated_at: nowIso,
+      activated_by: gate.user.id,
+      updated_at: nowIso,
+    }
+    if (paymentProof) reqPatch.admin_notes = paymentProof
+
     if (requestId) {
-      await admin
-        .from("subscription_requests")
-        .update({
-          status: "activated",
-          activated_at: now,
-          activated_by: gate.user.id,
-          updated_at: now,
-        })
-        .eq("id", requestId)
+      await admin.from("subscription_requests").update(reqPatch).eq("id", requestId)
     } else {
       await admin
         .from("subscription_requests")
-        .update({
-          status: "activated",
-          activated_at: now,
-          activated_by: gate.user.id,
-          updated_at: now,
-        })
+        .update(reqPatch)
         .eq("user_id", targetUserId)
         .eq("requested_tier", tier)
         .eq("status", "pending")
     }
+
+    await admin.from("notifications").insert({
+      user_id: targetUserId,
+      type: "alert",
+      title: "Abonnement activé",
+      message: `Ton palier ${tier} est actif jusqu’au ${expires.toLocaleDateString("fr-FR")}.`,
+      body: `Abonnement ${tier} activé`,
+      link: "/abonnement",
+      is_read: false,
+      read: false,
+    })
 
     return NextResponse.json({
       success: true,
       user_id: targetUserId,
       tier,
       previous_tier: targetProfile.subscription_tier,
+      expires_at: expiresIso,
+      payment_proof_saved: !!paymentProof,
     })
   } catch (err) {
     console.error("[api/subscriptions/activate]", err)

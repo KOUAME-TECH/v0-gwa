@@ -11,7 +11,7 @@ const COACH_MAP: Record<keyof SCGDimensions, Omit<CoachAction, "dim">> = {
   fiabilite: {
     title: "Honorer tes prochaines livraisons",
     how: "Confirme et livre à l’heure — chaque commande réussie monte ta fiabilité.",
-    href: "/dashboard/commandes",
+    href: "/dashboard/commandes?tab=ventes",
   },
   qualite: {
     title: "Soigner la qualité perçue",
@@ -26,7 +26,7 @@ const COACH_MAP: Record<keyof SCGDimensions, Omit<CoachAction, "dim">> = {
   volumes: {
     title: "Augmenter un peu les volumes",
     how: "Ajoute une offre claire (prix + quantité) pour plus de transactions.",
-    href: "/dashboard/products/new",
+    href: "/publier",
   },
   stabilite: {
     title: "Stabiliser ton approvisionnement",
@@ -47,12 +47,15 @@ export function coachBand(score: number): CoachBand {
 export function coachIntro(score: number): string {
   const band = coachBand(score)
   if (band === "low") {
-    return `Ton score est ${score}. On part de bas, c’est normal — trois gestes concrets pour remonter.`
+    return `Ton score est ${score}. C’est un début — trois gestes simples pour monter. À 500, tu peux demander une avance sur vente.`
   }
   if (band === "mid") {
-    return `Ton score est ${score} — déjà solide. Trois actions pour passer au niveau bancable.`
+    if (score >= 500) {
+      return `Ton score est ${score} — tu peux déjà demander une avance sur vente. Trois gestes pour le garder haut.`
+    }
+    return `Ton score est ${score}. Encore ${500 - score} points pour l’avance sur vente — trois gestes concrets.`
   }
-  return `Ton score est ${score} — excellent. Trois gestes pour le garder stable.`
+  return `Ton score est ${score} — très bien. Trois gestes pour le garder stable.`
 }
 
 /** Jusqu’à 3 actions sur les dimensions les plus faibles (ton coach, pas jugement). */

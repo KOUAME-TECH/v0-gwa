@@ -1,12 +1,13 @@
-<<<<<<< Updated upstream
 import { type NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { requireUser } from "@/lib/auth/require-admin"
 import { sendPushToUser } from "@/lib/notifications/push"
 import {
   mapLitigeDescriptionToReason,
   normalizeDisputeReason,
 } from "@/lib/orders/escrow-flow"
+import { checkRateLimit } from "@/lib/security/rate-limiter"
+import { assertSameOrigin } from "@/lib/security/csrf"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -16,14 +17,23 @@ type Ctx = { params: Promise<{ id: string }> }
  */
 export async function POST(request: NextRequest, context: Ctx) {
   try {
-    const { id } = await context.params
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
+    const csrf = assertSameOrigin(request)
+    if (csrf) return csrf
+    const rate = await checkRateLimit("API_CREATE")
+    if (!rate.success) {
+      return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })
     }
+
+    const { id } = await context.params
+    const gate = await requireUser()
+    if (!gate.user) {
+      return NextResponse.json(
+        { error: gate.error || "Non authentifié" },
+        { status: gate.suspended ? 403 : 401 },
+      )
+    }
+    const user = gate.user
+    const supabase = gate.supabase
 
     const body = await request.json()
     const description = String(body?.description || "").trim()
@@ -43,6 +53,16 @@ export async function POST(request: NextRequest, context: Ctx) {
     if (order.buyer_id !== user.id && order.seller_id !== user.id) {
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 })
     }
+    // Ne pas geler pendant un payout en cours — attendre fin ou failed
+    if (order.payout_status === "processing") {
+      return NextResponse.json(
+        {
+          error: "Libération d’argent en cours — réessaie dans un instant",
+          code: "PAYOUT_IN_PROGRESS",
+        },
+        { status: 409 },
+      )
+    }
     if (order.payment_status !== "paid") {
       return NextResponse.json(
         { error: "Litige possible seulement après paiement", code: "NOT_PAID" },
@@ -60,7 +80,7 @@ export async function POST(request: NextRequest, context: Ctx) {
       ? normalizeDisputeReason(String(body.reason))
       : mapLitigeDescriptionToReason(description)
 
-    await admin
+    const { data: frozen, error: freezeErr } = await admin
       .from("orders")
       .update({
         status: "disputed",
@@ -71,6 +91,20 @@ export async function POST(request: NextRequest, context: Ctx) {
         updated_at: now,
       })
       .eq("id", id)
+      .neq("payout_status", "processing")
+      .neq("escrow_status", "frozen")
+      .select("id")
+      .maybeSingle()
+
+    if (freezeErr || !frozen) {
+      return NextResponse.json(
+        {
+          error: "Impossible d’ouvrir le litige (libération en cours ou déjà gelé)",
+          code: "LITIGE_CLAIM_FAILED",
+        },
+        { status: 409 },
+      )
+    }
 
     await admin
       .from("escrow_transactions")
@@ -129,119 +163,6 @@ export async function POST(request: NextRequest, context: Ctx) {
     return NextResponse.json({ success: true, status: "disputed" })
   } catch (err) {
     console.error("[api/orders/litige]", err)
-=======
-/**
- * POST /api/orders/[id]/litige — Ouvrir un litige sur une commande
- * Body: { description: string, photo_urls?: string[] }
- */
-import { type NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
-import { sendPushNotification } from "@/lib/notifications/push"
-import { sendSMSFallback } from "@/lib/notifications/sms"
-
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id: orderId } = await params
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
-
-    // Charger la commande — seul l'acheteur peut ouvrir un litige
-    const { data: order } = await supabase
-      .from("orders")
-      .select("*")
-      .eq("id", orderId)
-      .eq("buyer_id", user.id)
-      .single()
-
-    if (!order) return NextResponse.json({ error: "Commande introuvable" }, { status: 404 })
-    if (order.escrow_status === "released") {
-      return NextResponse.json(
-        { error: "Impossible d'ouvrir un litige : fonds déjà libérés" },
-        { status: 400 }
-      )
-    }
-    if (order.status === "litige") {
-      return NextResponse.json({ error: "Un litige est déjà ouvert sur cette commande" }, { status: 400 })
-    }
-
-    const body = await request.json()
-    const { description, photo_urls } = body as {
-      description: string
-      photo_urls?: string[]
-    }
-
-    if (!description || description.trim().length < 10) {
-      return NextResponse.json(
-        { error: "La description du litige doit faire au moins 10 caractères" },
-        { status: 400 }
-      )
-    }
-
-    const now = new Date().toISOString()
-
-    // Mettre à jour la commande en litige
-    const { error: updateError } = await supabase
-      .from("orders")
-      .update({
-        status: "litige",
-        escrow_status: "disputed",
-        litige_description: description.trim(),
-        litige_photos: photo_urls ?? [],
-        litige_opened_at: now,
-        updated_at: now,
-      })
-      .eq("id", orderId)
-
-    if (updateError) {
-      console.error("[GWA] litige update error:", updateError)
-      return NextResponse.json({ error: updateError.message }, { status: 500 })
-    }
-
-    // Insérer dans la table disputes
-    try {
-      await supabase.from("disputes").insert({
-        order_id: orderId,
-        opened_by: user.id,
-        description: description.trim(),
-        photo_urls: photo_urls ?? [],
-        status: "open",
-        created_at: now,
-      })
-    } catch { /* La table disputes peut ne pas exister encore */ }
-
-    // Log d'audit
-    try {
-      await supabase.from("audit_logs").insert({
-        user_id: user.id,
-        action: "litige_ouvert",
-        resource_type: "order",
-        resource_id: orderId,
-        metadata: { description: description.trim(), photo_count: photo_urls?.length ?? 0 },
-        created_at: now,
-      })
-    } catch { /* ignore si la table n'existe pas */ }
-
-    // Notifier le vendeur
-    await sendPushNotification(order.seller_id, {
-      title: "⚠️ Litige ouvert",
-      body: `L'acheteur a ouvert un litige sur la commande ${order.order_number}. Vérifiez l'application.`,
-      data: { type: "order_status", order_id: orderId },
-    }).catch(() => null)
-
-    await sendSMSFallback(
-      order.seller_id,
-      supabase,
-      `GWA — Litige ouvert sur commande ${order.order_number}. Connectez-vous pour répondre.`
-    ).catch(() => null)
-
-    return NextResponse.json({ success: true, order_id: orderId })
-  } catch (err) {
-    console.error("[GWA] POST /api/orders/[id]/litige exception:", err)
->>>>>>> Stashed changes
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 })
   }
 }

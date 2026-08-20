@@ -146,10 +146,10 @@ export default function ScgPage() {
       {/* Header */}
       <header className="sticky top-0 z-10 bg-white border-b border-[#E5E7EB]">
         <div className="flex items-center gap-3 px-4 h-14">
-          <Link href="/profil" aria-label="Retour">
+          <Link href="/dashboard/farmer" aria-label="Retour espace producteur">
             <ArrowLeft className="h-5 w-5 text-[#1A1A1A]" />
           </Link>
-          <h1 className="text-lg font-semibold text-[#1A1A1A]">Score de Confiance GWA</h1>
+          <h1 className="text-lg font-semibold text-[#1A1A1A]">Mon score</h1>
         </div>
       </header>
 
@@ -159,7 +159,7 @@ export default function ScgPage() {
             <div className="w-14 h-14 rounded-full bg-[#2F7D32]/10 flex items-center justify-center mx-auto mb-3">
               <TrendingUp className="h-7 w-7 text-[#2F7D32]" />
             </div>
-            <h2 className="text-lg font-semibold text-[#1A1A1A] mb-1">Calculez votre SCG</h2>
+            <h2 className="text-lg font-semibold text-[#1A1A1A] mb-1">Calculez votre score</h2>
             <p className="text-sm text-[#6B7280] mb-4 text-pretty">
               Score de fiabilité sur 5 dimensions.
             </p>
@@ -197,7 +197,7 @@ export default function ScgPage() {
               </Button>
             </Card>
 
-            {/* Statut bancable */}
+            {/* Statut avance sur vente */}
             <Card
               className={`p-4 flex items-start gap-3 ${
                 result.bancable ? "bg-[#2F7D32]/5 border-[#2F7D32]/20" : "bg-[#F9A825]/5 border-[#F9A825]/20"
@@ -206,7 +206,9 @@ export default function ScgPage() {
               <Landmark className={`h-5 w-5 mt-0.5 ${result.bancable ? "text-[#2F7D32]" : "text-[#F9A825]"}`} />
               <div>
                 <p className="font-semibold text-[#1A1A1A] text-sm">
-                  {result.bancable ? "Profil bancable" : "Pas encore bancable"}
+                  {result.bancable
+                    ? "Éligible à une avance sur vente"
+                    : "Pas encore éligible à une avance sur vente"}
                 </p>
                 <p className="text-sm text-[#6B7280] text-pretty">{result.recommandation}</p>
               </div>
@@ -216,7 +218,7 @@ export default function ScgPage() {
 
             {/* Dimensions */}
             <Card className="p-5">
-              <h3 className="font-semibold text-[#1A1A1A] mb-4">Détail par dimension</h3>
+              <h3 className="font-semibold text-[#1A1A1A] mb-4">Ce qui compte pour ta confiance</h3>
               <ScgDimensions dimensions={result.dimensions} />
             </Card>
 

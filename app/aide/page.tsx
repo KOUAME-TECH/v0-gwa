@@ -16,7 +16,7 @@ const FAQ = [
   },
   {
     q: "C’est quoi le score de confiance ?",
-    a: "Le SCG montre ta fiabilité. Il monte avec un profil complet et de bonnes livraisons.",
+    a: "Il montre ta fiabilité. Il monte avec un profil complet et de bonnes livraisons.",
   },
   {
     q: "Comment rejoindre une coop ?",

@@ -1,7 +1,7 @@
 /** Copy escrow unifiée — acheteur & vendeur. */
 export const ESCROW_COPY = {
   protected: "Argent protégé",
-  held: "En séquestre",
+  held: "Argent protégé",
   released: "Fonds libérés",
   frozen: "Gelé (litige)",
   pending: "En attente de paiement",

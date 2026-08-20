@@ -1,5 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
+import { requireUser } from "@/lib/auth/require-admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { sendPushToUser } from "@/lib/notifications/push"
 
@@ -53,13 +55,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })
     }
 
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
+    const gate = await requireUser()
+    if (!gate.user) {
+      return NextResponse.json(
+        { error: gate.error || "Non authentifié" },
+        { status: gate.suspended ? 403 : 401 },
+      )
     }
+    const user = gate.user
+    const supabase = gate.supabase
 
     const body = await request.json()
     const sellerId = String(body?.seller_id || "")
@@ -117,8 +121,21 @@ export async function POST(request: NextRequest) {
         )
       }
       const qty = Math.max(1, Math.min(999_999, Number(item.quantity) || 1))
+      const stock =
+        product.stock_quantity == null ? null : Number(product.stock_quantity)
+      if (stock != null && Number.isFinite(stock) && qty > stock) {
+        return NextResponse.json(
+          {
+            error: `Stock insuffisant pour « ${product.name || item.product_id} » (max ${stock})`,
+            code: "OUT_OF_STOCK",
+            product_id: item.product_id,
+          },
+          { status: 400 },
+        )
+      }
+      // Prix toujours depuis la DB — ignorer unit_price client
       const unitPrice = Number(product.price)
-      if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+      if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
         return NextResponse.json(
           { error: `Prix invalide pour ${item.product_id}` },
           { status: 400 },
@@ -152,8 +169,9 @@ export async function POST(request: NextRequest) {
     const vendeurRecoit = commission.vendeurRecoitFcfa
 
     const orderNumber = `GWA-${Date.now().toString(36).toUpperCase()}`
+    const admin = createAdminClient()
 
-    const { data: order, error: orderError } = await supabase
+    const { data: order, error: orderError } = await admin
       .from("orders")
       .insert({
         buyer_id: user.id,
@@ -189,15 +207,34 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { error: itemsError } = await supabase.from("order_items").insert(
+    const { error: itemsError } = await admin.from("order_items").insert(
       lineItems.map((li) => ({ ...li, order_id: order.id })),
     )
     if (itemsError) {
       console.error("[api/orders items]", itemsError.message)
+      // Compense : supprimer order orpheline
+      await admin.from("orders").delete().eq("id", order.id)
       return NextResponse.json({ error: itemsError.message }, { status: 400 })
     }
 
-    await supabase.from("escrow_transactions").insert({
+    // Stock atomique (RPC) — annule la commande si rupture concurrente
+    for (const li of lineItems) {
+      const { error: stockErr } = await admin.rpc("decrement_product_stock", {
+        p_product_id: li.product_id,
+        p_qty: li.quantity,
+      })
+      if (stockErr) {
+        await admin.from("order_items").delete().eq("order_id", order.id)
+        await admin.from("orders").delete().eq("id", order.id)
+        return NextResponse.json(
+          { error: "Stock insuffisant", code: "OUT_OF_STOCK" },
+          { status: 400 },
+        )
+      }
+    }
+
+    // Escrow tranche unique (100% à livraison) — pending jusqu'au pay
+    await admin.from("escrow_transactions").insert({
       order_id: order.id,
       tranche_numero: 1,
       montant_fcfa: Math.round(totalAmount),
@@ -207,7 +244,7 @@ export async function POST(request: NextRequest) {
       due_days: 7,
     })
 
-    await supabase.from("order_audit_log").insert({
+    await admin.from("order_audit_log").insert({
       order_id: order.id,
       performed_by: user.id,
       action: "order_created",
@@ -215,7 +252,8 @@ export async function POST(request: NextRequest) {
       notes: "Créée via /api/orders",
     })
 
-    await supabase.from("notifications").insert({
+    // Notif + push vendeur
+    await admin.from("notifications").insert({
       user_id: sellerId,
       type: "order",
       title: "Nouvelle commande",
@@ -226,7 +264,7 @@ export async function POST(request: NextRequest) {
       read: false,
     })
 
-    void sendPushToUser(supabase as never, sellerId, {
+    void sendPushToUser(admin as never, sellerId, {
       title: "Nouvelle commande GWA",
       body: `${orderNumber} — ${Math.round(totalAmount)} FCFA`,
       url: "/dashboard/commandes",

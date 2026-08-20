@@ -1,9 +1,14 @@
-<<<<<<< Updated upstream
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { checkRateLimit } from "@/lib/security/rate-limiter"
 
 export async function POST(request: Request) {
   try {
+    const rate = await checkRateLimit("API_CREATE")
+    if (!rate.success) {
+      return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })
+    }
+
     const supabase = await createClient()
     const {
       data: { user },
@@ -48,34 +53,6 @@ export async function POST(request: Request) {
     })
   } catch (err) {
     console.error("[onesignal/register]", err)
-=======
-/**
- * POST /api/onesignal/register — Enregistrer le player_id OneSignal
- * Body: { onesignal_player_id: string }
- */
-import { type NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
-import { registerDevice } from "@/lib/notifications/push"
-
-export async function POST(request: NextRequest) {
-  try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
-
-    const body = await request.json()
-    const { onesignal_player_id } = body as { onesignal_player_id?: string }
-
-    if (!onesignal_player_id || typeof onesignal_player_id !== "string" || onesignal_player_id.trim() === "") {
-      return NextResponse.json({ error: "onesignal_player_id requis" }, { status: 400 })
-    }
-
-    await registerDevice(user.id, onesignal_player_id.trim(), supabase)
-
-    return NextResponse.json({ success: true })
-  } catch (err) {
-    console.error("[GWA] POST /api/onesignal/register exception:", err)
->>>>>>> Stashed changes
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 })
   }
 }
