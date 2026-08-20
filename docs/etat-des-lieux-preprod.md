@@ -42,7 +42,7 @@ Surfaces : Accueil feed, Marché, fiche `/produit/[id]`. Shop + chat inchangés.
 
 ## Checklist go-live (Yao / Makan)
 
-1. Appliquer `scripts/schema/064_product_like_dislike.sql` sur GWA-DATABASE
+1. ~~Appliquer `scripts/schema/064_product_like_dislike.sql` sur GWA-DATABASE~~ **fait**
 2. Secrets Vercel : `OTP_PEPPER`, `FEEXPAY_WEBHOOK_SECRET`, `CRON_SECRET`, Upstash, AT live, `NEXT_PUBLIC_APP_URL`
 3. Smoke : OTP → pay → webhook held → confirm/release → withdraw one-open
 4. Smoke : like + dislike produit (exclusifs) + favoris + chat messages
