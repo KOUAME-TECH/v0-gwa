@@ -63,16 +63,12 @@ export default function AgriculturePage() {
       .order("created_at", { ascending: false })
       .limit(50)
 
-<<<<<<< Updated upstream
     if (error) {
       console.error("[agriculture] products", error.message)
       setProducts([])
     } else if (data) {
       setProducts(data as Product[])
     }
-=======
-    if (data) setProducts(data as unknown as Product[])
->>>>>>> Stashed changes
     setIsLoading(false)
   }
 

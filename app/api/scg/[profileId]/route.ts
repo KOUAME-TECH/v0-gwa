@@ -1,4 +1,3 @@
-<<<<<<< Updated upstream
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 
@@ -107,75 +106,6 @@ export async function GET(_request: Request, { params }: RouteParams) {
     })
   } catch (err) {
     console.error("[scg/[profileId]]", err)
-=======
-/**
- * GET /api/scg/[profileId] — Score SCG + historique 30 jours
- */
-import { type NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
-
-export async function GET(
-  _request: NextRequest,
-  { params }: { params: Promise<{ profileId: string }> }
-) {
-  try {
-    const { profileId } = await params
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
-
-    // Récupérer le score SCG actuel depuis profiles
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("id, scg_score, scg_badge, scg_bancable, scg_calculated_at, sub_type")
-      .eq("id", profileId)
-      .single()
-
-    if (profileError || !profile) {
-      return NextResponse.json({ error: "Profil introuvable" }, { status: 404 })
-    }
-
-    // Récupérer le dernier enregistrement scg_scores pour les dimensions
-    const { data: latestScore } = await supabase
-      .from("scg_scores")
-      .select("*")
-      .eq("user_id", profileId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    // Historique des 30 derniers jours depuis scg_history
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-      .toISOString()
-      .slice(0, 10) // format DATE
-
-    const { data: history } = await supabase
-      .from("scg_history")
-      .select("score_total, badge, bancable, snapshot_date")
-      .eq("profile_id", profileId)
-      .gte("snapshot_date", thirtyDaysAgo)
-      .order("snapshot_date", { ascending: true })
-
-    return NextResponse.json({
-      score: {
-        score_total: profile.scg_score ?? 0,
-        badge: profile.scg_badge ?? "insuffisant",
-        bancable: profile.scg_bancable ?? false,
-        calculated_at: profile.scg_calculated_at,
-        sub_type: profile.sub_type,
-        // Dimensions depuis le dernier scg_scores si disponible
-        dim_fiabilite: latestScore?.dim_fiabilite ?? latestScore?.score_fiabilite ?? 0,
-        dim_qualite: latestScore?.dim_qualite ?? latestScore?.score_qualite ?? 0,
-        dim_engagement: latestScore?.dim_engagement ?? latestScore?.score_engagement ?? 0,
-        dim_volumes: latestScore?.dim_volumes ?? latestScore?.score_volumes ?? 0,
-        dim_stabilite: latestScore?.dim_stabilite ?? 0,
-        recommandation: latestScore?.recommandation ?? null,
-      },
-      history: history ?? [],
-    })
-  } catch (err) {
-    console.error("[GWA] GET /api/scg/[profileId] exception:", err)
->>>>>>> Stashed changes
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 })
   }
 }
