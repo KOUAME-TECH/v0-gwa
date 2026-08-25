@@ -3,7 +3,7 @@ import { runHarmattanDigest } from "@/lib/notifications/harmattan-digest"
 import { authorizeCronRequest } from "@/lib/security/cron-auth"
 
 export const dynamic = "force-dynamic"
-export const maxDuration = 120
+export const maxDuration = 60
 export const runtime = "nodejs"
 
 /**
