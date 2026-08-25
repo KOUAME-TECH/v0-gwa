@@ -37,14 +37,40 @@ export type FeexPayPayoutResult = {
 
 const BASE_URL = "https://api.feexpay.me"
 
+function trimEnv(name: string): string {
+  return (process.env[name] || "").replace(/^"|"$/g, "").trim()
+}
+
 export function getFeexPayCredentials(): FeexPayCredentials | null {
-  const apiKey = (process.env.FEEXPAY_API_KEY || "").replace(/^"|"$/g, "").trim()
-  const shopId = (process.env.FEEXPAY_SHOP_ID || "").replace(/^"|"$/g, "").trim()
+  const apiKey = trimEnv("FEEXPAY_API_KEY")
+  const shopId = trimEnv("FEEXPAY_SHOP_ID")
   if (!apiKey || !shopId) return null
   const modeRaw = (process.env.FEEXPAY_MODE || "sandbox").toLowerCase()
   const mode = modeRaw === "live" || modeRaw === "prod" || modeRaw === "production"
     ? "live"
     : "sandbox"
+  return { apiKey, shopId, mode }
+}
+
+/** Env Vercel d'abord, puis platform_secrets (service_role). */
+export async function resolveFeexPayCredentials(): Promise<FeexPayCredentials | null> {
+  const fromEnv = getFeexPayCredentials()
+  if (fromEnv) return fromEnv
+
+  const { resolvePlatformSecret } = await import("@/lib/ops/platform-secrets")
+  const apiKey = await resolvePlatformSecret("FEEXPAY_API_KEY")
+  const shopId = await resolvePlatformSecret("FEEXPAY_SHOP_ID")
+  if (!apiKey || !shopId) return null
+
+  const modeRaw = (
+    trimEnv("FEEXPAY_MODE") ||
+    (await resolvePlatformSecret("FEEXPAY_MODE")) ||
+    "sandbox"
+  ).toLowerCase()
+  const mode =
+    modeRaw === "live" || modeRaw === "prod" || modeRaw === "production"
+      ? "live"
+      : "sandbox"
   return { apiKey, shopId, mode }
 }
 
@@ -90,7 +116,7 @@ export async function createFeexPayPayIn(input: {
   returnUrl?: string
   callbackInfo?: string
 }): Promise<FeexPayPayInResult> {
-  const creds = getFeexPayCredentials()
+  const creds = await resolveFeexPayCredentials()
   if (!creds) {
     return {
       ok: false,
@@ -164,7 +190,7 @@ export async function createFeexPayPayout(input: {
   network: FeexPayNetwork
   description?: string
 }): Promise<FeexPayPayoutResult> {
-  const creds = getFeexPayCredentials()
+  const creds = await resolveFeexPayCredentials()
   if (!creds) {
     return {
       ok: false,
@@ -227,7 +253,7 @@ export async function createFeexPayPayout(input: {
 export async function verifyFeexPayTransaction(
   reference: string,
 ): Promise<{ ok: boolean; status: string | null; raw: Record<string, unknown> }> {
-  const creds = getFeexPayCredentials()
+  const creds = await resolveFeexPayCredentials()
   if (!creds || !reference) {
     return { ok: false, status: null, raw: {} }
   }

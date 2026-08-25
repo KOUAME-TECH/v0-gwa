@@ -5,6 +5,7 @@ import { sendPushToUser } from "@/lib/notifications/push"
 import {
   createFeexPayPayout,
   getFeexPayCredentials,
+  resolveFeexPayCredentials,
   mapPaymentMethodToNetwork,
 } from "@/lib/feexpay/client"
 
@@ -88,7 +89,7 @@ export async function POST(request: NextRequest, context: Ctx) {
     let payoutNetwork: string | null = null
     let payoutError: string | null = null
 
-    const creds = getFeexPayCredentials()
+    const creds = await resolveFeexPayCredentials()
     const sellerPhone = String(sellerProfile?.phone || "").trim()
     const network = mapPaymentMethodToNetwork(
       order.payment_method || order.payout_network || "orange",

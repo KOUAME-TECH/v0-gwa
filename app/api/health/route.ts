@@ -5,7 +5,9 @@ import {
   hasAfricasTalkingSenderId,
   hasSmsProvider,
   isAfricasTalkingLiveUsername,
+  resolveAfricasTalkingSenderId,
 } from '@/lib/auth/sms'
+import { hasPlatformSecret } from '@/lib/ops/platform-secrets'
 import {
   getOneSignalAppId,
   getOneSignalRestApiKey,
@@ -34,9 +36,13 @@ export async function GET() {
   const onesignalRest = !!getOneSignalRestApiKey()
   const atKey = hasAfricasTalkingProvider()
   const atLive = isAfricasTalkingLiveUsername()
-  const atSender = hasAfricasTalkingSenderId()
-  const feexpayKey = envSet('FEEXPAY_API_KEY')
-  const feexpayShop = envSet('FEEXPAY_SHOP_ID')
+  const atSender = hasAfricasTalkingSenderId() || !!(await resolveAfricasTalkingSenderId())
+  const feexpayKey =
+    envSet('FEEXPAY_API_KEY') ||
+    (await hasPlatformSecret('FEEXPAY_API_KEY'))
+  const feexpayShop =
+    envSet('FEEXPAY_SHOP_ID') ||
+    (await hasPlatformSecret('FEEXPAY_SHOP_ID'))
   const feexpayMode = (process.env.FEEXPAY_MODE || 'sandbox').toLowerCase()
   let geminiReady =
     envSet('GEMINI_API_KEY') ||
