@@ -5,6 +5,7 @@ import { checkRateLimit } from "@/lib/security/rate-limiter"
 import {
   createFeexPayPayout,
   getFeexPayCredentials,
+  resolveFeexPayCredentials,
   mapPaymentMethodToNetwork,
 } from "@/lib/feexpay/client"
 
@@ -144,7 +145,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Tente payout immédiat si FeexPay configuré
-    const creds = getFeexPayCredentials()
+    const creds = await resolveFeexPayCredentials()
     if (creds) {
       await admin
         .from("withdrawal_requests")

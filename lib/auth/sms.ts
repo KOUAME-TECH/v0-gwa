@@ -49,6 +49,28 @@ export function hasAfricasTalkingSenderId(): boolean {
   )
 }
 
+/** Env Vercel d'abord, puis platform_secrets (AT_SENDER_ID, SMS_AT_SENDER_ID, …). */
+export async function resolveAfricasTalkingSenderId(): Promise<string> {
+  const fromEnv =
+    env("AT_SENDER_ID") ||
+    env("SMS_AT_SENDER_ID") ||
+    env("AFRICASTALKING_FROM") ||
+    env("AFRICASTALKING_SENDER_ID")
+  if (fromEnv) return fromEnv
+
+  const { resolvePlatformSecret } = await import("@/lib/ops/platform-secrets")
+  for (const key of [
+    "AT_SENDER_ID",
+    "SMS_AT_SENDER_ID",
+    "AFRICASTALKING_FROM",
+    "AFRICASTALKING_SENDER_ID",
+  ]) {
+    const value = await resolvePlatformSecret(key)
+    if (value) return value
+  }
+  return ""
+}
+
 export function hasSmsProvider(): boolean {
   const termii = !!env("TERMII_API_KEY")
   return hasTwilioProvider() || hasAfricasTalkingProvider() || termii
@@ -111,7 +133,8 @@ async function sendViaAfricasTalking(
     env("AT_SENDER_ID") ||
     env("SMS_AT_SENDER_ID") ||
     env("AFRICASTALKING_FROM") ||
-    env("AFRICASTALKING_SENDER_ID")
+    env("AFRICASTALKING_SENDER_ID") ||
+    (await resolveAfricasTalkingSenderId())
 
   if (!apiKey) {
     return { success: false, error: "Africa's Talking non configuré" }

@@ -6,6 +6,7 @@ import { sendPushToUser } from "@/lib/notifications/push"
 import {
   createFeexPayPayIn,
   getFeexPayCredentials,
+  resolveFeexPayCredentials,
   mapPaymentMethodToNetwork,
 } from "@/lib/feexpay/client"
 
@@ -77,7 +78,7 @@ export async function POST(request: NextRequest, context: Ctx) {
       String(body?.phone || order.shipping_phone || buyerProfile?.phone || "").trim()
 
     const admin = createAdminClient()
-    const creds = getFeexPayCredentials()
+    const creds = await resolveFeexPayCredentials()
     const amount = Math.round(Number(order.total_amount) || 0)
     const origin = appOrigin(request)
     const returnUrl = `${origin}/commandes/confirmation?order=${id}`
