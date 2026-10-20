@@ -33,6 +33,10 @@ export function hasAfricasTalkingProvider(): boolean {
   return !!(env("AT_API_KEY") || env("AFRICASTALKING_API_KEY"))
 }
 
+export function hasTermiiProvider(): boolean {
+  return !!env("TERMII_API_KEY")
+}
+
 /** Username AT live (pas sandbox) — requis pour livrer vers des mobiles réels. */
 export function isAfricasTalkingLiveUsername(): boolean {
   const username =
@@ -72,16 +76,16 @@ export async function resolveAfricasTalkingSenderId(): Promise<string> {
 }
 
 export function hasSmsProvider(): boolean {
-  const termii = !!env("TERMII_API_KEY")
-  return hasTwilioProvider() || hasAfricasTalkingProvider() || termii
+  return hasTwilioProvider() || hasAfricasTalkingProvider() || hasTermiiProvider()
 }
 
 export function shouldUseSupabasePhoneOtpFallback(
   mode: "login" | "bind" | "register",
   hasTwilio: boolean,
   hasAfricasTalking: boolean,
+  hasTermii: boolean,
 ): boolean {
-  return mode === "login" && !hasTwilio && !hasAfricasTalking
+  return mode === "login" && !hasTwilio && !hasAfricasTalking && !hasTermii
 }
 
 export async function sendSmsOtp(

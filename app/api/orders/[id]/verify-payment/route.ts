@@ -4,8 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import {
   getGeniusPayPayment,
-  isGeniusPayPaymentForOrder,
 } from "@/lib/payment/geniuspay"
+import { isGeniusPayPaymentForOrder } from "@/lib/payment/geniuspay-validation"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -29,7 +29,10 @@ export async function POST(_request: NextRequest, context: Ctx) {
       .eq("id", id)
       .maybeSingle()
     if (orderError) {
-      if (/provider_reference|column/i.test(orderError.message)) {
+      if (
+        orderError.code === "42703" ||
+        /provider_reference.*column|column.*provider_reference/i.test(orderError.message)
+      ) {
         return NextResponse.json(
           { error: "Migration 057 requise pour GeniusPay", code: "MIGRATION_REQUIRED" },
           { status: 503 },
@@ -66,7 +69,7 @@ export async function POST(_request: NextRequest, context: Ctx) {
     ) {
       console.error("[api/orders/verify-payment] GeniusPay payment/order mismatch", {
         orderId: id,
-        reference: order.feexpay_ref,
+        reference: order.provider_reference,
       })
       return NextResponse.json({ error: "Données de paiement non concordantes" }, { status: 422 })
     }

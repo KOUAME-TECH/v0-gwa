@@ -47,7 +47,10 @@ export async function POST(request: NextRequest, context: Ctx) {
       .eq("id", id)
       .maybeSingle()
     if (orderError) {
-      if (/provider_reference|column/i.test(orderError.message)) {
+      if (
+        orderError.code === "42703" ||
+        /provider_reference.*column|column.*provider_reference/i.test(orderError.message)
+      ) {
         return NextResponse.json(
           { error: "Migration 057 requise pour GeniusPay", code: "MIGRATION_REQUIRED" },
           { status: 503 },
@@ -140,7 +143,7 @@ export async function POST(request: NextRequest, context: Ctx) {
         )
       }
 
-      const { error: referenceError } = await admin
+      const { data: savedReference, error: referenceError } = await admin
         .from("orders")
         .update({
           payment_status: "processing",
@@ -150,7 +153,9 @@ export async function POST(request: NextRequest, context: Ctx) {
         })
         .eq("id", id)
         .eq("payment_status", "processing")
-      if (referenceError) {
+        .select("id")
+        .maybeSingle()
+      if (referenceError || !savedReference) {
         console.error("[api/orders/pay] GeniusPay reference persistence failed", {
           orderId: id,
           reference: payIn.data.reference,
@@ -188,14 +193,14 @@ export async function POST(request: NextRequest, context: Ctx) {
       )
     }
 
-    const feexpayRef = `SIM-GWA-${Date.now().toString(36).toUpperCase()}`
+    const simulationReference = `SIM-GWA-${Date.now().toString(36).toUpperCase()}`
     await admin
       .from("orders")
       .update({
         payment_status: "paid",
         escrow_status: "held",
         status: "confirmed",
-        provider_reference: feexpayRef,
+        provider_reference: simulationReference,
         payment_method: paymentMethod,
         updated_at: new Date().toISOString(),
       })
@@ -205,7 +210,7 @@ export async function POST(request: NextRequest, context: Ctx) {
       .from("escrow_transactions")
       .update({
         status: "held",
-        feexpay_ref: feexpayRef,
+        feexpay_ref: simulationReference,
         paid_at: new Date().toISOString(),
       })
       .eq("order_id", id)
@@ -238,7 +243,7 @@ export async function POST(request: NextRequest, context: Ctx) {
 
     return NextResponse.json({
       status: "paid_simulated",
-      feexpay_ref: feexpayRef,
+      payment_reference: simulationReference,
       escrow_status: "held",
       payment_url: null,
       message: "Paiement simulé — configurez GeniusPay pour le live",

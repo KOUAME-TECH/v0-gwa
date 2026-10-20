@@ -18,6 +18,7 @@ import {
 import {
   hasAfricasTalkingProvider,
   hasSmsProvider,
+  hasTermiiProvider,
   hasTwilioProvider,
   shouldUseSupabasePhoneOtpFallback,
   sendSmsOtp,
@@ -156,6 +157,7 @@ export async function POST(request: Request) {
         mode,
         hasTwilioProvider(),
         hasAfricasTalkingProvider(),
+        hasTermiiProvider(),
       )
     ) {
       const { error: smsError } = await supabase.auth.signInWithOtp({

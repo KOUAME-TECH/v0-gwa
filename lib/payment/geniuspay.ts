@@ -1,5 +1,6 @@
 import "server-only"
 import { resolvePlatformSecret } from "@/lib/ops/platform-secrets"
+import { isGeniusPayPaymentForOrder } from "@/lib/payment/geniuspay-validation"
 
 const API_URL = "https://geniuspay.ci/api/v1/merchant"
 
@@ -154,14 +155,4 @@ export async function getGeniusPayPayment(
     : { ok: false, data: null, error: "GENIUSPAY_INVALID_STATUS_RESPONSE" }
 }
 
-export function isGeniusPayPaymentForOrder(
-  payment: GeniusPayPayment,
-  order: { id: string; totalAmount: number; reference: string },
-): boolean {
-  return (
-    payment.reference === order.reference &&
-    payment.currency === "XOF" &&
-    payment.amount === order.totalAmount &&
-    String(payment.metadata.order_id ?? "") === order.id
-  )
-}
+export { isGeniusPayPaymentForOrder }
