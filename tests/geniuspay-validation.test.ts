@@ -9,6 +9,7 @@ const payment = {
   reference: "gp-ref-123",
   amount: 2500,
   currency: "XOF",
+  status: "pending",
   metadata: { order_id: "order-123" },
 }
 
