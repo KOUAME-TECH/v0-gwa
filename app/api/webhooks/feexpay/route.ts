@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "crypto"
 import { NextResponse } from "next/server"
+import { isExactPaymentAmount } from "@/lib/payment/amount"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 /**
@@ -72,20 +73,14 @@ export async function POST(request: Request) {
         return NextResponse.json({ received: true, matched: true, paid: true, idempotent: true })
       }
 
-      const paidAmount = Number(
-        payload.amount ?? payload.paid_amount ?? payload.montant ?? NaN,
-      )
+      const paidAmount = payload.amount ?? payload.paid_amount ?? payload.montant
       const expectedAmount = Number(order.total_amount)
-      if (
-        Number.isFinite(paidAmount) &&
-        Number.isFinite(expectedAmount) &&
-        paidAmount + 1e-6 < expectedAmount
-      ) {
+      if (!isExactPaymentAmount(paidAmount, expectedAmount)) {
         console.error(
-          `[webhooks/feexpay] montant insuffisant ref=${ref} paid=${paidAmount} expected=${expectedAmount}`,
+          `[webhooks/feexpay] montant absent ou incorrect ref=${ref}`,
         )
         return NextResponse.json(
-          { error: "Montant insuffisant", received: true, matched: true },
+          { error: "Montant absent ou incorrect", received: true, matched: true },
           { status: 422 },
         )
       }
