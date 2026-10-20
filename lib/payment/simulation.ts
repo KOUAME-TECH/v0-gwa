@@ -1,5 +1,5 @@
 export function isPaymentSimulationAllowed(
-  env: Pick<NodeJS.ProcessEnv, "NODE_ENV" | "VERCEL_ENV" | "ALLOW_PAYMENT_SIMULATION"> =
+  env: Partial<Pick<NodeJS.ProcessEnv, "NODE_ENV" | "VERCEL_ENV" | "ALLOW_PAYMENT_SIMULATION">> =
     process.env,
 ): boolean {
   if (env.NODE_ENV === "production" || env.VERCEL_ENV === "production") return false
