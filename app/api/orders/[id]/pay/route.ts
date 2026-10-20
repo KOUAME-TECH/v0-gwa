@@ -1,19 +1,22 @@
-import { NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { sendPushToUser } from "@/lib/notifications/push"
 import { isPaymentSimulationAllowed } from "@/lib/payment/simulation"
-import { resolveGeniusPayCredentials } from "@/lib/payment/geniuspay"
+import {
+  createGeniusPayCheckout,
+  resolveGeniusPayCredentials,
+} from "@/lib/payment/geniuspay"
 
 type Ctx = { params: Promise<{ id: string }> }
 
 /**
  * POST /api/orders/[id]/pay
- * Vérifie la disponibilité du pay-in GeniusPay avant simulation locale.
+ * Initie le checkout GeniusPay côté serveur.
  * Simulation uniquement hors prod / flag explicite.
  */
-export async function POST(_request: Request, context: Ctx) {
+export async function POST(request: NextRequest, context: Ctx) {
   try {
     const rate = await checkRateLimit("PAYMENT")
     if (!rate.success) {
@@ -57,20 +60,107 @@ export async function POST(_request: Request, context: Ctx) {
       return NextResponse.json({ error: "Déjà payée" }, { status: 400 })
     }
 
-    const paymentMethod = "geniuspay"
-
     const admin = createAdminClient()
     const creds = await resolveGeniusPayCredentials()
 
     if (creds) {
-      return NextResponse.json(
-        {
-          error:
-            "Paiement suspendu : la signature officielle des requêtes GeniusPay doit être confirmée.",
-          code: "GENIUSPAY_REQUEST_SIGNATURE_SPEC_REQUIRED",
-        },
-        { status: 503 },
-      )
+      const body = await request.json().catch(() => ({}))
+      const { data: buyerProfile } = await supabase
+        .from("profiles")
+        .select("phone, full_name, email")
+        .eq("id", user.id)
+        .maybeSingle()
+      const phone = String(body?.phone || order.shipping_phone || buyerProfile?.phone || "").trim()
+      const amount = Math.round(Number(order.total_amount) || 0)
+      if (amount < 200) {
+        return NextResponse.json(
+          { error: "Montant minimum GeniusPay : 200 XOF", code: "AMOUNT_TOO_LOW" },
+          { status: 400 },
+        )
+      }
+
+      const { data: reservation, error: reservationError } = await admin
+        .from("orders")
+        .update({
+          payment_status: "processing",
+          payment_method: "geniuspay",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id)
+        .in("payment_status", ["pending", "failed"])
+        .select("id")
+        .maybeSingle()
+      if (reservationError) throw reservationError
+      if (!reservation) {
+        return NextResponse.json(
+          { error: "Un paiement est déjà en cours ou cette commande n’est pas payable.", code: "PAYMENT_ALREADY_STARTED" },
+          { status: 409 },
+        )
+      }
+
+      const appUrl = (process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin).replace(/\/$/, "")
+      const returnUrl = `${appUrl}/commandes/confirmation?order=${encodeURIComponent(id)}`
+      const payIn = await createGeniusPayCheckout({
+        amount,
+        orderId: id,
+        description: `Commande GWA ${order.order_number}`,
+        customerName: buyerProfile?.full_name || undefined,
+        customerEmail: buyerProfile?.email || user.email || undefined,
+        customerPhone: phone || undefined,
+        successUrl: returnUrl,
+        errorUrl: `${returnUrl}&payment=failed`,
+      })
+      if (!payIn.ok || !payIn.data) {
+        console.error("[api/orders/pay] GeniusPay", payIn.error)
+        if (!payIn.uncertain) {
+          await admin
+            .from("orders")
+            .update({ payment_status: "failed", updated_at: new Date().toISOString() })
+            .eq("id", id)
+            .eq("payment_status", "processing")
+        }
+        return NextResponse.json(
+          {
+            error: payIn.uncertain
+              ? "Résultat d’initiation incertain. Ne relancez pas le paiement ; contactez le support."
+              : "Échec initiation paiement GeniusPay",
+            code: payIn.error || "PAYIN_FAILED",
+          },
+          { status: 502 },
+        )
+      }
+
+      const { data: saved, error: referenceError } = await admin
+        .from("orders")
+        .update({
+          provider_reference: payIn.data.reference,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id)
+        .eq("payment_status", "processing")
+        .select("id")
+        .maybeSingle()
+      if (referenceError || !saved) {
+        console.error("[api/orders/pay] GeniusPay reference persistence failed", { orderId: id })
+        return NextResponse.json(
+          { error: "Paiement créé mais référence non enregistrée. Contactez le support.", code: "PAYMENT_REFERENCE_SAVE_FAILED" },
+          { status: 503 },
+        )
+      }
+
+      await admin.from("order_audit_log").insert({
+        order_id: id,
+        performed_by: user.id,
+        action: "geniuspay_payin_initiated",
+        new_value: "processing",
+        notes: `GeniusPay ${payIn.data.reference}; ${amount} XOF`,
+      })
+      return NextResponse.json({
+        status: "redirect_required",
+        payment_reference: payIn.data.reference,
+        payment_url: payIn.data.checkoutUrl,
+        message: "Redirection vers le checkout GeniusPay pour finaliser le paiement",
+      })
     }
 
     if (!isPaymentSimulationAllowed()) {
@@ -92,7 +182,7 @@ export async function POST(_request: Request, context: Ctx) {
         escrow_status: "held",
         status: "confirmed",
         provider_reference: simulationReference,
-        payment_method: paymentMethod,
+        payment_method: "geniuspay",
         updated_at: new Date().toISOString(),
       })
       .eq("id", id)

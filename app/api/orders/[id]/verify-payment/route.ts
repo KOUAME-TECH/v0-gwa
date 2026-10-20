@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
+import { getGeniusPayPayment, isGeniusPayPaymentForOrder } from "@/lib/payment/geniuspay"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -56,14 +57,69 @@ export async function POST(_request: NextRequest, context: Ctx) {
       return NextResponse.json({ error: "Référence GeniusPay introuvable" }, { status: 409 })
     }
 
-    return NextResponse.json(
-      {
-        error:
-          "Vérification suspendue : la signature officielle des requêtes GeniusPay doit être confirmée.",
-        code: "GENIUSPAY_REQUEST_SIGNATURE_SPEC_REQUIRED",
-      },
-      { status: 503 },
-    )
+    const result = await getGeniusPayPayment(order.provider_reference)
+    if (!result.ok || !result.data) {
+      return NextResponse.json(
+        { error: "Statut GeniusPay temporairement indisponible", code: result.error },
+        { status: 502 },
+      )
+    }
+
+    const payment = result.data
+    if (
+      !isGeniusPayPaymentForOrder(payment, {
+        id: order.id,
+        totalAmount: Math.round(Number(order.total_amount)),
+        reference: order.provider_reference,
+      })
+    ) {
+      console.error("[api/orders/verify-payment] GeniusPay payment/order mismatch", {
+        orderId: id,
+        reference: order.provider_reference,
+      })
+      return NextResponse.json({ error: "Données de paiement non concordantes" }, { status: 422 })
+    }
+
+    if (payment.status !== "completed") {
+      return NextResponse.json({ status: "pending" })
+    }
+
+    const admin = createAdminClient()
+    const now = new Date().toISOString()
+    const { data: updated, error: updateError } = await admin
+      .from("orders")
+      .update({
+        payment_status: "paid",
+        escrow_status: "held",
+        status: "confirmed",
+        updated_at: now,
+      })
+      .eq("id", id)
+      .eq("payment_status", "processing")
+      .eq("payment_method", "geniuspay")
+      .eq("provider_reference", payment.reference)
+      .select("id")
+      .maybeSingle()
+    if (updateError) throw updateError
+
+    if (updated) {
+      const { error: escrowError } = await admin
+        .from("escrow_transactions")
+        .update({ status: "held", paid_at: now })
+        .eq("order_id", id)
+        .eq("tranche_numero", 1)
+        .eq("status", "pending")
+      if (escrowError) throw escrowError
+
+      await admin.from("order_audit_log").insert({
+        order_id: id,
+        performed_by: user.id,
+        action: "geniuspay_payment_verified",
+        new_value: "held",
+        notes: `GeniusPay ${payment.reference}; ${payment.amount} XOF`,
+      })
+    }
+    return NextResponse.json({ status: "paid" })
   } catch (err) {
     console.error("[api/orders/verify-payment]", err)
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 })

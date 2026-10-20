@@ -61,4 +61,4 @@ npm test
 2. OTP téléphone : fournisseur SMS live, expéditeur approuvé, Redis persistant et `OTP_PEPPER`
 3. Soft-launch seed contenu
 
-Le pay-in GeniusPay est suspendu jusqu’à confirmation de la signature officielle des requêtes. Ne configurez pas encore le webhook : le format complet de signature et la fenêtre anti-rejeu restent à confirmer. Les versements vendeurs restent en traitement ops tant que l’API de payout n’est pas spécifiée.
+Le pay-in GeniusPay utilise les headers serveur `X-API-Key` et `X-API-Secret` documentés, puis redirige vers le checkout hébergé. Le retour navigateur ne valide jamais le paiement : le statut est relu côté serveur avec la référence, le montant, la devise et les métadonnées de commande. Confirmez auprès de GeniusPay que `completed` est bien le statut final payé avant la mise en service. Ne configurez pas encore le webhook : son format complet de signature et sa fenêtre anti-rejeu restent à confirmer. Les versements vendeurs restent en traitement ops tant que l’API de payout n’est pas spécifiée.

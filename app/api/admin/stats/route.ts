@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { requireAdminSection } from "@/lib/auth/require-admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
+import { resolveGeniusPayCredentials } from "@/lib/payment/geniuspay"
 
 /** GET /api/admin/stats — compteurs dashboard (service role) */
 export async function GET() {
@@ -110,8 +111,9 @@ export async function GET() {
         0,
       ) || 0
 
+    const geniusPayCredentials = await resolveGeniusPayCredentials()
     const opsHealth = {
-      geniuspay: false,
+      geniuspay: Boolean(geniusPayCredentials),
       sms: Boolean(process.env.AT_SENDER_ID || process.env.SMS_AT_SENDER_ID),
       gemini: Boolean(
         process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY,

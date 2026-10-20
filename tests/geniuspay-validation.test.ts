@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest"
-import { isGeniusPayPaymentForOrder } from "@/lib/payment/geniuspay-validation"
+import {
+  isGeniusPayPaymentForOrder,
+  parseGeniusPayPayment,
+} from "@/lib/payment/geniuspay-validation"
 
 const order = { id: "order-123", totalAmount: 2500, reference: "gp-ref-123" }
 const payment = {
@@ -21,5 +24,11 @@ describe("GeniusPay payment/order validation", () => {
     expect(
       isGeniusPayPaymentForOrder({ ...payment, metadata: { order_id: "other" } }, order),
     ).toBe(false)
+  })
+
+  it("requires an explicit currency when parsing provider status responses", () => {
+    const { currency: _, ...withoutCurrency } = payment
+    expect(parseGeniusPayPayment(withoutCurrency)).toBeNull()
+    expect(parseGeniusPayPayment(withoutCurrency, { defaultCurrency: "XOF" })?.currency).toBe("XOF")
   })
 })
