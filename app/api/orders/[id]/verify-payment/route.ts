@@ -2,7 +2,11 @@ import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
-import { getGeniusPayPayment, isGeniusPayPaymentForOrder } from "@/lib/payment/geniuspay"
+import { getGeniusPayPayment } from "@/lib/payment/geniuspay"
+import {
+  isGeniusPayPaymentForOrder,
+  isGeniusPaySuccessStatus,
+} from "@/lib/payment/geniuspay-validation"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -80,7 +84,7 @@ export async function POST(_request: NextRequest, context: Ctx) {
       return NextResponse.json({ error: "Données de paiement non concordantes" }, { status: 422 })
     }
 
-    if (payment.status !== "completed") {
+    if (!isGeniusPaySuccessStatus(payment.status, process.env.GENIUSPAY_SUCCESS_STATUS)) {
       return NextResponse.json({ status: "pending" })
     }
 

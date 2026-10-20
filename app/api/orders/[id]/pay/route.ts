@@ -34,7 +34,9 @@ export async function POST(request: NextRequest, context: Ctx) {
 
     const { data: order, error: orderError } = await supabase
       .from("orders")
-      .select("*, provider_reference")
+      .select(
+        "id, buyer_id, total_amount, escrow_status, payment_status, order_number, seller_id, shipping_phone, provider_reference",
+      )
       .eq("id", id)
       .maybeSingle()
     if (orderError) {
@@ -64,6 +66,16 @@ export async function POST(request: NextRequest, context: Ctx) {
     const creds = await resolveGeniusPayCredentials()
 
     if (creds) {
+      if (!process.env.GENIUSPAY_SUCCESS_STATUS?.trim()) {
+        return NextResponse.json(
+          {
+            error:
+              "Paiement indisponible tant que le statut final payé GeniusPay n’est pas confirmé et configuré.",
+            code: "PAYMENT_VERIFICATION_NOT_CONFIGURED",
+          },
+          { status: 503 },
+        )
+      }
       const body = await request.json().catch(() => ({}))
       const { data: buyerProfile } = await supabase
         .from("profiles")

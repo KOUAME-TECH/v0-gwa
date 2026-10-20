@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   isGeniusPayPaymentForOrder,
+  isGeniusPaySuccessStatus,
   parseGeniusPayPayment,
 } from "@/lib/payment/geniuspay-validation"
 
@@ -31,5 +32,11 @@ describe("GeniusPay payment/order validation", () => {
     const { currency: _, ...withoutCurrency } = payment
     expect(parseGeniusPayPayment(withoutCurrency)).toBeNull()
     expect(parseGeniusPayPayment(withoutCurrency, { defaultCurrency: "XOF" })?.currency).toBe("XOF")
+  })
+
+  it("does not treat a provider status as paid until an approved success value is configured", () => {
+    expect(isGeniusPaySuccessStatus("completed", undefined)).toBe(false)
+    expect(isGeniusPaySuccessStatus("completed", "paid")).toBe(false)
+    expect(isGeniusPaySuccessStatus("completed", " COMPLETED ")).toBe(true)
   })
 })

@@ -103,7 +103,7 @@ export const API_ROUTES: RouteEntry[] = [
   { path: "/api/products", status: "complete", note: "CRUD F2" },
   { path: "/api/products/[id]", status: "complete" },
   { path: "/api/orders", status: "complete", note: "F3 + escrow pending" },
-  { path: "/api/orders/[id]/pay", status: "complete", note: "Pay-in GeniusPay serveur + checkout hébergé" },
+  { path: "/api/orders/[id]/pay", status: "partial", note: "Checkout GeniusPay serveur ; nécessite le statut final payé confirmé en configuration" },
   { path: "/api/orders/[id]/verify-payment", status: "partial", note: "Vérification GET ; statut final payé à confirmer auprès du fournisseur" },
   { path: "/api/orders/[id]/confirm", status: "complete" },
   { path: "/api/orders/[id]/litige", status: "complete" },

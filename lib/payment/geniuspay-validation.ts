@@ -36,3 +36,11 @@ export function isGeniusPayPaymentForOrder(
     String(payment.metadata.order_id ?? "") === order.id
   )
 }
+
+export function isGeniusPaySuccessStatus(
+  paymentStatus: string,
+  configuredSuccessStatus: string | undefined,
+): boolean {
+  const expected = configuredSuccessStatus?.trim().toLowerCase()
+  return Boolean(expected && paymentStatus.trim().toLowerCase() === expected)
+}
