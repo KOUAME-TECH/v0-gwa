@@ -40,7 +40,7 @@ describe("GeniusPay payment/order validation", () => {
     expect(parseGeniusPayPayment(withoutCurrency, { defaultCurrency: "XOF" })?.currency).toBe("XOF")
   })
 
-  it("does not treat a provider status as paid until an approved success value is configured", () => {
+  it("accepts only GeniusPay's documented completed success status", () => {
     expect(isGeniusPaySuccessStatus("completed")).toBe(true)
     expect(isGeniusPaySuccessStatus("paid")).toBe(false)
     expect(isGeniusPaySuccessStatus(" PENDING ")).toBe(false)

@@ -105,7 +105,7 @@ export const API_ROUTES: RouteEntry[] = [
   { path: "/api/orders", status: "complete", note: "F3 + escrow pending" },
   { path: "/api/orders/[id]/pay", status: "complete", note: "Checkout hébergé GeniusPay, clés conservées côté serveur" },
   { path: "/api/orders/[id]/verify-payment", status: "complete", note: "Vérification GET GeniusPay ; règlement uniquement sur completed" },
-  { path: "/api/webhooks/geniuspay", status: "complete", note: "HMAC horodaté, anti-rejeu 5 min, vérification GET et transitions idempotentes" },
+  { path: "/api/webhooks/geniuspay", status: "partial", note: "HMAC/anti-rejeu activés ; confirmer que GeniusPay signe les octets JSON bruts" },
   { path: "/api/orders/[id]/confirm", status: "complete" },
   { path: "/api/orders/[id]/litige", status: "complete" },
   { path: "/api/seller/stats", status: "complete", note: "Starter+ entitlements" },

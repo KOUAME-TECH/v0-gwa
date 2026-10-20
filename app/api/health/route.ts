@@ -97,7 +97,11 @@ export async function GET() {
       payin_ready: geniusPayApiKey && geniusPayApiSecret,
       payment_verification_ready: geniusPayApiKey && geniusPayApiSecret,
       payout_ready: false,
-      webhook_ready: geniusPayApiKey && geniusPayApiSecret && geniusPayWebhookSecret,
+      webhook_ready:
+        geniusPayApiKey &&
+        geniusPayApiSecret &&
+        geniusPayWebhookSecret &&
+        process.env.GENIUSPAY_WEBHOOK_RAW_BODY_CONFIRMED === "true",
     },
     sms_delivery_ready: atKey && atLive && atSender,
     resilience: {

@@ -33,8 +33,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Content-Type invalide" }, { status: 415 })
     }
 
-    const rawBody = await request.text()
-    if (rawBody.length > 64 * 1024) {
+    const contentLength = Number(request.headers.get("content-length"))
+    if (Number.isFinite(contentLength) && contentLength > 64 * 1024) {
+      return NextResponse.json({ error: "Payload trop volumineux" }, { status: 413 })
+    }
+    const rawBody = new Uint8Array(await request.arrayBuffer())
+    if (rawBody.byteLength > 64 * 1024) {
       return NextResponse.json({ error: "Payload trop volumineux" }, { status: 413 })
     }
 
@@ -49,6 +53,12 @@ export async function POST(request: Request) {
       (await resolvePlatformSecret("GENIUSPAY_WEBHOOK_SECRET"))
     if (!webhookSecret) {
       return NextResponse.json({ error: "Secret webhook non configuré" }, { status: 503 })
+    }
+    if (process.env.GENIUSPAY_WEBHOOK_RAW_BODY_CONFIRMED !== "true") {
+      return NextResponse.json(
+        { error: "Format exact du corps signé à confirmer avec GeniusPay" },
+        { status: 503 },
+      )
     }
     if (!verifyGeniusPayWebhookSignature({ timestamp, rawBody, signature, secret: webhookSecret })) {
       return NextResponse.json({ error: "Signature webhook invalide" }, { status: 401 })
@@ -67,7 +77,11 @@ export async function POST(request: Request) {
 
     let payload: WebhookPayload
     try {
-      payload = JSON.parse(rawBody) as WebhookPayload
+      const parsed: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(rawBody))
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return NextResponse.json({ error: "Objet webhook invalide" }, { status: 400 })
+      }
+      payload = parsed as WebhookPayload
     } catch {
       return NextResponse.json({ error: "JSON webhook invalide" }, { status: 400 })
     }
@@ -165,9 +179,9 @@ export async function POST(request: Request) {
     await admin.from("order_audit_log").insert({
       order_id: order.id,
       action: success ? "geniuspay_webhook_payment_success" : "geniuspay_webhook_payment_failed",
-      old_value: "processing",
+      old_value: order.payment_status,
       new_value: success ? "held" : "failed",
-      notes: `GeniusPay ${reference}; delivery=${request.headers.get("x-webhook-delivery") || "not-provided"}`,
+      notes: `GeniusPay ${reference}; delivery=${(request.headers.get("x-webhook-delivery") || "").replace(/[^a-zA-Z0-9._:-]/g, "").slice(0, 128) || "not-provided"}`,
     })
     return NextResponse.json({ received: true })
   } catch (error) {
