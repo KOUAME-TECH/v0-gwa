@@ -73,6 +73,7 @@ export async function POST(_request: NextRequest, context: Ctx) {
     if (
       !isGeniusPayPaymentForOrder(payment, {
         id: order.id,
+        userId: order.buyer_id,
         totalAmount: Math.round(Number(order.total_amount)),
         reference: order.provider_reference,
       })
@@ -84,7 +85,21 @@ export async function POST(_request: NextRequest, context: Ctx) {
       return NextResponse.json({ error: "Données de paiement non concordantes" }, { status: 422 })
     }
 
-    if (!isGeniusPaySuccessStatus(payment.status, process.env.GENIUSPAY_SUCCESS_STATUS)) {
+    if (payment.status === "failed" || payment.status === "cancelled") {
+      const admin = createAdminClient()
+      const { data: failed, error: failureError } = await admin
+        .from("orders")
+        .update({ payment_status: "failed", updated_at: new Date().toISOString() })
+        .eq("id", id)
+        .eq("payment_status", "processing")
+        .eq("provider_reference", payment.reference)
+        .select("id")
+        .maybeSingle()
+      if (failureError) throw failureError
+      return NextResponse.json({ status: failed ? "failed" : "pending" })
+    }
+
+    if (!isGeniusPaySuccessStatus(payment.status)) {
       return NextResponse.json({ status: "pending" })
     }
 
@@ -99,7 +114,7 @@ export async function POST(_request: NextRequest, context: Ctx) {
         updated_at: now,
       })
       .eq("id", id)
-      .eq("payment_status", "processing")
+      .in("payment_status", ["processing", "failed"])
       .eq("payment_method", "geniuspay")
       .eq("provider_reference", payment.reference)
       .select("id")

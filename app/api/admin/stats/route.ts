@@ -113,9 +113,7 @@ export async function GET() {
 
     const geniusPayCredentials = await resolveGeniusPayCredentials()
     const opsHealth = {
-      geniuspay: Boolean(
-        geniusPayCredentials && process.env.GENIUSPAY_SUCCESS_STATUS?.trim(),
-      ),
+      geniuspay: Boolean(geniusPayCredentials),
       sms: Boolean(process.env.AT_SENDER_ID || process.env.SMS_AT_SENDER_ID),
       gemini: Boolean(
         process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY,

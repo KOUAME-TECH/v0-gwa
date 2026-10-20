@@ -57,8 +57,8 @@ npm test
 
 ## Ops urgents
 
-1. `GENIUSPAY_API_KEY` + `GENIUSPAY_API_SECRET` (serveur uniquement), puis `GENIUSPAY_SUCCESS_STATUS` après confirmation officielle
+1. `GENIUSPAY_API_KEY` + `GENIUSPAY_API_SECRET` (serveur uniquement), et `GENIUSPAY_WEBHOOK_SECRET`
 2. OTP téléphone : fournisseur SMS live, expéditeur approuvé, Redis persistant et `OTP_PEPPER`
 3. Soft-launch seed contenu
 
-Le pay-in GeniusPay utilise les headers serveur `X-API-Key` et `X-API-Secret` documentés, puis redirige vers le checkout hébergé. Le retour navigateur ne valide jamais le paiement : le statut est relu côté serveur avec la référence, le montant, la devise et les métadonnées de commande. Le checkout reste désactivé tant que `GENIUSPAY_SUCCESS_STATUS` n’est pas renseigné avec le statut final payé confirmé par GeniusPay. Ne configurez pas encore le webhook : son format complet de signature et sa fenêtre anti-rejeu restent à confirmer. Les versements vendeurs restent en traitement ops tant que l’API de payout n’est pas spécifiée.
+Le pay-in GeniusPay utilise les headers serveur `X-API-Key` et `X-API-Secret`, puis redirige vers le checkout hébergé. La confirmation s'appuie sur le statut documenté `completed`, vérifié côté serveur avec la référence, le montant, la devise et les métadonnées de commande. Le webhook `/api/webhooks/geniuspay` valide HMAC-SHA256 sur `timestamp + "." + corps JSON brut`, rejette les horodatages au-delà de cinq minutes et recoupe l'événement avec le GET GeniusPay avant toute transition. Les mises à jour conditionnelles rendent les livraisons répétées idempotentes. Les versements vendeurs restent en traitement ops tant que l’API de payout n’est pas spécifiée.

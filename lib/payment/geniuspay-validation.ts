@@ -27,20 +27,19 @@ export function parseGeniusPayPayment(
 
 export function isGeniusPayPaymentForOrder(
   payment: GeniusPayPaymentDetails,
-  order: { id: string; totalAmount: number; reference: string },
+  order: { id: string; userId?: string; totalAmount: number; reference: string },
 ): boolean {
   return (
     payment.reference === order.reference &&
     payment.currency === "XOF" &&
     payment.amount === order.totalAmount &&
-    String(payment.metadata.order_id ?? "") === order.id
+    String(payment.metadata.order_id ?? "") === order.id &&
+    (!order.userId || String(payment.metadata.user_id ?? "") === order.userId)
   )
 }
 
 export function isGeniusPaySuccessStatus(
   paymentStatus: string,
-  configuredSuccessStatus: string | undefined,
 ): boolean {
-  const expected = configuredSuccessStatus?.trim().toLowerCase()
-  return Boolean(expected && paymentStatus.trim().toLowerCase() === expected)
+  return paymentStatus.trim().toLowerCase() === "completed"
 }

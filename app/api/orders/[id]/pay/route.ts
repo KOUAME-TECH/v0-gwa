@@ -66,16 +66,6 @@ export async function POST(request: NextRequest, context: Ctx) {
     const creds = await resolveGeniusPayCredentials()
 
     if (creds) {
-      if (!process.env.GENIUSPAY_SUCCESS_STATUS?.trim()) {
-        return NextResponse.json(
-          {
-            error:
-              "Paiement indisponible tant que le statut final payé GeniusPay n’est pas confirmé et configuré.",
-            code: "PAYMENT_VERIFICATION_NOT_CONFIGURED",
-          },
-          { status: 503 },
-        )
-      }
       const body = await request.json().catch(() => ({}))
       const { data: buyerProfile } = await supabase
         .from("profiles")
@@ -115,6 +105,7 @@ export async function POST(request: NextRequest, context: Ctx) {
       const payIn = await createGeniusPayCheckout({
         amount,
         orderId: id,
+        userId: user.id,
         description: `Commande GWA ${order.order_number}`,
         customerName: buyerProfile?.full_name || undefined,
         customerEmail: buyerProfile?.email || user.email || undefined,

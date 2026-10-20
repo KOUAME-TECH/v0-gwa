@@ -89,6 +89,7 @@ function validCheckoutUrl(value: string): boolean {
 export async function createGeniusPayCheckout(input: {
   amount: number
   orderId: string
+  userId: string
   description: string
   customerName?: string
   customerEmail?: string
@@ -108,7 +109,7 @@ export async function createGeniusPayCheckout(input: {
     customer,
     success_url: input.successUrl,
     error_url: input.errorUrl,
-    metadata: { order_id: input.orderId },
+    metadata: { order_id: input.orderId, user_id: input.userId },
   })
   if (!result.ok || !result.data) return { ...result, data: null }
 
@@ -124,6 +125,7 @@ export async function createGeniusPayCheckout(input: {
     payment.amount !== input.amount ||
     payment.currency !== "XOF" ||
     payment.metadata.order_id !== input.orderId ||
+    payment.metadata.user_id !== input.userId ||
     payment.status !== "pending" ||
     !validCheckoutUrl(checkoutUrl)
   ) {

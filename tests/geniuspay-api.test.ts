@@ -17,7 +17,7 @@ const checkoutResponse = {
     amount: 2500,
     status: "pending",
     payment_url: "https://checkout.geniuspay.ci/session/abc",
-    metadata: { order_id: "order-123" },
+    metadata: { order_id: "order-123", user_id: "buyer-123" },
   },
 }
 
@@ -41,6 +41,7 @@ describe("GeniusPay API client", () => {
     const result = await createGeniusPayCheckout({
       amount: 2500,
       orderId: "order-123",
+      userId: "buyer-123",
       description: "Commande test",
       successUrl: "https://gwa.example/commandes/confirmation?order=order-123",
       errorUrl: "https://gwa.example/commandes/confirmation?order=order-123&payment=failed",
@@ -61,7 +62,7 @@ describe("GeniusPay API client", () => {
     expect(JSON.parse(String(init.body))).toMatchObject({
       amount: 2500,
       currency: "XOF",
-      metadata: { order_id: "order-123" },
+      metadata: { order_id: "order-123", user_id: "buyer-123" },
     })
   })
 

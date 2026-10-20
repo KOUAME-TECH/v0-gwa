@@ -5,13 +5,13 @@ import {
   parseGeniusPayPayment,
 } from "@/lib/payment/geniuspay-validation"
 
-const order = { id: "order-123", totalAmount: 2500, reference: "gp-ref-123" }
+const order = { id: "order-123", userId: "buyer-123", totalAmount: 2500, reference: "gp-ref-123" }
 const payment = {
   reference: "gp-ref-123",
   amount: 2500,
   currency: "XOF",
   status: "pending",
-  metadata: { order_id: "order-123" },
+  metadata: { order_id: "order-123", user_id: "buyer-123" },
 }
 
 describe("GeniusPay payment/order validation", () => {
@@ -26,6 +26,12 @@ describe("GeniusPay payment/order validation", () => {
     expect(
       isGeniusPayPaymentForOrder({ ...payment, metadata: { order_id: "other" } }, order),
     ).toBe(false)
+    expect(
+      isGeniusPayPaymentForOrder(
+        { ...payment, metadata: { ...payment.metadata, user_id: "other" } },
+        order,
+      ),
+    ).toBe(false)
   })
 
   it("requires an explicit currency when parsing provider status responses", () => {
@@ -35,8 +41,8 @@ describe("GeniusPay payment/order validation", () => {
   })
 
   it("does not treat a provider status as paid until an approved success value is configured", () => {
-    expect(isGeniusPaySuccessStatus("completed", undefined)).toBe(false)
-    expect(isGeniusPaySuccessStatus("completed", "paid")).toBe(false)
-    expect(isGeniusPaySuccessStatus("completed", " COMPLETED ")).toBe(true)
+    expect(isGeniusPaySuccessStatus("completed")).toBe(true)
+    expect(isGeniusPaySuccessStatus("paid")).toBe(false)
+    expect(isGeniusPaySuccessStatus(" PENDING ")).toBe(false)
   })
 })

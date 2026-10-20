@@ -44,6 +44,9 @@ export async function GET() {
   const geniusPayApiSecret =
     envSet('GENIUSPAY_API_SECRET') ||
     (await hasPlatformSecret('GENIUSPAY_API_SECRET'))
+  const geniusPayWebhookSecret =
+    envSet('GENIUSPAY_WEBHOOK_SECRET') ||
+    (await hasPlatformSecret('GENIUSPAY_WEBHOOK_SECRET'))
   let geminiReady =
     envSet('GEMINI_API_KEY') ||
     envSet('GOOGLE_GENERATIVE_AI_API_KEY') ||
@@ -86,17 +89,15 @@ export async function GET() {
       GEMINI_API_KEY: geminiReady,
       GENIUSPAY_API_KEY: geniusPayApiKey,
       GENIUSPAY_API_SECRET: geniusPayApiSecret,
+      GENIUSPAY_WEBHOOK_SECRET: geniusPayWebhookSecret,
     },
     geniuspay: {
       configured: geniusPayApiKey && geniusPayApiSecret,
       api_contract_ready: true,
-      payin_ready:
-        geniusPayApiKey &&
-        geniusPayApiSecret &&
-        envSet('GENIUSPAY_SUCCESS_STATUS'),
-      payment_verification_ready: envSet('GENIUSPAY_SUCCESS_STATUS'),
+      payin_ready: geniusPayApiKey && geniusPayApiSecret,
+      payment_verification_ready: geniusPayApiKey && geniusPayApiSecret,
       payout_ready: false,
-      webhook_ready: false,
+      webhook_ready: geniusPayApiKey && geniusPayApiSecret && geniusPayWebhookSecret,
     },
     sms_delivery_ready: atKey && atLive && atSender,
     resilience: {
