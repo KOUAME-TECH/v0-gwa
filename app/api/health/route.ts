@@ -89,7 +89,8 @@ export async function GET() {
     },
     geniuspay: {
       configured: geniusPayApiKey && geniusPayApiSecret,
-      payin_ready: geniusPayApiKey && geniusPayApiSecret,
+      api_contract_ready: false,
+      payin_ready: false,
       payout_ready: false,
       webhook_ready: false,
     },

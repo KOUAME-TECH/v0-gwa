@@ -298,22 +298,17 @@ export default function CartPage() {
           return
         }
 
-        const code = String(payPayload?.code || "")
-        if (
-          payRes.status === 503 ||
-          code === "PAYMENT_PROVIDER_MISSING"
-        ) {
-          throw new Error(
-            "Paiement Mobile Money indisponible pour le moment. Réessaie plus tard ou contacte le support WhatsApp GWA. Ta commande n’a pas été finalisée.",
-          )
-        }
-        if (code === "PHONE_REQUIRED" || code === "INVALID_PHONE") {
-          throw new Error(payPayload?.error || "Numéro Mobile Money requis")
-        }
-        throw new Error(
-          payPayload?.error ||
-            "Le paiement n’a pas pu démarrer. Vérifie ton numéro et réessaie.",
-        )
+        await supabase
+          .from("cart_items")
+          .delete()
+          .eq("user_id", user.id)
+          .in("product_id", items.map((item) => item.product.id))
+        const { notifyCartChanged } = await import("@/lib/cart/events")
+        notifyCartChanged()
+        const { notifyOrdersChanged } = await import("@/hooks/use-active-orders-count")
+        notifyOrdersChanged()
+        router.push(`/commandes/confirmation?order=${encodeURIComponent(orderId)}&payment=unavailable`)
+        return
       }
 
       // Vider le panier une fois toutes les commandes creees

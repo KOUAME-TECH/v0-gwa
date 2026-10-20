@@ -111,9 +111,7 @@ export async function GET() {
       ) || 0
 
     const opsHealth = {
-      geniuspay: Boolean(
-        process.env.GENIUSPAY_API_KEY && process.env.GENIUSPAY_API_SECRET,
-      ),
+      geniuspay: false,
       sms: Boolean(process.env.AT_SENDER_ID || process.env.SMS_AT_SENDER_ID),
       gemini: Boolean(
         process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY,

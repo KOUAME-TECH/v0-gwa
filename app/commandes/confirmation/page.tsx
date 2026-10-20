@@ -42,6 +42,7 @@ interface Order {
 function ConfirmationContent() {
   const searchParams = useSearchParams()
   const orderId = searchParams.get('order')
+  const paymentUnavailable = searchParams.get('payment') === "unavailable"
   
   const [order, setOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(true)
@@ -101,7 +102,12 @@ function ConfirmationContent() {
   }, [order])
 
   useEffect(() => {
-    if (!orderId || order?.payment_method !== "geniuspay" || order.payment_status === "paid") return
+    if (
+      !orderId ||
+      paymentUnavailable ||
+      order?.payment_method !== "geniuspay" ||
+      order.payment_status === "paid"
+    ) return
     let cancelled = false
     let attempts = 0
     let timer: ReturnType<typeof setTimeout>
@@ -134,7 +140,7 @@ function ConfirmationContent() {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [orderId, order?.payment_method, order?.payment_status])
+  }, [orderId, order?.payment_method, order?.payment_status, paymentUnavailable])
 
   async function loadOrder(id: string) {
     const { data } = await supabase
@@ -234,9 +240,13 @@ function ConfirmationContent() {
                 ? "Ton paiement est protégé : le vendeur touche l’argent après confirmation de livraison."
                 : order.payment_status === "failed"
                   ? "Le paiement n’a pas abouti. Tu peux réessayer depuis tes commandes."
-                  : "Le retour du checkout ne confirme pas le paiement. GeniusPay vérifie la transaction côté serveur."}
+                  : paymentUnavailable
+                    ? "Commande créée, mais le paiement n’a pas pu démarrer. Consulte tes commandes avant de réessayer."
+                    : "Le retour du checkout ne confirme pas le paiement. GeniusPay vérifie la transaction côté serveur."}
             </p>
-            {order.payment_method === "geniuspay" && order.payment_status !== "paid" && (
+            {order.payment_method === "geniuspay" &&
+              order.payment_status !== "paid" &&
+              !paymentUnavailable && (
               <Button
                 className="mt-4"
                 variant="outline"
