@@ -65,6 +65,7 @@ async function geniusPayFetch(
         ok: false,
         data,
         error: `GENIUSPAY_HTTP_${response.status}`,
+        uncertain: method === "POST" && (response.status >= 500 || response.ok),
       }
     }
     return { ok: true, data }
@@ -119,21 +120,46 @@ export async function createGeniusPayCheckout(input: {
 
   const payment = toPayment(result.data)
   if (!payment || payment.amount !== input.amount || payment.currency !== "XOF") {
-    return { ok: false, data: null, error: "GENIUSPAY_INVALID_CREATE_RESPONSE" }
+    return {
+      ok: false,
+      data: null,
+      error: "GENIUSPAY_INVALID_CREATE_RESPONSE",
+      uncertain: true,
+    }
   }
   if (payment.status !== "pending" && payment.status !== "processing") {
-    return { ok: false, data: null, error: "GENIUSPAY_UNEXPECTED_INITIAL_STATUS" }
+    return {
+      ok: false,
+      data: null,
+      error: "GENIUSPAY_UNEXPECTED_INITIAL_STATUS",
+      uncertain: true,
+    }
   }
   if (!payment.checkoutUrl) {
-    return { ok: false, data: null, error: "GENIUSPAY_CHECKOUT_URL_MISSING" }
+    return {
+      ok: false,
+      data: null,
+      error: "GENIUSPAY_CHECKOUT_URL_MISSING",
+      uncertain: true,
+    }
   }
   try {
     const url = new URL(payment.checkoutUrl)
     if (url.protocol !== "https:" || url.hostname !== "geniuspay.ci") {
-      return { ok: false, data: null, error: "GENIUSPAY_INVALID_CHECKOUT_URL" }
+      return {
+        ok: false,
+        data: null,
+        error: "GENIUSPAY_INVALID_CHECKOUT_URL",
+        uncertain: true,
+      }
     }
   } catch {
-    return { ok: false, data: null, error: "GENIUSPAY_INVALID_CHECKOUT_URL" }
+    return {
+      ok: false,
+      data: null,
+      error: "GENIUSPAY_INVALID_CHECKOUT_URL",
+      uncertain: true,
+    }
   }
   return { ok: true, data: payment }
 }

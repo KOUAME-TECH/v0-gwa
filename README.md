@@ -57,8 +57,8 @@ npm test
 
 ## Ops urgents
 
-1. `GENIUSPAY_API_KEY` + `GENIUSPAY_API_SECRET` (serveur uniquement)  
-2. OTP téléphone : fournisseur SMS live, expéditeur approuvé, Redis persistant et `OTP_PEPPER`  
+1. `GENIUSPAY_API_KEY` + `GENIUSPAY_API_SECRET` (serveur uniquement)
+2. OTP téléphone : fournisseur SMS live, expéditeur approuvé, Redis persistant et `OTP_PEPPER`
 3. Soft-launch seed contenu
 
 Le paiement est confirmé par vérification serveur de la référence GeniusPay après retour du checkout. Ne configurez pas encore le webhook GeniusPay : le format complet de signature et la fenêtre anti-rejeu doivent être confirmés dans la documentation officielle. Les versements vendeurs restent en traitement ops tant que l’API de payout n’est pas spécifiée.

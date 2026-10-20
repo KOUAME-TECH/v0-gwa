@@ -151,7 +151,7 @@ export async function POST(request: Request) {
 
     // Si Africa's Talking est configuré, on n'utilise PAS Supabase Phone en premier :
     // Supabase peut répondre OK sans SMS réel (crédits AT jamais débités).
-    let supabasePhoneError: string | null = null
+    let supabasePhoneFailed = false
     if (
       shouldUseSupabasePhoneOtpFallback(
         mode,
@@ -183,8 +183,8 @@ export async function POST(request: Request) {
         })
       }
 
-      supabasePhoneError = smsError.message
-      console.warn("[auth/send-otp] supabase phone:", smsError.message)
+      supabasePhoneFailed = true
+      console.warn("[auth/send-otp] Supabase phone OTP was rejected")
     }
 
     // Login custom OTP : email synthétique OK si pas d'email réel
@@ -208,9 +208,7 @@ export async function POST(request: Request) {
             "Impossible d'envoyer le SMS pour le moment. Réessayez plus tard.",
           code: "SMS_SEND_FAILED",
           hint: [
-            supabasePhoneError
-              ? `supabase:${supabasePhoneError.slice(0, 80)}`
-              : null,
+            supabasePhoneFailed ? "supabase:rejected" : null,
             "sms_provider:missing",
             "twilio_vercel:missing",
           ]
@@ -252,7 +250,7 @@ export async function POST(request: Request) {
 
     const sms = await sendSmsOtp(formatted, code)
     if (!sms.success) {
-      console.error("[auth/send-otp] sms", sms.error)
+      console.error("[auth/send-otp] SMS provider rejected OTP", sms.provider || "unknown")
       // Pas de fallback Supabase Phone si AT est le provider choisi :
       // sinon l'UI dit « envoyé » alors que le SMS n'arrive jamais.
       if (mode === "login" && !hasAfricasTalkingProvider()) {
@@ -277,16 +275,14 @@ export async function POST(request: Request) {
             account_hint: accountHint,
           })
         }
-        supabasePhoneError = smsError.message
-        console.warn("[auth/send-otp] supabase fallback:", smsError.message)
+        supabasePhoneFailed = true
+        console.warn("[auth/send-otp] Supabase fallback rejected OTP")
       }
       const hintParts = [
         sms.provider
           ? `${sms.provider}:${(sms.error || "fail").slice(0, 120)}`
           : null,
-        supabasePhoneError
-          ? `supabase:${supabasePhoneError.slice(0, 80)}`
-          : null,
+        supabasePhoneFailed ? "supabase:rejected" : null,
         !hasTwilioProvider() ? "twilio_vercel:missing" : null,
       ].filter(Boolean)
       return NextResponse.json(

@@ -45,6 +45,15 @@ export async function POST(_request: NextRequest, context: Ctx) {
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 })
     }
     if (order.payment_status === "paid") {
+      const admin = createAdminClient()
+      const now = new Date().toISOString()
+      const { error: escrowError } = await admin
+        .from("escrow_transactions")
+        .update({ status: "held", paid_at: now })
+        .eq("order_id", id)
+        .eq("tranche_numero", 1)
+        .eq("status", "pending")
+      if (escrowError) throw escrowError
       return NextResponse.json({ status: "paid" })
     }
     if (order.payment_method !== "geniuspay" || !order.provider_reference) {
