@@ -13,11 +13,13 @@ import {
   storeOtp,
   canSendOtp,
   clearOtp,
+  isOtpStoreReady,
 } from "@/lib/auth/otp-store"
 import {
   hasAfricasTalkingProvider,
   hasSmsProvider,
   hasTwilioProvider,
+  shouldUseSupabasePhoneOtpFallback,
   sendSmsOtp,
 } from "@/lib/auth/sms"
 
@@ -68,17 +70,6 @@ export async function POST(request: Request) {
           ),
         },
         { status: 429 },
-      )
-    }
-
-    if (!hasSmsProvider()) {
-      return NextResponse.json(
-        {
-          error:
-            "L'envoi de SMS est temporairement indisponible. Réessayez plus tard ou utilisez l'email.",
-          code: "SMS_PROVIDER_MISSING",
-        },
-        { status: 503 },
       )
     }
 
@@ -161,9 +152,11 @@ export async function POST(request: Request) {
     // Supabase peut répondre OK sans SMS réel (crédits AT jamais débités).
     let supabasePhoneError: string | null = null
     if (
-      mode === "login" &&
-      !hasTwilioProvider() &&
-      !hasAfricasTalkingProvider()
+      shouldUseSupabasePhoneOtpFallback(
+        mode,
+        hasTwilioProvider(),
+        hasAfricasTalkingProvider(),
+      )
     ) {
       const { error: smsError } = await supabase.auth.signInWithOtp({
         phone: formatted,
@@ -223,6 +216,16 @@ export async function POST(request: Request) {
             .join(" | "),
         },
         { status: 502 },
+      )
+    }
+
+    if (!isOtpStoreReady()) {
+      return NextResponse.json(
+        {
+          error: "Le stockage sécurisé des codes SMS n'est pas configuré.",
+          code: "OTP_STORAGE_NOT_CONFIGURED",
+        },
+        { status: 503 },
       )
     }
 

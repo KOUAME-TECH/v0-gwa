@@ -3,12 +3,6 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { sendPushToUser } from "@/lib/notifications/push"
 import { isPaymentSimulationAllowed } from "@/lib/payment/simulation"
-import {
-  createFeexPayPayout,
-  getFeexPayCredentials,
-  resolveFeexPayCredentials,
-  mapPaymentMethodToNetwork,
-} from "@/lib/feexpay/client"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -69,12 +63,6 @@ export async function POST(request: NextRequest, context: Ctx) {
     const admin = createAdminClient()
     const now = new Date().toISOString()
 
-    const { data: sellerProfile } = await admin
-      .from("profiles")
-      .select("phone, full_name")
-      .eq("id", order.seller_id)
-      .maybeSingle()
-
     const payoutAmount =
       order.vendeur_recoit_fcfa != null
         ? Math.round(Number(order.vendeur_recoit_fcfa))
@@ -85,47 +73,18 @@ export async function POST(request: NextRequest, context: Ctx) {
               Math.round(Number(order.service_fee) || 0),
           )
 
-    let payoutStatus = "skipped_no_provider"
+    let payoutStatus = "pending"
     let payoutRef: string | null = null
     let payoutNetwork: string | null = null
-    let payoutError: string | null = null
+    let payoutError: string | null = "GENIUSPAY_PAYOUT_API_NOT_DOCUMENTED"
 
-    const creds = await resolveFeexPayCredentials()
-    const sellerPhone = String(sellerProfile?.phone || "").trim()
-    const network = mapPaymentMethodToNetwork(
-      order.payment_method || order.payout_network || "orange",
-    )
-
-    if (creds && payoutAmount > 0) {
-      if (!sellerPhone) {
-        payoutStatus = "failed"
-        payoutError = "SELLER_PHONE_MISSING"
-      } else {
-        payoutStatus = "processing"
-        payoutNetwork = network
-        const payout = await createFeexPayPayout({
-          amountFcfa: payoutAmount,
-          phone: sellerPhone,
-          network,
-          description: `GWA release ${order.order_number}`,
-        })
-        if (payout.ok) {
-          payoutStatus = "paid"
-          payoutRef = payout.reference
-        } else {
-          payoutStatus = "failed"
-          payoutError = payout.error || "PAYOUT_FAILED"
-          console.error("[api/orders/confirm] payout", payout.error, payout.raw)
-        }
-      }
-    } else if (!creds && isPaymentSimulationAllowed()) {
+    if (isPaymentSimulationAllowed()) {
       payoutStatus = "skipped_sim"
       payoutRef = `SIM-OUT-${Date.now().toString(36).toUpperCase()}`
-    } else if (!creds) {
-      payoutStatus = "failed"
-      payoutError = "PAYMENT_PROVIDER_MISSING"
+      payoutError = null
     } else if (payoutAmount <= 0) {
       payoutStatus = "skipped_zero"
+      payoutError = null
     }
 
     const payoutOk =
@@ -211,7 +170,7 @@ export async function POST(request: NextRequest, context: Ctx) {
     const sellerMsg =
       payoutStatus === "paid"
         ? `Fonds versés (${payoutAmount} FCFA) — ${order.order_number}`
-        : payoutStatus === "failed"
+        :         payoutStatus === "failed" || payoutStatus === "pending"
           ? `Livraison confirmée — payout en file ops (${order.order_number})`
           : `L'acheteur a confirmé ${order.order_number}`
 
@@ -223,7 +182,7 @@ export async function POST(request: NextRequest, context: Ctx) {
           ? "Paiement reçu"
           : payoutOk
             ? "Fonds libérés"
-            : "Livraison confirmée — versement en cours",
+            : "Livraison confirmée — versement en attente ops",
       message: sellerMsg,
       body: sellerMsg,
       link: `/wallet`,

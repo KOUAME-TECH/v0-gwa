@@ -135,7 +135,7 @@ export default function ConfidentialitePage() {
           </p>
           <div className="space-y-1.5">
             <Row label="Supabase" value="hébergement de la base de données et stockage des fichiers." />
-            <Row label="Feexpay" value="traitement des paiements (mobile money)." />
+            <Row label="GeniusPay" value="traitement des paiements (mobile money et checkout)." />
             <Row label="Africa's Talking" value="envoi des SMS / codes OTP." />
             <Row label="OneSignal" value="notifications push." />
             <Row label="Vercel" value="hébergement de l'application et mesure d'audience." />

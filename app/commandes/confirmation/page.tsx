@@ -45,6 +45,7 @@ function ConfirmationContent() {
   
   const [order, setOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(true)
+  const [verifyingPayment, setVerifyingPayment] = useState(false)
   const [deliveryMap, setDeliveryMap] = useState<{
     lat: number
     lon: number
@@ -98,6 +99,42 @@ function ConfirmationContent() {
       cancelled = true
     }
   }, [order])
+
+  useEffect(() => {
+    if (!orderId || order?.payment_method !== "geniuspay" || order.payment_status === "paid") return
+    let cancelled = false
+    let attempts = 0
+    let timer: ReturnType<typeof setTimeout>
+
+    const checkPayment = async () => {
+      if (cancelled || attempts >= 6) return
+      attempts += 1
+      setVerifyingPayment(true)
+      try {
+        const response = await fetch(`/api/orders/${encodeURIComponent(orderId)}/verify-payment`, {
+          method: "POST",
+        })
+        const result = await response.json().catch(() => ({}))
+        if (!cancelled && (result.status === "paid" || result.status === "failed")) {
+          await loadOrder(orderId)
+          setVerifyingPayment(false)
+          return
+        }
+      } catch {
+        /* la vérification pourra être relancée manuellement */
+      }
+      if (!cancelled) {
+        setVerifyingPayment(false)
+        timer = setTimeout(checkPayment, 5000)
+      }
+    }
+
+    timer = setTimeout(checkPayment, 1500)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [orderId, order?.payment_method, order?.payment_status])
 
   async function loadOrder(id: string) {
     const { data } = await supabase
@@ -189,10 +226,41 @@ function ConfirmationContent() {
             <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
               <CheckCircle2 className="h-10 w-10 text-primary" />
             </div>
-            <h1 className="text-3xl font-bold mb-2">Commande Confirmée !</h1>
+            <h1 className="text-3xl font-bold mb-2">
+              {order.payment_status === "paid" ? "Paiement confirmé" : "Commande créée"}
+            </h1>
             <p className="text-muted-foreground">
-              Merci. Ton paiement est protégé : le vendeur touche l’argent après confirmation de livraison.
+              {order.payment_status === "paid"
+                ? "Ton paiement est protégé : le vendeur touche l’argent après confirmation de livraison."
+                : order.payment_status === "failed"
+                  ? "Le paiement n’a pas abouti. Tu peux réessayer depuis tes commandes."
+                  : "Le retour du checkout ne confirme pas le paiement. GeniusPay vérifie la transaction côté serveur."}
             </p>
+            {order.payment_method === "geniuspay" && order.payment_status !== "paid" && (
+              <Button
+                className="mt-4"
+                variant="outline"
+                disabled={verifyingPayment}
+                onClick={async () => {
+                  if (!orderId) return
+                  setVerifyingPayment(true)
+                  try {
+                    const response = await fetch(
+                      `/api/orders/${encodeURIComponent(orderId)}/verify-payment`,
+                      { method: "POST" },
+                    )
+                    const result = await response.json().catch(() => ({}))
+                    if (response.ok && (result.status === "paid" || result.status === "failed")) {
+                      await loadOrder(orderId)
+                    }
+                  } finally {
+                    setVerifyingPayment(false)
+                  }
+                }}
+              >
+                {verifyingPayment ? "Vérification…" : "Vérifier le paiement"}
+              </Button>
+            )}
           </div>
 
           <div className="mb-6">

@@ -5,11 +5,9 @@ import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { sendPushToUser } from "@/lib/notifications/push"
 import { isPaymentSimulationAllowed } from "@/lib/payment/simulation"
 import {
-  createFeexPayPayIn,
-  getFeexPayCredentials,
-  resolveFeexPayCredentials,
-  mapPaymentMethodToNetwork,
-} from "@/lib/feexpay/client"
+  createGeniusPayCheckout,
+  resolveGeniusPayCredentials,
+} from "@/lib/payment/geniuspay"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -24,7 +22,7 @@ function appOrigin(request: NextRequest): string {
 
 /**
  * POST /api/orders/[id]/pay
- * Initie pay-in FeexPay (requesttopay) → payment_url ou USSD pending.
+ * Initie un checkout GeniusPay côté serveur.
  * Simulation uniquement hors prod / flag explicite.
  */
 export async function POST(request: NextRequest, context: Ctx) {
@@ -43,11 +41,20 @@ export async function POST(request: NextRequest, context: Ctx) {
       return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
     }
 
-    const { data: order } = await supabase
+    const { data: order, error: orderError } = await supabase
       .from("orders")
-      .select("*")
+      .select("*, provider_reference")
       .eq("id", id)
       .maybeSingle()
+    if (orderError) {
+      if (/provider_reference|column/i.test(orderError.message)) {
+        return NextResponse.json(
+          { error: "Migration 057 requise pour GeniusPay", code: "MIGRATION_REQUIRED" },
+          { status: 503 },
+        )
+      }
+      throw orderError
+    }
 
     if (!order) {
       return NextResponse.json({ error: "Commande introuvable" }, { status: 404 })
@@ -60,9 +67,7 @@ export async function POST(request: NextRequest, context: Ctx) {
     }
 
     const body = await request.json().catch(() => ({}))
-    const paymentMethod =
-      String(body?.payment_method || order.payment_method || "orange").trim()
-    const network = mapPaymentMethodToNetwork(paymentMethod)
+    const paymentMethod = "geniuspay"
 
     const { data: buyerProfile } = await supabase
       .from("profiles")
@@ -70,79 +75,105 @@ export async function POST(request: NextRequest, context: Ctx) {
       .eq("id", user.id)
       .maybeSingle()
 
-    const phone =
-      String(body?.phone || order.shipping_phone || buyerProfile?.phone || "").trim()
+    const phone = String(body?.phone || order.shipping_phone || buyerProfile?.phone || "").trim()
 
     const admin = createAdminClient()
-    const creds = await resolveFeexPayCredentials()
+    const creds = await resolveGeniusPayCredentials()
     const amount = Math.round(Number(order.total_amount) || 0)
     const origin = appOrigin(request)
-    const returnUrl = `${origin}/commandes/confirmation?order=${id}`
+    const returnUrl = `${origin}/commandes/confirmation?order=${encodeURIComponent(id)}`
 
     if (creds) {
-      if (!phone) {
+      if (amount < 200) {
         return NextResponse.json(
-          {
-            error: "Numéro Mobile Money requis pour payer",
-            code: "PHONE_REQUIRED",
-          },
+          { error: "Montant minimum GeniusPay : 200 XOF", code: "AMOUNT_TOO_LOW" },
           { status: 400 },
         )
       }
 
-      const nameParts = String(buyerProfile?.full_name || "").trim().split(/\s+/)
-      const payIn = await createFeexPayPayIn({
-        amountFcfa: amount,
-        phone,
-        network,
-        description: `GWA ${order.order_number}`,
-        firstName: nameParts[0] || "Acheteur",
-        lastName: nameParts.slice(1).join(" ") || "GWA",
-        returnUrl,
-        callbackInfo: JSON.stringify({ order_id: id, order_number: order.order_number }),
+      const { data: reservation, error: reservationError } = await admin
+        .from("orders")
+        .update({
+          payment_status: "processing",
+          payment_method: paymentMethod,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id)
+        .in("payment_status", ["pending", "failed"])
+        .select("id")
+        .maybeSingle()
+      if (reservationError) throw reservationError
+      if (!reservation) {
+        return NextResponse.json(
+          { error: "Un paiement est déjà en cours ou cette commande n’est pas payable.", code: "PAYMENT_ALREADY_STARTED" },
+          { status: 409 },
+        )
+      }
+
+      const payIn = await createGeniusPayCheckout({
+        amount,
+        orderId: id,
+        description: `Commande GWA ${order.order_number}`,
+        customerName: buyerProfile?.full_name || undefined,
+        customerPhone: phone || undefined,
+        successUrl: returnUrl,
+        errorUrl: `${returnUrl}&payment=failed`,
       })
 
       if (!payIn.ok) {
-        console.error("[api/orders/pay] feexpay pay-in", payIn.error, payIn.raw)
+        console.error("[api/orders/pay] GeniusPay", payIn.error)
+        if (!payIn.uncertain) {
+          await admin
+            .from("orders")
+            .update({ payment_status: "failed", updated_at: new Date().toISOString() })
+            .eq("id", id)
+            .eq("payment_status", "processing")
+        }
         return NextResponse.json(
           {
-            error: "Échec initiation paiement FeexPay",
+            error: payIn.uncertain
+              ? "Résultat d’initiation incertain. N’essayez pas de repayer ; contactez le support."
+              : "Échec initiation paiement GeniusPay",
             code: payIn.error || "PAYIN_FAILED",
-            details: payIn.raw,
           },
           { status: 502 },
         )
       }
 
-      const feexpayRef =
-        payIn.reference || `GWA-${Date.now().toString(36).toUpperCase()}`
-
-      await admin
+      const { error: referenceError } = await admin
         .from("orders")
         .update({
           payment_status: "processing",
-          feexpay_ref: feexpayRef,
+          provider_reference: payIn.data.reference,
           payment_method: paymentMethod,
           updated_at: new Date().toISOString(),
         })
         .eq("id", id)
+        .eq("payment_status", "processing")
+      if (referenceError) {
+        console.error("[api/orders/pay] GeniusPay reference persistence failed", {
+          orderId: id,
+          reference: payIn.data.reference,
+        })
+        return NextResponse.json(
+          { error: "Paiement créé mais référence non enregistrée. Contactez le support.", code: "PAYMENT_REFERENCE_SAVE_FAILED" },
+          { status: 503 },
+        )
+      }
 
       await admin.from("order_audit_log").insert({
         order_id: id,
         performed_by: user.id,
-        action: "feexpay_payin_initiated",
+        action: "geniuspay_payin_initiated",
         new_value: "processing",
-        notes: `ref=${feexpayRef} network=${network} url=${payIn.paymentUrl ? "yes" : "ussd"}`,
+        notes: `ref=${payIn.data.reference} amount=${amount} currency=XOF`,
       })
 
       return NextResponse.json({
-        status: payIn.paymentUrl ? "redirect_required" : "ussd_pending",
-        feexpay_ref: feexpayRef,
-        payment_url: payIn.paymentUrl,
-        network,
-        message: payIn.paymentUrl
-          ? "Redirige vers FeexPay pour finaliser le paiement"
-          : "Valide le paiement sur ton téléphone (USSD / push MM)",
+        status: "redirect_required",
+        payment_reference: payIn.data.reference,
+        payment_url: payIn.data.checkoutUrl,
+        message: "Redirection vers GeniusPay pour finaliser le paiement",
       })
     }
 
@@ -150,7 +181,7 @@ export async function POST(request: NextRequest, context: Ctx) {
       return NextResponse.json(
         {
           error:
-            "Paiements live non configurés. Définissez FEEXPAY_API_KEY + FEEXPAY_SHOP_ID.",
+            "Paiements non configurés. Définissez GENIUSPAY_API_KEY + GENIUSPAY_API_SECRET.",
           code: "PAYMENT_PROVIDER_MISSING",
         },
         { status: 503 },
@@ -164,7 +195,7 @@ export async function POST(request: NextRequest, context: Ctx) {
         payment_status: "paid",
         escrow_status: "held",
         status: "confirmed",
-        feexpay_ref: feexpayRef,
+        provider_reference: feexpayRef,
         payment_method: paymentMethod,
         updated_at: new Date().toISOString(),
       })
@@ -210,7 +241,7 @@ export async function POST(request: NextRequest, context: Ctx) {
       feexpay_ref: feexpayRef,
       escrow_status: "held",
       payment_url: null,
-      message: "Paiement simulé — configurez FEEXPAY_* pour le live",
+      message: "Paiement simulé — configurez GeniusPay pour le live",
     })
   } catch (err) {
     console.error("[api/orders/pay]", err)

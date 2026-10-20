@@ -12,6 +12,7 @@ import {
   getOneSignalAppId,
   getOneSignalRestApiKey,
 } from '@/lib/notifications/onesignal-config'
+import { isOtpStoreReady } from '@/lib/auth/otp-store'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,13 +38,12 @@ export async function GET() {
   const atKey = hasAfricasTalkingProvider()
   const atLive = isAfricasTalkingLiveUsername()
   const atSender = hasAfricasTalkingSenderId() || !!(await resolveAfricasTalkingSenderId())
-  const feexpayKey =
-    envSet('FEEXPAY_API_KEY') ||
-    (await hasPlatformSecret('FEEXPAY_API_KEY'))
-  const feexpayShop =
-    envSet('FEEXPAY_SHOP_ID') ||
-    (await hasPlatformSecret('FEEXPAY_SHOP_ID'))
-  const feexpayMode = (process.env.FEEXPAY_MODE || 'sandbox').toLowerCase()
+  const geniusPayApiKey =
+    envSet('GENIUSPAY_API_KEY') ||
+    (await hasPlatformSecret('GENIUSPAY_API_KEY'))
+  const geniusPayApiSecret =
+    envSet('GENIUSPAY_API_SECRET') ||
+    (await hasPlatformSecret('GENIUSPAY_API_SECRET'))
   let geminiReady =
     envSet('GEMINI_API_KEY') ||
     envSet('GOOGLE_GENERATIVE_AI_API_KEY') ||
@@ -72,6 +72,7 @@ export async function GET() {
       OTP_PEPPER: otpPepper,
       CRON_SECRET: cronSecret,
       SMS_PROVIDER: smsConfigured,
+      OTP_STORAGE: isOtpStoreReady(),
       SMS_AT: atKey,
       SMS_AT_USERNAME_LIVE: atLive,
       SMS_AT_SENDER_ID: atSender,
@@ -83,16 +84,14 @@ export async function GET() {
       ONESIGNAL_APP_ID: onesignalApp,
       ONESIGNAL_REST_API_KEY: onesignalRest,
       GEMINI_API_KEY: geminiReady,
-      FEEXPAY_API_KEY: feexpayKey,
-      FEEXPAY_SHOP_ID: feexpayShop,
+      GENIUSPAY_API_KEY: geniusPayApiKey,
+      GENIUSPAY_API_SECRET: geniusPayApiSecret,
     },
-    feexpay: {
-      configured: feexpayKey && feexpayShop,
-      mode: feexpayMode === 'live' || feexpayMode === 'prod' || feexpayMode === 'production'
-        ? 'live'
-        : 'sandbox',
-      payin_ready: feexpayKey && feexpayShop,
-      payout_ready: feexpayKey && feexpayShop,
+    geniuspay: {
+      configured: geniusPayApiKey && geniusPayApiSecret,
+      payin_ready: geniusPayApiKey && geniusPayApiSecret,
+      payout_ready: false,
+      webhook_ready: false,
     },
     sms_delivery_ready: atKey && atLive && atSender,
     resilience: {

@@ -76,6 +76,14 @@ export function hasSmsProvider(): boolean {
   return hasTwilioProvider() || hasAfricasTalkingProvider() || termii
 }
 
+export function shouldUseSupabasePhoneOtpFallback(
+  mode: "login" | "bind" | "register",
+  hasTwilio: boolean,
+  hasAfricasTalking: boolean,
+): boolean {
+  return mode === "login" && !hasTwilio && !hasAfricasTalking
+}
+
 export async function sendSmsOtp(
   phoneE164: string,
   code: string,

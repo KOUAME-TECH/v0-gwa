@@ -111,8 +111,8 @@ export async function GET() {
       ) || 0
 
     const opsHealth = {
-      feexpay: Boolean(
-        process.env.FEEXPAY_API_KEY && process.env.FEEXPAY_SHOP_ID,
+      geniuspay: Boolean(
+        process.env.GENIUSPAY_API_KEY && process.env.GENIUSPAY_API_SECRET,
       ),
       sms: Boolean(process.env.AT_SENDER_ID || process.env.SMS_AT_SENDER_ID),
       gemini: Boolean(

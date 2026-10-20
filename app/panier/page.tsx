@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { 
   ShoppingCart, Trash2, Plus, Minus, MapPin, 
-  Smartphone, Building2, ArrowRight, ChevronLeft,
+  Smartphone, ArrowRight, ChevronLeft,
   Package, X
 } from "lucide-react"
 import Link from "next/link"
@@ -43,11 +43,7 @@ interface CartItem {
 }
 
 const paymentMethods = [
-  { id: "orange", name: "Orange Money", icon: Smartphone, color: "text-orange-500" },
-  { id: "mtn", name: "MTN MoMo", icon: Smartphone, color: "text-yellow-500" },
-  { id: "wave", name: "Wave", icon: Smartphone, color: "text-cyan-500" },
-  { id: "moov", name: "Moov Money", icon: Smartphone, color: "text-blue-500" },
-  { id: "bank", name: "Virement", icon: Building2, color: "text-gray-500" },
+  { id: "geniuspay", name: "GeniusPay — choisir le moyen de paiement au checkout", icon: Smartphone, color: "text-[#1F5C2E]" },
 ]
 
 export default function CartPage() {
@@ -274,7 +270,7 @@ export default function CartPage() {
         if (!orderId) throw new Error("Réponse commande invalide")
         createdOrderIds.push(orderId)
 
-        // Paiement : FeexPay pay-in (payment_url) ou simulation hors prod
+        // Le choix du moyen de paiement se fait sur le checkout GeniusPay.
         const payRes = await fetch(`/api/orders/${orderId}/pay`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -592,7 +588,7 @@ export default function CartPage() {
         <div className="mx-auto max-w-3xl space-y-3 p-4">
           <EscrowStepper payment_status="pending" escrow_status="pending" status="pending" />
           <p className="text-sm text-[#4B5563]">
-            Paiement sécurisé — argent protégé jusqu’à réception.
+            Le checkout GeniusPay te permet de choisir ton moyen de paiement. Le paiement sera confirmé côté serveur.
           </p>
           <div className="rounded-2xl border border-[#1F5C2E]/10 bg-white p-4 space-y-2 text-sm">
             <div className="flex justify-between">
@@ -618,9 +614,7 @@ export default function CartPage() {
                 <Label htmlFor={method.id} className="flex-1 cursor-pointer font-medium">
                   {method.name}
                 </Label>
-                {method.id !== "bank" && (
-                  <Badge variant="outline" className="text-[10px]">Instant</Badge>
-                )}
+                <Badge variant="outline" className="text-[10px]">Checkout sécurisé</Badge>
               </div>
             ))}
           </RadioGroup>
