@@ -44,10 +44,10 @@ describe("GeniusPay webhook authentication", () => {
       }),
     ).toBe(false)
     expect(
-      verifyGeniusPayWebhookSignature({ timestamp, rawBody, signature, secret: "wrong" }),
+      verifyGeniusPayWebhookSignature({ timestamp, payload, signature, secret: "wrong" }),
     ).toBe(false)
     expect(
-      verifyGeniusPayWebhookSignature({ timestamp, rawBody, signature: "bad", secret }),
+      verifyGeniusPayWebhookSignature({ timestamp, payload, signature: "bad", secret }),
     ).toBe(false)
   })
 
