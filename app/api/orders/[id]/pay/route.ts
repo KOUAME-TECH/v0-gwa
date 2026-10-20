@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { sendPushToUser } from "@/lib/notifications/push"
+import { isPaymentSimulationAllowed } from "@/lib/payment/simulation"
 import {
   createFeexPayPayIn,
   getFeexPayCredentials,
@@ -11,11 +12,6 @@ import {
 } from "@/lib/feexpay/client"
 
 type Ctx = { params: Promise<{ id: string }> }
-
-function allowPaymentSimulation(): boolean {
-  if (process.env.ALLOW_PAYMENT_SIMULATION === "true") return true
-  return process.env.NODE_ENV === "development" && !process.env.VERCEL_ENV
-}
 
 function appOrigin(request: NextRequest): string {
   const env = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "")
@@ -150,7 +146,7 @@ export async function POST(request: NextRequest, context: Ctx) {
       })
     }
 
-    if (!allowPaymentSimulation()) {
+    if (!isPaymentSimulationAllowed()) {
       return NextResponse.json(
         {
           error:
