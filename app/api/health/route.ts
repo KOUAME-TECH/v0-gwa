@@ -13,6 +13,11 @@ import {
   getOneSignalRestApiKey,
 } from '@/lib/notifications/onesignal-config'
 import { isOtpStoreReady } from '@/lib/auth/otp-store'
+import {
+  resolveGeniusPayCredentials,
+  resolveGeniusPayWebhookSecret,
+  type GeniusPayEnvironment,
+} from '@/lib/payment/geniuspay'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,15 +43,20 @@ export async function GET() {
   const atKey = hasAfricasTalkingProvider()
   const atLive = isAfricasTalkingLiveUsername()
   const atSender = hasAfricasTalkingSenderId() || !!(await resolveAfricasTalkingSenderId())
-  const geniusPayApiKey =
-    envSet('GENIUSPAY_API_KEY') ||
-    (await hasPlatformSecret('GENIUSPAY_API_KEY'))
-  const geniusPayApiSecret =
-    envSet('GENIUSPAY_API_SECRET') ||
-    (await hasPlatformSecret('GENIUSPAY_API_SECRET'))
-  const geniusPayWebhookSecret =
-    envSet('GENIUSPAY_WEBHOOK_SECRET') ||
-    (await hasPlatformSecret('GENIUSPAY_WEBHOOK_SECRET'))
+  const geniusPayCredentials = await resolveGeniusPayCredentials()
+  const configuredGeniusPayMode = process.env.GENIUSPAY_MODE?.trim().toLowerCase()
+  const geniusPayEnvironment: GeniusPayEnvironment | null =
+    configuredGeniusPayMode === 'sandbox' || configuredGeniusPayMode === 'live'
+      ? configuredGeniusPayMode
+      : geniusPayCredentials?.apiKey.startsWith('pk_sandbox_')
+        ? 'sandbox'
+        : geniusPayCredentials?.apiKey.startsWith('pk_live_')
+          ? 'live'
+          : null
+  const geniusPayWebhookSecret = geniusPayEnvironment
+    ? Boolean(await resolveGeniusPayWebhookSecret(geniusPayEnvironment))
+    : false
+  const geniusPayConfigured = Boolean(geniusPayCredentials)
   let geminiReady =
     envSet('GEMINI_API_KEY') ||
     envSet('GOOGLE_GENERATIVE_AI_API_KEY') ||
@@ -87,21 +97,17 @@ export async function GET() {
       ONESIGNAL_APP_ID: onesignalApp,
       ONESIGNAL_REST_API_KEY: onesignalRest,
       GEMINI_API_KEY: geminiReady,
-      GENIUSPAY_API_KEY: geniusPayApiKey,
-      GENIUSPAY_API_SECRET: geniusPayApiSecret,
+      GENIUSPAY_API_KEY: geniusPayConfigured,
+      GENIUSPAY_API_SECRET: geniusPayConfigured,
       GENIUSPAY_WEBHOOK_SECRET: geniusPayWebhookSecret,
     },
     geniuspay: {
-      configured: geniusPayApiKey && geniusPayApiSecret,
+      configured: geniusPayConfigured,
       api_contract_ready: true,
-      payin_ready: geniusPayApiKey && geniusPayApiSecret,
-      payment_verification_ready: geniusPayApiKey && geniusPayApiSecret,
+      payin_ready: geniusPayConfigured,
+      payment_verification_ready: geniusPayConfigured,
       payout_ready: false,
-      webhook_ready:
-        geniusPayApiKey &&
-        geniusPayApiSecret &&
-        geniusPayWebhookSecret &&
-        process.env.GENIUSPAY_WEBHOOK_RAW_BODY_CONFIRMED === "true",
+      webhook_ready: geniusPayConfigured && geniusPayWebhookSecret,
     },
     sms_delivery_ready: atKey && atLive && atSender,
     resilience: {

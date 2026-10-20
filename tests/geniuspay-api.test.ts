@@ -98,4 +98,34 @@ describe("GeniusPay API client", () => {
       "Content-Type": "application/json",
     })
   })
+
+  it("uses sandbox credentials when verifying a sandbox webhook payment", async () => {
+    vi.stubEnv("GENIUSPAY_API_KEY_SANDBOX", "pk_sandbox_test")
+    vi.stubEnv("GENIUSPAY_API_SECRET_SANDBOX", "sandbox-api-secret")
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          success: true,
+          data: {
+            reference: "gp-ref-123",
+            amount: 2500,
+            currency: "XOF",
+            status: "completed",
+            metadata: { order_id: "order-123", user_id: "buyer-123" },
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const result = await getGeniusPayPayment("gp-ref-123", "sandbox")
+
+    expect(result.ok).toBe(true)
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(init.headers).toMatchObject({
+      "X-API-Key": "pk_sandbox_test",
+      "X-API-Secret": "sandbox-api-secret",
+    })
+  })
 })

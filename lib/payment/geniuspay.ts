@@ -13,6 +13,8 @@ export type GeniusPayCredentials = {
   apiSecret: string
 }
 
+export type GeniusPayEnvironment = "sandbox" | "live"
+
 export type GeniusPayResult<T> = {
   ok: boolean
   data: T | null
@@ -20,22 +22,86 @@ export type GeniusPayResult<T> = {
   uncertain?: boolean
 }
 
-export async function resolveGeniusPayCredentials(): Promise<GeniusPayCredentials | null> {
-  const apiKey =
-    (process.env.GENIUSPAY_API_KEY || "").trim() ||
-    (await resolvePlatformSecret("GENIUSPAY_API_KEY"))
-  const apiSecret =
-    (process.env.GENIUSPAY_API_SECRET || "").trim() ||
-    (await resolvePlatformSecret("GENIUSPAY_API_SECRET"))
+function keyEnvironment(apiKey: string): GeniusPayEnvironment | null {
+  if (apiKey.startsWith("pk_sandbox_")) return "sandbox"
+  if (apiKey.startsWith("pk_live_")) return "live"
+  return null
+}
+
+async function resolveCredentialPair(
+  suffix: string,
+): Promise<GeniusPayCredentials | null> {
+  const keyName = `GENIUSPAY_API_KEY${suffix}`
+  const secretName = `GENIUSPAY_API_SECRET${suffix}`
+  const [apiKey, apiSecret] = await Promise.all([
+    resolvePlatformSecret(keyName),
+    resolvePlatformSecret(secretName),
+  ])
   return apiKey && apiSecret ? { apiKey, apiSecret } : null
+}
+
+export async function resolveGeniusPayCredentials(
+  environment?: GeniusPayEnvironment,
+): Promise<GeniusPayCredentials | null> {
+  if (environment) {
+    const environmentCredentials = await resolveCredentialPair(`_${environment.toUpperCase()}`)
+    if (environmentCredentials) return environmentCredentials
+
+    const legacyCredentials = await resolveCredentialPair("")
+    return legacyCredentials && keyEnvironment(legacyCredentials.apiKey) === environment
+      ? legacyCredentials
+      : null
+  }
+
+  const configuredMode = process.env.GENIUSPAY_MODE?.trim().toLowerCase()
+  if (configuredMode === "sandbox" || configuredMode === "live") {
+    return resolveGeniusPayCredentials(configuredMode)
+  }
+  if (configuredMode) return null
+
+  const legacyCredentials = await resolveCredentialPair("")
+  if (legacyCredentials) return legacyCredentials
+
+  const [sandboxCredentials, liveCredentials] = await Promise.all([
+    resolveCredentialPair("_SANDBOX"),
+    resolveCredentialPair("_LIVE"),
+  ])
+  if (sandboxCredentials && !liveCredentials) return sandboxCredentials
+  if (liveCredentials && !sandboxCredentials) return liveCredentials
+  return null
+}
+
+export async function resolveGeniusPayWebhookSecret(
+  environment: GeniusPayEnvironment,
+): Promise<string> {
+  const environmentSecretName = `GENIUSPAY_WEBHOOK_SECRET_${environment.toUpperCase()}`
+  const environmentSecret =
+    (process.env[environmentSecretName] || "").trim() ||
+    (await resolvePlatformSecret(environmentSecretName))
+  if (environmentSecret) return environmentSecret
+
+  const configuredMode = process.env.GENIUSPAY_MODE?.trim().toLowerCase()
+  const legacyCredentials = await resolveCredentialPair("")
+  if (
+    legacyCredentials &&
+    keyEnvironment(legacyCredentials.apiKey) === environment &&
+    (!configuredMode || configuredMode === environment)
+  ) {
+    return (
+      (process.env.GENIUSPAY_WEBHOOK_SECRET || "").trim() ||
+      (await resolvePlatformSecret("GENIUSPAY_WEBHOOK_SECRET"))
+    )
+  }
+  return ""
 }
 
 async function geniusPayFetch(
   path: string,
   method: "GET" | "POST",
+  environment?: GeniusPayEnvironment,
   body?: Record<string, unknown>,
 ): Promise<GeniusPayResult<Record<string, unknown>>> {
-  const credentials = await resolveGeniusPayCredentials()
+  const credentials = await resolveGeniusPayCredentials(environment)
   if (!credentials) return { ok: false, data: null, error: "GENIUSPAY_NOT_CONFIGURED" }
 
   try {
@@ -102,7 +168,7 @@ export async function createGeniusPayCheckout(input: {
   if (input.customerEmail) customer.email = input.customerEmail
   if (input.customerPhone) customer.phone = input.customerPhone
 
-  const result = await geniusPayFetch("/payments", "POST", {
+  const result = await geniusPayFetch("/payments", "POST", undefined, {
     amount: input.amount,
     currency: "XOF",
     description: input.description.slice(0, 500),
@@ -141,6 +207,7 @@ export async function createGeniusPayCheckout(input: {
 
 export async function getGeniusPayPayment(
   reference: string,
+  environment?: GeniusPayEnvironment,
 ): Promise<GeniusPayResult<GeniusPayPayment>> {
   if (!reference || reference.length > 128) {
     return { ok: false, data: null, error: "INVALID_PAYMENT_REFERENCE" }
@@ -148,6 +215,7 @@ export async function getGeniusPayPayment(
   const result = await geniusPayFetch(
     `/payments/${encodeURIComponent(reference)}`,
     "GET",
+    environment,
   )
   if (!result.ok || !result.data) return { ...result, data: null }
   const payment = parseGeniusPayPayment(result.data)

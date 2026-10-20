@@ -1,6 +1,7 @@
 import { createHmac } from "crypto"
 import { describe, expect, it } from "vitest"
 import {
+  isGeniusPayWebhookEnvelopeConsistent,
   isGeniusPayWebhookTimestampFresh,
   verifyGeniusPayWebhookSignature,
 } from "@/lib/payment/geniuspay-webhook-validation"
@@ -8,14 +9,28 @@ import {
 describe("GeniusPay webhook authentication", () => {
   const secret = "test-webhook-secret"
   const timestamp = "1792497600"
-  const rawBody = '{"reference":"MTX-123","metadata":{"order_id":"order-1"}}'
+  const payload = {
+    id: "delivery-1",
+    event: "payment.success",
+    data: { reference: "MTX-123", metadata: { order_id: "order-1" } },
+    environment: "sandbox",
+  }
+  const wireBody = `{
+  "id": "delivery-1",
+  "event": "payment.success",
+  "data": { "reference": "MTX-123", "metadata": { "order_id": "order-1" } },
+  "environment": "sandbox"
+}`
   const signature = createHmac("sha256", secret)
-    .update(`${timestamp}.${rawBody}`)
+    .update(`${timestamp}.${JSON.stringify(payload)}`)
     .digest("hex")
 
-  it("accepts the documented timestamped HMAC-SHA256 signature", () => {
+  it("signs the compact JSON serialization of the parsed webhook payload", () => {
     expect(
-      verifyGeniusPayWebhookSignature({ timestamp, rawBody, signature, secret }),
+      JSON.parse(wireBody),
+    ).toEqual(payload)
+    expect(
+      verifyGeniusPayWebhookSignature({ timestamp, payload: JSON.parse(wireBody), signature, secret }),
     ).toBe(true)
   })
 
@@ -23,7 +38,7 @@ describe("GeniusPay webhook authentication", () => {
     expect(
       verifyGeniusPayWebhookSignature({
         timestamp,
-        rawBody: `${rawBody} `,
+        payload: { ...payload, environment: "live" },
         signature,
         secret,
       }),
@@ -34,6 +49,12 @@ describe("GeniusPay webhook authentication", () => {
     expect(
       verifyGeniusPayWebhookSignature({ timestamp, rawBody, signature: "bad", secret }),
     ).toBe(false)
+  })
+
+  it("requires the header event and environment to match the signed envelope", () => {
+    expect(isGeniusPayWebhookEnvelopeConsistent(payload, "payment.success", "sandbox")).toBe(true)
+    expect(isGeniusPayWebhookEnvelopeConsistent(payload, "payment.failed", "sandbox")).toBe(false)
+    expect(isGeniusPayWebhookEnvelopeConsistent(payload, "payment.success", "live")).toBe(false)
   })
 
   it("accepts timestamps only within the five-minute replay window", () => {

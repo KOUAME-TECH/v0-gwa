@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { resolvePlatformSecret } from "@/lib/ops/platform-secrets"
-import { getGeniusPayPayment } from "@/lib/payment/geniuspay"
+import {
+  getGeniusPayPayment,
+  resolveGeniusPayCredentials,
+  resolveGeniusPayWebhookSecret,
+} from "@/lib/payment/geniuspay"
 import { isGeniusPayPaymentForOrder } from "@/lib/payment/geniuspay-validation"
 import {
+  isGeniusPayWebhookEnvelopeConsistent,
   isGeniusPayWebhookTimestampFresh,
   verifyGeniusPayWebhookSignature,
 } from "@/lib/payment/geniuspay-webhook-validation"
@@ -11,6 +15,8 @@ import {
 export const dynamic = "force-dynamic"
 
 type WebhookPayload = {
+  event?: unknown
+  environment?: unknown
   reference?: unknown
   data?: { reference?: unknown } | null
 }
@@ -48,30 +54,13 @@ export async function POST(request: Request) {
     }
 
     const signature = request.headers.get("x-webhook-signature") || ""
-    const webhookSecret =
-      (process.env.GENIUSPAY_WEBHOOK_SECRET || "").trim() ||
-      (await resolvePlatformSecret("GENIUSPAY_WEBHOOK_SECRET"))
-    if (!webhookSecret) {
-      return NextResponse.json({ error: "Secret webhook non configuré" }, { status: 503 })
-    }
-    if (process.env.GENIUSPAY_WEBHOOK_RAW_BODY_CONFIRMED !== "true") {
-      return NextResponse.json(
-        { error: "Format exact du corps signé à confirmer avec GeniusPay" },
-        { status: 503 },
-      )
-    }
-    if (!verifyGeniusPayWebhookSignature({ timestamp, rawBody, signature, secret: webhookSecret })) {
-      return NextResponse.json({ error: "Signature webhook invalide" }, { status: 401 })
-    }
-
     const event = request.headers.get("x-webhook-event") || ""
     const webhookEnvironment = request.headers.get("x-webhook-environment") || ""
     if (webhookEnvironment !== "sandbox" && webhookEnvironment !== "live") {
       return NextResponse.json({ error: "Environnement webhook invalide" }, { status: 400 })
     }
-    const apiKey = (process.env.GENIUSPAY_API_KEY || "").trim() ||
-      (await resolvePlatformSecret("GENIUSPAY_API_KEY"))
-    if (!apiKey || apiKeyEnvironment(apiKey) !== webhookEnvironment) {
+    const credentials = await resolveGeniusPayCredentials(webhookEnvironment)
+    if (!credentials || apiKeyEnvironment(credentials.apiKey) !== webhookEnvironment) {
       return NextResponse.json({ error: "Environnement GeniusPay non concordant" }, { status: 403 })
     }
 
@@ -86,6 +75,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "JSON webhook invalide" }, { status: 400 })
     }
 
+    if (!event || !isGeniusPayWebhookEnvelopeConsistent(payload, event, webhookEnvironment)) {
+      return NextResponse.json({ error: "Événement ou environnement webhook non concordant" }, { status: 400 })
+    }
+    const webhookSecret = await resolveGeniusPayWebhookSecret(webhookEnvironment)
+    if (!webhookSecret) {
+      return NextResponse.json({ error: "Secret webhook non configuré pour cet environnement" }, { status: 503 })
+    }
+    if (!verifyGeniusPayWebhookSignature({ timestamp, payload, signature, secret: webhookSecret })) {
+      return NextResponse.json({ error: "Signature webhook invalide" }, { status: 401 })
+    }
+
     if (event !== "payment.success" && event !== "payment.failed") {
       return NextResponse.json({ received: true, ignored: true })
     }
@@ -95,7 +95,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Référence de paiement invalide" }, { status: 400 })
     }
 
-    const providerResult = await getGeniusPayPayment(reference)
+    const providerResult = await getGeniusPayPayment(reference, webhookEnvironment)
     if (!providerResult.ok || !providerResult.data) {
       return NextResponse.json({ error: "Vérification GeniusPay indisponible" }, { status: 502 })
     }
