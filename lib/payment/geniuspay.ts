@@ -28,14 +28,18 @@ function keyEnvironment(apiKey: string): GeniusPayEnvironment | null {
   return null
 }
 
+async function resolveConfigSecret(name: string): Promise<string> {
+  return (process.env[name] || "").trim() || resolvePlatformSecret(name)
+}
+
 async function resolveCredentialPair(
   suffix: string,
 ): Promise<GeniusPayCredentials | null> {
   const keyName = `GENIUSPAY_API_KEY${suffix}`
   const secretName = `GENIUSPAY_API_SECRET${suffix}`
   const [apiKey, apiSecret] = await Promise.all([
-    resolvePlatformSecret(keyName),
-    resolvePlatformSecret(secretName),
+    resolveConfigSecret(keyName),
+    resolveConfigSecret(secretName),
   ])
   return apiKey && apiSecret ? { apiKey, apiSecret } : null
 }
@@ -75,9 +79,7 @@ export async function resolveGeniusPayWebhookSecret(
   environment: GeniusPayEnvironment,
 ): Promise<string> {
   const environmentSecretName = `GENIUSPAY_WEBHOOK_SECRET_${environment.toUpperCase()}`
-  const environmentSecret =
-    (process.env[environmentSecretName] || "").trim() ||
-    (await resolvePlatformSecret(environmentSecretName))
+  const environmentSecret = await resolveConfigSecret(environmentSecretName)
   if (environmentSecret) return environmentSecret
 
   const configuredMode = process.env.GENIUSPAY_MODE?.trim().toLowerCase()
@@ -88,8 +90,7 @@ export async function resolveGeniusPayWebhookSecret(
     (!configuredMode || configuredMode === environment)
   ) {
     return (
-      (process.env.GENIUSPAY_WEBHOOK_SECRET || "").trim() ||
-      (await resolvePlatformSecret("GENIUSPAY_WEBHOOK_SECRET"))
+      await resolveConfigSecret("GENIUSPAY_WEBHOOK_SECRET")
     )
   }
   return ""
