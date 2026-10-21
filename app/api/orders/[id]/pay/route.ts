@@ -184,7 +184,7 @@ export async function POST(request: NextRequest, context: Ctx) {
     }
 
     const simulationReference = `SIM-GWA-${Date.now().toString(36).toUpperCase()}`
-    await admin
+    const { data: simulatedOrder, error: simulationError } = await admin
       .from("orders")
       .update({
         payment_status: "paid",
@@ -195,6 +195,17 @@ export async function POST(request: NextRequest, context: Ctx) {
         updated_at: new Date().toISOString(),
       })
       .eq("id", id)
+      .in("payment_status", ["pending", "failed"])
+      .neq("escrow_status", "held")
+      .select("id")
+      .maybeSingle()
+    if (simulationError) throw simulationError
+    if (!simulatedOrder) {
+      return NextResponse.json(
+        { error: "Un paiement est déjà en cours ou cette commande n’est pas payable.", code: "PAYMENT_ALREADY_STARTED" },
+        { status: 409 },
+      )
+    }
 
     await admin
       .from("escrow_transactions")
@@ -205,6 +216,7 @@ export async function POST(request: NextRequest, context: Ctx) {
       })
       .eq("order_id", id)
       .eq("tranche_numero", 1)
+      .eq("status", "pending")
 
     await admin.from("order_audit_log").insert({
       order_id: id,

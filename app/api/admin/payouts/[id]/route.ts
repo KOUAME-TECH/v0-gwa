@@ -60,6 +60,7 @@ export async function PATCH(request: NextRequest, context: Context) {
       return NextResponse.json({ error: "Indiquez le motif de l’échec" }, { status: 400 })
     }
 
+    // The RPC rechecks this transition under a row lock and remains authoritative during races.
     const { data, error } = await gate.admin.rpc("admin_update_manual_payout", {
       p_request_id: id,
       p_new_status: status,

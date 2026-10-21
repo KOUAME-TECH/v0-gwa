@@ -267,5 +267,6 @@ BEGIN
 END;
 $$;
 
+-- Only the finance API calls this with its authenticated admin id; the RPC also rechecks admin_roles.
 REVOKE ALL ON FUNCTION public.admin_update_manual_payout(UUID, TEXT, TEXT, TEXT, UUID) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_update_manual_payout(UUID, TEXT, TEXT, TEXT, UUID) TO service_role;

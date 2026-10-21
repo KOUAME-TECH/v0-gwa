@@ -31,6 +31,7 @@ type Payout = {
 }
 
 type Action = "paid" | "failed" | null
+const PAGE_SIZE = 50
 
 const STATUS_LABELS: Record<string, string> = {
   pending: "À traiter",
@@ -50,6 +51,8 @@ function formatAmount(value: number) {
 export default function ManualPayoutsPage() {
   const [payouts, setPayouts] = useState<Payout[]>([])
   const [filter, setFilter] = useState("pending")
+  const [offset, setOffset] = useState(0)
+  const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [savingId, setSavingId] = useState<string | null>(null)
   const [selected, setSelected] = useState<Payout | null>(null)
@@ -59,11 +62,16 @@ export default function ManualPayoutsPage() {
   const [error, setError] = useState<string | null>(null)
 
   const loadPayouts = useCallback(async () => {
+    setLoading(true)
     try {
-      const response = await fetch(`/api/admin/payouts?status=${filter}`, { cache: "no-store" })
+      const response = await fetch(
+        `/api/admin/payouts?status=${filter}&limit=${PAGE_SIZE}&offset=${offset}`,
+        { cache: "no-store" },
+      )
       const data = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(data.error || "Impossible de charger la file.")
       setPayouts(data.payouts || [])
+      setTotal(Number(data.total || 0))
       setError(null)
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Chargement impossible.")
@@ -71,7 +79,7 @@ export default function ManualPayoutsPage() {
     } finally {
       setLoading(false)
     }
-  }, [filter])
+  }, [filter, offset])
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => void loadPayouts(), 0)
@@ -122,7 +130,8 @@ export default function ManualPayoutsPage() {
       )
       setSelected(null)
       setAction(null)
-      await loadPayouts()
+      if (offset === 0) await loadPayouts()
+      else setOffset(0)
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Mise à jour impossible.")
     } finally {
@@ -140,7 +149,7 @@ export default function ManualPayoutsPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Select value={filter} onValueChange={setFilter}>
+          <Select value={filter} onValueChange={(value) => { setFilter(value); setOffset(0) }}>
             <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="pending">À traiter</SelectItem>
@@ -231,6 +240,29 @@ export default function ManualPayoutsPage() {
                   </div>
                 </article>
               ))}
+            </div>
+          )}
+          {!loading && total > 0 && (
+            <div className="mt-4 flex items-center justify-between gap-3">
+              <p className="text-sm text-muted-foreground">
+                {offset + 1}–{Math.min(offset + payouts.length, total)} sur {total}
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  disabled={offset === 0}
+                  onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
+                >
+                  Précédent
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={offset + payouts.length >= total}
+                  onClick={() => setOffset(offset + PAGE_SIZE)}
+                >
+                  Suivant
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>

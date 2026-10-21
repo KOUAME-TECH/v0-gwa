@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { requireAdminSection } from "@/lib/auth/require-admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
+import { parsePagination } from "@/lib/pagination"
 
 export async function GET(request: NextRequest) {
   try {
@@ -21,6 +22,7 @@ export async function GET(request: NextRequest) {
     if (!allowedStatuses.has(status)) {
       return NextResponse.json({ error: "Filtre invalide" }, { status: 400 })
     }
+    const { limit, offset } = parsePagination(request.nextUrl.searchParams)
 
     let query = gate.admin
       .from("withdrawal_requests")
@@ -29,7 +31,7 @@ export async function GET(request: NextRequest) {
         { count: "exact" },
       )
       .order("created_at", { ascending: false })
-      .limit(100)
+      .range(offset, offset + limit - 1)
     if (status !== "all") query = query.eq("status", status)
 
     const { data, count, error } = await query
@@ -56,6 +58,8 @@ export async function GET(request: NextRequest) {
         seller_name: names.get(row.user_id) || "Producteur",
       })),
       total: count || 0,
+      limit,
+      offset,
     })
   } catch (err) {
     console.error("[api/admin/payouts GET]", err)

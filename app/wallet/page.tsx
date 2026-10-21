@@ -40,6 +40,9 @@ type SellerOrder = {
   escrow_status: string | null
   payout_status: string | null
   total_amount: number
+  vendeur_recoit_fcfa: number | null
+  commission_fcfa: number | null
+  service_fee: number | null
   created_at: string
 }
 
@@ -116,9 +119,20 @@ function formatDate(value: string) {
   })
 }
 
+function sellerProceeds(order: SellerOrder) {
+  if (order.vendeur_recoit_fcfa != null) return Number(order.vendeur_recoit_fcfa)
+  return Math.max(
+    0,
+    Number(order.total_amount || 0) -
+      Number(order.commission_fcfa || 0) -
+      Number(order.service_fee || 0),
+  )
+}
+
 export default function SellerEarningsPage() {
   const router = useRouter()
   const [profile, setProfile] = useState<{ user_type: string | null; phone: string | null } | null>(null)
+  const [profileLoadError, setProfileLoadError] = useState<string | null>(null)
   const [orders, setOrders] = useState<SellerOrder[]>([])
   const [ordersTotal, setOrdersTotal] = useState(0)
   const [payouts, setPayouts] = useState<PayoutRequest[]>([])
@@ -147,11 +161,16 @@ export default function SellerEarningsPage() {
         router.replace("/auth/login?redirect=/wallet")
         return
       }
-      const { data: currentProfile } = await supabase
+      const { data: currentProfile, error: profileError } = await supabase
         .from("profiles")
         .select("user_type, phone")
         .eq("id", user.id)
         .maybeSingle()
+      if (profileError) {
+        setProfileLoadError("Impossible de vérifier votre profil pour le moment.")
+        throw profileError
+      }
+      setProfileLoadError(null)
       setProfile(currentProfile)
       if (currentProfile?.phone) setPhone((currentPhone) => currentPhone || currentProfile.phone || "")
 
@@ -275,6 +294,24 @@ export default function SellerEarningsPage() {
     )
   }
 
+  if (profileLoadError) {
+    return (
+      <main className="mx-auto max-w-xl px-4 py-12">
+        <Card>
+          <CardHeader>
+            <CardTitle>Profil indisponible</CardTitle>
+            <CardDescription role="alert">{profileLoadError}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" onClick={() => void loadData(true)} disabled={refreshing}>
+              Réessayer
+            </Button>
+          </CardContent>
+        </Card>
+      </main>
+    )
+  }
+
   if (!isSellerRole(profile?.user_type)) {
     return (
       <main className="mx-auto max-w-xl px-4 py-12">
@@ -393,7 +430,10 @@ export default function SellerEarningsPage() {
                     <p className="mt-1 text-sm text-muted-foreground">{formatDate(order.created_at)}</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="mr-2 font-semibold">{currency(Number(order.total_amount))}</span>
+                    <span className="font-semibold">Votre part : {currency(sellerProceeds(order))}</span>
+                    <span className="mr-2 text-xs text-muted-foreground">
+                      Commande : {currency(Number(order.total_amount))}
+                    </span>
                     {statusBadge(order.payment_status)}
                     {statusBadge(order.status)}
                     {order.payout_status && statusBadge(order.payout_status)}

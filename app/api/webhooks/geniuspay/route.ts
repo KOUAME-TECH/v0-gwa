@@ -134,6 +134,7 @@ export async function POST(request: Request) {
     const finalStatus = success ? "paid" : "failed"
     if (order.payment_status === finalStatus) {
       if (success) {
+        // Retry the conditional escrow repair if the order update succeeded but the escrow write did not.
         const now = new Date().toISOString()
         const { error: escrowError } = await admin
           .from("escrow_transactions")
