@@ -80,7 +80,7 @@ export default function ConfidentialitePage() {
           <p>
             Pour toute question ou pour exercer vos droits : WhatsApp{" "}
             <strong>+225 07 88 32 60 19</strong> — e-mail{" "}
-            <strong>gwa-contact@agentmail.to</strong>.
+            <strong>contact@mygwa.org</strong>.
           </p>
         </Section>
 

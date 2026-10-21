@@ -76,7 +76,7 @@ export default function ConditionsPage() {
           </p>
           <p>
             Contact : WhatsApp <strong>+225 07 88 32 60 19</strong> — e-mail{" "}
-            <strong>gwa-contact@agentmail.to</strong>.
+            <strong>contact@mygwa.org</strong>.
           </p>
         </Section>
 

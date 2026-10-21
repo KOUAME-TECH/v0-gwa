@@ -10,14 +10,14 @@ export function getAgentMailConfig() {
   const inboxId = (
     process.env.AGENTMAIL_INBOX_ID ||
     process.env.AGENTMAIL_FROM ||
-    "gwa-contact@agentmail.to"
+    "contact@mygwa.org"
   )
     .replace(/^"|"$/g, "")
     .trim()
   const to = (
     process.env.CONTACT_INBOX_TO ||
     process.env.AGENTMAIL_CONTACT_TO ||
-    "gwa-contact@agentmail.to"
+    "contact@mygwa.org"
   )
     .replace(/^"|"$/g, "")
     .trim()
