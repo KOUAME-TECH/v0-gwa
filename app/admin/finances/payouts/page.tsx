@@ -59,7 +59,6 @@ export default function ManualPayoutsPage() {
   const [error, setError] = useState<string | null>(null)
 
   const loadPayouts = useCallback(async () => {
-    setLoading(true)
     try {
       const response = await fetch(`/api/admin/payouts?status=${filter}`, { cache: "no-store" })
       const data = await response.json().catch(() => ({}))
@@ -75,7 +74,8 @@ export default function ManualPayoutsPage() {
   }, [filter])
 
   useEffect(() => {
-    void loadPayouts()
+    const timeoutId = window.setTimeout(() => void loadPayouts(), 0)
+    return () => window.clearTimeout(timeoutId)
   }, [loadPayouts])
 
   const updateStatus = async (payout: Payout, status: "processing" | "paid" | "failed") => {

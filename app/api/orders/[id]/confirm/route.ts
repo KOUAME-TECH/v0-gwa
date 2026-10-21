@@ -8,8 +8,8 @@ type Ctx = { params: Promise<{ id: string }> }
 
 /**
  * POST /api/orders/[id]/confirm
- * Acheteur confirme réception → payout vendeur (net commission) + release escrow.
- * Si le payout échoue : commande livrée mais escrow reste held (file ops / retry).
+ * Acheteur confirme réception → release escrow et rend le solde vendeur demandable.
+ * Les versements sont ensuite traités manuellement par l'équipe finance.
  */
 export async function POST(request: NextRequest, context: Ctx) {
   try {
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest, context: Ctx) {
 
     let payoutStatus = "pending"
     let payoutRef: string | null = null
-    let payoutNetwork: string | null = null
+    const payoutNetwork: string | null = null
     let payoutError: string | null = null
 
     if (isPaymentSimulationAllowed()) {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -38,12 +38,7 @@ export default function AdminFinancesPage() {
   const [period, setPeriod] = useState("30")
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    fetchData()
-  }, [period])
-
-  const fetchData = async () => {
-    setLoading(true)
+  const fetchData = useCallback(async () => {
     try {
       const res = await fetch(`/api/admin/finances?period=${encodeURIComponent(period)}`, {
         credentials: "include",
@@ -56,7 +51,6 @@ export default function AdminFinancesPage() {
           escrowBalance: 0,
         })
         setTransactions([])
-        setLoading(false)
         return
       }
       setStats({
@@ -67,9 +61,15 @@ export default function AdminFinancesPage() {
       setTransactions(data.transactions || [])
     } catch {
       setTransactions([])
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
-  }
+  }, [period])
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => void fetchData(), 0)
+    return () => window.clearTimeout(timeoutId)
+  }, [fetchData])
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("fr-FR").format(amount) + " FCFA"

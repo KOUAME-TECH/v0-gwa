@@ -133,7 +133,6 @@ export default function SellerEarningsPage() {
 
   const loadData = useCallback(async (showRefresh = false) => {
     if (showRefresh) setRefreshing(true)
-    else setLoading(true)
 
     try {
       const supabase = createClient()
@@ -200,7 +199,8 @@ export default function SellerEarningsPage() {
   }, [router])
 
   useEffect(() => {
-    void loadData()
+    const timeoutId = window.setTimeout(() => void loadData(), 0)
+    return () => window.clearTimeout(timeoutId)
   }, [loadData])
 
   const available = Number(summary?.available_for_request || 0)

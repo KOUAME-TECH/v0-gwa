@@ -47,10 +47,14 @@ BEGIN
   IF p_amount_fcfa IS NULL OR p_amount_fcfa < 1000 THEN
     RAISE EXCEPTION 'amount below minimum';
   END IF;
-  IF p_phone IS NULL OR length(p_phone) < 8 OR length(p_phone) > 25 THEN
+  IF p_phone IS NULL
+    OR length(p_phone) < 8
+    OR length(p_phone) > 25
+    OR p_phone !~ '^[+0-9][0-9[:space:]().-]{7,24}$'
+  THEN
     RAISE EXCEPTION 'invalid phone';
   END IF;
-  IF p_network NOT IN ('orange_ci', 'mtn_ci', 'moov_ci', 'wave_ci') THEN
+  IF p_network IS NULL OR p_network NOT IN ('orange_ci', 'mtn_ci', 'moov_ci', 'wave_ci') THEN
     RAISE EXCEPTION 'invalid network';
   END IF;
 
