@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "crypto"
 import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { resolveFeexPayWebhookSecret } from "@/lib/feexpay/client"
 
 /**
  * POST /api/webhooks/feexpay
@@ -8,7 +9,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
  */
 export async function POST(request: Request) {
   try {
-    const secret = process.env.FEEXPAY_WEBHOOK_SECRET
+    const secret = await resolveFeexPayWebhookSecret()
     if (!secret) {
       console.error("[webhooks/feexpay] FEEXPAY_WEBHOOK_SECRET manquant")
       return NextResponse.json(

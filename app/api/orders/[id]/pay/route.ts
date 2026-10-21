@@ -5,7 +5,7 @@ import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { sendPushToUser } from "@/lib/notifications/push"
 import {
   createFeexPayPayIn,
-  getFeexPayCredentials,
+  getFeexPayReadiness,
   resolveFeexPayCredentials,
   mapPaymentMethodToNetwork,
 } from "@/lib/feexpay/client"
@@ -78,7 +78,19 @@ export async function POST(request: NextRequest, context: Ctx) {
       String(body?.phone || order.shipping_phone || buyerProfile?.phone || "").trim()
 
     const admin = createAdminClient()
-    const creds = await resolveFeexPayCredentials()
+    const readiness = await getFeexPayReadiness()
+    if (readiness.configured && !readiness.payin_ready) {
+      return NextResponse.json(
+        {
+          error: readiness.live_blocked_reason || "Paiements FeexPay non prêts",
+          code: "PAYMENT_WEBHOOK_MISSING",
+        },
+        { status: 503 },
+      )
+    }
+    const creds = readiness.payin_ready
+      ? await resolveFeexPayCredentials()
+      : null
     const amount = Math.round(Number(order.total_amount) || 0)
     const origin = appOrigin(request)
     const returnUrl = `${origin}/commandes/confirmation?order=${id}`

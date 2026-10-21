@@ -8,6 +8,7 @@ import {
   resolveAfricasTalkingSenderId,
 } from '@/lib/auth/sms'
 import { hasPlatformSecret } from '@/lib/ops/platform-secrets'
+import { getFeexPayReadiness } from '@/lib/feexpay/client'
 import {
   getOneSignalAppId,
   getOneSignalRestApiKey,
@@ -37,13 +38,12 @@ export async function GET() {
   const atKey = hasAfricasTalkingProvider()
   const atLive = isAfricasTalkingLiveUsername()
   const atSender = hasAfricasTalkingSenderId() || !!(await resolveAfricasTalkingSenderId())
-  const feexpayKey =
-    envSet('FEEXPAY_API_KEY') ||
-    (await hasPlatformSecret('FEEXPAY_API_KEY'))
-  const feexpayShop =
-    envSet('FEEXPAY_SHOP_ID') ||
-    (await hasPlatformSecret('FEEXPAY_SHOP_ID'))
-  const feexpayMode = (process.env.FEEXPAY_MODE || 'sandbox').toLowerCase()
+  const [feexpayKey, feexpayShop, feexpayWebhookSecret, feexpay] = await Promise.all([
+    envSet('FEEXPAY_API_KEY') || hasPlatformSecret('FEEXPAY_API_KEY'),
+    envSet('FEEXPAY_SHOP_ID') || hasPlatformSecret('FEEXPAY_SHOP_ID'),
+    envSet('FEEXPAY_WEBHOOK_SECRET') || hasPlatformSecret('FEEXPAY_WEBHOOK_SECRET'),
+    getFeexPayReadiness(),
+  ])
   let geminiReady =
     envSet('GEMINI_API_KEY') ||
     envSet('GOOGLE_GENERATIVE_AI_API_KEY') ||
@@ -85,14 +85,15 @@ export async function GET() {
       GEMINI_API_KEY: geminiReady,
       FEEXPAY_API_KEY: feexpayKey,
       FEEXPAY_SHOP_ID: feexpayShop,
+      FEEXPAY_WEBHOOK_SECRET: feexpayWebhookSecret,
     },
     feexpay: {
-      configured: feexpayKey && feexpayShop,
-      mode: feexpayMode === 'live' || feexpayMode === 'prod' || feexpayMode === 'production'
-        ? 'live'
-        : 'sandbox',
-      payin_ready: feexpayKey && feexpayShop,
-      payout_ready: feexpayKey && feexpayShop,
+      configured: feexpay.configured,
+      mode: feexpay.mode,
+      webhook_ready: feexpay.webhook_ready,
+      payin_ready: feexpay.payin_ready,
+      payout_ready: feexpay.payout_ready,
+      live_blocked_reason: feexpay.live_blocked_reason,
     },
     sms_delivery_ready: atKey && atLive && atSender,
     resilience: {

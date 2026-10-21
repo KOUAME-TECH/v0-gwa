@@ -8,9 +8,15 @@ import {
   normalizeFeexPayPhone,
   type FeexPayNetwork,
 } from "@/lib/feexpay/networks"
+import {
+  getFeexPayReadinessFromConfig,
+  parseFeexPayMode,
+} from "@/lib/feexpay/readiness"
+import { resolvePlatformSecret } from "@/lib/ops/platform-secrets"
 
 export type { FeexPayNetwork }
 export { mapPaymentMethodToNetwork, normalizeFeexPayPhone }
+export { getFeexPayReadinessFromConfig, parseFeexPayMode }
 
 export type FeexPayCredentials = {
   apiKey: string
@@ -45,11 +51,7 @@ export function getFeexPayCredentials(): FeexPayCredentials | null {
   const apiKey = trimEnv("FEEXPAY_API_KEY")
   const shopId = trimEnv("FEEXPAY_SHOP_ID")
   if (!apiKey || !shopId) return null
-  const modeRaw = (process.env.FEEXPAY_MODE || "sandbox").toLowerCase()
-  const mode = modeRaw === "live" || modeRaw === "prod" || modeRaw === "production"
-    ? "live"
-    : "sandbox"
-  return { apiKey, shopId, mode }
+  return { apiKey, shopId, mode: parseFeexPayMode(process.env.FEEXPAY_MODE) }
 }
 
 /** Env Vercel d'abord, puis platform_secrets (service_role). */
@@ -57,21 +59,39 @@ export async function resolveFeexPayCredentials(): Promise<FeexPayCredentials | 
   const fromEnv = getFeexPayCredentials()
   if (fromEnv) return fromEnv
 
-  const { resolvePlatformSecret } = await import("@/lib/ops/platform-secrets")
   const apiKey = await resolvePlatformSecret("FEEXPAY_API_KEY")
   const shopId = await resolvePlatformSecret("FEEXPAY_SHOP_ID")
   if (!apiKey || !shopId) return null
 
   const modeRaw = (
     trimEnv("FEEXPAY_MODE") ||
-    (await resolvePlatformSecret("FEEXPAY_MODE")) ||
-    "sandbox"
-  ).toLowerCase()
-  const mode =
-    modeRaw === "live" || modeRaw === "prod" || modeRaw === "production"
-      ? "live"
-      : "sandbox"
+    (await resolvePlatformSecret("FEEXPAY_MODE"))
+  )
+  const mode = parseFeexPayMode(modeRaw)
   return { apiKey, shopId, mode }
+}
+
+export async function resolveFeexPayWebhookSecret(): Promise<string> {
+  return (
+    await resolvePlatformSecret("FEEXPAY_WEBHOOK_SECRET")
+  ).replace(/^"|"$/g, "").trim()
+}
+
+export async function getFeexPayReadiness() {
+  const creds = await resolveFeexPayCredentials()
+  const webhookSecret = await resolveFeexPayWebhookSecret()
+  const mode =
+    creds?.mode ??
+    parseFeexPayMode(
+      trimEnv("FEEXPAY_MODE") || (await resolvePlatformSecret("FEEXPAY_MODE")),
+    )
+
+  return getFeexPayReadinessFromConfig({
+    apiKey: creds?.apiKey || "",
+    shopId: creds?.shopId || "",
+    webhookSecret,
+    mode,
+  })
 }
 
 function pickString(obj: Record<string, unknown>, keys: string[]): string | null {
@@ -125,6 +145,19 @@ export async function createFeexPayPayIn(input: {
       status: null,
       raw: {},
       error: "FEEXPAY_NOT_CONFIGURED",
+    }
+  }
+  if (
+    creds.mode === "live" &&
+    !(await resolveFeexPayWebhookSecret())
+  ) {
+    return {
+      ok: false,
+      reference: null,
+      paymentUrl: null,
+      status: null,
+      raw: {},
+      error: "FEEXPAY_WEBHOOK_SECRET_REQUIRED",
     }
   }
 
@@ -200,6 +233,18 @@ export async function createFeexPayPayout(input: {
       error: "FEEXPAY_NOT_CONFIGURED",
     }
   }
+  if (
+    creds.mode === "live" &&
+    !(await resolveFeexPayWebhookSecret())
+  ) {
+    return {
+      ok: false,
+      reference: null,
+      status: null,
+      raw: {},
+      error: "FEEXPAY_WEBHOOK_SECRET_REQUIRED",
+    }
+  }
 
   const phone = normalizeFeexPayPhone(input.phone)
   if (!phone) {
@@ -254,7 +299,11 @@ export async function verifyFeexPayTransaction(
   reference: string,
 ): Promise<{ ok: boolean; status: string | null; raw: Record<string, unknown> }> {
   const creds = await resolveFeexPayCredentials()
-  if (!creds || !reference) {
+  if (
+    !creds ||
+    !reference ||
+    (creds.mode === "live" && !(await resolveFeexPayWebhookSecret()))
+  ) {
     return { ok: false, status: null, raw: {} }
   }
   try {
