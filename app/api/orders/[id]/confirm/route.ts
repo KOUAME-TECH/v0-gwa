@@ -76,7 +76,7 @@ export async function POST(request: NextRequest, context: Ctx) {
     let payoutStatus = "pending"
     let payoutRef: string | null = null
     let payoutNetwork: string | null = null
-    let payoutError: string | null = "GENIUSPAY_PAYOUT_API_NOT_DOCUMENTED"
+    let payoutError: string | null = null
 
     if (isPaymentSimulationAllowed()) {
       payoutStatus = "skipped_sim"
@@ -92,7 +92,7 @@ export async function POST(request: NextRequest, context: Ctx) {
       payoutStatus === "skipped_sim" ||
       payoutStatus === "skipped_zero"
 
-    const escrowStatus = payoutOk ? "released" : "held"
+    const escrowStatus = "released"
 
     const orderPatch: Record<string, unknown> = {
       status: "delivered",
@@ -128,7 +128,7 @@ export async function POST(request: NextRequest, context: Ctx) {
         .eq("id", id)
     }
 
-    if (payoutOk) {
+    if (escrowStatus === "released") {
       await admin
         .from("escrow_transactions")
         .update({ status: "released", released_at: now })
@@ -170,8 +170,10 @@ export async function POST(request: NextRequest, context: Ctx) {
     const sellerMsg =
       payoutStatus === "paid"
         ? `Fonds versés (${payoutAmount} FCFA) — ${order.order_number}`
-        :         payoutStatus === "failed" || payoutStatus === "pending"
-          ? `Livraison confirmée — payout en file ops (${order.order_number})`
+        : payoutStatus === "pending"
+          ? `Livraison confirmée — vous pouvez demander un versement manuel (${order.order_number})`
+          : payoutStatus === "failed"
+            ? `Livraison confirmée — versement à vérifier (${order.order_number})`
           : `L'acheteur a confirmé ${order.order_number}`
 
     await admin.from("notifications").insert({
@@ -180,9 +182,9 @@ export async function POST(request: NextRequest, context: Ctx) {
       title:
         payoutStatus === "paid"
           ? "Paiement reçu"
-          : payoutOk
-            ? "Fonds libérés"
-            : "Livraison confirmée — versement en attente ops",
+          : payoutStatus === "pending"
+            ? "Vente confirmée — versement disponible sur demande"
+            : "Fonds libérés",
       message: sellerMsg,
       body: sellerMsg,
       link: `/wallet`,
@@ -194,9 +196,9 @@ export async function POST(request: NextRequest, context: Ctx) {
       title:
         payoutStatus === "paid"
           ? "Argent versé"
-          : payoutOk
-            ? "Argent libéré"
-            : "Confirmation reçue",
+          : payoutStatus === "pending"
+            ? "Vente confirmée"
+            : "Fonds libérés",
       body: sellerMsg,
       url: "/wallet",
     })

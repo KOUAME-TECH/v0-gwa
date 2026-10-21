@@ -2,29 +2,37 @@ import { type NextRequest, NextResponse } from "next/server"
 import { requireUser } from "@/lib/auth/require-admin"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
-import { mapPaymentMethodToNetwork } from "@/lib/payment/networks"
-import { isWalletRegulatoryApprovalEnabled } from "@/lib/wallet/availability"
+import { isSellerRole } from "@/lib/dashboard/routing"
+
+const ALLOWED_NETWORKS = new Set(["orange_ci", "mtn_ci", "moov_ci", "wave_ci"])
 
 /**
  * GET /api/wallet/withdraw — historique demandes
  * POST /api/wallet/withdraw — créer une demande en file ops
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    if (!isWalletRegulatoryApprovalEnabled()) {
-      return NextResponse.json({ error: "Fonctionnalité indisponible" }, { status: 404 })
-    }
     const { user, error } = await requireUser()
     if (!user) {
       return NextResponse.json({ error: error || "Non authentifié" }, { status: 401 })
     }
     const admin = createAdminClient()
-    const { data, error: qErr } = await admin
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("user_type")
+      .eq("id", user.id)
+      .maybeSingle()
+    if (!isSellerRole(profile?.user_type)) {
+      return NextResponse.json({ error: "Espace réservé aux vendeurs" }, { status: 403 })
+    }
+    const limit = Math.min(100, Math.max(1, Number(request.nextUrl.searchParams.get("limit")) || 50))
+    const offset = Math.max(0, Number(request.nextUrl.searchParams.get("offset")) || 0)
+    const { data, count, error: qErr } = await admin
       .from("withdrawal_requests")
-      .select("*")
+      .select("id, amount_fcfa, network, phone, status, payout_reference, admin_notes, created_at, updated_at, processed_at", { count: "exact" })
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
-      .limit(50)
+      .range(offset, offset + limit - 1)
 
     if (qErr) {
       // Table absente (migration 053)
@@ -33,7 +41,7 @@ export async function GET() {
       }
       return NextResponse.json({ error: qErr.message }, { status: 500 })
     }
-    return NextResponse.json({ withdrawals: data || [] })
+    return NextResponse.json({ withdrawals: data || [], total: count || 0, limit, offset })
   } catch (err) {
     console.error("[api/wallet/withdraw GET]", err)
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 })
@@ -42,114 +50,86 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    if (!isWalletRegulatoryApprovalEnabled()) {
-      return NextResponse.json({ error: "Fonctionnalité indisponible" }, { status: 404 })
-    }
     const rate = await checkRateLimit("PAYMENT")
     if (!rate.success) {
       return NextResponse.json({ error: "Trop de tentatives" }, { status: 429 })
     }
 
-    const { user, error } = await requireUser()
+    const { user, error, supabase } = await requireUser()
     if (!user) {
       return NextResponse.json({ error: error || "Non authentifié" }, { status: 401 })
     }
 
-    const body = await request.json().catch(() => ({}))
-    const amount = Math.round(Number(body?.amount_fcfa ?? body?.amount))
-    const phone = String(body?.phone || "").trim()
-    const network = mapPaymentMethodToNetwork(String(body?.network || body?.method || "orange"))
+    const admin = createAdminClient()
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("user_type")
+      .eq("id", user.id)
+      .maybeSingle()
+    if (!isSellerRole(profile?.user_type)) {
+      return NextResponse.json({ error: "Espace réservé aux vendeurs" }, { status: 403 })
+    }
 
-    if (!Number.isFinite(amount) || amount < 1000) {
+    const body = await request.json().catch(() => ({}))
+    const amount = Number(body?.amount_fcfa ?? body?.amount)
+    const phone = String(body?.phone || "").trim()
+    const network = String(body?.network || "")
+
+    if (!Number.isSafeInteger(amount) || amount < 1000) {
       return NextResponse.json(
         { error: "Montant minimum 1 000 FCFA", code: "AMOUNT_TOO_LOW" },
         { status: 400 },
       )
     }
-    if (phone.length < 8) {
+    if (!/^[+\d][\d\s().-]{7,24}$/.test(phone)) {
       return NextResponse.json(
         { error: "Numéro Mobile Money invalide", code: "INVALID_PHONE" },
         { status: 400 },
       )
     }
-
-    const admin = createAdminClient()
-
-    // Solde disponible = commandes livrées / escrow released
-    const { data: completed } = await admin
-      .from("orders")
-      .select("vendeur_recoit_fcfa, total_amount, commission_fcfa, service_fee")
-      .eq("seller_id", user.id)
-      .eq("payment_status", "paid")
-      .or("escrow_status.eq.released,status.eq.delivered")
-
-    const available = (completed || []).reduce((sum, o) => {
-      if (o.vendeur_recoit_fcfa != null) return sum + (Number(o.vendeur_recoit_fcfa) || 0)
-      return (
-        sum +
-        (Number(o.total_amount) || 0) -
-        (Number(o.commission_fcfa) || 0) -
-        (Number(o.service_fee) || 0)
-      )
-    }, 0)
-
-    const { data: prior } = await admin
-      .from("withdrawal_requests")
-      .select("amount_fcfa, status")
-      .eq("user_id", user.id)
-      .in("status", ["pending", "processing", "paid"])
-
-    const already = (prior || []).reduce((s, w) => s + (Number(w.amount_fcfa) || 0), 0)
-    const balance = Math.max(0, available - already)
-
-    if (amount > balance) {
+    if (!ALLOWED_NETWORKS.has(network)) {
       return NextResponse.json(
-        {
-          error: "Solde insuffisant",
-          code: "INSUFFICIENT_BALANCE",
-          balance_fcfa: balance,
-        },
+        { error: "Réseau Mobile Money non pris en charge", code: "INVALID_NETWORK" },
         { status: 400 },
       )
     }
 
-    const now = new Date().toISOString()
-    const insertPayload = {
-      user_id: user.id,
-      amount_fcfa: amount,
-      phone,
-      network,
-      status: "pending" as const,
-      created_at: now,
-      updated_at: now,
-    }
-
-    const { data: created, error: insErr } = await admin
-      .from("withdrawal_requests")
-      .insert(insertPayload)
-      .select()
-      .single()
-
-    if (insErr || !created) {
-      if (insErr && /does not exist|relation/i.test(insErr.message)) {
+    const { data: requestId, error: rpcError } = await supabase.rpc(
+      "request_manual_payout",
+      {
+        p_amount_fcfa: amount,
+        p_phone: phone,
+        p_network: network,
+      },
+    )
+    if (rpcError || !requestId) {
+      if (/function .*request_manual_payout|does not exist/i.test(rpcError?.message || "")) {
         return NextResponse.json(
-          {
-            error: "Migration 053 requise (withdrawal_requests)",
-            code: "MIGRATION_REQUIRED",
-          },
+          { error: "Migration 062 requise pour les demandes de versement", code: "MIGRATION_REQUIRED" },
           { status: 503 },
         )
       }
-      return NextResponse.json(
-        { error: insErr?.message || "Création échouée" },
-        { status: 400 },
-      )
+      if (/solde insuffisant/i.test(rpcError?.message || "")) {
+        return NextResponse.json({ error: "Montant supérieur au disponible", code: "INSUFFICIENT_BALANCE" }, { status: 400 })
+      }
+      if (/vendeur/i.test(rpcError?.message || "")) {
+        return NextResponse.json({ error: "Espace réservé aux vendeurs" }, { status: 403 })
+      }
+      console.error("[api/wallet/withdraw POST]", rpcError?.message)
+      return NextResponse.json({ error: "Demande impossible pour le moment" }, { status: 400 })
     }
+
+    const { data: created } = await admin
+      .from("withdrawal_requests")
+      .select("id, amount_fcfa, network, phone, status, created_at")
+      .eq("id", requestId)
+      .eq("user_id", user.id)
+      .single()
 
     return NextResponse.json({
       withdrawal: created,
       status: "pending",
-      message: "Demande enregistrée — versement en attente de traitement ops.",
+      message: "Demande enregistrée. Le versement sera traité manuellement par notre équipe.",
     })
   } catch (err) {
     console.error("[api/wallet/withdraw POST]", err)
