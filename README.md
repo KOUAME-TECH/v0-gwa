@@ -38,7 +38,7 @@ Ce dépôt = **code uniquement** + ce README. Pas de dossier `docs/`.
 | Frontend | Next.js App Router, React, Tailwind, PWA |
 | Backend | Route Handlers `app/api/*`, `lib/*`, middleware |
 | Data | Supabase (Auth, Postgres, Realtime, Storage) |
-| Infra | Vercel · Upstash Redis · OneSignal · Africa’s Talking · FeexPay · Gemini |
+| Infra | Vercel · Upstash Redis · OneSignal · Africa’s Talking · GeniusPay · Gemini |
 
 ## Démarrage local
 

@@ -274,7 +274,7 @@ export default function CartPage() {
         if (!orderId) throw new Error("Réponse commande invalide")
         createdOrderIds.push(orderId)
 
-        // Paiement : FeexPay pay-in (payment_url) ou simulation hors prod
+        // Paiement : GeniusPay pay-in (payment_url) ou simulation hors prod
         const payRes = await fetch(`/api/orders/${orderId}/pay`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },

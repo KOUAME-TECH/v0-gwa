@@ -2,16 +2,11 @@ import { type NextRequest, NextResponse } from "next/server"
 import { requireUser } from "@/lib/auth/require-admin"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
-import {
-  createFeexPayPayout,
-  getFeexPayCredentials,
-  resolveFeexPayCredentials,
-  mapPaymentMethodToNetwork,
-} from "@/lib/feexpay/client"
+import { mapPaymentMethodToNetwork } from "@/lib/payment/networks"
 
 /**
  * GET /api/wallet/withdraw — historique demandes
- * POST /api/wallet/withdraw — créer retrait (FeexPay payout ou pending ops)
+ * POST /api/wallet/withdraw — créer retrait (file ops sécurisée)
  */
 export async function GET() {
   try {
@@ -144,62 +139,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Tente payout immédiat si FeexPay configuré
-    const creds = await resolveFeexPayCredentials()
-    if (creds) {
-      await admin
-        .from("withdrawal_requests")
-        .update({ status: "processing", updated_at: now })
-        .eq("id", created.id)
-
-      const payout = await createFeexPayPayout({
-        amountFcfa: amount,
-        phone,
-        network,
-        description: `GWA withdraw ${created.id.slice(0, 8)}`,
-      })
-
-      if (payout.ok) {
-        await admin
-          .from("withdrawal_requests")
-          .update({
-            status: "paid",
-            feexpay_ref: payout.reference,
-            processed_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", created.id)
-
-        return NextResponse.json({
-          withdrawal: { ...created, status: "paid", feexpay_ref: payout.reference },
-          status: "paid",
-        })
-      }
-
-      await admin
-        .from("withdrawal_requests")
-        .update({
-          status: "pending",
-          error_message: payout.error || "PAYOUT_FAILED",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", created.id)
-
-      return NextResponse.json({
-        withdrawal: {
-          ...created,
-          status: "pending",
-          error_message: payout.error,
-        },
-        status: "pending",
-        message: "Demande enregistrée — payout en file ops",
-      })
-    }
-
     return NextResponse.json({
       withdrawal: created,
       status: "pending",
-      message: "Demande enregistrée — activation FeexPay pour versement auto",
+      message: "Demande enregistrée — versement traité par l'équipe opérations",
     })
   } catch (err) {
     console.error("[api/wallet/withdraw POST]", err)

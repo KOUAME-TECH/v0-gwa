@@ -56,7 +56,7 @@ export async function POST(request: NextRequest, context: Ctx) {
       }
       const { error: orderUpdateError } = await admin
         .from("orders")
-        .update({ payment_status: "processing", feexpay_ref: payment.reference, payment_method: "geniuspay", updated_at: new Date().toISOString() })
+        .update({ payment_status: "processing", payment_reference: payment.reference, payment_method: "geniuspay", updated_at: new Date().toISOString() })
         .eq("id", id)
       if (orderUpdateError) {
         console.error("[api/orders/pay] order update", orderUpdateError)
@@ -67,8 +67,8 @@ export async function POST(request: NextRequest, context: Ctx) {
     }
 
     if (!allowPaymentSimulation()) return NextResponse.json({ error: "Paiements GeniusPay non configurés", code: "PAYMENT_PROVIDER_MISSING" }, { status: 503 })
-    await admin.from("orders").update({ payment_status: "paid", escrow_status: "held", status: "confirmed", feexpay_ref: reference, payment_method: "simulation", updated_at: new Date().toISOString() }).eq("id", id)
-    await admin.from("escrow_transactions").update({ status: "held", feexpay_ref: reference, paid_at: new Date().toISOString() }).eq("order_id", id).eq("tranche_numero", 1)
+    await admin.from("orders").update({ payment_status: "paid", escrow_status: "held", status: "confirmed", payment_reference: reference, payment_method: "simulation", updated_at: new Date().toISOString() }).eq("id", id)
+    await admin.from("escrow_transactions").update({ status: "held", payment_reference: reference, paid_at: new Date().toISOString() }).eq("order_id", id).eq("tranche_numero", 1)
     await admin.from("order_audit_log").insert({ order_id: id, performed_by: user.id, action: "payment_simulated", new_value: "held", notes: "Simulation locale uniquement" })
     await admin.from("notifications").insert({ user_id: order.seller_id, type: "order", title: "Paiement reçu (escrow)", message: `Commande ${order.order_number} payée — fonds en séquestre`, body: `Commande ${order.order_number} payée`, link: "/dashboard/commandes", is_read: false, read: false })
     void sendPushToUser(supabase as never, order.seller_id, { title: "Paiement escrow GWA", body: `${order.order_number} — fonds sécurisés`, url: "/dashboard/commandes" })

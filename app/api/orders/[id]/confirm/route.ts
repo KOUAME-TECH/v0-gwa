@@ -2,12 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { sendPushToUser } from "@/lib/notifications/push"
-import {
-  createFeexPayPayout,
-  getFeexPayCredentials,
-  resolveFeexPayCredentials,
-  mapPaymentMethodToNetwork,
-} from "@/lib/feexpay/client"
+import { mapPaymentMethodToNetwork } from "@/lib/payment/networks"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -89,42 +84,20 @@ export async function POST(request: NextRequest, context: Ctx) {
     let payoutNetwork: string | null = null
     let payoutError: string | null = null
 
-    const creds = await resolveFeexPayCredentials()
     const sellerPhone = String(sellerProfile?.phone || "").trim()
     const network = mapPaymentMethodToNetwork(
       order.payment_method || order.payout_network || "orange",
     )
 
-    if (creds && payoutAmount > 0) {
-      if (!sellerPhone) {
-        payoutStatus = "failed"
-        payoutError = "SELLER_PHONE_MISSING"
-      } else {
-        payoutStatus = "processing"
-        payoutNetwork = network
-        const payout = await createFeexPayPayout({
-          amountFcfa: payoutAmount,
-          phone: sellerPhone,
-          network,
-          description: `GWA release ${order.order_number}`,
-        })
-        if (payout.ok) {
-          payoutStatus = "paid"
-          payoutRef = payout.reference
-        } else {
-          payoutStatus = "failed"
-          payoutError = payout.error || "PAYOUT_FAILED"
-          console.error("[api/orders/confirm] payout", payout.error, payout.raw)
-        }
-      }
-    } else if (!creds && process.env.ALLOW_PAYMENT_SIMULATION === "true") {
-      payoutStatus = "skipped_sim"
-      payoutRef = `SIM-OUT-${Date.now().toString(36).toUpperCase()}`
-    } else if (!creds) {
-      payoutStatus = "failed"
-      payoutError = "PAYMENT_PROVIDER_MISSING"
-    } else if (payoutAmount <= 0) {
+    if (payoutAmount <= 0) {
       payoutStatus = "skipped_zero"
+    } else if (!sellerPhone) {
+      payoutStatus = "failed"
+      payoutError = "SELLER_PHONE_MISSING"
+    } else {
+      payoutNetwork = network
+      payoutStatus = "pending_ops"
+      payoutError = "GENIUSPAY_PAYOUT_REQUIRES_OPERATIONS_APPROVAL"
     }
 
     const payoutOk =

@@ -20,7 +20,7 @@ export async function POST(request: Request) {
   const amount = Number(payload.amount ?? payload.data?.amount)
   if (!reference) return NextResponse.json({ error: "reference manquante" }, { status: 400 })
   const admin = createAdminClient()
-  const { data: order } = await admin.from("orders").select("id,total_amount,payment_status").eq("feexpay_ref", reference).maybeSingle()
+  const { data: order } = await admin.from("orders").select("id,total_amount,payment_status,escrow_status").eq("payment_reference", reference).maybeSingle()
   if (!order) return NextResponse.json({ received: true, matched: false })
   if (["completed", "success", "successful", "paid"].includes(status)) {
     if (Number.isFinite(amount) && amount !== Number(order.total_amount)) return NextResponse.json({ error: "Montant invalide" }, { status: 422 })

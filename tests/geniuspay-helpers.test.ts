@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest"
 import {
   mapPaymentMethodToNetwork,
-  normalizeFeexPayPhone,
-} from "@/lib/feexpay/networks"
+  normalizeGeniusPayPhone,
+} from "@/lib/payment/networks"
 
-describe("feexpay helpers", () => {
+describe("geniuspay helpers", () => {
   it("maps panier methods to CI networks", () => {
     expect(mapPaymentMethodToNetwork("orange")).toBe("orange_ci")
     expect(mapPaymentMethodToNetwork("mtn")).toBe("mtn_ci")
@@ -13,8 +13,8 @@ describe("feexpay helpers", () => {
   })
 
   it("normalizes CI phones", () => {
-    expect(normalizeFeexPayPhone("0700000000")).toBe("225700000000")
-    expect(normalizeFeexPayPhone("2250700000000")).toMatch(/^225/)
-    expect(normalizeFeexPayPhone("")).toBeNull()
+    expect(normalizeGeniusPayPhone("0700000000")).toBe("225700000000")
+    expect(normalizeGeniusPayPhone("2250700000000")).toMatch(/^225/)
+    expect(normalizeGeniusPayPhone("")).toBeNull()
   })
 })

@@ -142,7 +142,7 @@ export function humanPaymentLabel(method?: string | null, status?: string | null
           ? "échoué"
           : st || "en cours"
   const methodLabel =
-    !method || method === "feexpay" || method === "FeexPay"
+    !method || method === "geniuspay" || method === "GeniusPay"
       ? "Paiement sécurisé"
       : method
   return `${methodLabel} (${statusLabel})`

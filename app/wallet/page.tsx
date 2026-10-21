@@ -138,7 +138,7 @@ export default function WalletPage() {
         id: string
         amount_fcfa: number
         status: string
-        feexpay_ref?: string | null
+        payment_reference?: string | null
         created_at: string
       }[]
       totalWithdrawn = rows
@@ -156,7 +156,7 @@ export default function WalletPage() {
                 ? "failed"
                 : "pending",
           description: "Retrait Mobile Money",
-          reference: w.feexpay_ref || null,
+          reference: w.payment_reference || null,
           created_at: w.created_at,
         })
       }
