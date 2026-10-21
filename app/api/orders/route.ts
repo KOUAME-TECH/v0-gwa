@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { sendPushToUser } from "@/lib/notifications/push"
+import { isAgriculturalProductType } from "@/lib/catalog/scope"
 
 type OrderItemInput = {
   product_id: string
@@ -82,12 +83,18 @@ export async function POST(request: NextRequest) {
     const productIds = items.map((i) => i.product_id)
     const { data: products, error: pErr } = await supabase
       .from("products")
-      .select("id, price, seller_id, name, stock_quantity, status")
+      .select("id, price, seller_id, name, stock_quantity, status, product_type")
       .in("id", productIds)
       .eq("status", "active")
 
     if (pErr || !products?.length) {
       return NextResponse.json({ error: "Produits invalides" }, { status: 400 })
+    }
+    if (products.some((product) => !isAgriculturalProductType(product.product_type))) {
+      return NextResponse.json(
+        { error: "Seuls les produits agricoles peuvent être commandés", code: "OUT_OF_SCOPE" },
+        { status: 400 },
+      )
     }
 
     for (const p of products) {
@@ -163,6 +170,7 @@ export async function POST(request: NextRequest) {
         shipping_cost: shipping,
         service_fee: serviceFee,
         total_amount: totalAmount,
+        currency: "XOF",
         status: "pending",
         payment_status: "pending",
         escrow_status: "pending",

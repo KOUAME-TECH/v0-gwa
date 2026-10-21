@@ -126,15 +126,15 @@ export default function AdminFinancesPage() {
           <CardContent>
             <div className="text-2xl font-bold text-green-600">{formatCurrency(stats.totalRevenue)}</div>
             <p className="text-xs text-muted-foreground flex items-center mt-1">
-              <TrendingUp className="h-3 w-3 mr-1 text-green-500" />
-              +12% vs periode precedente
+              <TrendingUp className="h-3 w-3 mr-1 text-muted-foreground" />
+              Évolution non calculée
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Commissions GWA (5%)</CardTitle>
+            <CardTitle className="text-sm font-medium">Commissions GWA</CardTitle>
             <Building2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -161,7 +161,7 @@ export default function AdminFinancesPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(stats.pendingPayouts)}</div>
-            <p className="text-xs text-muted-foreground">A verser aux vendeurs</p>
+            <p className="text-xs text-muted-foreground">Montants en attente de traitement ops</p>
           </CardContent>
         </Card>
       </div>

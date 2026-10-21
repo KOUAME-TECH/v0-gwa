@@ -26,7 +26,7 @@ export async function POST(_request: NextRequest, context: Ctx) {
 
     const { data: order, error: orderError } = await supabase
       .from("orders")
-      .select("id, buyer_id, total_amount, payment_status, payment_method, provider_reference")
+      .select("id, buyer_id, total_amount, currency, payment_status, payment_method, provider_reference")
       .eq("id", id)
       .maybeSingle()
     if (orderError) {
@@ -35,13 +35,19 @@ export async function POST(_request: NextRequest, context: Ctx) {
         /provider_reference.*column|column.*provider_reference/i.test(orderError.message)
       ) {
         return NextResponse.json(
-          { error: "Migration 057 requise pour GeniusPay", code: "MIGRATION_REQUIRED" },
+          { error: "Migrations 057–058 requises pour GeniusPay", code: "MIGRATION_REQUIRED" },
           { status: 503 },
         )
       }
       throw orderError
     }
     if (!order) return NextResponse.json({ error: "Commande introuvable" }, { status: 404 })
+    if (order.currency !== "XOF") {
+      return NextResponse.json(
+        { error: "Devise de paiement non prise en charge", code: "UNSUPPORTED_CURRENCY" },
+        { status: 422 },
+      )
+    }
     if (order.buyer_id !== user.id) {
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 })
     }

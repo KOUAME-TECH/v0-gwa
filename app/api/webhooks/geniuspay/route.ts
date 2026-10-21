@@ -103,12 +103,15 @@ export async function POST(request: Request) {
     const admin = createAdminClient()
     const { data: order, error: lookupError } = await admin
       .from("orders")
-      .select("id, buyer_id, total_amount, payment_status, payment_method, provider_reference")
+      .select("id, buyer_id, total_amount, currency, payment_status, payment_method, provider_reference")
       .eq("provider_reference", reference)
       .eq("payment_method", "geniuspay")
       .maybeSingle()
     if (lookupError) throw lookupError
     if (!order) return NextResponse.json({ error: "Commande introuvable" }, { status: 404 })
+    if (order.currency !== "XOF") {
+      return NextResponse.json({ error: "Devise de paiement non prise en charge" }, { status: 422 })
+    }
 
     if (
       !isGeniusPayPaymentForOrder(payment, {
