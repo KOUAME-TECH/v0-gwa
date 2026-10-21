@@ -18,18 +18,21 @@ type GeniusPayResponse = {
 
 export type GeniusPayPayment = NonNullable<GeniusPayResponse["data"]>
 
-function credentials() {
-  const key = process.env.GENIUSPAY_API_KEY?.trim()
-  const secret = process.env.GENIUSPAY_API_SECRET?.trim()
+async function credentials() {
+  const { resolvePlatformSecret } = await import("@/lib/ops/platform-secrets")
+  const [key, secret] = await Promise.all([
+    resolvePlatformSecret("GENIUSPAY_API_KEY"),
+    resolvePlatformSecret("GENIUSPAY_API_SECRET"),
+  ])
   return key && secret ? { key, secret } : null
 }
 
-export function isGeniusPayConfigured() {
-  return Boolean(credentials())
+export async function isGeniusPayConfigured() {
+  return Boolean(await credentials())
 }
 
 async function request(path: string, init: RequestInit): Promise<GeniusPayResponse> {
-  const auth = credentials()
+  const auth = await credentials()
   if (!auth) throw new Error("GENIUSPAY_NOT_CONFIGURED")
   const response = await fetch(`${BASE_URL}${path}`, {
     ...init,

@@ -3,7 +3,8 @@ import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 export async function POST(request: Request) {
-  const secret = process.env.GENIUSPAY_WEBHOOK_SECRET
+  const { resolvePlatformSecret } = await import("@/lib/ops/platform-secrets")
+  const secret = await resolvePlatformSecret("GENIUSPAY_WEBHOOK_SECRET")
   if (!secret) return NextResponse.json({ error: "Webhook non configuré" }, { status: 503 })
   const raw = await request.text()
   const signature = request.headers.get("x-webhook-signature") || ""

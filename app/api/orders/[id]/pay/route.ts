@@ -40,7 +40,7 @@ export async function POST(request: NextRequest, context: Ctx) {
     const admin = createAdminClient()
     const reference = `GWA-${id}-${Date.now().toString(36)}`
 
-    if (isGeniusPayConfigured()) {
+    if (await isGeniusPayConfigured()) {
       const payment = await createGeniusPayPayment({
         amount,
         description: `Commande ${order.order_number}`,
@@ -49,9 +49,21 @@ export async function POST(request: NextRequest, context: Ctx) {
         successUrl: `${appOrigin(request)}/commandes/confirmation?order=${id}`,
         errorUrl: `${appOrigin(request)}/commandes/${id}?payment=failed`,
       })
-      await admin.from("orders").update({ payment_status: "processing", feexpay_ref: payment.reference, payment_method: "geniuspay", updated_at: new Date().toISOString() }).eq("id", id)
+      const paymentUrl = payment.checkout_url || payment.payment_url
+      if (!paymentUrl) {
+        console.error("[api/orders/pay] GeniusPay returned no checkout URL", { reference: payment.reference })
+        return NextResponse.json({ error: "Lien de paiement indisponible", code: "PAYMENT_URL_MISSING" }, { status: 502 })
+      }
+      const { error: orderUpdateError } = await admin
+        .from("orders")
+        .update({ payment_status: "processing", feexpay_ref: payment.reference, payment_method: "geniuspay", updated_at: new Date().toISOString() })
+        .eq("id", id)
+      if (orderUpdateError) {
+        console.error("[api/orders/pay] order update", orderUpdateError)
+        return NextResponse.json({ error: "Impossible d'enregistrer le paiement", code: "PAYMENT_STATE_FAILED" }, { status: 500 })
+      }
       await admin.from("order_audit_log").insert({ order_id: id, performed_by: user.id, action: "geniuspay_payment_initiated", new_value: "processing", notes: `reference=${payment.reference}` })
-      return NextResponse.json({ status: "redirect_required", reference: payment.reference, payment_url: payment.checkout_url || payment.payment_url })
+      return NextResponse.json({ status: "redirect_required", reference: payment.reference, payment_url: paymentUrl })
     }
 
     if (!allowPaymentSimulation()) return NextResponse.json({ error: "Paiements GeniusPay non configurés", code: "PAYMENT_PROVIDER_MISSING" }, { status: 503 })
