@@ -1,7 +1,7 @@
 export type FeexPayMode = "sandbox" | "live"
 
 export function parseFeexPayMode(raw: string | undefined): FeexPayMode {
-  const mode = (raw || "sandbox").trim().toLowerCase()
+  const mode = (raw || "sandbox").replace(/^"|"$/g, "").trim().toLowerCase()
   return mode === "live" || mode === "prod" || mode === "production"
     ? "live"
     : "sandbox"

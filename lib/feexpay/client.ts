@@ -56,18 +56,16 @@ export function getFeexPayCredentials(): FeexPayCredentials | null {
 
 /** Env Vercel d'abord, puis platform_secrets (service_role). */
 export async function resolveFeexPayCredentials(): Promise<FeexPayCredentials | null> {
-  const fromEnv = getFeexPayCredentials()
-  if (fromEnv) return fromEnv
-
-  const apiKey = await resolvePlatformSecret("FEEXPAY_API_KEY")
-  const shopId = await resolvePlatformSecret("FEEXPAY_SHOP_ID")
+  const [rawApiKey, rawShopId, rawMode] = await Promise.all([
+    resolvePlatformSecret("FEEXPAY_API_KEY"),
+    resolvePlatformSecret("FEEXPAY_SHOP_ID"),
+    resolvePlatformSecret("FEEXPAY_MODE"),
+  ])
+  const apiKey = rawApiKey.replace(/^"|"$/g, "").trim()
+  const shopId = rawShopId.replace(/^"|"$/g, "").trim()
   if (!apiKey || !shopId) return null
 
-  const modeRaw = (
-    trimEnv("FEEXPAY_MODE") ||
-    (await resolvePlatformSecret("FEEXPAY_MODE"))
-  )
-  const mode = parseFeexPayMode(modeRaw)
+  const mode = parseFeexPayMode(rawMode)
   return { apiKey, shopId, mode }
 }
 
