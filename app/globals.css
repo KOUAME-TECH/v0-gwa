@@ -159,7 +159,7 @@
 }
 
 @theme inline {
-  --font-sans: var(--font-outfit), "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'SF Mono', 'Monaco', monospace;
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
@@ -431,7 +431,7 @@
 }
 
 .font-display {
-  font-family: var(--font-outfit), "Outfit", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Outfit", ui-sans-serif, system-ui, sans-serif;
   letter-spacing: -0.03em;
   font-weight: 700;
 }

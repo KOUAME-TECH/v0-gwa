@@ -1,16 +1,9 @@
 import type { Metadata, Viewport } from "next"
-import { Outfit } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { OneSignalProvider } from "@/components/pwa/onesignal-provider"
 import { ServiceWorkerRegister } from "@/components/pwa/service-worker-register"
 import { AppShell } from "@/components/layout/app-shell"
 import "./globals.css"
-
-const outfit = Outfit({
-  subsets: ["latin"],
-  variable: "--font-outfit",
-  display: "swap",
-})
 
 export const metadata: Metadata = {
   title: "GWA - La Super App Africaine",
@@ -39,7 +32,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="fr" className={outfit.variable}>
+    <html lang="fr">
       <head>
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
