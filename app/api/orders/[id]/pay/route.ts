@@ -121,6 +121,17 @@ export async function POST(request: NextRequest, context: Ctx) {
       })
       if (!payIn.ok || !payIn.data) {
         console.error("[api/orders/pay] GeniusPay", payIn.error)
+        if (payIn.uncertain) {
+          const { error: auditError } = await admin.from("order_audit_log").insert({
+            order_id: id,
+            performed_by: user.id,
+            action: "geniuspay_payin_uncertain",
+            old_value: "processing",
+            new_value: "processing",
+            notes: `Résultat d’initiation incertain (${payIn.error || "inconnu"}); réconciliation fournisseur requise avant toute nouvelle tentative.`,
+          })
+          if (auditError) console.error("[api/orders/pay] uncertain audit log", auditError.message)
+        }
         if (!payIn.uncertain) {
           await admin
             .from("orders")
@@ -133,7 +144,7 @@ export async function POST(request: NextRequest, context: Ctx) {
             error: payIn.uncertain
               ? "Résultat d’initiation incertain. Ne relancez pas le paiement ; contactez le support."
               : "Échec initiation paiement GeniusPay",
-            code: payIn.error || "PAYIN_FAILED",
+            code: payIn.uncertain ? "PAYIN_RESULT_UNCERTAIN" : payIn.error || "PAYIN_FAILED",
           },
           { status: 502 },
         )

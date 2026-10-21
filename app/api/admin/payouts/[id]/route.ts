@@ -71,7 +71,7 @@ export async function PATCH(request: NextRequest, context: Context) {
     if (error) {
       if (/admin_update_manual_payout|function .*does not exist/i.test(error.message)) {
         return NextResponse.json(
-          { error: "Migration 062 requise pour le traitement manuel", code: "MIGRATION_REQUIRED" },
+          { error: "Migration 065 requise pour le traitement manuel", code: "MIGRATION_REQUIRED" },
           { status: 503 },
         )
       }

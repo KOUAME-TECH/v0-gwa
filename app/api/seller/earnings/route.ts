@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
     if (summaryError) {
       if (/get_seller_earnings_summary|function .*does not exist/i.test(summaryError.message)) {
         return NextResponse.json(
-          { error: "Migration 062 requise pour le suivi des versements", code: "MIGRATION_REQUIRED" },
+          { error: "Migration 065 requise pour le suivi des versements", code: "MIGRATION_REQUIRED" },
           { status: 503 },
         )
       }

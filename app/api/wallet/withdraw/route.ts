@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
     if (rpcError || !requestId) {
       if (/function .*request_manual_payout|does not exist/i.test(rpcError?.message || "")) {
         return NextResponse.json(
-          { error: "Migration 062 requise pour les demandes de versement", code: "MIGRATION_REQUIRED" },
+          { error: "Migration 065 requise pour les demandes de versement", code: "MIGRATION_REQUIRED" },
           { status: 503 },
         )
       }

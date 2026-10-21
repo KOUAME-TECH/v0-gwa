@@ -159,9 +159,14 @@ export default function VerificationPage() {
           toast.error("Image trop lourde. Rapprochez-vous un peu.")
           return
         }
-        const file = new File([blob], `selfie-${Date.now()}.jpg`, {
-          type: "image/jpeg",
-        })
+        const mimeType = blob.type.toLowerCase()
+        if (!["image/jpeg", "image/png", "image/webp"].includes(mimeType)) {
+          toast.error("Format de selfie non pris en charge")
+          return
+        }
+        const extension =
+          mimeType === "image/png" ? "png" : mimeType === "image/webp" ? "webp" : "jpg"
+        const file = new File([blob], `selfie-${Date.now()}.${extension}`, { type: mimeType })
         setSelfieFile(file)
         setSelfiePreview(URL.createObjectURL(blob))
         stopCamera()
@@ -184,7 +189,9 @@ export default function VerificationPage() {
       const extension =
         idFile.type === "image/png" ? "png" : idFile.type === "image/webp" ? "webp" : "jpg"
       const idPath = `${userId}/kyc-id-${stamp}.${extension}`
-      const selfiePath = `${userId}/kyc-selfie-${stamp}.jpg`
+      const selfieExtension =
+        selfieFile.type === "image/png" ? "png" : selfieFile.type === "image/webp" ? "webp" : "jpg"
+      const selfiePath = `${userId}/kyc-selfie-${stamp}.${selfieExtension}`
 
       const { error: idUp } = await supabase.storage
         .from("kyc-documents")
@@ -227,7 +234,7 @@ export default function VerificationPage() {
 
   const prompt = shouldPromptIdentityVerification({
     is_verified: isVerified,
-    kyc_status: status === "idle" ? null : status,
+    kyc_status: status === "idle" || status === "more_info_needed" ? null : status,
   })
 
   return (
@@ -276,7 +283,6 @@ export default function VerificationPage() {
                 className="w-full aspect-[4/3] rounded-2xl border-2 border-dashed border-[#C5D4C2] bg-[#F3F7F0] overflow-hidden flex flex-col items-center justify-center gap-2 active:scale-[0.99] transition-transform"
               >
                 {idPreview ? (
-                  // eslint-disable-next-line @next/next/no-img-element
                   <img src={idPreview} alt="Pièce" className="w-full h-full object-cover" />
                 ) : (
                   <>
@@ -338,7 +344,6 @@ export default function VerificationPage() {
                   className="w-full aspect-square max-h-64 rounded-2xl border-2 border-dashed border-[#C5D4C2] bg-[#F3F7F0] overflow-hidden flex flex-col items-center justify-center gap-2 mx-auto active:scale-[0.99] transition-transform"
                 >
                   {selfiePreview ? (
-                    // eslint-disable-next-line @next/next/no-img-element
                     <img src={selfiePreview} alt="Selfie" className="w-full h-full object-cover" />
                   ) : (
                     <>
