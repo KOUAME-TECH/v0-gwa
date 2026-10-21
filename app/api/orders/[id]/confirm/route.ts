@@ -84,7 +84,7 @@ export async function POST(request: NextRequest, context: Ctx) {
       payoutStatus = "skipped_zero"
     }
 
-    const payoutOk = payoutStatus === "skipped_sim" || payoutStatus === "skipped_zero"
+    const payoutNotRequired = payoutStatus === "skipped_sim" || payoutStatus === "skipped_zero"
 
     const escrowStatus = "released"
 
@@ -96,7 +96,7 @@ export async function POST(request: NextRequest, context: Ctx) {
       updated_at: now,
       payout_status: payoutStatus,
       payout_ref: payoutRef,
-      payout_at: payoutOk ? now : null,
+      payout_at: payoutNotRequired ? now : null,
     }
     if (receptionPhotoUrl) {
       orderPatch.notes = [order.notes, `Photo réception: ${receptionPhotoUrl}`]
@@ -131,7 +131,9 @@ export async function POST(request: NextRequest, context: Ctx) {
     await admin.from("order_audit_log").insert({
       order_id: id,
       performed_by: user.id,
-      action: payoutOk ? "buyer_confirmed" : "buyer_confirmed_payout_pending",
+      action: payoutNotRequired
+        ? "buyer_confirmed"
+        : "buyer_confirmed_awaiting_manual_payout",
       new_value: escrowStatus,
       notes: [
         receptionPhotoUrl ? `Photo: ${receptionPhotoUrl}` : null,
@@ -143,7 +145,7 @@ export async function POST(request: NextRequest, context: Ctx) {
         .join(" | "),
     })
 
-    if (payoutOk) {
+    if (payoutNotRequired) {
       const invoiceNumber = `FA-${order.order_number}`
       await admin.from("invoices").upsert(
         {
@@ -198,7 +200,7 @@ export async function POST(request: NextRequest, context: Ctx) {
       payout_status: payoutStatus,
       payout_ref: payoutRef,
       payout_amount_fcfa: payoutAmount,
-      payout_pending: !payoutOk,
+      awaiting_manual_payout: payoutStatus === "pending",
     })
   } catch (err) {
     console.error("[api/orders/confirm]", err)

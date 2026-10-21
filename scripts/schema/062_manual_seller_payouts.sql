@@ -24,6 +24,28 @@ ALTER TABLE public.withdrawal_request_events ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.withdrawal_request_events FROM PUBLIC, anon, authenticated;
 GRANT ALL ON public.withdrawal_request_events TO service_role;
 
+CREATE OR REPLACE FUNCTION public.get_seller_eligible_proceeds(p_seller_id UUID)
+RETURNS NUMERIC
+LANGUAGE SQL
+STABLE
+SET search_path = public
+AS $$
+  SELECT COALESCE(SUM(
+    COALESCE(
+      vendeur_recoit_fcfa,
+      GREATEST(0, total_amount - COALESCE(commission_fcfa, 0) - COALESCE(service_fee, 0))
+    )
+  ), 0)
+  FROM public.orders
+  WHERE seller_id = p_seller_id
+    AND payment_status = 'paid'
+    AND status = 'delivered'
+    AND escrow_status = 'released'
+    AND COALESCE(payout_status, '') NOT IN ('processing', 'paid', 'skipped_sim', 'skipped_zero');
+$$;
+
+REVOKE ALL ON FUNCTION public.get_seller_eligible_proceeds(UUID) FROM PUBLIC, anon, authenticated;
+
 CREATE OR REPLACE FUNCTION public.request_manual_payout(
   p_amount_fcfa INTEGER,
   p_phone TEXT,
@@ -65,26 +87,13 @@ BEGIN
     WHERE id = requester
     FOR UPDATE;
 
-  IF requester_type NOT IN ('producteur', 'cooperative', 'transformateur', 'farmer', 'processor') THEN
+  IF requester_type IS NULL
+    OR requester_type NOT IN ('producteur', 'cooperative', 'transformateur', 'farmer', 'processor')
+  THEN
     RAISE EXCEPTION 'seller role required';
   END IF;
 
-  SELECT COALESCE(SUM(
-    CASE
-      WHEN vendeur_recoit_fcfa IS NOT NULL THEN vendeur_recoit_fcfa
-      ELSE GREATEST(
-        0,
-        total_amount - COALESCE(commission_fcfa, 0) - COALESCE(service_fee, 0)
-      )
-    END
-  ), 0)
-  INTO available_amount
-  FROM public.orders
-  WHERE seller_id = requester
-    AND payment_status = 'paid'
-    AND status = 'delivered'
-    AND escrow_status = 'released'
-    AND COALESCE(payout_status, '') NOT IN ('processing', 'paid', 'skipped_sim', 'skipped_zero');
+  available_amount := public.get_seller_eligible_proceeds(requester);
 
   SELECT COALESCE(SUM(amount_fcfa), 0)
     INTO reserved_amount
@@ -147,6 +156,9 @@ BEGIN
       COALESCE(SUM(amount_fcfa) FILTER (WHERE status = 'paid'), 0) AS paid
     FROM public.withdrawal_requests
     WHERE user_id = requester
+  ),
+  seller_proceeds AS (
+    SELECT public.get_seller_eligible_proceeds(requester) AS eligible
   )
   SELECT jsonb_build_object(
     'orders_count', (SELECT COUNT(*) FROM seller_orders),
@@ -162,26 +174,16 @@ BEGIN
       SELECT SUM(seller_net) FROM seller_orders
       WHERE payment_status = 'paid' AND status <> 'delivered'
     ), 0),
-    'eligible_proceeds', COALESCE((
-      SELECT SUM(seller_net) FROM seller_orders
-      WHERE payment_status = 'paid'
-        AND status = 'delivered'
-        AND escrow_status = 'released'
-        AND COALESCE(payout_status, '') NOT IN ('processing', 'paid', 'skipped_sim', 'skipped_zero')
-    ), 0),
+    'eligible_proceeds', seller_proceeds.eligible,
     'reserved_for_payout', payout_requests.reserved,
     'paid_out', payout_requests.paid,
     'available_for_request', GREATEST(
       0,
-      COALESCE((
-        SELECT SUM(seller_net) FROM seller_orders
-        WHERE payment_status = 'paid' AND status = 'delivered' AND escrow_status = 'released'
-          AND COALESCE(payout_status, '') NOT IN ('processing', 'paid', 'skipped_sim', 'skipped_zero')
-      ), 0) - payout_requests.reserved - payout_requests.paid
+      seller_proceeds.eligible - payout_requests.reserved - payout_requests.paid
     )
   )
   INTO result
-  FROM payout_requests;
+  FROM payout_requests CROSS JOIN seller_proceeds;
 
   RETURN result;
 END;
