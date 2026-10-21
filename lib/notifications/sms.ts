@@ -5,8 +5,10 @@
 const AfricasTalking = require('africastalking')
 
 function getATClient() {
-  const username = process.env.AFRICASTALKING_USERNAME
-  const apiKey = process.env.AFRICASTALKING_API_KEY
+  // AT_API_KEY / AT_USERNAME are the canonical production variables. Keep the
+  // long-form names as backwards-compatible aliases for existing deployments.
+  const username = process.env.AT_USERNAME || process.env.AFRICASTALKING_USERNAME
+  const apiKey = process.env.AT_API_KEY || process.env.AFRICASTALKING_API_KEY
   if (!username || !apiKey) return null
   const at = AfricasTalking({ username, apiKey })
   return at.SMS
@@ -19,7 +21,16 @@ export async function sendDirectSMS(phone: string, message: string): Promise<voi
     return
   }
   try {
-    await sms.send({ to: [phone], message, from: 'GWA' })
+    const from =
+      process.env.AT_SENDER_ID ||
+      process.env.SMS_AT_SENDER_ID ||
+      process.env.AFRICASTALKING_FROM ||
+      process.env.AFRICASTALKING_SENDER_ID
+    await sms.send({
+      to: [phone],
+      message,
+      ...(from ? { from } : {}),
+    })
   } catch (err) {
     console.error('[GWA] AT SMS error:', err)
   }
