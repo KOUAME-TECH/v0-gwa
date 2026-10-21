@@ -14,9 +14,6 @@ import {
 interface FinanceStats {
   totalRevenue: number
   totalCommissions: number
-  pendingPayouts: number
-  completedPayouts: number
-  walletBalance: number
   escrowBalance: number
 }
 
@@ -34,9 +31,6 @@ export default function AdminFinancesPage() {
   const [stats, setStats] = useState<FinanceStats>({
     totalRevenue: 0,
     totalCommissions: 0,
-    pendingPayouts: 0,
-    completedPayouts: 0,
-    walletBalance: 0,
     escrowBalance: 0,
   })
   const [transactions, setTransactions] = useState<Transaction[]>([])
@@ -58,9 +52,6 @@ export default function AdminFinancesPage() {
         setStats({
           totalRevenue: 0,
           totalCommissions: 0,
-          pendingPayouts: 0,
-          completedPayouts: 0,
-          walletBalance: 0,
           escrowBalance: 0,
         })
         setTransactions([])
@@ -70,9 +61,6 @@ export default function AdminFinancesPage() {
       setStats({
         totalRevenue: data.stats?.totalRevenue || 0,
         totalCommissions: data.stats?.totalCommissions || 0,
-        pendingPayouts: data.stats?.pendingPayouts || 0,
-        completedPayouts: data.stats?.completedPayouts || 0,
-        walletBalance: data.stats?.walletBalance || 0,
         escrowBalance: data.stats?.escrowBalance || 0,
       })
       setTransactions(data.transactions || [])
@@ -139,7 +127,7 @@ export default function AdminFinancesPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(stats.totalCommissions)}</div>
-            <p className="text-xs text-muted-foreground">Sur {stats.completedPayouts} transactions</p>
+            <p className="text-xs text-muted-foreground">Calculées sur les commandes payées</p>
           </CardContent>
         </Card>
 
@@ -156,12 +144,12 @@ export default function AdminFinancesPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Paiements en attente</CardTitle>
+            <CardTitle className="text-sm font-medium">Versements vendeurs</CardTitle>
             <Wallet className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats.pendingPayouts)}</div>
-            <p className="text-xs text-muted-foreground">Montants en attente de traitement ops</p>
+            <div className="text-lg font-bold">Traitement ops</div>
+            <p className="text-xs text-muted-foreground">Aucune API de payout GeniusPay n’est documentée</p>
           </CardContent>
         </Card>
       </div>

@@ -102,7 +102,7 @@ function LoginForm() {
         return
       }
       setMaskedPhone(data.masked_phone || maskPhone(data.phone))
-      setLinkedEmailMasked(data.linked_email_masked || "")
+      setLinkedEmailMasked("")
       setOtpChannel(data.channel || "sms")
       setOtpExpiresAt(Date.now() + (data.expires_in || 600) * 1000)
       setResendCooldown(Number(data.resend_after) || 60)

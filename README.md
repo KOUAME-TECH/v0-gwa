@@ -52,13 +52,19 @@ npm test
 ## Déploiement & SQL
 
 - Push `main` → Vercel prod.
-- Migrations : `scripts/schema/0XX_*.sql` dans l’ordre (SQL Editor Supabase).
+- Migrations : `scripts/schema/0XX_*.sql` dans l’ordre (SQL Editor Supabase), notamment 058–061 avant déploiement de ces changements.
 - GitHub Supabase Deploy = **OFF**.
 
 ## Ops urgents
 
 1. GeniusPay : `GENIUSPAY_MODE` (`sandbox` ou `live`) et, pour chaque mode utilisé, `GENIUSPAY_API_KEY_<MODE>`, `GENIUSPAY_API_SECRET_<MODE>` et `GENIUSPAY_WEBHOOK_SECRET_<MODE>` (serveur uniquement)
 2. OTP téléphone : fournisseur SMS live, expéditeur approuvé, Redis persistant et `OTP_PEPPER`
-3. Soft-launch seed contenu
+3. Contenu de lancement provenant uniquement de sources réelles et autorisées ; aucune donnée de démonstration en production
 
 Le pay-in GeniusPay utilise les headers serveur `X-API-Key` et `X-API-Secret`, puis redirige vers le checkout hébergé. La confirmation s'appuie sur le statut documenté `completed`, vérifié côté serveur avec la référence, le montant, la devise et les métadonnées de commande. Le webhook `/api/webhooks/geniuspay` vérifie HMAC-SHA256 sur `timestamp + "." + JSON.stringify(payload)` après parsing JSON, rejette les horodatages au-delà de cinq minutes, vérifie la cohérence de l'événement et de l'environnement dans le payload, puis recoupe l'événement avec le GET GeniusPay avant toute transition. Les credentials API et le secret webhook sont distincts pour sandbox et live ; `GENIUSPAY_MODE` sélectionne les credentials du pay-in. Les mises à jour conditionnelles rendent les transitions répétées idempotentes, mais l'ID de livraison optionnel n'a pas de registre durable dédié. Les versements vendeurs restent en traitement ops tant que l’API de payout n’est pas spécifiée.
+
+Les commandes portent explicitement la devise XOF ; le pay-in GeniusPay refuse les autres devises jusqu’à une intégration fournisseur validée. La création de commandes est réservée aux routes serveur qui vérifient l’acheteur et recalculent les prix depuis le catalogue. Les migrations 058–060 sont additives et doivent être examinées/appliquées explicitement ; aucune migration distante n’est exécutée par le code.
+
+Les nouveaux documents KYC sont déposés dans le bucket privé `kyc-documents` et les liens de revue sont signés temporairement. Les anciens documents qui ont été stockés dans le bucket public `avatars` ne sont pas déplacés par la migration 060 : leur migration sécurisée et la révocation des anciennes URLs restent un préalable opérationnel avant de déclarer l’exposition historique résolue.
+
+Le portefeuille et les retraits restent désactivés par défaut. Ils ne peuvent être activés qu’après validation réglementaire documentée, via `GWA_WALLET_REGULATORY_APPROVAL=true` côté serveur ; l’API de payout GeniusPay demeure non documentée et non implémentée.

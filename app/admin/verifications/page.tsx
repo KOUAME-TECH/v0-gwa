@@ -113,6 +113,24 @@ export default function AdminVerificationsPage() {
     setProcessing(false)
   }
 
+  async function openDocument(path: string) {
+    const tab = window.open("about:blank", "_blank")
+    if (!tab) return
+    tab.opener = null
+    if (/^https?:\/\//i.test(path)) {
+      tab.location.href = path
+      return
+    }
+    const { data, error } = await supabase.storage
+      .from("kyc-documents")
+      .createSignedUrl(path, 300)
+    if (error || !data?.signedUrl) {
+      tab.close()
+      return
+    }
+    tab.location.href = data.signedUrl
+  }
+
   const getRequestTypeLabel = (type: string) => {
     switch (type) {
       case 'user':
@@ -387,16 +405,12 @@ export default function AdminVerificationsPage() {
                             </div>
                           </div>
                           <div className="flex gap-2">
-                            <Button variant="outline" size="sm" asChild>
-                              <a href={doc.url} target="_blank" rel="noopener noreferrer">
+                            <Button variant="outline" size="sm" onClick={() => void openDocument(doc.url)}>
                                 <Eye className="h-4 w-4 mr-1" />
                                 Voir
-                              </a>
                             </Button>
-                            <Button variant="outline" size="sm" asChild>
-                              <a href={doc.url} download>
-                                <Download className="h-4 w-4" />
-                              </a>
+                            <Button variant="outline" size="sm" onClick={() => void openDocument(doc.url)}>
+                              <Download className="h-4 w-4" />
                             </Button>
                           </div>
                         </div>

@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { sendPushToUser } from "@/lib/notifications/push"
 import { isAgriculturalProductType } from "@/lib/catalog/scope"
@@ -160,7 +161,7 @@ export async function POST(request: NextRequest) {
 
     const orderNumber = `GWA-${Date.now().toString(36).toUpperCase()}`
 
-    const { data: order, error: orderError } = await supabase
+    const { data: order, error: orderError } = await createAdminClient()
       .from("orders")
       .insert({
         buyer_id: user.id,
@@ -197,7 +198,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { error: itemsError } = await supabase.from("order_items").insert(
+    const { error: itemsError } = await createAdminClient().from("order_items").insert(
       lineItems.map((li) => ({ ...li, order_id: order.id })),
     )
     if (itemsError) {
