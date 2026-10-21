@@ -1,13 +1,14 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { 
   DollarSign, TrendingUp, Wallet, 
-  Download, RefreshCw, Clock,
+  RefreshCw, Clock,
   ArrowUpRight, Building2
 } from "lucide-react"
 
@@ -82,6 +83,9 @@ export default function AdminFinancesPage() {
           <p className="text-muted-foreground">Suivi des revenus, commissions et paiements</p>
         </div>
         <div className="flex gap-2">
+          <Button asChild variant="outline">
+            <Link href="/admin/finances/payouts">Demandes de versement manuel</Link>
+          </Button>
           <Select value={period} onValueChange={setPeriod}>
             <SelectTrigger className="w-[140px]">
               <SelectValue />
@@ -96,10 +100,6 @@ export default function AdminFinancesPage() {
           <Button variant="outline" onClick={fetchData}>
             <RefreshCw className="h-4 w-4 mr-2" />
             Actualiser
-          </Button>
-          <Button variant="outline">
-            <Download className="h-4 w-4 mr-2" />
-            Export SYSCOA
           </Button>
         </div>
       </div>

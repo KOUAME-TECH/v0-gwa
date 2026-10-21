@@ -3,8 +3,7 @@ import { requireUser } from "@/lib/auth/require-admin"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { isSellerRole } from "@/lib/dashboard/routing"
-
-const ALLOWED_NETWORKS = new Set(["orange_ci", "mtn_ci", "moov_ci", "wave_ci"])
+import { validateManualPayoutRequest } from "@/lib/wallet/manual-payout"
 
 /**
  * GET /api/wallet/withdraw — historique demandes
@@ -71,35 +70,29 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json().catch(() => ({}))
-    const amount = Number(body?.amount_fcfa ?? body?.amount)
-    const phone = String(body?.phone || "").trim()
-    const network = String(body?.network || "")
-
-    if (!Number.isSafeInteger(amount) || amount < 1000) {
-      return NextResponse.json(
-        { error: "Montant minimum 1 000 FCFA", code: "AMOUNT_TOO_LOW" },
-        { status: 400 },
-      )
-    }
-    if (!/^[+\d][\d\s().-]{7,24}$/.test(phone)) {
-      return NextResponse.json(
-        { error: "Numéro Mobile Money invalide", code: "INVALID_PHONE" },
-        { status: 400 },
-      )
-    }
-    if (!ALLOWED_NETWORKS.has(network)) {
-      return NextResponse.json(
-        { error: "Réseau Mobile Money non pris en charge", code: "INVALID_NETWORK" },
-        { status: 400 },
-      )
+    const validation = validateManualPayoutRequest({
+      amount: Number(body?.amount_fcfa ?? body?.amount),
+      phone: String(body?.phone || ""),
+      network: String(body?.network || ""),
+      available: Number.POSITIVE_INFINITY,
+    })
+    if (!validation.ok) {
+      const errorByCode = {
+        INVALID_AMOUNT: { message: "Montant minimum 1 000 FCFA", status: 400 },
+        INSUFFICIENT_BALANCE: { message: "Montant supérieur au disponible", status: 400 },
+        INVALID_PHONE: { message: "Numéro Mobile Money invalide", status: 400 },
+        INVALID_NETWORK: { message: "Réseau Mobile Money non pris en charge", status: 400 },
+      } as const
+      const error = errorByCode[validation.code]
+      return NextResponse.json({ error: error.message, code: validation.code }, { status: error.status })
     }
 
     const { data: requestId, error: rpcError } = await supabase.rpc(
       "request_manual_payout",
       {
-        p_amount_fcfa: amount,
-        p_phone: phone,
-        p_network: network,
+        p_amount_fcfa: validation.amount,
+        p_phone: validation.phone,
+        p_network: validation.network,
       },
     )
     if (rpcError || !requestId) {

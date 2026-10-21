@@ -78,7 +78,8 @@ BEGIN
   WHERE seller_id = requester
     AND payment_status = 'paid'
     AND status = 'delivered'
-    AND escrow_status = 'released';
+    AND escrow_status = 'released'
+    AND COALESCE(payout_status, '') NOT IN ('processing', 'paid', 'skipped_sim', 'skipped_zero');
 
   SELECT COALESCE(SUM(amount_fcfa), 0)
     INTO reserved_amount
@@ -127,6 +128,7 @@ BEGIN
       status,
       payment_status,
       escrow_status,
+      payout_status,
       COALESCE(
         vendeur_recoit_fcfa,
         GREATEST(0, total_amount - COALESCE(commission_fcfa, 0) - COALESCE(service_fee, 0))
@@ -157,7 +159,10 @@ BEGIN
     ), 0),
     'eligible_proceeds', COALESCE((
       SELECT SUM(seller_net) FROM seller_orders
-      WHERE payment_status = 'paid' AND status = 'delivered' AND escrow_status = 'released'
+      WHERE payment_status = 'paid'
+        AND status = 'delivered'
+        AND escrow_status = 'released'
+        AND COALESCE(payout_status, '') NOT IN ('processing', 'paid', 'skipped_sim', 'skipped_zero')
     ), 0),
     'reserved_for_payout', payout_requests.reserved,
     'paid_out', payout_requests.paid,
@@ -166,6 +171,7 @@ BEGIN
       COALESCE((
         SELECT SUM(seller_net) FROM seller_orders
         WHERE payment_status = 'paid' AND status = 'delivered' AND escrow_status = 'released'
+          AND COALESCE(payout_status, '') NOT IN ('processing', 'paid', 'skipped_sim', 'skipped_zero')
       ), 0) - payout_requests.reserved - payout_requests.paid
     )
   )

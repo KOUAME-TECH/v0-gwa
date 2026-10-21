@@ -68,6 +68,31 @@ export async function PATCH(request: NextRequest, context: Context) {
       return NextResponse.json({ error: "Mise à jour impossible" }, { status: 400 })
     }
 
+    const { data: payout } = await gate.admin
+      .from("withdrawal_requests")
+      .select("user_id, amount_fcfa")
+      .eq("id", id)
+      .maybeSingle()
+    if (payout) {
+      const message =
+        status === "paid"
+          ? `Votre versement de ${Number(payout.amount_fcfa).toLocaleString("fr-FR")} FCFA a été enregistré.`
+          : status === "failed"
+            ? `Votre demande de versement a échoué : ${notes}`
+            : "Votre demande de versement est en cours de traitement."
+      const { error: notificationError } = await gate.admin.from("notifications").insert({
+        user_id: payout.user_id,
+        type: "order",
+        title: status === "paid" ? "Versement effectué" : "Mise à jour du versement",
+        message,
+        body: message,
+        link: "/wallet",
+        is_read: false,
+        read: false,
+      })
+      if (notificationError) console.warn("[api/admin/payouts] notification", notificationError.message)
+    }
+
     return NextResponse.json({ payout: data })
   } catch (err) {
     console.error("[api/admin/payouts PATCH]", err)

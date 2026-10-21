@@ -1,627 +1,481 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { createClient } from "@/lib/supabase/client"
+import {
+  AlertCircle,
+  ArrowDownLeft,
+  ArrowUpRight,
+  Building2,
+  CheckCircle2,
+  Clock3,
+  History,
+  RefreshCw,
+  Smartphone,
+  Wallet,
+} from "lucide-react"
+import { toast } from "sonner"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { 
-  Dialog, DialogContent, DialogDescription, DialogFooter, 
-  DialogHeader, DialogTitle 
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { 
-  Wallet, ArrowUpRight, ArrowDownLeft, Clock, CheckCircle2, 
-  XCircle, RefreshCw, Smartphone, Building2, History,
-  TrendingUp, AlertCircle
-} from "lucide-react"
-import { formatDistanceToNow } from "date-fns"
-import { fr } from "date-fns/locale"
+import { createClient } from "@/lib/supabase/client"
 import { isSellerRole } from "@/lib/dashboard/routing"
-import Link from "next/link"
 
-interface Transaction {
+type SellerOrder = {
   id: string
-  type: 'credit' | 'debit' | 'withdrawal' | 'refund'
-  amount: number
-  status: 'pending' | 'completed' | 'failed'
-  description: string
-  reference: string | null
+  order_number: string
+  status: string
+  payment_status: string
+  escrow_status: string | null
+  payout_status: string | null
+  total_amount: number
   created_at: string
 }
 
-interface WalletData {
-  balance: number
-  pending_balance: number
-  total_earned: number
-  total_withdrawn: number
+type PayoutRequest = {
+  id: string
+  amount_fcfa: number
+  network: string
+  phone: string
+  status: string
+  payout_reference: string | null
+  admin_notes: string | null
+  created_at: string
+  processed_at: string | null
 }
 
-export default function WalletPage() {
-  const router = useRouter()
-  const [user, setUser] = useState<any>(null)
-  const [profile, setProfile] = useState<any>(null)
-  const [wallet, setWallet] = useState<WalletData>({
-    balance: 0,
-    pending_balance: 0,
-    total_earned: 0,
-    total_withdrawn: 0
+type EarningsSummary = {
+  orders_count: number
+  paid_orders_count: number
+  delivered_orders_count: number
+  total_paid_sales: number
+  sales_in_progress: number
+  eligible_proceeds: number
+  reserved_for_payout: number
+  paid_out: number
+  available_for_request: number
+}
+
+const PAGE_SIZE = 100
+const NETWORKS = [
+  { value: "orange_ci", label: "Orange Money" },
+  { value: "mtn_ci", label: "MTN Money" },
+  { value: "moov_ci", label: "Moov Money" },
+  { value: "wave_ci", label: "Wave" },
+] as const
+
+const STATUS_LABELS: Record<string, string> = {
+  pending: "En attente",
+  processing: "En traitement",
+  paid: "Versé",
+  failed: "Échec",
+  cancelled: "Annulée",
+  delivered: "Livrée",
+  shipped: "Expédiée",
+  shipping: "En livraison",
+  preparing: "En préparation",
+  confirmed: "Confirmée",
+  pending_payment: "Paiement en attente",
+  released: "Libéré",
+  held: "Séquestre",
+}
+
+function currency(value: number) {
+  return new Intl.NumberFormat("fr-FR", {
+    style: "currency",
+    currency: "XOF",
+    maximumFractionDigits: 0,
+  }).format(Number.isFinite(value) ? value : 0)
+}
+
+function statusBadge(status: string) {
+  const variant =
+    status === "paid" || status === "delivered" || status === "released"
+      ? "default"
+      : status === "failed" || status === "cancelled"
+        ? "destructive"
+        : "secondary"
+  return <Badge variant={variant}>{STATUS_LABELS[status] || status}</Badge>
+}
+
+function formatDate(value: string) {
+  return new Date(value).toLocaleString("fr-FR", {
+    dateStyle: "medium",
+    timeStyle: "short",
   })
-  const [transactions, setTransactions] = useState<Transaction[]>([])
+}
+
+export default function SellerEarningsPage() {
+  const router = useRouter()
+  const [profile, setProfile] = useState<{ user_type: string | null; phone: string | null } | null>(null)
+  const [orders, setOrders] = useState<SellerOrder[]>([])
+  const [payouts, setPayouts] = useState<PayoutRequest[]>([])
+  const [summary, setSummary] = useState<EarningsSummary | null>(null)
   const [loading, setLoading] = useState(true)
-  const [showWithdrawDialog, setShowWithdrawDialog] = useState(false)
-  const [withdrawAmount, setWithdrawAmount] = useState("")
-  const [withdrawMethod, setWithdrawMethod] = useState("orange_money")
-  const [withdrawPhone, setWithdrawPhone] = useState("")
-  const [withdrawing, setWithdrawing] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [requestOpen, setRequestOpen] = useState(false)
+  const [amount, setAmount] = useState("")
+  const [phone, setPhone] = useState("")
+  const [network, setNetwork] = useState<(typeof NETWORKS)[number]["value"]>("orange_ci")
+  const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  
-  const supabase = createClient()
+
+  const loadData = useCallback(async (showRefresh = false) => {
+    if (showRefresh) setRefreshing(true)
+    else setLoading(true)
+
+    try {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) {
+        router.replace("/auth/login?redirect=/wallet")
+        return
+      }
+      const { data: currentProfile } = await supabase
+        .from("profiles")
+        .select("user_type, phone")
+        .eq("id", user.id)
+        .maybeSingle()
+      setProfile(currentProfile)
+      if (currentProfile?.phone) setPhone((currentPhone) => currentPhone || currentProfile.phone || "")
+
+      const [earningsResponse, payoutResponse] = await Promise.all([
+        fetch(`/api/seller/earnings?limit=${PAGE_SIZE}&offset=0`, { cache: "no-store" }),
+        fetch(`/api/wallet/withdraw?limit=${PAGE_SIZE}&offset=0`, { cache: "no-store" }),
+      ])
+      const earningsData = await earningsResponse.json().catch(() => ({}))
+      const payoutData = await payoutResponse.json().catch(() => ({}))
+      if (!earningsResponse.ok) {
+        throw new Error(earningsData.error || "Impossible de charger vos ventes.")
+      }
+      if (!payoutResponse.ok) {
+        throw new Error(payoutData.error || "Impossible de charger vos demandes de versement.")
+      }
+
+      const allOrders: SellerOrder[] = [...(earningsData.orders || [])]
+      for (let offset = allOrders.length; offset < Number(earningsData.total || 0); offset += PAGE_SIZE) {
+        const response = await fetch(
+          `/api/seller/earnings?limit=${PAGE_SIZE}&offset=${offset}`,
+          { cache: "no-store" },
+        )
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok) throw new Error(data.error || "Historique des ventes incomplet.")
+        allOrders.push(...(data.orders || []))
+      }
+
+      const allPayouts: PayoutRequest[] = [...(payoutData.withdrawals || [])]
+      for (let offset = allPayouts.length; offset < Number(payoutData.total || 0); offset += PAGE_SIZE) {
+        const response = await fetch(
+          `/api/wallet/withdraw?limit=${PAGE_SIZE}&offset=${offset}`,
+          { cache: "no-store" },
+        )
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok) throw new Error(data.error || "Historique des versements incomplet.")
+        allPayouts.push(...(data.withdrawals || []))
+      }
+
+      setOrders(allOrders)
+      setPayouts(allPayouts)
+      setSummary(earningsData.summary || null)
+      setError(null)
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Chargement impossible.")
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }, [router])
 
   useEffect(() => {
-    loadWalletData()
-  }, [])
+    void loadData()
+  }, [loadData])
 
-  async function loadWalletData() {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      router.push('/auth/login')
+  const available = Number(summary?.available_for_request || 0)
+
+  const submitRequest = async () => {
+    const amountValue = Number(amount)
+    if (!Number.isSafeInteger(amountValue) || amountValue < 1000) {
+      setError("Le montant minimum est de 1 000 FCFA.")
       return
     }
-    setUser(user)
-
-    // Get profile
-    const { data: profileData } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single()
-    
-    setProfile(profileData)
-    setWithdrawPhone(profileData?.phone || "")
-
-    if (!isSellerRole(profileData?.user_type)) {
-      setLoading(false)
+    if (amountValue > available) {
+      setError("Le montant dépasse vos revenus disponibles.")
+      return
+    }
+    if (!phone.trim()) {
+      setError("Renseignez le numéro à créditer.")
       return
     }
 
-    // Calculate wallet balance from completed orders (seller)
-    const { data: completedOrders } = await supabase
-      .from('orders')
-      .select('total_amount, service_fee, vendeur_recoit_fcfa, commission_fcfa')
-      .eq('seller_id', user.id)
-      .eq('status', 'delivered')
-      .eq('payment_status', 'paid')
-
-    type OrderMoney = {
-      total_amount?: number | null
-      service_fee?: number | null
-      vendeur_recoit_fcfa?: number | null
-      commission_fcfa?: number | null
-    }
-
-    const sellerNet = (order: OrderMoney) => {
-      if (order.vendeur_recoit_fcfa != null) return Number(order.vendeur_recoit_fcfa) || 0
-      const total = Number(order.total_amount) || 0
-      const commission = Number(order.commission_fcfa) || 0
-      if (commission > 0) return Math.max(0, total - commission)
-      return Math.max(0, total - (Number(order.service_fee) || 0))
-    }
-
-    const totalEarned =
-      (completedOrders as OrderMoney[] | null)?.reduce((sum: number, order: OrderMoney) => {
-        return sum + sellerNet(order)
-      }, 0) || 0
-
-    // Calculate pending balance (orders not yet delivered)
-    const { data: pendingOrders } = await supabase
-      .from('orders')
-      .select('total_amount, service_fee, vendeur_recoit_fcfa, commission_fcfa')
-      .eq('seller_id', user.id)
-      .in('status', ['confirmed', 'preparing', 'shipping'])
-      .eq('payment_status', 'paid')
-
-    const pendingBalance =
-      (pendingOrders as OrderMoney[] | null)?.reduce((sum: number, order: OrderMoney) => {
-        return sum + sellerNet(order)
-      }, 0) || 0
-
-    let totalWithdrawn = 0
-    const withdrawTxns: Transaction[] = []
-    try {
-      const wRes = await fetch("/api/wallet/withdraw")
-      const wData = await wRes.json().catch(() => ({}))
-      const rows = (wData.withdrawals || []) as {
-        id: string
-        amount_fcfa: number
-        status: string
-        feexpay_ref?: string | null
-        created_at: string
-      }[]
-      totalWithdrawn = rows
-        .filter((w) => ["pending", "processing", "paid"].includes(w.status))
-        .reduce((s, w) => s + (Number(w.amount_fcfa) || 0), 0)
-      for (const w of rows) {
-        withdrawTxns.push({
-          id: w.id,
-          type: "withdrawal",
-          amount: Number(w.amount_fcfa) || 0,
-          status:
-            w.status === "paid"
-              ? "completed"
-              : w.status === "failed"
-                ? "failed"
-                : "pending",
-          description: "Retrait Mobile Money",
-          reference: w.feexpay_ref || null,
-          created_at: w.created_at,
-        })
-      }
-    } catch {
-      /* API absente / migration */
-    }
-    
-    setWallet({
-      balance: Math.max(0, totalEarned - totalWithdrawn),
-      pending_balance: pendingBalance,
-      total_earned: totalEarned,
-      total_withdrawn: totalWithdrawn
-    })
-
-    const creditTxns: Transaction[] =
-      (completedOrders as OrderMoney[] | null)?.map((order: OrderMoney, i: number) => ({
-      id: `credit-${i}`,
-      type: 'credit' as const,
-      amount: sellerNet(order),
-      status: 'completed' as const,
-      description: 'Vente livrée',
-      reference: null,
-      created_at: new Date(Date.now() - i * 86400000).toISOString()
-    })) || []
-
-    setTransactions([...withdrawTxns, ...creditTxns])
-    setLoading(false)
-  }
-
-  const handleWithdraw = async () => {
-    if (!user) return
-    
-    const amount = parseFloat(withdrawAmount)
-    if (isNaN(amount) || amount <= 0) {
-      setError("Montant invalide")
-      return
-    }
-
-    if (amount > wallet.balance) {
-      setError("Solde insuffisant")
-      return
-    }
-
-    if (amount < 1000) {
-      setError("Le montant minimum de retrait est de 1,000 FCFA")
-      return
-    }
-
-    if (!withdrawPhone || withdrawPhone.length < 8) {
-      setError("Numéro de téléphone invalide")
-      return
-    }
-
-    setWithdrawing(true)
+    setSubmitting(true)
     setError(null)
-
     try {
-      const res = await fetch("/api/wallet/withdraw", {
+      const response = await fetch("/api/wallet/withdraw", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          amount_fcfa: amount,
-          phone: withdrawPhone,
-          network: "orange",
+          amount_fcfa: amountValue,
+          phone: phone.trim(),
+          network,
         }),
       })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setError(data.error || "Retrait impossible")
-        setWithdrawing(false)
-        return
-      }
-      setShowWithdrawDialog(false)
-      setWithdrawAmount("")
-      await loadWalletData()
-      if (data.status === "paid") {
-        // ok
-      }
-    } catch {
-      setError("Erreur réseau")
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || "Demande impossible.")
+      setRequestOpen(false)
+      setAmount("")
+      toast.success("Demande enregistrée. Le versement sera traité manuellement.")
+      await loadData(true)
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Demande impossible.")
     } finally {
-      setWithdrawing(false)
-    }
-  }
-
-  const formatAmount = (amount: number) => {
-    return new Intl.NumberFormat('fr-FR').format(amount) + ' FCFA'
-  }
-
-  const getTransactionIcon = (type: string) => {
-    switch (type) {
-      case 'credit':
-        return <ArrowDownLeft className="h-4 w-4 text-green-600" />
-      case 'debit':
-      case 'withdrawal':
-        return <ArrowUpRight className="h-4 w-4 text-red-600" />
-      case 'refund':
-        return <RefreshCw className="h-4 w-4 text-blue-600" />
-      default:
-        return <Clock className="h-4 w-4" />
-    }
-  }
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return <Badge className="bg-green-100 text-green-700">Complété</Badge>
-      case 'pending':
-        return <Badge className="bg-yellow-100 text-yellow-700">En attente</Badge>
-      case 'failed':
-        return <Badge className="bg-red-100 text-red-700">Échoué</Badge>
-      default:
-        return <Badge>{status}</Badge>
+      setSubmitting(false)
     }
   }
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background">
-        <div className="container mx-auto px-4 py-8">
-          <div className="flex items-center justify-center h-64">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-          </div>
-        </div>
-      </div>
+      <main className="container mx-auto flex min-h-[60vh] items-center justify-center px-4">
+        <p className="text-muted-foreground">Chargement de vos ventes…</p>
+      </main>
     )
   }
 
   if (!isSellerRole(profile?.user_type)) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-[#FFF6E5] to-white pb-24 px-4 pt-8">
-        <h1 className="text-2xl font-bold text-[#1F5C2E]">Mes paiements</h1>
-        <p className="mt-2 text-sm text-[#6B7280]">
-          Côté acheteur, suis tes commandes et confirme la réception pour libérer
-          le séquestre. Le portefeuille vendeur n’est pas utilisé ici.
-        </p>
-        <div className="mt-6 space-y-3">
-          <Link
-            href="/dashboard/commandes"
-            className="flex items-center justify-center rounded-full bg-[#1F5C2E] px-5 py-3 text-sm font-semibold text-white"
-          >
-            Voir mes commandes
-          </Link>
-          <Link
-            href="/dashboard/buyer"
-            className="flex items-center justify-center rounded-full border border-[#1F5C2E]/30 px-5 py-3 text-sm font-semibold text-[#1F5C2E]"
-          >
-            Mon espace acheteur
-          </Link>
-        </div>
-      </div>
+      <main className="mx-auto max-w-xl px-4 py-12">
+        <Card>
+          <CardHeader>
+            <CardTitle>Suivi des ventes</CardTitle>
+            <CardDescription>Cette page est réservée aux producteurs et vendeurs.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild><Link href="/dashboard/commandes">Voir mes commandes</Link></Button>
+          </CardContent>
+        </Card>
+      </main>
     )
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      
-      <main className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Mon Portefeuille</h1>
-          <p className="text-muted-foreground">
-            Gérez vos revenus et effectuez des retraits vers Mobile Money
+    <main className="container mx-auto max-w-6xl space-y-6 px-4 py-8 pb-24">
+      <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+        <div>
+          <h1 className="text-2xl font-bold sm:text-3xl">Mes ventes et versements</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Consultez vos commandes et demandez un versement traité manuellement par GWA.
           </p>
         </div>
+        <Button variant="outline" onClick={() => void loadData(true)} disabled={refreshing}>
+          <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+          Actualiser
+        </Button>
+      </header>
 
-        {/* Balance Cards */}
-        <div className="grid md:grid-cols-4 gap-4 mb-8">
-          <Card className="bg-primary text-primary-foreground">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium opacity-90">Solde disponible</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between">
-                <span className="text-3xl font-bold">{formatAmount(wallet.balance)}</span>
-                <Wallet className="h-8 w-8 opacity-80" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">En attente</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between">
-                <span className="text-2xl font-bold">{formatAmount(wallet.pending_balance)}</span>
-                <Clock className="h-6 w-6 text-yellow-500" />
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">Commandes en cours</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Total gagné</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between">
-                <span className="text-2xl font-bold">{formatAmount(wallet.total_earned)}</span>
-                <TrendingUp className="h-6 w-6 text-green-500" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Total retiré</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between">
-                <span className="text-2xl font-bold">{formatAmount(wallet.total_withdrawn)}</span>
-                <ArrowUpRight className="h-6 w-6 text-blue-500" />
-              </div>
-            </CardContent>
-          </Card>
+      {error && (
+        <div role="alert" className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{error}</span>
         </div>
+      )}
 
-        {/* Actions */}
-        <div className="flex gap-4 mb-8">
-          <Button 
-            size="lg" 
-            onClick={() => setShowWithdrawDialog(true)}
-            disabled={wallet.balance < 1000}
-          >
-            <ArrowUpRight className="h-5 w-5 mr-2" />
-            Retirer des fonds
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Disponible sur ventes livrées</CardTitle>
+          </CardHeader>
+          <CardContent className="flex items-center justify-between">
+            <span className="text-2xl font-bold">{currency(available)}</span>
+            <Wallet className="h-6 w-6 text-primary" />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Ventes payées</CardTitle>
+          </CardHeader>
+          <CardContent className="flex items-center justify-between">
+            <span className="text-2xl font-bold">{currency(Number(summary?.total_paid_sales || 0))}</span>
+            <ArrowDownLeft className="h-6 w-6 text-green-600" />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Commandes en cours</CardTitle>
+          </CardHeader>
+          <CardContent className="flex items-center justify-between">
+            <span className="text-2xl font-bold">{currency(Number(summary?.sales_in_progress || 0))}</span>
+            <Clock3 className="h-6 w-6 text-amber-600" />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Déjà versé</CardTitle>
+          </CardHeader>
+          <CardContent className="flex items-center justify-between">
+            <span className="text-2xl font-bold">{currency(Number(summary?.paid_out || 0))}</span>
+            <CheckCircle2 className="h-6 w-6 text-blue-600" />
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="border-primary/20 bg-primary/5">
+        <CardContent className="flex flex-col justify-between gap-4 p-5 sm:flex-row sm:items-center">
+          <div>
+            <p className="font-semibold">Versements traités manuellement</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Une demande ne déclenche pas un paiement automatique. L’équipe GWA la vérifiera puis mettra son statut à jour.
+            </p>
+          </div>
+          <Button onClick={() => { setError(null); setRequestOpen(true) }} disabled={available < 1000}>
+            <ArrowUpRight className="mr-2 h-4 w-4" />
+            Demander un versement
           </Button>
-          <Button variant="outline" size="lg" onClick={loadWalletData}>
-            <RefreshCw className="h-5 w-5 mr-2" />
-            Actualiser
-          </Button>
-          <Button variant="outline" size="lg" onClick={() => router.push("/affacturage")}>
-            <Building2 className="h-5 w-5 mr-2" />
-            Affacturage
-          </Button>
-        </div>
+        </CardContent>
+      </Card>
 
-        {/* Info Card */}
-        {wallet.balance < 1000 && (
-          <Card className="mb-8 border-blue-200 bg-blue-50 dark:bg-blue-950/20">
-            <CardContent className="p-4 flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5" />
-              <div>
-                <p className="font-medium text-blue-900 dark:text-blue-100">Montant minimum de retrait</p>
-                <p className="text-sm text-blue-700 dark:text-blue-300">
-                  Vous devez avoir au moins 1,000 FCFA de solde disponible pour effectuer un retrait.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Transactions */}
-        <Tabs defaultValue="all">
-          <TabsList>
-            <TabsTrigger value="all">Toutes les transactions</TabsTrigger>
-            <TabsTrigger value="credits">Entrées</TabsTrigger>
-            <TabsTrigger value="withdrawals">Retraits</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="all" className="mt-6">
-            {transactions.length === 0 ? (
-              <Card className="p-12 text-center">
-                <History className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold mb-2">Aucune transaction</h3>
-                <p className="text-muted-foreground">
-                  Vos transactions apparaîtront ici après vos premières ventes
-                </p>
-              </Card>
-            ) : (
-              <Card>
-                <CardContent className="p-0">
-                  <div className="divide-y">
-                    {transactions.map((txn) => (
-                      <div key={txn.id} className="flex items-center justify-between p-4 hover:bg-muted/50">
-                        <div className="flex items-center gap-4">
-                          <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
-                            txn.type === 'credit' ? 'bg-green-100' : 
-                            txn.type === 'withdrawal' ? 'bg-red-100' : 'bg-blue-100'
-                          }`}>
-                            {getTransactionIcon(txn.type)}
-                          </div>
-                          <div>
-                            <p className="font-medium">{txn.description}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {formatDistanceToNow(new Date(txn.created_at), { addSuffix: true, locale: fr })}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className={`font-bold ${
-                            txn.type === 'credit' || txn.type === 'refund' 
-                              ? 'text-green-600' 
-                              : 'text-red-600'
-                          }`}>
-                            {txn.type === 'credit' || txn.type === 'refund' ? '+' : '-'}
-                            {formatAmount(txn.amount)}
-                          </p>
-                          {getStatusBadge(txn.status)}
-                        </div>
-                      </div>
-                    ))}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <History className="h-5 w-5" />
+            Toutes mes commandes ({summary?.orders_count ?? orders.length})
+          </CardTitle>
+          <CardDescription>
+            Le statut de paiement et celui de livraison sont affichés séparément.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {orders.length === 0 ? (
+            <div className="py-10 text-center">
+              <Building2 className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
+              <p className="font-medium">Aucune vente pour le moment</p>
+              <p className="mt-1 text-sm text-muted-foreground">Vos commandes apparaîtront ici avec leur statut réel.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {orders.map((order) => (
+                <div key={order.id} className="flex flex-col justify-between gap-3 rounded-lg border p-4 sm:flex-row sm:items-center">
+                  <div>
+                    <p className="font-semibold">{order.order_number}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{formatDate(order.created_at)}</p>
                   </div>
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
-
-          <TabsContent value="credits" className="mt-6">
-            <Card>
-              <CardContent className="p-0">
-                <div className="divide-y">
-                  {transactions.filter(t => t.type === 'credit' || t.type === 'refund').map((txn) => (
-                    <div key={txn.id} className="flex items-center justify-between p-4 hover:bg-muted/50">
-                      <div className="flex items-center gap-4">
-                        <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
-                          {getTransactionIcon(txn.type)}
-                        </div>
-                        <div>
-                          <p className="font-medium">{txn.description}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {formatDistanceToNow(new Date(txn.created_at), { addSuffix: true, locale: fr })}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-bold text-green-600">+{formatAmount(txn.amount)}</p>
-                        {getStatusBadge(txn.status)}
-                      </div>
-                    </div>
-                  ))}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="mr-2 font-semibold">{currency(Number(order.total_amount))}</span>
+                    {statusBadge(order.payment_status)}
+                    {statusBadge(order.status)}
+                    {order.payout_status && statusBadge(order.payout_status)}
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-          <TabsContent value="withdrawals" className="mt-6">
-            {transactions.filter(t => t.type === 'withdrawal').length === 0 ? (
-              <Card className="p-12 text-center">
-                <ArrowUpRight className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold mb-2">Aucun retrait</h3>
-                <p className="text-muted-foreground">
-                  Vos retraits apparaîtront ici
-                </p>
-              </Card>
-            ) : (
-              <Card>
-                <CardContent className="p-0">
-                  <div className="divide-y">
-                    {transactions.filter(t => t.type === 'withdrawal').map((txn) => (
-                      <div key={txn.id} className="flex items-center justify-between p-4 hover:bg-muted/50">
-                        <div className="flex items-center gap-4">
-                          <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center">
-                            {getTransactionIcon(txn.type)}
-                          </div>
-                          <div>
-                            <p className="font-medium">{txn.description}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {formatDistanceToNow(new Date(txn.created_at), { addSuffix: true, locale: fr })}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-bold text-red-600">-{formatAmount(txn.amount)}</p>
-                          {getStatusBadge(txn.status)}
-                        </div>
-                      </div>
-                    ))}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Smartphone className="h-5 w-5" />
+            Demandes de versement ({payouts.length})
+          </CardTitle>
+          <CardDescription>Les demandes en attente ou en traitement sont déduites du montant disponible.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {payouts.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">Aucune demande de versement.</p>
+          ) : (
+            <div className="space-y-3">
+              {payouts.map((payout) => (
+                <div key={payout.id} className="flex flex-col justify-between gap-3 rounded-lg border p-4 sm:flex-row sm:items-center">
+                  <div>
+                    <p className="font-semibold">{currency(Number(payout.amount_fcfa))} · {payout.network.replace("_ci", "").toUpperCase()}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {payout.phone} · {formatDate(payout.created_at)}
+                    </p>
+                    {payout.payout_reference && (
+                      <p className="mt-1 text-xs text-muted-foreground">Référence : {payout.payout_reference}</p>
+                    )}
+                    {payout.admin_notes && (
+                      <p className="mt-1 text-sm text-muted-foreground">{payout.admin_notes}</p>
+                    )}
                   </div>
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
-        </Tabs>
-      </main>
+                  {statusBadge(payout.status)}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-      {/* Withdraw Dialog */}
-      <Dialog open={showWithdrawDialog} onOpenChange={setShowWithdrawDialog}>
+      <Dialog open={requestOpen} onOpenChange={(open) => { setRequestOpen(open); if (!open) setError(null) }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Retirer des fonds</DialogTitle>
+            <DialogTitle>Demander un versement manuel</DialogTitle>
             <DialogDescription>
-              Transférez vos gains vers votre compte Mobile Money
+              Disponible : {currency(available)}. Votre demande sera vérifiée par l’équipe GWA ; aucun paiement automatique n’est lancé.
             </DialogDescription>
           </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            {error && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-                {error}
-              </div>
-            )}
-
-            <div className="p-4 bg-muted rounded-lg">
-              <p className="text-sm text-muted-foreground">Solde disponible</p>
-              <p className="text-2xl font-bold">{formatAmount(wallet.balance)}</p>
-            </div>
-
+          <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label>Montant à retirer (FCFA)</Label>
+              <Label htmlFor="payout-amount">Montant (FCFA)</Label>
               <Input
+                id="payout-amount"
                 type="number"
-                placeholder="10000"
-                value={withdrawAmount}
-                onChange={(e) => setWithdrawAmount(e.target.value)}
+                inputMode="numeric"
                 min={1000}
-                max={wallet.balance}
+                max={available}
+                step={1}
+                value={amount}
+                onChange={(event) => setAmount(event.target.value)}
               />
-              <p className="text-xs text-muted-foreground">Minimum: 1,000 FCFA</p>
+              <p className="text-xs text-muted-foreground">Minimum : 1 000 FCFA</p>
             </div>
-
             <div className="space-y-2">
-              <Label>Méthode de retrait</Label>
-              <div className="grid grid-cols-3 gap-2">
-                <Button
-                  type="button"
-                  variant={withdrawMethod === "orange_money" ? "default" : "outline"}
-                  className={withdrawMethod !== "orange_money" ? "bg-transparent" : ""}
-                  onClick={() => setWithdrawMethod("orange_money")}
-                >
-                  <Smartphone className="h-4 w-4 mr-2" />
-                  Orange
-                </Button>
-                <Button
-                  type="button"
-                  variant={withdrawMethod === "mtn_money" ? "default" : "outline"}
-                  className={withdrawMethod !== "mtn_money" ? "bg-transparent" : ""}
-                  onClick={() => setWithdrawMethod("mtn_money")}
-                >
-                  <Smartphone className="h-4 w-4 mr-2" />
-                  MTN
-                </Button>
-                <Button
-                  type="button"
-                  variant={withdrawMethod === "moov_money" ? "default" : "outline"}
-                  className={withdrawMethod !== "moov_money" ? "bg-transparent" : ""}
-                  onClick={() => setWithdrawMethod("moov_money")}
-                >
-                  <Smartphone className="h-4 w-4 mr-2" />
-                  Moov
-                </Button>
+              <Label>Réseau de réception</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {NETWORKS.map((item) => (
+                  <Button
+                    key={item.value}
+                    type="button"
+                    variant={network === item.value ? "default" : "outline"}
+                    onClick={() => setNetwork(item.value)}
+                  >
+                    {item.label}
+                  </Button>
+                ))}
               </div>
             </div>
-
             <div className="space-y-2">
-              <Label>Numéro de téléphone</Label>
+              <Label htmlFor="payout-phone">Numéro Mobile Money</Label>
               <Input
+                id="payout-phone"
                 type="tel"
+                autoComplete="tel"
+                value={phone}
+                onChange={(event) => setPhone(event.target.value)}
                 placeholder="07 XX XX XX XX"
-                value={withdrawPhone}
-                onChange={(e) => setWithdrawPhone(e.target.value)}
               />
             </div>
           </div>
-
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowWithdrawDialog(false)}>
-              Annuler
-            </Button>
-            <Button onClick={handleWithdraw} disabled={withdrawing}>
-              {withdrawing ? "Traitement..." : "Confirmer le retrait"}
+            <Button variant="outline" onClick={() => setRequestOpen(false)} disabled={submitting}>Annuler</Button>
+            <Button onClick={() => void submitRequest()} disabled={submitting}>
+              {submitting ? "Envoi…" : "Envoyer la demande"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </main>
   )
 }
