@@ -7,7 +7,10 @@ export type ManualPayoutStatus = keyof typeof MANUAL_PAYOUT_TRANSITIONS | "paid"
 
 type ManualPayoutUpdateValidation =
   | { ok: true }
-  | { ok: false; code: "INVALID_STATUS" | "INVALID_TRANSITION" | "REFERENCE_REQUIRED" }
+  | {
+      ok: false
+      code: "INVALID_STATUS" | "INVALID_TRANSITION" | "REFERENCE_REQUIRED" | "REFERENCE_TOO_LONG"
+    }
 
 export function validateManualPayoutUpdate(
   currentStatus: string,
@@ -26,8 +29,11 @@ export function validateManualPayoutUpdate(
   if (!allowedTransitions.includes(nextStatus as never)) {
     return { ok: false, code: "INVALID_TRANSITION" }
   }
-  if (nextStatus === "paid" && (!payoutReference || payoutReference.length > 128)) {
+  if (nextStatus === "paid" && !payoutReference) {
     return { ok: false, code: "REFERENCE_REQUIRED" }
+  }
+  if (nextStatus === "paid" && payoutReference.length > 128) {
+    return { ok: false, code: "REFERENCE_TOO_LONG" }
   }
   return { ok: true }
 }

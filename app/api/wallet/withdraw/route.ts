@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { isSellerRole } from "@/lib/dashboard/routing"
 import { validateManualPayoutRequest } from "@/lib/wallet/manual-payout"
+import { parsePagination } from "@/lib/pagination"
 
 /**
  * GET /api/wallet/withdraw — historique demandes
@@ -24,8 +25,7 @@ export async function GET(request: NextRequest) {
     if (!isSellerRole(profile?.user_type)) {
       return NextResponse.json({ error: "Espace réservé aux vendeurs" }, { status: 403 })
     }
-    const limit = Math.min(100, Math.max(1, Number(request.nextUrl.searchParams.get("limit")) || 50))
-    const offset = Math.max(0, Number(request.nextUrl.searchParams.get("offset")) || 0)
+    const { limit, offset } = parsePagination(request.nextUrl.searchParams)
     const { data, count, error: qErr } = await admin
       .from("withdrawal_requests")
       .select("id, amount_fcfa, network, phone, status, payout_reference, admin_notes, created_at, updated_at, processed_at", { count: "exact" })

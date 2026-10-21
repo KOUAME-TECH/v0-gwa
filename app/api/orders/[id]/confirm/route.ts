@@ -74,18 +74,14 @@ export async function POST(request: NextRequest, context: Ctx) {
 
     let payoutStatus = "pending"
     let payoutRef: string | null = null
-    const payoutNetwork: string | null = null
-    let payoutError: string | null = null
 
     const isSimulatedPayment =
       typeof order.provider_reference === "string" && order.provider_reference.startsWith("SIM-GWA-")
     if (isSimulatedPayment) {
       payoutStatus = "skipped_sim"
       payoutRef = order.provider_reference
-      payoutError = null
     } else if (payoutAmount <= 0) {
       payoutStatus = "skipped_zero"
-      payoutError = null
     }
 
     const payoutOk = payoutStatus === "skipped_sim" || payoutStatus === "skipped_zero"
@@ -100,9 +96,7 @@ export async function POST(request: NextRequest, context: Ctx) {
       updated_at: now,
       payout_status: payoutStatus,
       payout_ref: payoutRef,
-      payout_network: payoutNetwork,
       payout_at: payoutOk ? now : null,
-      payout_error: payoutError,
     }
     if (receptionPhotoUrl) {
       orderPatch.notes = [order.notes, `Photo réception: ${receptionPhotoUrl}`]
@@ -143,7 +137,6 @@ export async function POST(request: NextRequest, context: Ctx) {
         receptionPhotoUrl ? `Photo: ${receptionPhotoUrl}` : null,
         `payout=${payoutStatus}`,
         payoutRef ? `ref=${payoutRef}` : null,
-        payoutError ? `err=${payoutError}` : null,
         `amount=${payoutAmount}`,
       ]
         .filter(Boolean)
@@ -205,7 +198,6 @@ export async function POST(request: NextRequest, context: Ctx) {
       payout_status: payoutStatus,
       payout_ref: payoutRef,
       payout_amount_fcfa: payoutAmount,
-      payout_error: payoutError,
       payout_pending: !payoutOk,
     })
   } catch (err) {

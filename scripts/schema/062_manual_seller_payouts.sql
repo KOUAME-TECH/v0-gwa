@@ -223,6 +223,9 @@ BEGIN
   IF p_new_status = 'paid' AND length(trim(COALESCE(p_payout_reference, ''))) = 0 THEN
     RAISE EXCEPTION 'payout reference required';
   END IF;
+  IF p_new_status = 'paid' AND length(trim(p_payout_reference)) > 128 THEN
+    RAISE EXCEPTION 'payout reference too long';
+  END IF;
 
   SELECT *
     INTO existing

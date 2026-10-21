@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth/require-admin"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { isSellerRole } from "@/lib/dashboard/routing"
+import { parsePagination } from "@/lib/pagination"
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,9 +26,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Espace réservé aux vendeurs" }, { status: 403 })
     }
 
-    const params = request.nextUrl.searchParams
-    const limit = Math.min(100, Math.max(1, Number(params.get("limit")) || 50))
-    const offset = Math.max(0, Number(params.get("offset")) || 0)
+    const { limit, offset } = parsePagination(request.nextUrl.searchParams)
     const [{ data: orders, error: ordersError, count }, { data: summary, error: summaryError }] =
       await Promise.all([
         admin

@@ -32,7 +32,7 @@ export async function PATCH(request: NextRequest, context: Context) {
       .eq("id", id)
       .maybeSingle()
     if (payoutError) {
-      console.error("[api/admin/payouts GET]", payoutError.message)
+      console.error("[api/admin/payouts PATCH]", payoutError.message)
       return NextResponse.json({ error: "Demande indisponible" }, { status: 500 })
     }
     if (!payout) return NextResponse.json({ error: "Demande introuvable" }, { status: 404 })
@@ -45,6 +45,12 @@ export async function PATCH(request: NextRequest, context: Context) {
       if (validation.code === "REFERENCE_REQUIRED") {
         return NextResponse.json(
           { error: "La référence réelle du versement est obligatoire" },
+          { status: 400 },
+        )
+      }
+      if (validation.code === "REFERENCE_TOO_LONG") {
+        return NextResponse.json(
+          { error: "La référence ne peut pas dépasser 128 caractères" },
           { status: 400 },
         )
       }
@@ -76,6 +82,9 @@ export async function PATCH(request: NextRequest, context: Context) {
       }
       if (/reference required/i.test(error.message)) {
         return NextResponse.json({ error: "Référence de versement requise" }, { status: 400 })
+      }
+      if (/reference too long/i.test(error.message)) {
+        return NextResponse.json({ error: "La référence ne peut pas dépasser 128 caractères" }, { status: 400 })
       }
       if (/finance admin/i.test(error.message)) {
         return NextResponse.json({ error: "Accès finance refusé" }, { status: 403 })
