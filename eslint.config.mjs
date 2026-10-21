@@ -1,10 +1,12 @@
 import { defineConfig, globalIgnores } from "eslint/config"
-import nextVitals from "eslint-config-next/core-web-vitals"
-import nextTs from "eslint-config-next/typescript"
+import jsxA11y from "eslint-plugin-jsx-a11y"
+import reactHooks from "eslint-plugin-react-hooks"
+import tseslint from "typescript-eslint"
 
 export default defineConfig([
-  ...nextVitals,
-  ...nextTs,
+  ...tseslint.configs.recommended,
+  reactHooks.configs.flat.recommended,
+  jsxA11y.flatConfigs.recommended,
   globalIgnores([
     ".next/**",
     "out/**",
