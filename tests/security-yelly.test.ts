@@ -29,6 +29,24 @@ describe("sanitizeHtml / XSS", () => {
 })
 
 describe("assertSameOrigin CSRF", () => {
+  it("allows the configured canonical application origin", () => {
+    const previous = process.env.NEXT_PUBLIC_APP_URL
+    process.env.NEXT_PUBLIC_APP_URL = "https://mygwa.org"
+    try {
+      const req = new Request("https://preview.vercel.app/api/auth/send-otp", {
+        method: "POST",
+        headers: {
+          Origin: "https://mygwa.org",
+          Host: "preview.vercel.app",
+        },
+      })
+      expect(assertSameOrigin(req)).toBeNull()
+    } finally {
+      if (previous === undefined) delete process.env.NEXT_PUBLIC_APP_URL
+      else process.env.NEXT_PUBLIC_APP_URL = previous
+    }
+  })
+
   it("allows same-origin POST", () => {
     const req = new Request("https://v0-gwa-mu.vercel.app/api/comments", {
       method: "POST",
