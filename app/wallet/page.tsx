@@ -67,7 +67,7 @@ type EarningsSummary = {
   available_for_request: number
 }
 
-const PAGE_SIZE = 100
+const PAGE_SIZE = 25
 const NETWORKS = [
   { value: "orange_ci", label: "Orange Money" },
   { value: "mtn_ci", label: "MTN Money" },
@@ -120,10 +120,14 @@ export default function SellerEarningsPage() {
   const router = useRouter()
   const [profile, setProfile] = useState<{ user_type: string | null; phone: string | null } | null>(null)
   const [orders, setOrders] = useState<SellerOrder[]>([])
+  const [ordersTotal, setOrdersTotal] = useState(0)
   const [payouts, setPayouts] = useState<PayoutRequest[]>([])
+  const [payoutsTotal, setPayoutsTotal] = useState(0)
   const [summary, setSummary] = useState<EarningsSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [loadingMoreOrders, setLoadingMoreOrders] = useState(false)
+  const [loadingMorePayouts, setLoadingMorePayouts] = useState(false)
   const [requestOpen, setRequestOpen] = useState(false)
   const [amount, setAmount] = useState("")
   const [phone, setPhone] = useState("")
@@ -164,30 +168,10 @@ export default function SellerEarningsPage() {
         throw new Error(payoutData.error || "Impossible de charger vos demandes de versement.")
       }
 
-      const allOrders: SellerOrder[] = [...(earningsData.orders || [])]
-      for (let offset = allOrders.length; offset < Number(earningsData.total || 0); offset += PAGE_SIZE) {
-        const response = await fetch(
-          `/api/seller/earnings?limit=${PAGE_SIZE}&offset=${offset}`,
-          { cache: "no-store" },
-        )
-        const data = await response.json().catch(() => ({}))
-        if (!response.ok) throw new Error(data.error || "Historique des ventes incomplet.")
-        allOrders.push(...(data.orders || []))
-      }
-
-      const allPayouts: PayoutRequest[] = [...(payoutData.withdrawals || [])]
-      for (let offset = allPayouts.length; offset < Number(payoutData.total || 0); offset += PAGE_SIZE) {
-        const response = await fetch(
-          `/api/wallet/withdraw?limit=${PAGE_SIZE}&offset=${offset}`,
-          { cache: "no-store" },
-        )
-        const data = await response.json().catch(() => ({}))
-        if (!response.ok) throw new Error(data.error || "Historique des versements incomplet.")
-        allPayouts.push(...(data.withdrawals || []))
-      }
-
-      setOrders(allOrders)
-      setPayouts(allPayouts)
+      setOrders(earningsData.orders || [])
+      setOrdersTotal(Number(earningsData.total || 0))
+      setPayouts(payoutData.withdrawals || [])
+      setPayoutsTotal(Number(payoutData.total || 0))
       setSummary(earningsData.summary || null)
       setError(null)
     } catch (loadError) {
@@ -197,6 +181,44 @@ export default function SellerEarningsPage() {
       setRefreshing(false)
     }
   }, [router])
+
+  const loadMoreOrders = useCallback(async () => {
+    if (loadingMoreOrders || orders.length >= ordersTotal) return
+    setLoadingMoreOrders(true)
+    try {
+      const response = await fetch(
+        `/api/seller/earnings?limit=${PAGE_SIZE}&offset=${orders.length}`,
+        { cache: "no-store" },
+      )
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || "Historique des ventes indisponible.")
+      setOrders((current) => [...current, ...(data.orders || [])])
+      setOrdersTotal(Number(data.total || 0))
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Chargement impossible.")
+    } finally {
+      setLoadingMoreOrders(false)
+    }
+  }, [loadingMoreOrders, orders.length, ordersTotal])
+
+  const loadMorePayouts = useCallback(async () => {
+    if (loadingMorePayouts || payouts.length >= payoutsTotal) return
+    setLoadingMorePayouts(true)
+    try {
+      const response = await fetch(
+        `/api/wallet/withdraw?limit=${PAGE_SIZE}&offset=${payouts.length}`,
+        { cache: "no-store" },
+      )
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || "Historique des versements indisponible.")
+      setPayouts((current) => [...current, ...(data.withdrawals || [])])
+      setPayoutsTotal(Number(data.total || 0))
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Chargement impossible.")
+    } finally {
+      setLoadingMorePayouts(false)
+    }
+  }, [loadingMorePayouts, payouts.length, payoutsTotal])
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => void loadData(), 0)
@@ -349,7 +371,7 @@ export default function SellerEarningsPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <History className="h-5 w-5" />
-            Toutes mes commandes ({summary?.orders_count ?? orders.length})
+            Toutes mes commandes ({summary?.orders_count ?? ordersTotal})
           </CardTitle>
           <CardDescription>
             Le statut de paiement et celui de livraison sont affichés séparément.
@@ -378,6 +400,16 @@ export default function SellerEarningsPage() {
                   </div>
                 </div>
               ))}
+              {orders.length < ordersTotal && (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => void loadMoreOrders()}
+                  disabled={loadingMoreOrders}
+                >
+                  {loadingMoreOrders ? "Chargement…" : `Afficher plus (${ordersTotal - orders.length} restantes)`}
+                </Button>
+              )}
             </div>
           )}
         </CardContent>
@@ -387,7 +419,7 @@ export default function SellerEarningsPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Smartphone className="h-5 w-5" />
-            Demandes de versement ({payouts.length})
+            Demandes de versement ({payoutsTotal})
           </CardTitle>
           <CardDescription>Les demandes en attente ou en traitement sont déduites du montant disponible.</CardDescription>
         </CardHeader>
@@ -413,6 +445,16 @@ export default function SellerEarningsPage() {
                   {statusBadge(payout.status)}
                 </div>
               ))}
+              {payouts.length < payoutsTotal && (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => void loadMorePayouts()}
+                  disabled={loadingMorePayouts}
+                >
+                  {loadingMorePayouts ? "Chargement…" : `Afficher plus (${payoutsTotal - payouts.length} restantes)`}
+                </Button>
+              )}
             </div>
           )}
         </CardContent>

@@ -179,13 +179,14 @@ export async function POST(request: Request) {
       if (escrowError) throw escrowError
     }
 
-    await admin.from("order_audit_log").insert({
+    const { error: auditError } = await admin.from("order_audit_log").insert({
       order_id: order.id,
       action: success ? "geniuspay_webhook_payment_success" : "geniuspay_webhook_payment_failed",
       old_value: order.payment_status,
       new_value: success ? "held" : "failed",
       notes: `GeniusPay ${reference}; delivery=${(request.headers.get("x-webhook-delivery") || "").replace(/[^a-zA-Z0-9._:-]/g, "").slice(0, 128) || "not-provided"}`,
     })
+    if (auditError) console.error("[webhooks/geniuspay] audit log", auditError.message)
     return NextResponse.json({ received: true })
   } catch (error) {
     console.error("[webhooks/geniuspay]", error)

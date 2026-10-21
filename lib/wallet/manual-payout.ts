@@ -11,7 +11,7 @@ type ManualPayoutInput = {
   amount: number
   phone: string
   network: string
-  available: number
+  available?: number
 }
 
 type ManualPayoutValidation =
@@ -24,7 +24,7 @@ export function validateManualPayoutRequest(
   if (!Number.isSafeInteger(input.amount) || input.amount < 1000) {
     return { ok: false, code: "INVALID_AMOUNT" }
   }
-  if (input.amount > input.available) {
+  if (input.available !== undefined && input.amount > input.available) {
     return { ok: false, code: "INSUFFICIENT_BALANCE" }
   }
   const phone = input.phone.trim()

@@ -2,7 +2,6 @@ import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { sendPushToUser } from "@/lib/notifications/push"
-import { isPaymentSimulationAllowed } from "@/lib/payment/simulation"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -78,19 +77,18 @@ export async function POST(request: NextRequest, context: Ctx) {
     const payoutNetwork: string | null = null
     let payoutError: string | null = null
 
-    if (isPaymentSimulationAllowed()) {
+    const isSimulatedPayment =
+      typeof order.provider_reference === "string" && order.provider_reference.startsWith("SIM-GWA-")
+    if (isSimulatedPayment) {
       payoutStatus = "skipped_sim"
-      payoutRef = `SIM-OUT-${Date.now().toString(36).toUpperCase()}`
+      payoutRef = order.provider_reference
       payoutError = null
     } else if (payoutAmount <= 0) {
       payoutStatus = "skipped_zero"
       payoutError = null
     }
 
-    const payoutOk =
-      payoutStatus === "paid" ||
-      payoutStatus === "skipped_sim" ||
-      payoutStatus === "skipped_zero"
+    const payoutOk = payoutStatus === "skipped_sim" || payoutStatus === "skipped_zero"
 
     const escrowStatus = "released"
 
@@ -168,22 +166,20 @@ export async function POST(request: NextRequest, context: Ctx) {
     }
 
     const sellerMsg =
-      payoutStatus === "paid"
-        ? `Fonds versés (${payoutAmount} FCFA) — ${order.order_number}`
-        : payoutStatus === "pending"
-          ? `Livraison confirmée — vous pouvez demander un versement manuel (${order.order_number})`
-          : payoutStatus === "failed"
-            ? `Livraison confirmée — versement à vérifier (${order.order_number})`
+      payoutStatus === "pending"
+        ? `Livraison confirmée — vous pouvez demander un versement manuel (${order.order_number})`
+        : payoutStatus === "skipped_sim"
+          ? `Livraison confirmée — paiement de simulation ignoré (${order.order_number})`
           : `L'acheteur a confirmé ${order.order_number}`
 
     await admin.from("notifications").insert({
       user_id: order.seller_id,
       type: "order",
       title:
-        payoutStatus === "paid"
-          ? "Paiement reçu"
-          : payoutStatus === "pending"
-            ? "Vente confirmée — versement disponible sur demande"
+        payoutStatus === "pending"
+          ? "Vente confirmée — versement disponible sur demande"
+          : payoutStatus === "skipped_sim"
+            ? "Paiement de simulation"
             : "Fonds libérés",
       message: sellerMsg,
       body: sellerMsg,
@@ -194,10 +190,10 @@ export async function POST(request: NextRequest, context: Ctx) {
 
     void sendPushToUser(supabase as never, order.seller_id, {
       title:
-        payoutStatus === "paid"
-          ? "Argent versé"
-          : payoutStatus === "pending"
-            ? "Vente confirmée"
+        payoutStatus === "pending"
+          ? "Vente confirmée"
+          : payoutStatus === "skipped_sim"
+            ? "Paiement de simulation"
             : "Fonds libérés",
       body: sellerMsg,
       url: "/wallet",

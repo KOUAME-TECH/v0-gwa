@@ -74,7 +74,6 @@ export async function POST(request: NextRequest) {
       amount: Number(body?.amount_fcfa ?? body?.amount),
       phone: String(body?.phone || ""),
       network: String(body?.network || ""),
-      available: Number.POSITIVE_INFINITY,
     })
     if (!validation.ok) {
       const errorByCode = {
@@ -102,10 +101,10 @@ export async function POST(request: NextRequest) {
           { status: 503 },
         )
       }
-      if (/solde insuffisant/i.test(rpcError?.message || "")) {
+      if (/insufficient available balance/i.test(rpcError?.message || "")) {
         return NextResponse.json({ error: "Montant supérieur au disponible", code: "INSUFFICIENT_BALANCE" }, { status: 400 })
       }
-      if (/vendeur/i.test(rpcError?.message || "")) {
+      if (/seller role required/i.test(rpcError?.message || "")) {
         return NextResponse.json({ error: "Espace réservé aux vendeurs" }, { status: 403 })
       }
       console.error("[api/wallet/withdraw POST]", rpcError?.message)

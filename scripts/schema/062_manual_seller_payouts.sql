@@ -58,6 +58,7 @@ BEGIN
     RAISE EXCEPTION 'invalid network';
   END IF;
 
+  -- This row lock serializes payout requests from the same seller.
   SELECT user_type
     INTO requester_type
     FROM public.profiles
