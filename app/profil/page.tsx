@@ -16,7 +16,6 @@ import {
   MessageCircle,
   MapPin,
   BadgeCheck,
-  Wallet,
   Bell,
   HelpCircle,
   Star,
@@ -241,7 +240,6 @@ export default function ProfilPage() {
           href: "/dashboard/commandes",
           count: stats.orders,
         },
-        { icon: Wallet, label: "Portefeuille", href: "/wallet" },
         { icon: Crown, label: "Abonnement", href: "/abonnement" },
       ]
     }
@@ -261,7 +259,6 @@ export default function ProfilPage() {
           href: "/dashboard/commandes",
           count: stats.orders,
         },
-        { icon: Wallet, label: "Portefeuille", href: "/wallet" },
         { icon: Crown, label: "Abonnement", href: "/abonnement" },
         { icon: Star, label: "Mes avis", href: "/dashboard/reviews" },
       ]

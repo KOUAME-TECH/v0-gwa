@@ -125,9 +125,6 @@ importers:
       embla-carousel-react:
         specifier: 8.5.1
         version: 8.5.1(react@19.2.0)
-      feexpay-sdk:
-        specifier: ^1.0.9
-        version: 1.0.9
       input-otp:
         specifier: 1.4.1
         version: 1.4.1(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
@@ -2413,10 +2410,6 @@ packages:
 
   fecha@4.2.3:
     resolution: {integrity: sha512-OP2IUU6HeYKJi3i0z4A19kHMQoLVs4Hc+DPqqxI2h/DPZHTm/vjsfC6P0b4jCMy14XizLBqvndQ+UilD7707Jw==}
-
-  feexpay-sdk@1.0.9:
-    resolution: {integrity: sha512-Og69487KL2jpbvnOY2pwVG8dqYyMThZTPsBehXC2VofPE6K1zb4/i0GZrd96OhiMzVNhcg16RYLzjZ2Qhb+1pw==}
-    engines: {node: '>=18.0.0'}
 
   finalhandler@1.3.2:
     resolution: {integrity: sha512-aA4RyPcd3badbdABGDuTXCMTtOneUCAYH/gxoYRTZlIJdF0YPWuGqiAsIrhNnnqdXGswYk6dGujem4w80UJFhg==}
@@ -5478,20 +5471,6 @@ snapshots:
       picomatch: 4.0.5
 
   fecha@4.2.3: {}
-
-  feexpay-sdk@1.0.9:
-    dependencies:
-      axios: 1.18.1
-      body-parser: 1.20.6
-      crypto: 1.0.1
-      dotenv: 16.6.1
-      express: 4.22.2
-      express-http-context: 2.0.1
-      nodemailer: 6.10.1
-      winston: 3.19.0
-    transitivePeerDependencies:
-      - debug
-      - supports-color
 
   finalhandler@1.3.2:
     dependencies:

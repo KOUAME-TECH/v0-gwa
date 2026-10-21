@@ -12,6 +12,12 @@ import {
   getOneSignalAppId,
   getOneSignalRestApiKey,
 } from '@/lib/notifications/onesignal-config'
+import { isOtpStoreReady } from '@/lib/auth/otp-store'
+import {
+  resolveGeniusPayCredentials,
+  resolveGeniusPayWebhookSecret,
+  type GeniusPayEnvironment,
+} from '@/lib/payment/geniuspay'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,13 +43,20 @@ export async function GET() {
   const atKey = hasAfricasTalkingProvider()
   const atLive = isAfricasTalkingLiveUsername()
   const atSender = hasAfricasTalkingSenderId() || !!(await resolveAfricasTalkingSenderId())
-  const feexpayKey =
-    envSet('FEEXPAY_API_KEY') ||
-    (await hasPlatformSecret('FEEXPAY_API_KEY'))
-  const feexpayShop =
-    envSet('FEEXPAY_SHOP_ID') ||
-    (await hasPlatformSecret('FEEXPAY_SHOP_ID'))
-  const feexpayMode = (process.env.FEEXPAY_MODE || 'sandbox').toLowerCase()
+  const geniusPayCredentials = await resolveGeniusPayCredentials()
+  const configuredGeniusPayMode = process.env.GENIUSPAY_MODE?.trim().toLowerCase()
+  const geniusPayEnvironment: GeniusPayEnvironment | null =
+    configuredGeniusPayMode === 'sandbox' || configuredGeniusPayMode === 'live'
+      ? configuredGeniusPayMode
+      : geniusPayCredentials?.apiKey.startsWith('pk_sandbox_')
+        ? 'sandbox'
+        : geniusPayCredentials?.apiKey.startsWith('pk_live_')
+          ? 'live'
+          : null
+  const geniusPayWebhookSecret = geniusPayEnvironment
+    ? Boolean(await resolveGeniusPayWebhookSecret(geniusPayEnvironment))
+    : false
+  const geniusPayConfigured = Boolean(geniusPayCredentials)
   let geminiReady =
     envSet('GEMINI_API_KEY') ||
     envSet('GOOGLE_GENERATIVE_AI_API_KEY') ||
@@ -72,6 +85,7 @@ export async function GET() {
       OTP_PEPPER: otpPepper,
       CRON_SECRET: cronSecret,
       SMS_PROVIDER: smsConfigured,
+      OTP_STORAGE: isOtpStoreReady(),
       SMS_AT: atKey,
       SMS_AT_USERNAME_LIVE: atLive,
       SMS_AT_SENDER_ID: atSender,
@@ -83,16 +97,17 @@ export async function GET() {
       ONESIGNAL_APP_ID: onesignalApp,
       ONESIGNAL_REST_API_KEY: onesignalRest,
       GEMINI_API_KEY: geminiReady,
-      FEEXPAY_API_KEY: feexpayKey,
-      FEEXPAY_SHOP_ID: feexpayShop,
+      GENIUSPAY_API_KEY: geniusPayConfigured,
+      GENIUSPAY_API_SECRET: geniusPayConfigured,
+      GENIUSPAY_WEBHOOK_SECRET: geniusPayWebhookSecret,
     },
-    feexpay: {
-      configured: feexpayKey && feexpayShop,
-      mode: feexpayMode === 'live' || feexpayMode === 'prod' || feexpayMode === 'production'
-        ? 'live'
-        : 'sandbox',
-      payin_ready: feexpayKey && feexpayShop,
-      payout_ready: feexpayKey && feexpayShop,
+    geniuspay: {
+      configured: geniusPayConfigured,
+      api_contract_ready: true,
+      payin_ready: geniusPayConfigured,
+      payment_verification_ready: geniusPayConfigured,
+      payout_ready: false,
+      webhook_ready: geniusPayConfigured && geniusPayWebhookSecret,
     },
     sms_delivery_ready: atKey && atLive && atSender,
     resilience: {

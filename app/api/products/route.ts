@@ -4,6 +4,7 @@ import { assertSameOrigin } from "@/lib/security/csrf"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { sanitizeForQuery, sanitizePlainText } from "@/lib/security/validation"
 import { checkPriceAnomaly } from "@/lib/products/price-guard"
+import { isAgriculturalProductType } from "@/lib/catalog/scope"
 
 /**
  * GET /api/products — catalogue public (filtres)
@@ -20,7 +21,13 @@ export async function GET(request: NextRequest) {
     const q = searchParams.get("q")?.trim()
     const categoryId = searchParams.get("category_id")
     const sellerId = searchParams.get("seller_id")
-    const productType = searchParams.get("product_type") || "agriculture"
+    const requestedProductType = searchParams.get("product_type") || "agriculture"
+    if (requestedProductType !== "all" && !isAgriculturalProductType(requestedProductType)) {
+      return NextResponse.json(
+        { error: "Seuls les produits agricoles sont disponibles", code: "OUT_OF_SCOPE" },
+        { status: 400 },
+      )
+    }
     const statusParam = searchParams.get("status")
     // Public catalogue: force active unless seller_id=self (handled below)
     const status = statusParam === "all" ? null : statusParam || "active"
@@ -51,7 +58,7 @@ export async function GET(request: NextRequest) {
       query = query.eq("status", "active")
     }
 
-    if (productType !== "all") query = query.eq("product_type", productType)
+    query = query.eq("product_type", "agriculture")
     if (categoryId) query = query.eq("category_id", categoryId)
     if (sellerId) query = query.eq("seller_id", sellerId)
     if (q) {
@@ -110,6 +117,15 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
+    if (
+      body?.product_type !== undefined &&
+      !isAgriculturalProductType(body.product_type)
+    ) {
+      return NextResponse.json(
+        { error: "Seuls les produits agricoles peuvent être publiés", code: "OUT_OF_SCOPE" },
+        { status: 400 },
+      )
+    }
     const name = sanitizePlainText(String(body?.name || ""), 100)
     const price = Number(body?.price)
     const categoryId = body?.category_id || null
@@ -197,7 +213,7 @@ export async function POST(request: NextRequest) {
       unit: body?.unit ? sanitizePlainText(String(body.unit), 20) : "kg",
       stock_quantity: Math.min(Math.max(Number(body?.stock_quantity) || 0, 0), 999_999),
       category_id: categoryId,
-      product_type: body?.product_type || "agriculture",
+      product_type: "agriculture",
       images: Array.isArray(body?.images) ? body.images : null,
       video_url: body?.video_url ? String(body.video_url).slice(0, 500) : null,
       audio_url: body?.audio_url ? String(body.audio_url).slice(0, 500) : null,

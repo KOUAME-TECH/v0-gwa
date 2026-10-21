@@ -40,7 +40,7 @@ interface DashboardStats {
 }
 
 interface OpsHealth {
-  feexpay: boolean
+  geniuspay: boolean
   sms: boolean
   gemini: boolean
 }
@@ -88,7 +88,7 @@ export default function AdminDashboardPage() {
     pendingSubscriptions: 0,
   })
   const [opsHealth, setOpsHealth] = useState<OpsHealth>({
-    feexpay: false,
+    geniuspay: false,
     sms: false,
     gemini: false,
   })
@@ -233,8 +233,8 @@ export default function AdminDashboardPage() {
         <CardContent className="p-4 flex flex-wrap items-center gap-3">
           <Activity className="h-5 w-5 text-[#1F5C2E]" />
           <span className="text-sm font-medium">Santé ops</span>
-          <Badge variant={opsHealth.feexpay ? "default" : "destructive"}>
-            FeexPay {opsHealth.feexpay ? "OK" : "✗"}
+          <Badge variant={opsHealth.geniuspay ? "default" : "destructive"}>
+            GeniusPay {opsHealth.geniuspay ? "OK" : "✗"}
           </Badge>
           <Badge variant={opsHealth.sms ? "default" : "destructive"}>
             SMS {opsHealth.sms ? "OK" : "✗"}

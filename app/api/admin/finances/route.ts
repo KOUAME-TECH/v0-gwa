@@ -2,7 +2,6 @@ import { NextResponse, type NextRequest } from "next/server"
 import { requireAdminSection } from "@/lib/auth/require-admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 
-const PENDING_STATUSES = ["pending", "confirmed", "processing", "shipped"]
 const ALLOWED_PERIODS = new Set([7, 30, 90, 365])
 
 /**
@@ -52,8 +51,7 @@ export async function GET(request: NextRequest) {
 
     let totalRevenue = 0
     let escrowBalance = 0
-    let pendingPayouts = 0
-    let completedCount = 0
+    let completedOrders = 0
     let totalCommissions = 0
 
     for (const o of rows) {
@@ -77,30 +75,10 @@ export async function GET(request: NextRequest) {
 
       if (esc === "held") {
         escrowBalance += amount
-        pendingPayouts += amount
       }
 
       if (o.status === "delivered" || esc === "released") {
-        completedCount += 1
-      }
-    }
-
-    // Fallback UI-aligned: si pas d'escrow renseigné, pending = statuts en cours
-    if (escrowBalance === 0 && pendingPayouts === 0) {
-      const pending = rows.filter((o) => PENDING_STATUSES.includes(o.status || ""))
-      pendingPayouts = pending.reduce((s, o) => s + (Number(o.total_amount) || 0), 0)
-      escrowBalance = pendingPayouts
-    }
-
-    // Fallback revenu: commandes livrées si aucun paid
-    if (totalRevenue === 0) {
-      totalRevenue = rows
-        .filter((o) => o.status === "delivered")
-        .reduce((s, o) => s + (Number(o.total_amount) || 0), 0)
-      if (totalCommissions === 0) {
-        totalCommissions = rows
-          .filter((o) => o.status === "delivered")
-          .reduce((s, o) => s + (Number(o.commission_fcfa) || 0), 0)
+        completedOrders += 1
       }
     }
 
@@ -120,9 +98,7 @@ export async function GET(request: NextRequest) {
       stats: {
         totalRevenue,
         totalCommissions,
-        pendingPayouts,
-        completedPayouts: completedCount,
-        walletBalance: 0,
+        completedOrders,
         escrowBalance,
         ordersCount: rows.length,
       },

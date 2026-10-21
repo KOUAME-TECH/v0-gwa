@@ -2,30 +2,36 @@ import { type NextRequest, NextResponse } from "next/server"
 import { requireUser } from "@/lib/auth/require-admin"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
-import {
-  createFeexPayPayout,
-  getFeexPayCredentials,
-  resolveFeexPayCredentials,
-  mapPaymentMethodToNetwork,
-} from "@/lib/feexpay/client"
+import { isSellerRole } from "@/lib/dashboard/routing"
+import { validateManualPayoutRequest } from "@/lib/wallet/manual-payout"
+import { parsePagination } from "@/lib/pagination"
 
 /**
  * GET /api/wallet/withdraw — historique demandes
- * POST /api/wallet/withdraw — créer retrait (FeexPay payout ou pending ops)
+ * POST /api/wallet/withdraw — créer une demande en file ops
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const { user, error } = await requireUser()
     if (!user) {
       return NextResponse.json({ error: error || "Non authentifié" }, { status: 401 })
     }
     const admin = createAdminClient()
-    const { data, error: qErr } = await admin
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("user_type")
+      .eq("id", user.id)
+      .maybeSingle()
+    if (!isSellerRole(profile?.user_type)) {
+      return NextResponse.json({ error: "Espace réservé aux vendeurs" }, { status: 403 })
+    }
+    const { limit, offset } = parsePagination(request.nextUrl.searchParams)
+    const { data, count, error: qErr } = await admin
       .from("withdrawal_requests")
-      .select("*")
+      .select("id, amount_fcfa, network, phone, status, payout_reference, admin_notes, created_at, updated_at, processed_at", { count: "exact" })
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
-      .limit(50)
+      .range(offset, offset + limit - 1)
 
     if (qErr) {
       // Table absente (migration 053)
@@ -34,7 +40,7 @@ export async function GET() {
       }
       return NextResponse.json({ error: qErr.message }, { status: 500 })
     }
-    return NextResponse.json({ withdrawals: data || [] })
+    return NextResponse.json({ withdrawals: data || [], total: count || 0, limit, offset })
   } catch (err) {
     console.error("[api/wallet/withdraw GET]", err)
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 })
@@ -48,158 +54,74 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Trop de tentatives" }, { status: 429 })
     }
 
-    const { user, error } = await requireUser()
+    const { user, error, supabase } = await requireUser()
     if (!user) {
       return NextResponse.json({ error: error || "Non authentifié" }, { status: 401 })
     }
 
-    const body = await request.json().catch(() => ({}))
-    const amount = Math.round(Number(body?.amount_fcfa ?? body?.amount))
-    const phone = String(body?.phone || "").trim()
-    const network = mapPaymentMethodToNetwork(String(body?.network || body?.method || "orange"))
-
-    if (!Number.isFinite(amount) || amount < 1000) {
-      return NextResponse.json(
-        { error: "Montant minimum 1 000 FCFA", code: "AMOUNT_TOO_LOW" },
-        { status: 400 },
-      )
-    }
-    if (phone.length < 8) {
-      return NextResponse.json(
-        { error: "Numéro Mobile Money invalide", code: "INVALID_PHONE" },
-        { status: 400 },
-      )
-    }
-
     const admin = createAdminClient()
-
-    // Solde disponible = commandes livrées / escrow released
-    const { data: completed } = await admin
-      .from("orders")
-      .select("vendeur_recoit_fcfa, total_amount, commission_fcfa, service_fee")
-      .eq("seller_id", user.id)
-      .eq("payment_status", "paid")
-      .or("escrow_status.eq.released,status.eq.delivered")
-
-    const available = (completed || []).reduce((sum, o) => {
-      if (o.vendeur_recoit_fcfa != null) return sum + (Number(o.vendeur_recoit_fcfa) || 0)
-      return (
-        sum +
-        (Number(o.total_amount) || 0) -
-        (Number(o.commission_fcfa) || 0) -
-        (Number(o.service_fee) || 0)
-      )
-    }, 0)
-
-    const { data: prior } = await admin
-      .from("withdrawal_requests")
-      .select("amount_fcfa, status")
-      .eq("user_id", user.id)
-      .in("status", ["pending", "processing", "paid"])
-
-    const already = (prior || []).reduce((s, w) => s + (Number(w.amount_fcfa) || 0), 0)
-    const balance = Math.max(0, available - already)
-
-    if (amount > balance) {
-      return NextResponse.json(
-        {
-          error: "Solde insuffisant",
-          code: "INSUFFICIENT_BALANCE",
-          balance_fcfa: balance,
-        },
-        { status: 400 },
-      )
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("user_type")
+      .eq("id", user.id)
+      .maybeSingle()
+    if (!isSellerRole(profile?.user_type)) {
+      return NextResponse.json({ error: "Espace réservé aux vendeurs" }, { status: 403 })
     }
 
-    const now = new Date().toISOString()
-    const insertPayload = {
-      user_id: user.id,
-      amount_fcfa: amount,
-      phone,
-      network,
-      status: "pending" as const,
-      created_at: now,
-      updated_at: now,
+    const body = await request.json().catch(() => ({}))
+    const validation = validateManualPayoutRequest({
+      amount: Number(body?.amount_fcfa ?? body?.amount),
+      phone: String(body?.phone || ""),
+      network: String(body?.network || ""),
+    })
+    if (!validation.ok) {
+      const errorByCode = {
+        INVALID_AMOUNT: { message: "Montant minimum 1 000 FCFA", status: 400 },
+        INSUFFICIENT_BALANCE: { message: "Montant supérieur au disponible", status: 400 },
+        INVALID_PHONE: { message: "Numéro Mobile Money invalide", status: 400 },
+        INVALID_NETWORK: { message: "Réseau Mobile Money non pris en charge", status: 400 },
+      } as const
+      const error = errorByCode[validation.code]
+      return NextResponse.json({ error: error.message, code: validation.code }, { status: error.status })
     }
 
-    const { data: created, error: insErr } = await admin
-      .from("withdrawal_requests")
-      .insert(insertPayload)
-      .select()
-      .single()
-
-    if (insErr || !created) {
-      if (insErr && /does not exist|relation/i.test(insErr.message)) {
+    const { data: requestId, error: rpcError } = await supabase.rpc(
+      "request_manual_payout",
+      {
+        p_amount_fcfa: validation.amount,
+        p_phone: validation.phone,
+        p_network: validation.network,
+      },
+    )
+    if (rpcError || !requestId) {
+      if (/function .*request_manual_payout|does not exist/i.test(rpcError?.message || "")) {
         return NextResponse.json(
-          {
-            error: "Migration 053 requise (withdrawal_requests)",
-            code: "MIGRATION_REQUIRED",
-          },
+          { error: "Migration 065 requise pour les demandes de versement", code: "MIGRATION_REQUIRED" },
           { status: 503 },
         )
       }
-      return NextResponse.json(
-        { error: insErr?.message || "Création échouée" },
-        { status: 400 },
-      )
-    }
-
-    // Tente payout immédiat si FeexPay configuré
-    const creds = await resolveFeexPayCredentials()
-    if (creds) {
-      await admin
-        .from("withdrawal_requests")
-        .update({ status: "processing", updated_at: now })
-        .eq("id", created.id)
-
-      const payout = await createFeexPayPayout({
-        amountFcfa: amount,
-        phone,
-        network,
-        description: `GWA withdraw ${created.id.slice(0, 8)}`,
-      })
-
-      if (payout.ok) {
-        await admin
-          .from("withdrawal_requests")
-          .update({
-            status: "paid",
-            feexpay_ref: payout.reference,
-            processed_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", created.id)
-
-        return NextResponse.json({
-          withdrawal: { ...created, status: "paid", feexpay_ref: payout.reference },
-          status: "paid",
-        })
+      if (/insufficient available balance/i.test(rpcError?.message || "")) {
+        return NextResponse.json({ error: "Montant supérieur au disponible", code: "INSUFFICIENT_BALANCE" }, { status: 400 })
       }
-
-      await admin
-        .from("withdrawal_requests")
-        .update({
-          status: "pending",
-          error_message: payout.error || "PAYOUT_FAILED",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", created.id)
-
-      return NextResponse.json({
-        withdrawal: {
-          ...created,
-          status: "pending",
-          error_message: payout.error,
-        },
-        status: "pending",
-        message: "Demande enregistrée — payout en file ops",
-      })
+      if (/seller role required/i.test(rpcError?.message || "")) {
+        return NextResponse.json({ error: "Espace réservé aux vendeurs" }, { status: 403 })
+      }
+      console.error("[api/wallet/withdraw POST]", rpcError?.message)
+      return NextResponse.json({ error: "Demande impossible pour le moment" }, { status: 400 })
     }
+
+    const { data: created } = await admin
+      .from("withdrawal_requests")
+      .select("id, amount_fcfa, network, phone, status, created_at")
+      .eq("id", requestId)
+      .eq("user_id", user.id)
+      .single()
 
     return NextResponse.json({
       withdrawal: created,
       status: "pending",
-      message: "Demande enregistrée — activation FeexPay pour versement auto",
+      message: "Demande enregistrée. Le versement sera traité manuellement par notre équipe.",
     })
   } catch (err) {
     console.error("[api/wallet/withdraw POST]", err)
