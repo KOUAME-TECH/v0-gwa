@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "next build",
+    "build": "BASELINE_BROWSER_MAPPING_IGNORE_OLD_DATA=true next build",
     "dev": "next dev",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",

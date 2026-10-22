@@ -12,11 +12,12 @@ const globalForSupabase = globalThis as unknown as {
 
 function buildClient(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const anonKey =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 
   if (!url || !anonKey) {
     throw new Error(
-      'Supabase config manquante: NEXT_PUBLIC_SUPABASE_URL ou NEXT_PUBLIC_SUPABASE_ANON_KEY non defini.',
+      'Supabase config manquante: NEXT_PUBLIC_SUPABASE_URL et une clé publique Supabase sont requises.',
     )
   }
 
