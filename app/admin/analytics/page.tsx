@@ -701,15 +701,15 @@ export default function AdminAnalyticsPage() {
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">Volume B2B estime</CardTitle>
+                <CardTitle className="text-sm font-medium">Volume B2B</CardTitle>
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold">
-                  {formatCurrency(data.totalRevenue * 0.4)}
+                  Non disponible
                 </div>
                 <p className="text-xs text-muted-foreground mt-2">
-                  Estimation basee sur 40% des transactions
+                  Aucun calcul fondé sur les transactions B2B n’est disponible
                 </p>
               </CardContent>
             </Card>

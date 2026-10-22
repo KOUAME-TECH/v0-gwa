@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -17,7 +17,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Label } from "@/components/ui/label"
 import {
   ShieldCheck, Clock, CheckCircle2, XCircle, Eye, Search,
-  FileText, User, Building2, Download, ExternalLink, RefreshCw
+  FileText, RefreshCw
 } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { fr } from "date-fns/locale"
@@ -62,27 +62,31 @@ export default function AdminVerificationsPage() {
   
   const supabase = createClient()
 
-  useEffect(() => {
-    loadRequests()
-  }, [])
-
-  async function loadRequests() {
+  const loadRequests = useCallback(async () => {
     setLoading(true)
-    
-    const { data } = await supabase
-      .from('verification_requests')
-      .select(`
-        *,
-        profiles:user_id (full_name, email, user_type, avatar_url, city, country),
-        cooperatives:cooperative_id (name, registration_number)
-      `)
-      .order('created_at', { ascending: false })
+    try {
+      const { data, error } = await supabase
+        .from('verification_requests')
+        .select(`
+          *,
+          profiles:user_id (full_name, email, user_type, avatar_url, city, country),
+          cooperatives:cooperative_id (name, registration_number)
+        `)
+        .order('created_at', { ascending: false })
 
-    if (data) {
-      setRequests(data as VerificationRequest[])
+      if (error) throw error
+      if (data) setRequests(data as VerificationRequest[])
+    } catch (error) {
+      console.error("[admin/verifications]", error)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
-  }
+  }, [supabase])
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => void loadRequests(), 0)
+    return () => window.clearTimeout(timeoutId)
+  }, [loadRequests])
 
   async function handleApprove(request: VerificationRequest) {
     setProcessing(true)
@@ -111,6 +115,24 @@ export default function AdminVerificationsPage() {
     setRejectionReason("")
     await loadRequests()
     setProcessing(false)
+  }
+
+  async function openDocument(path: string) {
+    const tab = window.open("about:blank", "_blank")
+    if (!tab) return
+    tab.opener = null
+    if (/^https?:\/\//i.test(path)) {
+      tab.location.href = path
+      return
+    }
+    const { data, error } = await supabase.storage
+      .from("kyc-documents")
+      .createSignedUrl(path, 300)
+    if (error || !data?.signedUrl) {
+      tab.close()
+      return
+    }
+    tab.location.href = data.signedUrl
   }
 
   const getRequestTypeLabel = (type: string) => {
@@ -387,16 +409,9 @@ export default function AdminVerificationsPage() {
                             </div>
                           </div>
                           <div className="flex gap-2">
-                            <Button variant="outline" size="sm" asChild>
-                              <a href={doc.url} target="_blank" rel="noopener noreferrer">
+                            <Button variant="outline" size="sm" onClick={() => void openDocument(doc.url)}>
                                 <Eye className="h-4 w-4 mr-1" />
                                 Voir
-                              </a>
-                            </Button>
-                            <Button variant="outline" size="sm" asChild>
-                              <a href={doc.url} download>
-                                <Download className="h-4 w-4" />
-                              </a>
                             </Button>
                           </div>
                         </div>

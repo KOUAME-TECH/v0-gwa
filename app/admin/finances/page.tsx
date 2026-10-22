@@ -1,22 +1,20 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
+import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { 
   DollarSign, TrendingUp, Wallet, 
-  Download, RefreshCw, Clock,
+  RefreshCw, Clock,
   ArrowUpRight, Building2
 } from "lucide-react"
 
 interface FinanceStats {
   totalRevenue: number
   totalCommissions: number
-  pendingPayouts: number
-  completedPayouts: number
-  walletBalance: number
   escrowBalance: number
 }
 
@@ -34,21 +32,13 @@ export default function AdminFinancesPage() {
   const [stats, setStats] = useState<FinanceStats>({
     totalRevenue: 0,
     totalCommissions: 0,
-    pendingPayouts: 0,
-    completedPayouts: 0,
-    walletBalance: 0,
     escrowBalance: 0,
   })
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [period, setPeriod] = useState("30")
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    fetchData()
-  }, [period])
-
-  const fetchData = async () => {
-    setLoading(true)
+  const fetchData = useCallback(async () => {
     try {
       const res = await fetch(`/api/admin/finances?period=${encodeURIComponent(period)}`, {
         credentials: "include",
@@ -58,29 +48,28 @@ export default function AdminFinancesPage() {
         setStats({
           totalRevenue: 0,
           totalCommissions: 0,
-          pendingPayouts: 0,
-          completedPayouts: 0,
-          walletBalance: 0,
           escrowBalance: 0,
         })
         setTransactions([])
-        setLoading(false)
         return
       }
       setStats({
         totalRevenue: data.stats?.totalRevenue || 0,
         totalCommissions: data.stats?.totalCommissions || 0,
-        pendingPayouts: data.stats?.pendingPayouts || 0,
-        completedPayouts: data.stats?.completedPayouts || 0,
-        walletBalance: data.stats?.walletBalance || 0,
         escrowBalance: data.stats?.escrowBalance || 0,
       })
       setTransactions(data.transactions || [])
     } catch {
       setTransactions([])
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
-  }
+  }, [period])
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => void fetchData(), 0)
+    return () => window.clearTimeout(timeoutId)
+  }, [fetchData])
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("fr-FR").format(amount) + " FCFA"
@@ -94,6 +83,9 @@ export default function AdminFinancesPage() {
           <p className="text-muted-foreground">Suivi des revenus, commissions et paiements</p>
         </div>
         <div className="flex gap-2">
+          <Button asChild variant="outline">
+            <Link href="/admin/finances/payouts">Demandes de versement manuel</Link>
+          </Button>
           <Select value={period} onValueChange={setPeriod}>
             <SelectTrigger className="w-[140px]">
               <SelectValue />
@@ -109,10 +101,6 @@ export default function AdminFinancesPage() {
             <RefreshCw className="h-4 w-4 mr-2" />
             Actualiser
           </Button>
-          <Button variant="outline">
-            <Download className="h-4 w-4 mr-2" />
-            Export SYSCOA
-          </Button>
         </div>
       </div>
 
@@ -126,20 +114,20 @@ export default function AdminFinancesPage() {
           <CardContent>
             <div className="text-2xl font-bold text-green-600">{formatCurrency(stats.totalRevenue)}</div>
             <p className="text-xs text-muted-foreground flex items-center mt-1">
-              <TrendingUp className="h-3 w-3 mr-1 text-green-500" />
-              +12% vs periode precedente
+              <TrendingUp className="h-3 w-3 mr-1 text-muted-foreground" />
+              Évolution non calculée
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Commissions GWA (5%)</CardTitle>
+            <CardTitle className="text-sm font-medium">Commissions GWA</CardTitle>
             <Building2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(stats.totalCommissions)}</div>
-            <p className="text-xs text-muted-foreground">Sur {stats.completedPayouts} transactions</p>
+            <p className="text-xs text-muted-foreground">Calculées sur les commandes payées</p>
           </CardContent>
         </Card>
 
@@ -156,12 +144,12 @@ export default function AdminFinancesPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Paiements en attente</CardTitle>
+            <CardTitle className="text-sm font-medium">Versements vendeurs</CardTitle>
             <Wallet className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats.pendingPayouts)}</div>
-            <p className="text-xs text-muted-foreground">A verser aux vendeurs</p>
+            <div className="text-lg font-bold">Traitement ops</div>
+            <p className="text-xs text-muted-foreground">Aucune API de payout GeniusPay n’est documentée</p>
           </CardContent>
         </Card>
       </div>

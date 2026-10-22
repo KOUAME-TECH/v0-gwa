@@ -185,7 +185,7 @@ export default function PublicProfilePage() {
       setLoading(false)
     }
     void load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [profileId])
 
   async function toggleFollow() {
@@ -236,7 +236,7 @@ export default function PublicProfilePage() {
       <div className="relative">
         <div className="h-40 sm:h-52 w-full overflow-hidden bg-gradient-to-br from-[#1F5C2E] via-[#2F7D32] to-[#F39A1F]">
           {coverSrc && (
-            // eslint-disable-next-line @next/next/no-img-element
+             
             <img
               src={coverSrc}
               alt=""

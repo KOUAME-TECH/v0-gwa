@@ -1,8 +1,8 @@
 /**
- * Mapping réseaux FeexPay (sans I/O) — utilisable client + tests.
+ * Mapping réseaux GeniusPay (sans I/O) — utilisable client + tests.
  */
 
-export type FeexPayNetwork =
+export type GeniusPayNetwork =
   | "orange_ci"
   | "mtn_ci"
   | "moov_ci"
@@ -10,16 +10,16 @@ export type FeexPayNetwork =
   | "mtn"
   | "moov"
 
-/** Map UI payment_method → réseau FeexPay CI (défaut marché GWA). */
+/** Map UI payment_method → réseau GeniusPay CI (défaut marché GWA). */
 export function mapPaymentMethodToNetwork(
   method: string | null | undefined,
-): FeexPayNetwork {
+): GeniusPayNetwork {
   const m = (method || "").toLowerCase().trim()
   if (m.includes("orange")) return "orange_ci"
   if (m.includes("wave")) return "wave_ci"
   if (m.includes("moov")) return "moov_ci"
   if (m.includes("mtn") || m.includes("momo")) return "mtn_ci"
-  if (m === "mobile_money" || m === "feexpay" || !m) return "orange_ci"
+  if (m === "mobile_money" || !m) return "orange_ci"
   return "orange_ci"
 }
 
@@ -27,7 +27,7 @@ export function mapPaymentMethodToNetwork(
  * Normalise un numéro vers format international sans +.
  * CI : 225XXXXXXXXXX
  */
-export function normalizeFeexPayPhone(
+export function normalizeGeniusPayPhone(
   raw: string | null | undefined,
   defaultCountry: "ci" | "bj" = "ci",
 ): string | null {

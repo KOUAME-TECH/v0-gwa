@@ -1,7 +1,7 @@
 /**
  * Commission vendeur GWA — décision DG 28/07/2026.
  * Acheteur retail : 0 frais GWA. Commission prélevée côté vendeur selon son palier.
- * FeexPay (tuyau) reste hors de ce module.
+ * GeniusPay (tuyau) reste hors de ce module.
  */
 
 export type SubscriptionTier = "free" | "starter" | "pro" | "enterprise"
@@ -75,7 +75,7 @@ export type SellerCommissionResult = {
 }
 
 /**
- * Calcule la commission vendeur sur le sous-total catalogue (hors FeexPay).
+ * Calcule la commission vendeur sur le sous-total catalogue (hors GeniusPay).
  * L’acheteur paie subtotal (+ shipping) ; GWA prélève sur le vendeur.
  */
 export function computeSellerCommission(

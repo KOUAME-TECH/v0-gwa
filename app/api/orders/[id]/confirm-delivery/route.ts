@@ -83,7 +83,7 @@ export async function POST(
     }).catch(() => null)
 
     // Notif vendeur
-    await sendPushNotification(order.seller_id, {
+    await sendPushNotification({ externalUserIds: [order.seller_id],
       title: "Paiement viré ! 🎉",
       body: `${order.vendeur_recoit_fcfa?.toLocaleString("fr-FR") ?? order.total_amount.toLocaleString("fr-FR")} FCFA libérés — commande ${order.order_number}`,
       data: { type: "payment", order_id: orderId },
@@ -96,7 +96,7 @@ export async function POST(
     ).catch(() => null)
 
     // Notif acheteur
-    await sendPushNotification(user.id, {
+    await sendPushNotification({ externalUserIds: [user.id],
       title: "Livraison confirmée ✓",
       body: `Merci ! Votre commande ${order.order_number} est clôturée.`,
       data: { type: "order_status", order_id: orderId },

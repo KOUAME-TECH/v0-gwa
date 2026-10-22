@@ -27,7 +27,7 @@ describe("destination du formulaire contact (P9)", () => {
 
   it("utilise le défaut surveillé par l'équipe si aucun override", () => {
     const cfg = getAgentMailConfig()
-    expect(cfg.to).toBe("gwa-contact@agentmail.to")
+    expect(cfg.to).toBe("contact@mygwa.org")
   })
 
   it("CONTACT_INBOX_TO est prioritaire sur AGENTMAIL_CONTACT_TO", () => {

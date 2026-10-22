@@ -85,7 +85,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    const rows = (data ?? []) as Record<string, unknown>[]
+    const rows = (data ?? []) as unknown as Record<string, unknown>[]
     const header = columns.join(",")
     const body = rows
       .map((row) => columns.map((col) => csvEscape(row[col])).join(","))

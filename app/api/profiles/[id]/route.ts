@@ -140,7 +140,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
     return NextResponse.json({
       profile,
-      completion_pct: profile?.profile_completion_pct ?? 0,
+      completion_pct: (profile as unknown as { profile_completion_pct?: number } | null)?.profile_completion_pct ?? 0,
     })
   } catch (err) {
     console.error("[profiles/[id] PATCH]", err)

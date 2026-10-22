@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { parseOfferContent } from "@/lib/chat/offer"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { sendPushToUser } from "@/lib/notifications/push"
+import { isAgriculturalProductType } from "@/lib/catalog/scope"
 
 /**
  * POST /api/orders/from-offer
@@ -79,11 +80,11 @@ export async function POST(request: Request) {
     if (productId) {
       const { data: product } = await supabase
         .from("products")
-        .select("id, seller_id, price, name, status, stock_quantity")
+        .select("id, seller_id, price, name, status, stock_quantity, product_type")
         .eq("id", productId)
         .maybeSingle()
 
-      if (!product || product.status !== "active") {
+      if (!product || product.status !== "active" || !isAgriculturalProductType(product.product_type)) {
         return NextResponse.json({ error: "Produit de l'offre indisponible" }, { status: 400 })
       }
       sellerId = product.seller_id
@@ -103,6 +104,7 @@ export async function POST(request: Request) {
         .select("id, seller_id, name, status, price, stock_quantity")
         .eq("seller_id", otherId)
         .eq("status", "active")
+        .eq("product_type", "agriculture")
         .limit(1)
 
       if (sellerProducts?.[0]) {
@@ -120,6 +122,7 @@ export async function POST(request: Request) {
           .select("id, seller_id, name, status, price, stock_quantity")
           .eq("seller_id", offererId)
           .eq("status", "active")
+          .eq("product_type", "agriculture")
           .limit(1)
         if (offererProducts?.[0]) {
           productId = offererProducts[0].id
@@ -198,6 +201,7 @@ export async function POST(request: Request) {
         shipping_cost: shipping,
         service_fee: serviceFee,
         total_amount: totalAmount,
+        currency: "XOF",
         status: "pending",
         payment_status: "pending",
         escrow_status: "pending",

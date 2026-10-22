@@ -82,7 +82,7 @@ export async function POST(
     }
 
     // Notifier l'acheteur
-    await sendPushNotification(order.buyer_id, {
+    await sendPushNotification({ externalUserIds: [order.buyer_id],
       title: "Votre commande est en route ! 🚚",
       body: `La commande ${order.order_number} a été expédiée. Preuve disponible dans l'application.`,
       data: { type: "order_status", order_id: orderId },

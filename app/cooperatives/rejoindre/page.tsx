@@ -44,7 +44,7 @@ function RejoindreContent() {
       setLoading(false)
     }
     load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [coopId])
 
   async function handleJoin() {
@@ -96,7 +96,7 @@ function RejoindreContent() {
             <CardContent className="p-6 text-center">
               <div className="w-20 h-20 rounded-2xl bg-[#059669]/10 flex items-center justify-center mx-auto mb-4 overflow-hidden">
                 {coop.logo_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
+                   
                   <img src={coop.logo_url} alt="" className="w-full h-full object-cover" />
                 ) : (
                   <Building2 className="h-9 w-9 text-[#059669]" />

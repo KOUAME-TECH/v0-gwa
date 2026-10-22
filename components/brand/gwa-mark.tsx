@@ -19,7 +19,7 @@ export function GwaMark({
 }: GwaMarkProps) {
   return (
     <span className={cn("inline-flex items-center gap-2", className)}>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
+      { }
       <img
         src="/icon-192.png"
         alt="GWA"

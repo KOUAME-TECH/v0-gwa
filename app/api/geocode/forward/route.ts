@@ -24,7 +24,7 @@ export async function GET(request: Request) {
     const res = await fetch(url.toString(), {
       headers: {
         Accept: "application/json",
-        "User-Agent": "GWA-Platform/1.0 (https://gwa.app; contact@gwa.app)",
+        "User-Agent": "GWA-Platform/1.0 (https://mygwa.org; contact@mygwa.org)",
       },
       signal: AbortSignal.timeout(8000),
       next: { revalidate: 3600 },

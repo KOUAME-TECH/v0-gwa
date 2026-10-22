@@ -163,7 +163,7 @@ export default function PublierPage() {
       if (video) URL.revokeObjectURL(video.url)
       if (audio) URL.revokeObjectURL(audio.url)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [])
 
   const resetMedia = () => {
@@ -890,6 +890,8 @@ export default function PublierPage() {
                 stock_quantity: "",
                 category_id: "",
                 product_type: "agriculture",
+                ville: "",
+                origin_country: "Côte d'Ivoire",
               })
             }}
             className="p-2 -ml-2"

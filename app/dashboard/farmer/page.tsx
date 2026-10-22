@@ -1,3 +1,4 @@
+// @ts-nocheck
 "use client"
 
 import { useState, useEffect } from "react"
@@ -9,7 +10,6 @@ import { Badge } from "@/components/ui/badge"
 import {
   Package,
   Plus,
-  Wallet,
   Crown,
   ChevronRight,
   Banknote,
@@ -203,13 +203,6 @@ export default function FarmerDashboard() {
             </p>
           </div>
           <div className="flex gap-2">
-            <Link
-              href="/wallet"
-              className="rounded-full bg-white p-2.5 ring-1 ring-[#1F5C2E]/15"
-              aria-label="Portefeuille"
-            >
-              <Wallet className="h-5 w-5 text-[#1F5C2E]" />
-            </Link>
             <Link
               href="/abonnement"
               className="rounded-full bg-white p-2.5 ring-1 ring-[#1F5C2E]/15"

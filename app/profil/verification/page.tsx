@@ -84,8 +84,8 @@ export default function VerificationPage() {
 
   const onPickId = (file: File | undefined) => {
     if (!file) return
-    if (!file.type.startsWith("image/")) {
-      toast.error("Image requise (JPG ou PNG)")
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      toast.error("Image JPG, PNG ou WebP requise")
       return
     }
     if (file.size > 2 * 1024 * 1024) {
@@ -114,11 +114,15 @@ export default function VerificationPage() {
       // Fallback file input capture
       const input = document.createElement("input")
       input.type = "file"
-      input.accept = "image/*"
+      input.accept = "image/jpeg,image/png,image/webp"
       input.capture = "user"
       input.onchange = () => {
         const f = input.files?.[0]
         if (!f) return
+        if (!["image/jpeg", "image/png", "image/webp"].includes(f.type)) {
+          toast.error("Image JPG, PNG ou WebP requise")
+          return
+        }
         if (f.size > 2 * 1024 * 1024) {
           toast.error("Fichier trop lourd (max 2 Mo)")
           return
@@ -155,9 +159,14 @@ export default function VerificationPage() {
           toast.error("Image trop lourde. Rapprochez-vous un peu.")
           return
         }
-        const file = new File([blob], `selfie-${Date.now()}.jpg`, {
-          type: "image/jpeg",
-        })
+        const mimeType = blob.type.toLowerCase()
+        if (!["image/jpeg", "image/png", "image/webp"].includes(mimeType)) {
+          toast.error("Format de selfie non pris en charge")
+          return
+        }
+        const extension =
+          mimeType === "image/png" ? "png" : mimeType === "image/webp" ? "webp" : "jpg"
+        const file = new File([blob], `selfie-${Date.now()}.${extension}`, { type: mimeType })
         setSelfieFile(file)
         setSelfiePreview(URL.createObjectURL(blob))
         stopCamera()
@@ -177,33 +186,30 @@ export default function VerificationPage() {
     try {
       const supabase = createClient()
       const stamp = Date.now()
-      const idPath = `${userId}/kyc-id-${stamp}.${idFile.name.split(".").pop() || "jpg"}`
-      const selfiePath = `${userId}/kyc-selfie-${stamp}.jpg`
+      const extension =
+        idFile.type === "image/png" ? "png" : idFile.type === "image/webp" ? "webp" : "jpg"
+      const idPath = `${userId}/kyc-id-${stamp}.${extension}`
+      const selfieExtension =
+        selfieFile.type === "image/png" ? "png" : selfieFile.type === "image/webp" ? "webp" : "jpg"
+      const selfiePath = `${userId}/kyc-selfie-${stamp}.${selfieExtension}`
 
       const { error: idUp } = await supabase.storage
-        .from("avatars")
-        .upload(idPath, idFile, { upsert: true })
+        .from("kyc-documents")
+        .upload(idPath, idFile)
       if (idUp) throw idUp
 
       const { error: selfUp } = await supabase.storage
-        .from("avatars")
-        .upload(selfiePath, selfieFile, { upsert: true })
+        .from("kyc-documents")
+        .upload(selfiePath, selfieFile)
       if (selfUp) throw selfUp
-
-      const {
-        data: { publicUrl: idUrl },
-      } = supabase.storage.from("avatars").getPublicUrl(idPath)
-      const {
-        data: { publicUrl: selfieUrl },
-      } = supabase.storage.from("avatars").getPublicUrl(selfiePath)
 
       const res = await fetch("/api/auth/verification-request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           documents: [
-            { type: "id_document", url: idUrl },
-            { type: "selfie", url: selfieUrl },
+            { type: "id_document", url: idPath },
+            { type: "selfie", url: selfiePath },
           ],
         }),
       })
@@ -228,7 +234,7 @@ export default function VerificationPage() {
 
   const prompt = shouldPromptIdentityVerification({
     is_verified: isVerified,
-    kyc_status: status === "idle" ? null : status,
+    kyc_status: status === "idle" || status === "more_info_needed" ? null : status,
   })
 
   return (
@@ -277,7 +283,6 @@ export default function VerificationPage() {
                 className="w-full aspect-[4/3] rounded-2xl border-2 border-dashed border-[#C5D4C2] bg-[#F3F7F0] overflow-hidden flex flex-col items-center justify-center gap-2 active:scale-[0.99] transition-transform"
               >
                 {idPreview ? (
-                  // eslint-disable-next-line @next/next/no-img-element
                   <img src={idPreview} alt="Pièce" className="w-full h-full object-cover" />
                 ) : (
                   <>
@@ -289,7 +294,7 @@ export default function VerificationPage() {
               <input
                 ref={idRef}
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp"
                 capture="environment"
                 className="hidden"
                 onChange={(e) => onPickId(e.target.files?.[0])}
@@ -339,7 +344,6 @@ export default function VerificationPage() {
                   className="w-full aspect-square max-h-64 rounded-2xl border-2 border-dashed border-[#C5D4C2] bg-[#F3F7F0] overflow-hidden flex flex-col items-center justify-center gap-2 mx-auto active:scale-[0.99] transition-transform"
                 >
                   {selfiePreview ? (
-                    // eslint-disable-next-line @next/next/no-img-element
                     <img src={selfiePreview} alt="Selfie" className="w-full h-full object-cover" />
                   ) : (
                     <>

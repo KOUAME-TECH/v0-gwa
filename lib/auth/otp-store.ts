@@ -43,7 +43,7 @@ function otpPepper(): string {
   if (pepper) return pepper
 
   // Fail closed en production : un pepper dédié est obligatoire.
-  if (process.env.VERCEL_ENV === "production") {
+  if (process.env.VERCEL_ENV === "production" || process.env.NODE_ENV === "production") {
     throw new Error(
       "OTP_PEPPER manquant en production — refus de hacher un OTP avec un secret par défaut",
     )
@@ -51,6 +51,15 @@ function otpPepper(): string {
 
   // Hors production : fallback pour le développement local uniquement.
   return process.env.SUPABASE_SERVICE_ROLE_KEY || "gwa-dev-otp-pepper"
+}
+
+export function isOtpStoreReady(): boolean {
+  const production =
+    process.env.VERCEL_ENV === "production" || process.env.NODE_ENV === "production"
+  return (
+    !production ||
+    (hasUpstash() && Boolean(process.env.OTP_PEPPER?.trim()))
+  )
 }
 
 export function hashOtpCode(code: string): string {
@@ -99,6 +108,9 @@ export async function storeOtp(
   if (redis) {
     await redis.set(otpKey(phoneE164), data, { ex: ttlSeconds })
     return
+  }
+  if (process.env.VERCEL_ENV === "production" || process.env.NODE_ENV === "production") {
+    throw new Error("Persistent OTP storage is required in production")
   }
   memoryStore.set(otpKey(phoneE164), {
     ...data,

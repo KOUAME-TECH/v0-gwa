@@ -44,22 +44,37 @@ export function assertSameOrigin(request: Request): NextResponse | null {
     return NextResponse.json({ error: "Origine invalide" }, { status: 403 })
   }
 
-  const allowedHosts = new Set(
-    host
-      .split(",")
-      .map((h) => h.trim().toLowerCase())
-      .filter(Boolean),
-  )
-
-  // Preview / prod Vercel aliases
   const requestUrl = new URL(request.url)
-  allowedHosts.add(requestUrl.host.toLowerCase())
+  const forwardedProto = (request.headers.get("x-forwarded-proto") || requestUrl.protocol.replace(":", "")).split(",")[0].trim()
+  const forwardedHosts = [
+    ...host.split(","),
+    ...(request.headers.get("x-forwarded-host") || "").split(","),
+    requestUrl.host,
+  ]
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean)
+
+  // Trust only explicitly configured application origins plus the current request
+  // host. This supports the canonical domain, www redirects, and Vercel previews
+  // without accepting arbitrary origins from proxy headers.
+  const allowedOrigins = new Set<string>(
+    forwardedHosts.map((value) => `${forwardedProto}://${value}`),
+  )
+  for (const configuredUrl of [process.env.NEXT_PUBLIC_APP_URL, process.env.NEXT_PUBLIC_SITE_URL]) {
+    if (!configuredUrl) continue
+    try {
+      const configured = new URL(configuredUrl)
+      allowedOrigins.add(`${configured.protocol}//${configured.host}`.toLowerCase())
+    } catch {
+      // Ignore malformed optional configuration and keep the request-host fallback.
+    }
+  }
 
   const checkUrl = (raw: string | null): boolean => {
     if (!raw) return false
     try {
       const u = new URL(raw)
-      return allowedHosts.has(u.host.toLowerCase())
+      return allowedOrigins.has(`${u.protocol}//${u.host}`.toLowerCase())
     } catch {
       return false
     }

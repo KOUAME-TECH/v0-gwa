@@ -6,18 +6,15 @@ import {
   formatPhoneE164,
   validateWestAfricaPhone,
   maskPhone,
-  maskEmail,
 } from "@/lib/auth/phone"
 import {
   generateOtpCode,
   storeOtp,
   canSendOtp,
-  clearOtp,
+  isOtpStoreReady,
 } from "@/lib/auth/otp-store"
 import {
-  hasAfricasTalkingProvider,
   hasSmsProvider,
-  hasTwilioProvider,
   sendSmsOtp,
 } from "@/lib/auth/sms"
 
@@ -71,17 +68,6 @@ export async function POST(request: Request) {
       )
     }
 
-    if (!hasSmsProvider()) {
-      return NextResponse.json(
-        {
-          error:
-            "L'envoi de SMS est temporairement indisponible. Réessayez plus tard ou utilisez l'email.",
-          code: "SMS_PROVIDER_MISSING",
-        },
-        { status: 503 },
-      )
-    }
-
     const supabase = await createClient()
     const {
       data: { user: sessionUser },
@@ -98,8 +84,6 @@ export async function POST(request: Request) {
     let otpUserId: string
     let otpEmail: string
     let mode: "login" | "bind" | "register"
-    let accountHint: "existing" | "new" | "bind" = "new"
-
     if (sessionUser && intent === "bind") {
       // BIND — uniquement si l'utilisateur le demande explicitement (intent bind)
       if (
@@ -132,7 +116,6 @@ export async function POST(request: Request) {
         .trim()
         .toLowerCase()
       mode = "bind"
-      accountHint = "bind"
     } else if (profileByPhone) {
       // Compte existant (vérifié OU non) → toujours login, jamais bloqué
       otpUserId = profileByPhone.id
@@ -140,13 +123,11 @@ export async function POST(request: Request) {
         .trim()
         .toLowerCase()
       mode = "login"
-      accountHint = "existing"
     } else {
       // Numéro inconnu → inscription (login ou signup aboutissent au même OTP)
       otpUserId = "pending"
       otpEmail = ""
       mode = "register"
-      accountHint = "new"
     }
 
     // Session connectée sans intent bind : ne pas forcer bind ;
@@ -157,72 +138,27 @@ export async function POST(request: Request) {
 
     const linkedEmail = otpEmail
 
-    // Si Africa's Talking est configuré, on n'utilise PAS Supabase Phone en premier :
-    // Supabase peut répondre OK sans SMS réel (crédits AT jamais débités).
-    let supabasePhoneError: string | null = null
-    if (
-      mode === "login" &&
-      !hasTwilioProvider() &&
-      !hasAfricasTalkingProvider()
-    ) {
-      const { error: smsError } = await supabase.auth.signInWithOtp({
-        phone: formatted,
-        options: { shouldCreateUser: false },
-      })
-
-      if (!smsError) {
-        return NextResponse.json({
-          success: true,
-          phone: formatted,
-          masked_phone: maskPhone(formatted),
-          channel: "sms",
-          message: "Code SMS envoyé",
-          expires_in: 600,
-          resend_after: 60,
-          linked_email_masked: linkedEmail
-            ? maskEmail(linkedEmail)
-            : undefined,
-          otp_mode: "supabase",
-          account_hint: accountHint,
-          phone_verified: profileByPhone?.phone_verified === true,
-        })
-      }
-
-      supabasePhoneError = smsError.message
-      console.warn("[auth/send-otp] supabase phone:", smsError.message)
-    }
-
     // Login custom OTP : email synthétique OK si pas d'email réel
     // (évite de bloquer les comptes téléphone-only)
 
-    if (!hasSmsProvider() && mode !== "login") {
+    if (!hasSmsProvider()) {
       return NextResponse.json(
         {
           error:
             "L'envoi de SMS est temporairement indisponible. Réessayez plus tard ou utilisez l'email.",
-          code: "SMS_PROVIDER_MISSING",
+          code: "SMS_UNAVAILABLE",
         },
         { status: 503 },
       )
     }
 
-    if (mode === "login" && !hasSmsProvider()) {
+    if (!isOtpStoreReady()) {
       return NextResponse.json(
         {
-          error:
-            "Impossible d'envoyer le SMS pour le moment. Réessayez plus tard.",
-          code: "SMS_SEND_FAILED",
-          hint: [
-            supabasePhoneError
-              ? `supabase:${supabasePhoneError.slice(0, 80)}`
-              : null,
-            "sms_provider:missing",
-            "twilio_vercel:missing",
-          ]
-            .filter(Boolean)
-            .join(" | "),
+          error: "Le stockage sécurisé des codes SMS n'est pas configuré.",
+          code: "OTP_STORAGE_NOT_CONFIGURED",
         },
-        { status: 502 },
+        { status: 503 },
       )
     }
 
@@ -247,49 +183,12 @@ export async function POST(request: Request) {
 
     const sms = await sendSmsOtp(formatted, code)
     if (!sms.success) {
-      console.error("[auth/send-otp] sms", sms.error)
-      // Pas de fallback Supabase Phone si AT est le provider choisi :
-      // sinon l'UI dit « envoyé » alors que le SMS n'arrive jamais.
-      if (mode === "login" && !hasAfricasTalkingProvider()) {
-        const { error: smsError } = await supabase.auth.signInWithOtp({
-          phone: formatted,
-          options: { shouldCreateUser: false },
-        })
-        if (!smsError) {
-          await clearOtp(formatted).catch(() => {})
-          return NextResponse.json({
-            success: true,
-            phone: formatted,
-            masked_phone: maskPhone(formatted),
-            channel: "sms",
-            message: "Code SMS envoyé",
-            expires_in: 600,
-            resend_after: 60,
-            linked_email_masked: linkedEmail
-              ? maskEmail(linkedEmail)
-              : undefined,
-            otp_mode: "supabase_fallback",
-            account_hint: accountHint,
-          })
-        }
-        supabasePhoneError = smsError.message
-        console.warn("[auth/send-otp] supabase fallback:", smsError.message)
-      }
-      const hintParts = [
-        sms.provider
-          ? `${sms.provider}:${(sms.error || "fail").slice(0, 120)}`
-          : null,
-        supabasePhoneError
-          ? `supabase:${supabasePhoneError.slice(0, 80)}`
-          : null,
-        !hasTwilioProvider() ? "twilio_vercel:missing" : null,
-      ].filter(Boolean)
+      console.error("[auth/send-otp] SMS provider rejected OTP", sms.provider || "unknown")
       return NextResponse.json(
         {
           error:
             "Impossible d'envoyer le SMS pour le moment. Réessayez plus tard.",
-          code: "SMS_SEND_FAILED",
-          hint: hintParts.join(" | ") || undefined,
+          code: "SMS_UNAVAILABLE",
         },
         { status: 502 },
       )
@@ -304,10 +203,6 @@ export async function POST(request: Request) {
       message: "Code SMS envoyé",
       expires_in: 600,
       resend_after: 60,
-      linked_email_masked: linkedEmail ? maskEmail(linkedEmail) : undefined,
-      otp_mode: mode,
-      account_hint: accountHint,
-      phone_verified: profileByPhone?.phone_verified === true,
       ...(sms.warning ? { delivery_warning: sms.warning } : {}),
     })
   } catch (err) {
