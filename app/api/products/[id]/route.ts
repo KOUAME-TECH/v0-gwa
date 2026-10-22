@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
+import { isAgriculturalProductType } from "@/lib/catalog/scope"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -12,6 +13,7 @@ export async function GET(_request: NextRequest, context: Ctx) {
       .from("products")
       .select("*")
       .eq("id", id)
+      .eq("product_type", "agriculture")
       .maybeSingle()
 
     if (error) {
@@ -52,18 +54,30 @@ export async function PATCH(request: NextRequest, context: Ctx) {
 
     const { data: existing } = await supabase
       .from("products")
-      .select("id, seller_id")
+      .select("id, seller_id, product_type")
       .eq("id", id)
       .maybeSingle()
 
     if (!existing) {
       return NextResponse.json({ error: "Produit introuvable" }, { status: 404 })
     }
+    if (!isAgriculturalProductType(existing.product_type)) {
+      return NextResponse.json({ error: "Produit hors périmètre", code: "OUT_OF_SCOPE" }, { status: 404 })
+    }
     if (existing.seller_id !== user.id) {
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 })
     }
 
     const body = await request.json()
+    if (
+      body?.product_type !== undefined &&
+      !isAgriculturalProductType(body.product_type)
+    ) {
+      return NextResponse.json(
+        { error: "Seuls les produits agricoles sont autorisés", code: "OUT_OF_SCOPE" },
+        { status: 400 },
+      )
+    }
     const allowed = [
       "name",
       "description",
@@ -71,7 +85,6 @@ export async function PATCH(request: NextRequest, context: Ctx) {
       "unit",
       "stock_quantity",
       "category_id",
-      "product_type",
       "images",
       "video_url",
       "audio_url",

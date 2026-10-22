@@ -12,6 +12,12 @@ import {
   getOneSignalAppId,
   getOneSignalRestApiKey,
 } from '@/lib/notifications/onesignal-config'
+import { isOtpStoreReady } from '@/lib/auth/otp-store'
+import {
+  resolveGeniusPayCredentials,
+  resolveGeniusPayWebhookSecret,
+  type GeniusPayEnvironment,
+} from '@/lib/payment/geniuspay'
 
 export const dynamic = 'force-dynamic'
 
@@ -68,6 +74,7 @@ export async function GET() {
       OTP_PEPPER: otpPepper,
       CRON_SECRET: cronSecret,
       SMS_PROVIDER: smsConfigured,
+      OTP_STORAGE: isOtpStoreReady(),
       SMS_AT: atKey,
       SMS_AT_USERNAME_LIVE: atLive,
       SMS_AT_SENDER_ID: atSender,

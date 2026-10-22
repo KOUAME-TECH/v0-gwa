@@ -25,13 +25,20 @@ export async function POST(request: Request) {
       )
     }
 
+    const isOwnedKycPath = (value: unknown, prefix: string) =>
+      typeof value === "string" &&
+      value.startsWith(`${user.id}/${prefix}-`) &&
+      !value.includes("..") &&
+      !value.includes("\\") &&
+      !value.includes("?") &&
+      !value.includes("#")
     const hasId = documents.some(
       (d: { type?: string; url?: string }) =>
-        d?.type === "id_document" && typeof d.url === "string",
+        d?.type === "id_document" && isOwnedKycPath(d.url, "kyc-id"),
     )
     const hasSelfie = documents.some(
       (d: { type?: string; url?: string }) =>
-        d?.type === "selfie" && typeof d.url === "string",
+        d?.type === "selfie" && isOwnedKycPath(d.url, "kyc-selfie"),
     )
     if (!hasId || !hasSelfie) {
       return NextResponse.json(

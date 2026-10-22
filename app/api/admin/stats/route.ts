@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { requireAdminSection } from "@/lib/auth/require-admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
+import { resolveGeniusPayCredentials } from "@/lib/payment/geniuspay"
 
 /** GET /api/admin/stats — compteurs dashboard (service role) */
 export async function GET() {
