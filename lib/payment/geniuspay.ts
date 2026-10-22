@@ -40,8 +40,14 @@ export async function resolveGeniusPayWebhookSecret() {
   return resolvePlatformSecret("GENIUSPAY_WEBHOOK_SECRET")
 }
 
-export async function isGeniusPayConfigured() {
-  return Boolean(await resolveGeniusPayCredentials())
+export function getGeniusPayMode(): GeniusPayEnvironment {
+  return process.env.GENIUSPAY_MODE === "sandbox" ? "sandbox" : "live"
+}
+
+export async function isGeniusPayConfigured(
+  mode: GeniusPayEnvironment = getGeniusPayMode(),
+) {
+  return Boolean(await resolveGeniusPayCredentials(mode))
 }
 
 async function request(path: string, init: RequestInit, mode: GeniusPayEnvironment = "live") {
@@ -73,18 +79,26 @@ export async function createGeniusPayCheckout(input: {
   errorUrl?: string
 }) {
   try {
-    const result = await request("/payments", {
-      method: "POST",
-      body: JSON.stringify({
-        amount: input.amount,
-        currency: "XOF",
-        description: input.description,
-        customer: input.customer,
-        successUrl: input.successUrl,
-        errorUrl: input.errorUrl,
-        metadata: { order_id: input.orderId, user_id: input.userId, ...(input.metadata ?? {}) },
-      }),
-    })
+    const result = await request(
+      "/payments",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          amount: input.amount,
+          currency: "XOF",
+          description: input.description,
+          customer: input.customer,
+          success_url: input.successUrl,
+          error_url: input.errorUrl,
+          metadata: {
+            order_id: input.orderId,
+            user_id: input.userId,
+            ...(input.metadata ?? {}),
+          },
+        }),
+      },
+      getGeniusPayMode(),
+    )
     const data = result.data
     if (!data?.reference) return { ok: false as const, error: "GENIUSPAY_REFERENCE_MISSING" }
     return {
@@ -107,7 +121,10 @@ export async function createGeniusPayPayment(input: Parameters<typeof createGeni
   return result.data
 }
 
-export async function getGeniusPayPayment(reference: string, mode: GeniusPayEnvironment = "live") {
+export async function getGeniusPayPayment(
+  reference: string,
+  mode: GeniusPayEnvironment = getGeniusPayMode(),
+) {
   try {
     const result = await request(`/payments/${encodeURIComponent(reference)}`, { method: "GET" }, mode)
     const data = result.data
