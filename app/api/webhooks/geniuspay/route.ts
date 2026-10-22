@@ -1,10 +1,14 @@
-import { createHmac, timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { resolveGeniusPayWebhookSecret } from "@/lib/payment/geniuspay";
+import {
+  isGeniusPayWebhookEnvelopeConsistent,
+  isGeniusPayWebhookTimestampFresh,
+  verifyGeniusPayWebhookSignature,
+} from "@/lib/payment/geniuspay-webhook-validation";
 
 export async function POST(request: Request) {
-  const { resolvePlatformSecret } = await import("@/lib/ops/platform-secrets");
-  const secret = await resolvePlatformSecret("GENIUSPAY_WEBHOOK_SECRET");
+  const secret = await resolveGeniusPayWebhookSecret();
   if (!secret)
     return NextResponse.json(
       { error: "Webhook non configuré" },
@@ -13,20 +17,42 @@ export async function POST(request: Request) {
   const raw = await request.text();
   const signature = request.headers.get("x-webhook-signature") || "";
   const timestamp = request.headers.get("x-webhook-timestamp") || "";
-  if (
-    !signature ||
-    !/^\d+$/.test(timestamp) ||
-    Math.abs(Date.now() / 1000 - Number(timestamp)) > 300
-  )
+  const event = request.headers.get("x-webhook-event") || "";
+  if (!signature || !isGeniusPayWebhookTimestampFresh(timestamp))
     return NextResponse.json({ error: "Webhook invalide" }, { status: 401 });
-  const expected = createHmac("sha256", secret)
-    .update(`${timestamp}.${raw}`)
-    .digest("hex");
-  const a = Buffer.from(expected);
-  const b = Buffer.from(signature.replace(/^sha256=/i, "").trim());
-  if (a.length !== b.length || !timingSafeEqual(a, b))
+  let payload: Record<string, any>;
+  try {
+    payload = JSON.parse(raw) as Record<string, any>;
+  } catch {
+    return NextResponse.json({ error: "Payload invalide" }, { status: 400 });
+  }
+  if (
+    !verifyGeniusPayWebhookSignature({
+      timestamp,
+      payload,
+      signature: signature.replace(/^sha256=/i, "").trim(),
+      secret,
+    })
+  )
     return NextResponse.json({ error: "Signature invalide" }, { status: 401 });
-  const payload = JSON.parse(raw) as Record<string, any>;
+  const payloadEvent = String(payload.event || payload.type || "");
+  const environment = String(payload.environment || "live");
+  if (
+    event &&
+    !isGeniusPayWebhookEnvelopeConsistent(payload, event, environment)
+  )
+    return NextResponse.json(
+      { error: "Événement webhook invalide" },
+      { status: 400 },
+    );
+  const deliveryId = String(
+    payload.id || payload.event_id || payload.data?.id || "",
+  );
+  if (!deliveryId)
+    return NextResponse.json(
+      { error: "Identifiant webhook manquant" },
+      { status: 400 },
+    );
   const reference = String(payload.reference || payload.data?.reference || "");
   const status = String(
     payload.status || payload.data?.status || "",
@@ -35,6 +61,14 @@ export async function POST(request: Request) {
   if (!reference)
     return NextResponse.json({ error: "reference manquante" }, { status: 400 });
   const admin = createAdminClient();
+  const { data: alreadyProcessed } = await admin
+    .from("order_audit_log")
+    .select("id")
+    .eq("action", "geniuspay_webhook_paid")
+    .eq("notes", `delivery_id=${deliveryId}`)
+    .maybeSingle();
+  if (alreadyProcessed)
+    return NextResponse.json({ received: true, duplicate: true });
   const { data: order } = await admin
     .from("orders")
     .select("id,total_amount,payment_status,escrow_status")
@@ -58,15 +92,13 @@ export async function POST(request: Request) {
         .from("escrow_transactions")
         .update({ status: "held", paid_at: new Date().toISOString() })
         .eq("order_id", order.id);
-      await admin
-        .from("order_audit_log")
-        .insert({
-          order_id: order.id,
-          performed_by: null,
-          action: "geniuspay_webhook_paid",
-          new_value: "held",
-          notes: `reference=${reference}`,
-        });
+      await admin.from("order_audit_log").insert({
+        order_id: order.id,
+        performed_by: null,
+        action: "geniuspay_webhook_paid",
+        new_value: "held",
+        notes: `reference=${reference};delivery_id=${deliveryId};event=${payloadEvent || "unknown"}`,
+      });
     }
   }
   return NextResponse.json({ received: true, matched: true });

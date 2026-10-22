@@ -1,58 +1,69 @@
-import "server-only"
+import "server-only";
 
-const BASE_URL = "https://geniuspay.ci/api/v1/merchant"
+const BASE_URL = "https://geniuspay.ci/api/v1/merchant";
 
 type GeniusPayResponse = {
-  success?: boolean
+  success?: boolean;
   data?: {
-    id?: number | string
-    reference?: string
-    amount?: number
-    currency?: string
-    status?: string
-    checkout_url?: string
-    payment_url?: string
-    metadata?: Record<string, unknown>
-  }
-  error?: { code?: string; message?: string }
-}
+    id?: number | string;
+    reference?: string;
+    amount?: number;
+    currency?: string;
+    status?: string;
+    checkout_url?: string;
+    payment_url?: string;
+    metadata?: Record<string, unknown>;
+  };
+  error?: { code?: string; message?: string };
+};
 
-export type GeniusPayEnvironment = "live" | "sandbox"
-export type GeniusPayPayment = NonNullable<GeniusPayResponse["data"]>
+export type GeniusPayEnvironment = "live" | "sandbox";
+export type GeniusPayPayment = NonNullable<GeniusPayResponse["data"]>;
 
-export async function resolveGeniusPayCredentials(mode: GeniusPayEnvironment = "live") {
-  const suffix = mode === "sandbox" ? "_SANDBOX" : ""
-  const key = process.env[`GENIUSPAY_API_KEY${suffix}`]
-  const secret = process.env[`GENIUSPAY_API_SECRET${suffix}`]
-  if (key && secret) return { key, secret }
-  const { resolvePlatformSecret } = await import("@/lib/ops/platform-secrets")
+export async function resolveGeniusPayCredentials(
+  mode: GeniusPayEnvironment = "live",
+) {
+  const suffix = mode === "sandbox" ? "_SANDBOX" : "";
+  const key =
+    process.env[`GENIUSPAY_API_KEY${suffix}`] || process.env.X_API_Key;
+  const secret =
+    process.env[`GENIUSPAY_API_SECRET${suffix}`] || process.env.X_API_Secret;
+  if (key && secret) return { key, secret };
+  const { resolvePlatformSecret } = await import("@/lib/ops/platform-secrets");
   const [platformKey, platformSecret] = await Promise.all([
     resolvePlatformSecret(`GENIUSPAY_API_KEY${suffix}`),
     resolvePlatformSecret(`GENIUSPAY_API_SECRET${suffix}`),
-  ])
-  return platformKey && platformSecret ? { key: platformKey, secret: platformSecret } : null
+  ]);
+  return platformKey && platformSecret
+    ? { key: platformKey, secret: platformSecret }
+    : null;
 }
 
 export async function resolveGeniusPayWebhookSecret() {
-  const value = process.env.GENIUSPAY_WEBHOOK_SECRET
-  if (value) return value
-  const { resolvePlatformSecret } = await import("@/lib/ops/platform-secrets")
-  return resolvePlatformSecret("GENIUSPAY_WEBHOOK_SECRET")
+  const value =
+    process.env.GENIUSPAY_WEBHOOK_SECRET || process.env.X_Webhook_Secret;
+  if (value) return value;
+  const { resolvePlatformSecret } = await import("@/lib/ops/platform-secrets");
+  return resolvePlatformSecret("GENIUSPAY_WEBHOOK_SECRET");
 }
 
 export function getGeniusPayMode(): GeniusPayEnvironment {
-  return process.env.GENIUSPAY_MODE === "sandbox" ? "sandbox" : "live"
+  return process.env.GENIUSPAY_MODE === "sandbox" ? "sandbox" : "live";
 }
 
 export async function isGeniusPayConfigured(
   mode: GeniusPayEnvironment = getGeniusPayMode(),
 ) {
-  return Boolean(await resolveGeniusPayCredentials(mode))
+  return Boolean(await resolveGeniusPayCredentials(mode));
 }
 
-async function request(path: string, init: RequestInit, mode: GeniusPayEnvironment = "live") {
-  const auth = await resolveGeniusPayCredentials(mode)
-  if (!auth) throw new Error("GENIUSPAY_NOT_CONFIGURED")
+async function request(
+  path: string,
+  init: RequestInit,
+  mode: GeniusPayEnvironment = "live",
+) {
+  const auth = await resolveGeniusPayCredentials(mode);
+  if (!auth) throw new Error("GENIUSPAY_NOT_CONFIGURED");
   const response = await fetch(`${BASE_URL}${path}`, {
     ...init,
     headers: {
@@ -62,21 +73,27 @@ async function request(path: string, init: RequestInit, mode: GeniusPayEnvironme
       ...(init.headers || {}),
     },
     cache: "no-store",
-  })
-  const body = (await response.json().catch(() => ({}))) as GeniusPayResponse
-  if (!response.ok || body.success === false) throw new Error(body.error?.code || `GENIUSPAY_HTTP_${response.status}`)
-  return body
+  });
+  const body = (await response.json().catch(() => ({}))) as GeniusPayResponse;
+  if (!response.ok || body.success === false)
+    throw new Error(body.error?.code || `GENIUSPAY_HTTP_${response.status}`);
+  return body;
 }
 
 export async function createGeniusPayCheckout(input: {
-  amount: number
-  orderId: string
-  userId: string
-  description: string
-  customer?: { name?: string; email?: string; phone?: string; country?: string }
-  metadata?: Record<string, string | number>
-  successUrl?: string
-  errorUrl?: string
+  amount: number;
+  orderId: string;
+  userId: string;
+  description: string;
+  customer?: {
+    name?: string;
+    email?: string;
+    phone?: string;
+    country?: string;
+  };
+  metadata?: Record<string, string | number>;
+  successUrl?: string;
+  errorUrl?: string;
 }) {
   try {
     const result = await request(
@@ -98,9 +115,10 @@ export async function createGeniusPayCheckout(input: {
         }),
       },
       getGeniusPayMode(),
-    )
-    const data = result.data
-    if (!data?.reference) return { ok: false as const, error: "GENIUSPAY_REFERENCE_MISSING" }
+    );
+    const data = result.data;
+    if (!data?.reference)
+      return { ok: false as const, error: "GENIUSPAY_REFERENCE_MISSING" };
     return {
       ok: true as const,
       data: {
@@ -109,16 +127,22 @@ export async function createGeniusPayCheckout(input: {
         checkout_url: data.checkout_url,
         payment_url: data.payment_url,
       },
-    }
+    };
   } catch (error) {
-    return { ok: false as const, error: error instanceof Error ? error.message : "GENIUSPAY_REQUEST_FAILED" }
+    return {
+      ok: false as const,
+      error:
+        error instanceof Error ? error.message : "GENIUSPAY_REQUEST_FAILED",
+    };
   }
 }
 
-export async function createGeniusPayPayment(input: Parameters<typeof createGeniusPayCheckout>[0]) {
-  const result = await createGeniusPayCheckout(input)
-  if (!result.ok) throw new Error(result.error)
-  return result.data
+export async function createGeniusPayPayment(
+  input: Parameters<typeof createGeniusPayCheckout>[0],
+) {
+  const result = await createGeniusPayCheckout(input);
+  if (!result.ok) throw new Error(result.error);
+  return result.data;
 }
 
 export async function getGeniusPayPayment(
@@ -126,11 +150,20 @@ export async function getGeniusPayPayment(
   mode: GeniusPayEnvironment = getGeniusPayMode(),
 ) {
   try {
-    const result = await request(`/payments/${encodeURIComponent(reference)}`, { method: "GET" }, mode)
-    const data = result.data
-    if (!data?.currency || !data.reference) return { ok: false as const, error: "GENIUSPAY_INVALID_STATUS_RESPONSE" }
-    return { ok: true as const, data }
+    const result = await request(
+      `/payments/${encodeURIComponent(reference)}`,
+      { method: "GET" },
+      mode,
+    );
+    const data = result.data;
+    if (!data?.currency || !data.reference)
+      return { ok: false as const, error: "GENIUSPAY_INVALID_STATUS_RESPONSE" };
+    return { ok: true as const, data };
   } catch (error) {
-    return { ok: false as const, error: error instanceof Error ? error.message : "GENIUSPAY_REQUEST_FAILED" }
+    return {
+      ok: false as const,
+      error:
+        error instanceof Error ? error.message : "GENIUSPAY_REQUEST_FAILED",
+    };
   }
 }
