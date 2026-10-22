@@ -278,7 +278,7 @@ export async function submitFeedComment(
   let voiceStored = !!audioUrl
   let data: Record<string, unknown> | null = null
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   let res = await (supabase.from(table) as any)
     .insert(richInsert)
     .select(richSelect)

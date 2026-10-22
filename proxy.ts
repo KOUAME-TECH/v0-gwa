@@ -16,7 +16,7 @@ function isCsrfExempt(pathname: string): boolean {
   return CSRF_EXEMPT_PREFIXES.some((p) => pathname.startsWith(p))
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
   const method = request.method.toUpperCase()
 
@@ -87,8 +87,6 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Node.js required for anonymous/temporary Vercel deploys (Edge blocked there).
-  runtime: "nodejs",
   matcher: [
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],

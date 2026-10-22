@@ -36,6 +36,7 @@ export async function sendDirectSMS(phone: string, message: string): Promise<voi
   }
 }
 
+ 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function sendSMSFallback(userId: string, supabase: any, message: string): Promise<void> {
   try {

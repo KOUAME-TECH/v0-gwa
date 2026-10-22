@@ -121,5 +121,9 @@ export default withSentryConfig(nextConfig, {
   project: 'gwa-web',
   hideSourceMaps: true,
   widenClientFileUpload: true,
-  disableLogger: true,
+  webpack: {
+    treeshake: {
+      removeDebugLogging: true,
+    },
+  },
 })
