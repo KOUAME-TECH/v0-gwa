@@ -46,14 +46,32 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   const deliveryId = String(
-    payload.id || payload.event_id || payload.data?.id || "",
+    payload.id ||
+      payload.event_id ||
+      payload.webhook_id ||
+      payload.data?.id ||
+      payload.data?.event_id ||
+      `${event || "unknown"}:${timestamp}:${raw.length}`,
   );
   if (!deliveryId)
     return NextResponse.json(
       { error: "Identifiant webhook manquant" },
       { status: 400 },
     );
-  const reference = String(payload.reference || payload.data?.reference || "");
+  const reference = String(
+    payload.reference ||
+      payload.transaction_reference ||
+      payload.reference_id ||
+      payload.data?.reference ||
+      payload.data?.transaction_reference ||
+      payload.data?.reference_id ||
+      payload.data?.payment?.reference ||
+      payload.payment?.reference ||
+      payload.transaction?.reference ||
+      payload.metadata?.reference ||
+      payload.data?.metadata?.reference ||
+      "",
+  );
   const status = String(
     payload.status || payload.data?.status || "",
   ).toLowerCase();
