@@ -100,23 +100,3 @@ export const REGIONS_CI = [
 ] as const
 
 export const ZONES_CI = REGIONS_CI
-
-// ─── Rate limit OTP en mémoire (backup middleware) ───────────────────────────
-const OTP_ATTEMPTS = new Map<string, { count: number; resetAt: number }>()
-
-export function checkOtpRateLimit(phone: string): { allowed: boolean; waitSeconds: number } {
-  const key = `otp:${phone}`
-  const now = Date.now()
-  const entry = OTP_ATTEMPTS.get(key)
-
-  if (entry && now < entry.resetAt) {
-    if (entry.count >= 5) {
-      return { allowed: false, waitSeconds: Math.ceil((entry.resetAt - now) / 1000) }
-    }
-    entry.count++
-  } else {
-    OTP_ATTEMPTS.set(key, { count: 1, resetAt: now + 15 * 60 * 1000 }) // 15 min
-  }
-
-  return { allowed: true, waitSeconds: 0 }
-}
