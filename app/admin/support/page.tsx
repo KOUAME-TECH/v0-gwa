@@ -80,7 +80,7 @@ export default function AdminSupportPage() {
 
   useEffect(() => {
     void load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [filterStatus])
 
   const updateStatus = async (status: string) => {

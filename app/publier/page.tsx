@@ -163,7 +163,7 @@ export default function PublierPage() {
       if (video) URL.revokeObjectURL(video.url)
       if (audio) URL.revokeObjectURL(audio.url)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [])
 
   const resetMedia = () => {

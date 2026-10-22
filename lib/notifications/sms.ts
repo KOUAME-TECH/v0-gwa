@@ -1,7 +1,7 @@
 /**
  * GWA — F5 SMS fallback via Africa's Talking
  */
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+ 
 const AfricasTalking = require('africastalking')
 
 function getATClient() {
@@ -37,7 +37,7 @@ export async function sendDirectSMS(phone: string, message: string): Promise<voi
 }
 
  
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 export async function sendSMSFallback(userId: string, supabase: any, message: string): Promise<void> {
   try {
     const { data: profile } = await supabase

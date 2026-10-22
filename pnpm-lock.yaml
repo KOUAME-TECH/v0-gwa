@@ -7,7 +7,7 @@ settings:
 overrides:
   axios: 1.20.0
   follow-redirects: 1.16.1
-  joi: 18.2.6
+  joi: 18.2.9
   lodash: 4.18.1
   ws: 8.21.0
   fast-uri: 3.1.7
@@ -184,6 +184,9 @@ importers:
       postcss:
         specifier: 8.5.18
         version: 8.5.18
+      prettier:
+        specifier: 3.6.2
+        version: 3.6.2
       tailwindcss:
         specifier: ^4.1.9
         version: 4.2.1
@@ -2205,8 +2208,8 @@ packages:
   brace-expansion@1.1.21:
     resolution: {integrity: sha512-9zeA+KLZNNzglF2TPKRQEDyx6Yby7daAkuy8MiPzpXPsYDWi/DRM8jmwUDxokQjYqBpv5DgPiwD4h4ZZSy1Ujw==}
 
-  brace-expansion@5.0.11:
-    resolution: {integrity: sha512-awigjhi6cLTh90bdw6+QJ9CtmJmyYhEIi70iCbc8Rozn04Fw9FeQIBjv/E22FFGuCGx1bLJyUfB64x/szUSXUg==}
+  brace-expansion@5.0.12:
+    resolution: {integrity: sha512-YovQ3rzhaLMIrDjNDMkNS01tea93qhEhG5xy8f6+R0l+dw3Ki+5sCoIoI942iuLZTHWogWktgwVDhU09iNEimQ==}
     engines: {node: 20 || >=22}
 
   braces@3.0.3:
@@ -3004,8 +3007,8 @@ packages:
     resolution: {integrity: sha512-ekilCSN1jwRvIbgeg/57YFh8qQDNbwDb9xT/qu2DAHbFFZUicIl4ygVaAvzveMhMVr3LnpSKTNnwt8PoOfmKhQ==}
     hasBin: true
 
-  joi@18.2.6:
-    resolution: {integrity: sha512-8MD5jy4xIcTQi/pHbc10auxclVoJS3pPNiLaTNfW0eh90GbOPU+Y2AjDQnuQsUcHUGNJxqTMmAW6Ho895RaKPA==}
+  joi@18.2.9:
+    resolution: {integrity: sha512-2mD929bUVKUhOLQQEVhlf6EZ0Mlo0DeRb5MO7cViR9AXLtBauuccEtB1py9Ocxpo/P7ucnh442iY/iOwrh3IQw==}
     engines: {node: '>= 20'}
 
   js-tokens@4.0.0:
@@ -3575,6 +3578,11 @@ packages:
   prelude-ls@1.2.1:
     resolution: {integrity: sha512-vkcDPrRZo1QZLbn5RLGPpg/WmIQ65qoWWhcGKf/b5eplkkarX0m9z8ppCat4mlOqUsWpyNuYgO3VRyrYHSzX5g==}
     engines: {node: '>= 0.8.0'}
+
+  prettier@3.6.2:
+    resolution: {integrity: sha512-I7AIg5boAr5R0FFtJ6rCfD+LFsWHp81dolrFD8S79U9tb8Az2nGrJncnMSnys+bpQJfRUzqs9hnA81OAA3hCuQ==}
+    engines: {node: '>=14'}
+    hasBin: true
 
   progress@2.0.3:
     resolution: {integrity: sha512-7PiHtLll5LdnKIMw100I+8xJXR5gW2QwWYkT6iJva0bXitZKa/XMrSbdmg3r2Xnaidz9Qumd0VPaMrZlF9V9sA==}
@@ -6036,7 +6044,7 @@ snapshots:
     dependencies:
       axios: 1.20.0
       google-libphonenumber: 3.2.44
-      joi: 18.2.6
+      joi: 18.2.9
       lodash: 4.18.1
     transitivePeerDependencies:
       - debug
@@ -6198,7 +6206,7 @@ snapshots:
       balanced-match: 1.0.2
       concat-map: 0.0.1
 
-  brace-expansion@5.0.11:
+  brace-expansion@5.0.12:
     dependencies:
       balanced-match: 4.0.4
 
@@ -7120,7 +7128,7 @@ snapshots:
 
   jiti@2.6.1: {}
 
-  joi@18.2.6:
+  joi@18.2.9:
     dependencies:
       '@hapi/address': 5.1.1
       '@hapi/formula': 3.0.2
@@ -7323,7 +7331,7 @@ snapshots:
 
   minimatch@10.2.5:
     dependencies:
-      brace-expansion: 5.0.11
+      brace-expansion: 5.0.12
 
   minimatch@3.1.5:
     dependencies:
@@ -7571,6 +7579,8 @@ snapshots:
   postgres-range@1.1.4: {}
 
   prelude-ls@1.2.1: {}
+
+  prettier@3.6.2: {}
 
   progress@2.0.3: {}
 

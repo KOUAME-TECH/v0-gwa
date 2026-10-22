@@ -115,7 +115,7 @@ function MessagesContent() {
         unread_count: unreadMap.get(c.id) || 0,
       }
     })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [])
 
   useEffect(() => {
@@ -244,7 +244,7 @@ function MessagesContent() {
       }
     }
     openOrCreate()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [user, recipientId, loading])
 
   if (loading) {

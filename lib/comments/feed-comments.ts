@@ -83,7 +83,7 @@ export async function loadFeedComments(
       ? "id, content, created_at, author_id, parent_comment_id, likes_count"
       : "id, comment, created_at, reviewer_id, parent_review_id, likes_count"
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   let res: any = await (supabase.from(table) as any)
     .select(voiceSelect)
     .eq(idField, target.id)

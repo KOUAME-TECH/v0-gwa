@@ -69,7 +69,7 @@ export function LocationMapCard({
           referrerPolicy="no-referrer-when-downgrade"
         />
         {/* Fallback image sous l'iframe (si iframe vide / lente) */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
+        { }
         <img
           src={imgUrl}
           alt=""

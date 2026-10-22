@@ -222,7 +222,7 @@ export function useRealtimeLocation(options: Options = {}) {
   useEffect(() => {
     if (!auto) return
     void request()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- auto once on mount
+     
   }, [auto])
 
   useEffect(() => {
