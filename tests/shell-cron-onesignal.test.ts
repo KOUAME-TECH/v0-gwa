@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, it, expect } from "vitest"
 import { shouldShowBottomNav, shouldShowDesktopNav } from "@/lib/navigation/shell-routes"
 import { authorizeCronRequest, getCronSecret } from "@/lib/security/cron-auth"

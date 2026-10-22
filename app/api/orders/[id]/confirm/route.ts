@@ -78,6 +78,11 @@ export async function POST(request: NextRequest, context: Ctx) {
     let payoutNetwork: string | null = null
     let payoutError: string | null = null
 
+    const { data: sellerProfile } = await supabase
+      .from("profiles")
+      .select("phone")
+      .eq("id", order.seller_id)
+      .maybeSingle()
     const sellerPhone = String(sellerProfile?.phone || "").trim()
     const network = mapPaymentMethodToNetwork(
       order.payment_method || order.payout_network || "orange",
@@ -94,6 +99,7 @@ export async function POST(request: NextRequest, context: Ctx) {
       payoutError = "GENIUSPAY_PAYOUT_REQUIRES_OPERATIONS_APPROVAL"
     }
 
+    const payoutNotRequired = payoutAmount <= 0
     const payoutOk =
       payoutStatus === "paid" ||
       payoutStatus === "skipped_sim" ||

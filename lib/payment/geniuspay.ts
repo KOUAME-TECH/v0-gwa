@@ -68,6 +68,7 @@ export async function createGeniusPayCheckout(input: {
   userId: string
   description: string
   customer?: { name?: string; email?: string; phone?: string; country?: string }
+  metadata?: Record<string, string | number>
   successUrl?: string
   errorUrl?: string
 }) {
@@ -81,7 +82,7 @@ export async function createGeniusPayCheckout(input: {
         customer: input.customer,
         successUrl: input.successUrl,
         errorUrl: input.errorUrl,
-        metadata: { order_id: input.orderId, user_id: input.userId },
+        metadata: { order_id: input.orderId, user_id: input.userId, ...(input.metadata ?? {}) },
       }),
     })
     const data = result.data

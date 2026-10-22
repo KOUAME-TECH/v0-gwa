@@ -76,8 +76,13 @@ export async function POST(_request: NextRequest, context: Ctx) {
     }
 
     const payment = result.data
+    if (!payment.reference || !payment.currency || !payment.status || payment.amount == null) {
+      return NextResponse.json({ error: "Réponse GeniusPay invalide" }, { status: 502 })
+    }
     if (
-      !isGeniusPayPaymentForOrder(payment, {
+      !isGeniusPayPaymentForOrder(
+        payment as unknown as Parameters<typeof isGeniusPayPaymentForOrder>[0],
+        {
         id: order.id,
         userId: order.buyer_id,
         totalAmount: Math.round(Number(order.total_amount)),

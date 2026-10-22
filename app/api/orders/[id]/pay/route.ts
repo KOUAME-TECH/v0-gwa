@@ -43,6 +43,8 @@ export async function POST(request: NextRequest, context: Ctx) {
     if (await isGeniusPayConfigured()) {
       const payment = await createGeniusPayPayment({
         amount,
+        orderId: id,
+        userId: user.id,
         description: `Commande ${order.order_number}`,
         customer: { name: buyerProfile?.full_name || undefined, email: buyerProfile?.email || user.email || undefined, phone, country: "CI" },
         metadata: { order_id: id, order_number: order.order_number },

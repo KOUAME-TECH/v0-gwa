@@ -495,7 +495,7 @@ export default function AdminDisputesPage() {
                               ].join("\n")}
                               onDraft={(draft) => {
                                 setResolution(draft)
-                                if (!newStatus || newStatus === "open") {
+                                if (!newStatus) {
                                   setNewStatus("under_review")
                                 }
                               }}

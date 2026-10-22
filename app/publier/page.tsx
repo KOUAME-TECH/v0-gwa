@@ -890,6 +890,8 @@ export default function PublierPage() {
                 stock_quantity: "",
                 category_id: "",
                 product_type: "agriculture",
+                ville: "",
+                origin_country: "Côte d'Ivoire",
               })
             }}
             className="p-2 -ml-2"

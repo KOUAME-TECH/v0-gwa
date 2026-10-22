@@ -68,7 +68,7 @@ export async function POST(
         description,
         evidence_urls: photo_urls,
         status: "open",
-      }).then(() => null).catch(() => null)
+      }).then(() => null)
 
       // Log audit
       await supabase.from("order_audit_log").insert({
@@ -76,10 +76,10 @@ export async function POST(
         action: "litige_opened",
         new_value: JSON.stringify({ description, photo_count: photo_urls.length }),
         performed_by: user.id,
-      }).then(() => null).catch(() => null)
+      }).then(() => null)
 
       // Notifier vendeur
-      await sendPushNotification(order.seller_id, {
+await sendPushNotification({ externalUserIds: [order.seller_id],
         title: "⚠️ Litige ouvert",
         body: `Commande ${order.order_number} : l'acheteur a ouvert un litige. Les fonds sont gelés.`,
         data: { type: "order_status", order_id: orderId },
@@ -92,7 +92,7 @@ export async function POST(
         title: "Litige ouvert",
         body: `Commande ${order.order_number} — litige signalé par l'acheteur.`,
         data: { order_id: orderId, action: "litige" },
-      }).catch(() => null)
+      }).then(() => null)
 
       return NextResponse.json({ success: true, status: "disputed" })
     }
@@ -135,14 +135,14 @@ export async function POST(
       action: "escrow_released",
       new_value: JSON.stringify({ triggered_by: adminRole ? "admin" : "auto_72h", amount: order.vendeur_recoit_fcfa }),
       performed_by: user.id,
-    }).then(() => null).catch(() => null)
+    }).then(() => null)
 
     // Notifier vendeur
-    await sendPushNotification(order.seller_id, {
+    await sendPushNotification({ externalUserIds: [order.seller_id],
       title: "Paiement libéré 🎉",
       body: `${order.vendeur_recoit_fcfa?.toLocaleString("fr-FR") ?? order.total_amount?.toLocaleString("fr-FR")} FCFA virés — commande ${order.order_number}`,
       data: { type: "payment", order_id: orderId },
-    }).catch(() => null)
+    }).then(() => null)
 
     await sendSMSFallback(order.seller_id, supabase,
       `GWA — Paiement ${order.vendeur_recoit_fcfa?.toLocaleString("fr-FR") ?? order.total_amount?.toLocaleString("fr-FR")} FCFA libéré. Commande #${order.order_number} clôturée.`

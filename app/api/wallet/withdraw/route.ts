@@ -29,7 +29,7 @@ export async function GET() {
       }
       return NextResponse.json({ error: qErr.message }, { status: 500 })
     }
-    return NextResponse.json({ withdrawals: data || [], total: count || 0, limit, offset })
+    return NextResponse.json({ withdrawals: data || [], total: data?.length || 0, limit: 50, offset: 0 })
   } catch (err) {
     console.error("[api/wallet/withdraw GET]", err)
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 })

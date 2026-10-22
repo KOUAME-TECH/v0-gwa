@@ -70,7 +70,7 @@ export const signupSchema = z.object({
 })
 
 export const productSchema = z.object({
-  name: z.string().min(3).max(100).transform(sanitizePlainText),
+  name: z.string().min(3).max(100).transform((value) => sanitizePlainText(value)),
   description: z.string().max(2000).transform((v) => sanitizePlainText(v, 2000)),
   price: priceFCFA,
   quantity: quantitySchema,
