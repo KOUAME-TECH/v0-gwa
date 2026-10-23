@@ -30,6 +30,7 @@ export async function POST(request: Request) {
     !verifyGeniusPayWebhookSignature({
       timestamp,
       payload,
+      rawPayload: raw,
       signature: signature.replace(/^sha256=/i, "").trim(),
       secret,
     })
