@@ -77,8 +77,13 @@ export async function POST(request: Request) {
     payload.status || payload.data?.status || "",
   ).toLowerCase();
   const amount = Number(payload.amount ?? payload.data?.amount);
-  if (!reference)
-    return NextResponse.json({ error: "reference manquante" }, { status: 400 });
+  if (!reference) {
+    return NextResponse.json({
+      received: true,
+      matched: false,
+      message: "Webhook reçu sans référence de commande",
+    });
+  }
   const admin = createAdminClient();
   const { data: alreadyProcessed } = await admin
     .from("order_audit_log")
