@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("server-only", () => ({}))
 vi.mock("@/lib/ops/platform-secrets", () => ({
@@ -22,6 +22,12 @@ const checkoutResponse = {
 }
 
 describe("GeniusPay API client", () => {
+  beforeEach(() => {
+    vi.stubEnv("X_API_Key", "")
+    vi.stubEnv("X_API_Secret", "")
+    vi.stubEnv("GENIUSPAY_MODE", "live")
+  })
+
   afterEach(() => {
     vi.unstubAllEnvs()
     vi.unstubAllGlobals()
