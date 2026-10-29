@@ -80,18 +80,45 @@ export async function POST(request: Request) {
     }
 
     const admin = createAdminClient()
-    const { data: existingOrder } = await admin
+    const { data: existingOrder, error: existingOrderError } = await admin
       .from("orders")
       .select("*")
       .eq("source_offer_message_id", msg.id)
       .maybeSingle()
+    if (existingOrderError) {
+      return NextResponse.json({ error: "Vérification de la commande impossible" }, { status: 500 })
+    }
     if (existingOrder) {
-      return NextResponse.json({
-        success: true,
-        order: existingOrder,
-        negotiated_unit_price: offer.amount,
-        redirect_to: "/dashboard/commandes",
-      })
+      const { data: existingItem, error: existingItemError } = await admin
+        .from("order_items")
+        .select("order_id, product_id, quantity, unit_price, total_price")
+        .eq("source_offer_message_id", msg.id)
+        .maybeSingle()
+      if (existingItemError) {
+        return NextResponse.json({ error: "Vérification de l'article impossible" }, { status: 500 })
+      }
+      if (
+        existingItem &&
+        existingItem.order_id === existingOrder.id &&
+        Number(existingItem.quantity) === Number(existingOrder.source_offer_quantity) &&
+        Number(existingItem.total_price) === Number(existingOrder.subtotal) &&
+        Number(existingItem.unit_price) * Number(existingItem.quantity) ===
+          Number(existingItem.total_price) &&
+        (!offer.productId || existingItem.product_id === offer.productId)
+      ) {
+        return NextResponse.json({
+          success: true,
+          order: existingOrder,
+          negotiated_unit_price: Number(existingItem.unit_price),
+          redirect_to: "/dashboard/commandes",
+        })
+      }
+      if (existingItem) {
+        return NextResponse.json(
+          { error: "L'article de cette commande est incohérent", code: "ORDER_ITEM_MISMATCH" },
+          { status: 409 },
+        )
+      }
     }
 
     // Offreur = souvent acheteur ; l'autre = vendeur (ou inverse selon contexte produit)
@@ -112,7 +139,11 @@ export async function POST(request: Request) {
         .eq("id", productId)
         .maybeSingle()
 
-      if (!product || product.status !== "active" || !isAgriculturalProductType(product.product_type)) {
+      if (
+        !product ||
+        (!existingOrder && product.status !== "active") ||
+        !isAgriculturalProductType(product.product_type)
+      ) {
         return NextResponse.json({ error: "Produit de l'offre indisponible" }, { status: 400 })
       }
       sellerId = product.seller_id
@@ -127,24 +158,25 @@ export async function POST(request: Request) {
     } else {
       // Sans produit : prendre le 1er produit actif du vendeur (autre participant)
       // Si l'offreur est vendeur, seller = offerer
-      const { data: sellerProducts } = await supabase
+      const sellerProductsQuery = supabase
         .from("products")
         .select("id, seller_id, name, status, price, stock_quantity")
-        .eq("seller_id", otherId)
-        .eq("status", "active")
+        .eq("seller_id", existingOrder?.seller_id || otherId)
         .eq("product_type", "agriculture")
-        .limit(1)
+      const { data: sellerProducts } = existingOrder
+        ? await sellerProductsQuery.limit(1)
+        : await sellerProductsQuery.eq("status", "active").limit(1)
 
       if (sellerProducts?.[0]) {
         productId = sellerProducts[0].id
-        sellerId = otherId
-        buyerId = offererId
+        sellerId = sellerProducts[0].seller_id
+        buyerId = sellerId === offererId ? otherId : offererId
         catalogPrice = Math.round(Number(sellerProducts[0].price))
         stockQty =
           sellerProducts[0].stock_quantity == null
             ? null
             : Number(sellerProducts[0].stock_quantity)
-      } else {
+      } else if (!existingOrder) {
         const { data: offererProducts } = await supabase
           .from("products")
           .select("id, seller_id, name, status, price, stock_quantity")
@@ -176,6 +208,71 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Acheteur/vendeur invalides" }, { status: 400 })
     }
 
+    if (existingOrder) {
+      const savedQuantity = Number(existingOrder.source_offer_quantity)
+      const savedSubtotal = Number(existingOrder.subtotal)
+      const savedUnitPrice = savedSubtotal / savedQuantity
+      if (
+        existingOrder.buyer_id !== buyerId ||
+        existingOrder.seller_id !== sellerId ||
+        !Number.isInteger(savedQuantity) ||
+        savedQuantity < 1 ||
+        !Number.isInteger(savedUnitPrice) ||
+        savedUnitPrice < 1 ||
+        !productId
+      ) {
+        return NextResponse.json(
+          { error: "La commande existante ne peut pas être réparée automatiquement", code: "ORDER_ITEM_REPAIR_FAILED" },
+          { status: 409 },
+        )
+      }
+
+      const { error: repairError } = await admin.from("order_items").insert({
+        source_offer_message_id: msg.id,
+        order_id: existingOrder.id,
+        product_id: productId,
+        quantity: savedQuantity,
+        unit_price: savedUnitPrice,
+        total_price: savedSubtotal,
+      })
+      if (repairError) {
+        if (repairError.code === "23505") {
+          const { data: repairedItem } = await admin
+            .from("order_items")
+            .select("order_id, product_id, quantity, unit_price, total_price")
+            .eq("source_offer_message_id", msg.id)
+            .maybeSingle()
+          if (
+            repairedItem &&
+            repairedItem.order_id === existingOrder.id &&
+            repairedItem.product_id === productId &&
+            Number(repairedItem.quantity) === savedQuantity &&
+            Number(repairedItem.unit_price) === savedUnitPrice &&
+            Number(repairedItem.total_price) === savedSubtotal
+          ) {
+            return NextResponse.json({
+              success: true,
+              order: existingOrder,
+              negotiated_unit_price: savedUnitPrice,
+              redirect_to: "/dashboard/commandes",
+            })
+          }
+        }
+        console.error("[orders/from-offer] item repair", repairError.message)
+        return NextResponse.json(
+          { error: "L'article de la commande n'a pas pu être réparé", code: "ORDER_ITEM_REPAIR_FAILED" },
+          { status: 500 },
+        )
+      }
+
+      return NextResponse.json({
+        success: true,
+        order: existingOrder,
+        negotiated_unit_price: savedUnitPrice,
+        redirect_to: "/dashboard/commandes",
+      })
+    }
+
     let unitPrice = Math.round(Number(offer.amount))
     if (!Number.isFinite(unitPrice) || unitPrice < 1) {
       return NextResponse.json({ error: "Montant négocié invalide" }, { status: 400 })
@@ -184,7 +281,7 @@ export async function POST(request: Request) {
     if (catalogPrice != null && Number.isFinite(catalogPrice) && catalogPrice > 0) {
       unitPrice = Math.min(unitPrice, catalogPrice)
     }
-    if (stockQty != null && Number.isFinite(stockQty) && quantity > stockQty) {
+    if (!existingOrder && stockQty != null && Number.isFinite(stockQty) && quantity > stockQty) {
       return NextResponse.json(
         { error: `Stock insuffisant (max ${stockQty})`, code: "OUT_OF_STOCK" },
         { status: 400 },
@@ -214,6 +311,7 @@ export async function POST(request: Request) {
       .from("orders")
       .insert({
         source_offer_message_id: msg.id,
+        source_offer_quantity: quantity,
         buyer_id: buyerId,
         seller_id: sellerId,
         order_number: orderNumber,
@@ -244,12 +342,30 @@ export async function POST(request: Request) {
           .eq("source_offer_message_id", msg.id)
           .maybeSingle()
         if (duplicateOrder) {
-          return NextResponse.json({
-            success: true,
-            order: duplicateOrder,
-            negotiated_unit_price: offer.amount,
-            redirect_to: "/dashboard/commandes",
-          })
+          const { data: duplicateItem } = await admin
+            .from("order_items")
+            .select("order_id, product_id, quantity, unit_price, total_price")
+            .eq("source_offer_message_id", msg.id)
+            .maybeSingle()
+          if (
+            duplicateItem &&
+            duplicateItem.order_id === duplicateOrder.id &&
+            duplicateItem.product_id === productId &&
+            Number(duplicateItem.quantity) === quantity &&
+            Number(duplicateItem.unit_price) === unitPrice &&
+            Number(duplicateItem.total_price) === subtotal
+          ) {
+            return NextResponse.json({
+              success: true,
+              order: duplicateOrder,
+              negotiated_unit_price: unitPrice,
+              redirect_to: "/dashboard/commandes",
+            })
+          }
+          return NextResponse.json(
+            { error: "Commande en cours de finalisation, réessayez", code: "ORDER_ITEM_PENDING" },
+            { status: 409 },
+          )
         }
       }
       console.error("[orders/from-offer]", orderError?.message)
@@ -260,6 +376,7 @@ export async function POST(request: Request) {
     }
 
     const { error: itemsErr } = await admin.from("order_items").insert({
+      source_offer_message_id: msg.id,
       order_id: order.id,
       product_id: productId,
       quantity,
@@ -268,8 +385,29 @@ export async function POST(request: Request) {
     })
 
     if (itemsErr) {
+      if (itemsErr.code === "23505") {
+        const { data: existingItem } = await admin
+          .from("order_items")
+          .select("order_id, product_id, quantity, unit_price, total_price")
+          .eq("source_offer_message_id", msg.id)
+          .maybeSingle()
+        if (
+          existingItem &&
+          existingItem.order_id === order.id &&
+          existingItem.product_id === productId &&
+          Number(existingItem.quantity) === quantity &&
+          Number(existingItem.unit_price) === unitPrice &&
+          Number(existingItem.total_price) === subtotal
+        ) {
+          // Une requête concurrente a déjà créé l'article associé.
+        } else {
+          console.error("[orders/from-offer] items", itemsErr.message)
+          return NextResponse.json({ error: itemsErr.message }, { status: 400 })
+        }
+      } else {
       console.error("[orders/from-offer] items", itemsErr.message)
       return NextResponse.json({ error: itemsErr.message }, { status: 400 })
+      }
     }
 
     // Escrow aligné sur POST /api/orders

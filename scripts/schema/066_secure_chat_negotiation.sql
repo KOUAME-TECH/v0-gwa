@@ -4,10 +4,20 @@ ALTER TABLE public.messages
 
 ALTER TABLE public.orders
   ADD COLUMN IF NOT EXISTS source_offer_message_id UUID
-    REFERENCES public.messages(id) ON DELETE SET NULL;
+    REFERENCES public.messages(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS source_offer_quantity INTEGER
+    CHECK (source_offer_quantity IS NULL OR source_offer_quantity > 0);
 
 CREATE UNIQUE INDEX IF NOT EXISTS orders_source_offer_message_id_key
   ON public.orders(source_offer_message_id)
+  WHERE source_offer_message_id IS NOT NULL;
+
+ALTER TABLE public.order_items
+  ADD COLUMN IF NOT EXISTS source_offer_message_id UUID
+    REFERENCES public.messages(id) ON DELETE SET NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS order_items_source_offer_message_id_key
+  ON public.order_items(source_offer_message_id)
   WHERE source_offer_message_id IS NOT NULL;
 
 DROP POLICY IF EXISTS "messages_select_own" ON public.messages;
