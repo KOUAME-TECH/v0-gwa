@@ -237,8 +237,8 @@ export default function OrdersPage() {
       toast.error(data.error || "On n’a pas pu confirmer. Réessaie.")
       return
     }
-    toast.success("Merci ! L’argent part chez le vendeur.")
-    loadOrders()
+      toast.success("Réception confirmée. Le paiement est libéré au vendeur.")
+      loadOrders()
   }
 
   function openLitige(orderId: string) {
@@ -302,8 +302,16 @@ export default function OrdersPage() {
           <div>
             <h1 className="font-display text-2xl md:text-3xl text-[#1F5C2E]">Mes commandes</h1>
             <p className="text-[#4B5563] mt-1 text-sm md:text-base">
-              Suivi des achats et ventes.
+              De la validation au retrait, retrouve chaque étape, le vendeur et la protection de ton paiement.
             </p>
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-xs font-medium text-[#1F5C2E]">
+              {['Commande validée', 'Préparation', 'En route', 'Réception'].map((step, index) => (
+                <span key={step} className="flex items-center gap-2 rounded-full bg-[#E8F0E9] px-3 py-1.5">
+                  <span className="flex size-5 items-center justify-center rounded-full bg-[#1F5C2E] text-[10px] text-white">{index + 1}</span>
+                  {step}
+                </span>
+              ))}
+            </div>
           </div>
           <Link href="/marketplace">
             <Button className="rounded-xl bg-[#1F5C2E] hover:bg-[#184a25]">

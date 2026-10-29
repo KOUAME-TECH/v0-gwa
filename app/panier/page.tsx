@@ -346,7 +346,7 @@ export default function CartPage() {
     )
   }
 
-  if (!user) {
+  if (!user && cart.length === 0) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
         <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mb-4">
@@ -412,16 +412,30 @@ export default function CartPage() {
         </div>
         
         {/* Progress */}
-        <div className="mx-auto flex max-w-3xl gap-1.5 px-4 pb-3">
-          {[1, 2, 3].map(s => (
-            <div key={s} className={`h-1.5 flex-1 rounded-full transition-colors ${step >= s ? "bg-[#1F5C2E]" : "bg-[#E5E7EB]"}`} />
-          ))}
+        <div className="mx-auto max-w-3xl px-4 pb-3">
+          <div className="flex gap-1.5">
+            {[1, 2, 3].map(s => (
+              <div key={s} className={`h-1.5 flex-1 rounded-full transition-colors ${step >= s ? "bg-[#1F5C2E]" : "bg-[#E5E7EB]"}`} />
+            ))}
+          </div>
+          <div className="mt-2 grid grid-cols-3 text-[10px] font-medium text-[#6B7280]">
+            <span className={step === 1 ? "text-[#1F5C2E]" : ""}>1. Panier</span>
+            <span className={step === 2 ? "text-[#1F5C2E]" : ""}>2. Livraison</span>
+            <span className={`text-right ${step === 3 ? "text-[#1F5C2E]" : ""}`}>3. Paiement</span>
+          </div>
         </div>
       </header>
 
       {/* Step 1: Cart Items */}
       {step === 1 && (
         <div className="mx-auto max-w-3xl space-y-3 p-4">
+          {!user && (
+            <div className="flex items-center gap-3 rounded-2xl border border-[#C27D10]/25 bg-[#FFF8E8] p-3 text-sm text-[#7A5200]">
+              <ShoppingCart className="h-5 w-5 shrink-0" />
+              <p className="flex-1">Ton panier est conservé. Connecte-toi au moment de payer pour sécuriser la commande.</p>
+              <Link href="/auth/login?redirect=/panier" className="shrink-0 font-semibold underline">Connexion</Link>
+            </div>
+          )}
           {cart.map(item => (
             <div key={item.id} className="flex gap-3 bg-card rounded-2xl p-3 border border-border">
               <div className="w-20 h-20 relative rounded-xl overflow-hidden bg-muted shrink-0">
@@ -561,7 +575,7 @@ export default function CartPage() {
             <div>
               <p className="text-sm font-medium text-[#111827]">Remise en main propre</p>
               <p className="text-xs text-[#4B5563]">
-                Tu t’arranges avec le vendeur pour le rendez-vous. Pour l’instant GWA ne gère pas la livraison.
+                Le vendeur prépare la commande puis vous convenez du lieu de remise. Tu suivras chaque changement dans Mes commandes.
               </p>
             </div>
           </div>
