@@ -184,10 +184,7 @@ export function ChatConversation({
   )
 
   const refreshNegotiatedOrders = useCallback(async () => {
-    if (acceptedOfferIds.length === 0) {
-      setNegotiatedOrders({})
-      return
-    }
+    if (acceptedOfferIds.length === 0) return
 
     const { data, error } = await supabase
       .from("orders")
@@ -203,10 +200,13 @@ export function ChatConversation({
   }, [acceptedOfferIds, supabase])
 
   useEffect(() => {
-    void refreshNegotiatedOrders()
     if (acceptedOfferIds.length === 0) return
+    const initialFetch = window.setTimeout(() => void refreshNegotiatedOrders(), 0)
     const interval = window.setInterval(() => void refreshNegotiatedOrders(), 20_000)
-    return () => window.clearInterval(interval)
+    return () => {
+      window.clearTimeout(initialFetch)
+      window.clearInterval(interval)
+    }
   }, [acceptedOfferIds.length, refreshNegotiatedOrders])
 
   useEffect(() => {

@@ -278,7 +278,7 @@ export default function ProduitPage() {
   const minQty = product.min_order_quantity || 1
   const negotiationHref = `/messages?to=${encodeURIComponent(product.seller_id)}&product=${encodeURIComponent(product.id)}&amount=${Math.round(product.price)}&quantity=${quantity}&negotiate=1`
 
-  const QtyControl = ({ className }: { className?: string }) => (
+  const renderQtyControl = (className?: string) => (
     <div className={cn("flex items-center gap-1 rounded-full bg-neutral-100 p-1", className)}>
       <button
         type="button"
@@ -311,7 +311,7 @@ export default function ProduitPage() {
     </div>
   )
 
-  const SellerBlock = () => (
+  const renderSellerBlock = () => (
     <div className="rounded-2xl bg-neutral-50 p-4">
       <Link href={`/profil/${profile?.id}`} className="flex items-center gap-3">
         <Avatar className="h-14 w-14 ring-2 ring-white">
@@ -457,7 +457,7 @@ export default function ProduitPage() {
             </div>
           </div>
 
-          <SellerBlock />
+          {renderSellerBlock()}
 
           {product.description ? (
             <div>
@@ -480,7 +480,7 @@ export default function ProduitPage() {
         <div className="fixed bottom-[76px] left-0 right-0 z-40 border-t border-neutral-100 bg-white/95 p-4 backdrop-blur-sm">
           <div className="mx-auto flex max-w-lg flex-col gap-3">
             <div className="flex items-center justify-between gap-3">
-              <QtyControl />
+              {renderQtyControl()}
               <p className="text-right">
                 <span className="block text-xs text-neutral-500">Total</span>
                 <span className="text-lg font-bold tabular-nums">{formatPrice(totalPrice)} FCFA</span>
@@ -590,13 +590,13 @@ export default function ProduitPage() {
             ) : null}
 
             <div className="mt-6">
-              <SellerBlock />
+              {renderSellerBlock()}
             </div>
 
             <div className="mt-8 flex items-center gap-4 border-t border-[#E5E7EB] pt-6">
               <div>
                 <p className="mb-1.5 text-xs font-medium text-[#6B7280]">Quantité</p>
-                <QtyControl />
+                {renderQtyControl()}
               </div>
               <div className="flex-1 space-y-2">
                 <Button
