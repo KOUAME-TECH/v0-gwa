@@ -419,6 +419,13 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       return
     }
     const toastId = toast.loading(type === "image" ? "Envoi de l'image..." : "Envoi du fichier...")
+    const { data: refreshed } = await supabase.auth.refreshSession()
+    const authUser = refreshed.session?.user ?? (await supabase.auth.getUser()).data.user
+    if (!authUser) {
+      toast.dismiss(toastId)
+      toast.error("Session expirée, reconnecte-toi")
+      return
+    }
 
     const extension = file.name.split(".").pop()?.toLowerCase() || (type === "image" ? "jpg" : "bin")
     const path = `chat/${conversation.id}/${crypto.randomUUID()}.${extension}`
@@ -434,17 +441,22 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       return
     }
 
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from("chat-media").getPublicUrl(path)
+    const { data: signed, error: signedErr } = await supabase.storage
+      .from("chat-media")
+      .createSignedUrl(path, 60 * 60 * 24 * 7)
+    if (signedErr || !signed?.signedUrl) {
+      toast.dismiss(toastId)
+      toast.error("Le média a été envoyé mais son accès sécurisé a échoué")
+      return
+    }
 
     const content = type === "image" ? file.name : `[${file.name}]`
     const { error: msgErr } = await supabase.from("messages").insert({
       conversation_id: conversation.id,
-      sender_id: userId,
+      sender_id: authUser.id,
       content,
       message_type: type,
-      media_url: publicUrl,
+      media_url: signed.signedUrl,
     })
     await supabase
       .from("conversations")
@@ -1015,8 +1027,14 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
         <div className="flex items-center gap-2 bg-black/5 rounded-lg p-2.5 min-w-[180px]">
           <FileText className="h-8 w-8 text-[#1F5C2E] shrink-0" />
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium truncate">{msg.content.replace(/^\[|\]$/g, '')}</p>
-            <p className="text-[11px] opacity-50">Document</p>
+            {msg.media_url ? (
+              <a href={msg.media_url} target="_blank" rel="noreferrer" className="text-sm font-medium truncate underline underline-offset-2">
+                {msg.content.replace(/^\[|\]$/g, '')}
+              </a>
+            ) : (
+              <p className="text-sm font-medium truncate">{msg.content.replace(/^\[|\]$/g, '')}</p>
+            )}
+            <p className="text-[11px] opacity-50">Document sécurisé</p>
           </div>
         </div>
       )
