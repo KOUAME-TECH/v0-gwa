@@ -80,6 +80,8 @@ export async function POST(request: Request) {
     }
 
     const admin = createAdminClient()
+    const acceptedOfferMessageId = msg.id
+    const acceptingUserId = user.id
     const { data: existingOrder, error: existingOrderError } = await admin
       .from("orders")
       .select("*")
@@ -88,6 +90,72 @@ export async function POST(request: Request) {
     if (existingOrderError) {
       return NextResponse.json({ error: "Vérification de la commande impossible" }, { status: 500 })
     }
+    async function finalizeOrder(
+      order: NonNullable<typeof existingOrder>,
+      itemUnitPrice: number,
+      itemQuantity: number,
+      sendPush = false,
+    ) {
+      const [escrowResult, auditResult, notificationResult] = await Promise.all([
+        admin.from("escrow_transactions").upsert(
+          {
+            order_id: order.id,
+            tranche_numero: 1,
+            montant_fcfa: Math.round(Number(order.total_amount)),
+            pourcentage: 100,
+            status: "pending",
+            due_event: "a_la_livraison",
+            due_days: 7,
+          },
+          { onConflict: "order_id,tranche_numero", ignoreDuplicates: true },
+        ),
+        admin.from("order_audit_log").upsert(
+          {
+            source_offer_message_id: acceptedOfferMessageId,
+            order_id: order.id,
+            performed_by: acceptingUserId,
+            action: "order_created",
+            new_value: "pending",
+            notes: `Créée via négociation chat (offre ${messageId})`,
+          },
+          { onConflict: "source_offer_message_id", ignoreDuplicates: true },
+        ),
+        admin.from("notifications").upsert(
+          {
+            source_offer_message_id: acceptedOfferMessageId,
+            user_id: order.seller_id,
+            type: "order",
+            title: "Commande au prix négocié",
+            message: `Commande ${order.order_number} — ${itemUnitPrice.toLocaleString("fr-FR")} FCFA × ${itemQuantity}`,
+            body: "Prix négocié accepté",
+            link: "/dashboard/commandes",
+            is_read: false,
+            read: false,
+          },
+          { onConflict: "source_offer_message_id", ignoreDuplicates: true },
+        ),
+      ])
+
+      const finalizationError =
+        escrowResult.error || auditResult.error || notificationResult.error
+      if (finalizationError) {
+        console.error("[orders/from-offer] finalization", finalizationError.message)
+        return false
+      }
+
+      if (sendPush) {
+        const notifyUser =
+          acceptingUserId === order.buyer_id ? order.seller_id : order.buyer_id
+        void sendPushToUser(admin as never, notifyUser, {
+          title: "Commande au prix négocié",
+          body: `${itemUnitPrice.toLocaleString("fr-FR")} FCFA × ${itemQuantity}`,
+          url: "/dashboard/commandes",
+          data: { type: "negotiated_order", order_id: order.id },
+        })
+      }
+      return true
+    }
+
     if (existingOrder) {
       const { data: existingItem, error: existingItemError } = await admin
         .from("order_items")
@@ -107,6 +175,17 @@ export async function POST(request: Request) {
           Number(existingItem.total_price) &&
         (!offer.productId || existingItem.product_id === offer.productId)
       ) {
+        const finalized = await finalizeOrder(
+          existingOrder,
+          Number(existingItem.unit_price),
+          Number(existingItem.quantity),
+        )
+        if (!finalized) {
+          return NextResponse.json(
+            { error: "Finalisation de la commande en attente", code: "ORDER_FINALIZATION_PENDING" },
+            { status: 503 },
+          )
+        }
         return NextResponse.json({
           success: true,
           order: existingOrder,
@@ -258,6 +337,17 @@ export async function POST(request: Request) {
             Number(repairedItem.unit_price) === savedUnitPrice &&
             Number(repairedItem.total_price) === savedSubtotal
           ) {
+            const finalized = await finalizeOrder(
+              existingOrder,
+              savedUnitPrice,
+              savedQuantity,
+            )
+            if (!finalized) {
+              return NextResponse.json(
+                { error: "Finalisation de la commande en attente", code: "ORDER_FINALIZATION_PENDING" },
+                { status: 503 },
+              )
+            }
             return NextResponse.json({
               success: true,
               order: existingOrder,
@@ -273,6 +363,13 @@ export async function POST(request: Request) {
         )
       }
 
+      const finalized = await finalizeOrder(existingOrder, savedUnitPrice, savedQuantity)
+      if (!finalized) {
+        return NextResponse.json(
+          { error: "Finalisation de la commande en attente", code: "ORDER_FINALIZATION_PENDING" },
+          { status: 503 },
+        )
+      }
       return NextResponse.json({
         success: true,
         order: existingOrder,
@@ -364,6 +461,17 @@ export async function POST(request: Request) {
             Number(duplicateItem.unit_price) === unitPrice &&
             Number(duplicateItem.total_price) === subtotal
           ) {
+            const finalized = await finalizeOrder(
+              duplicateOrder,
+              unitPrice,
+              quantity,
+            )
+            if (!finalized) {
+              return NextResponse.json(
+                { error: "Finalisation de la commande en attente", code: "ORDER_FINALIZATION_PENDING" },
+                { status: 503 },
+              )
+            }
             return NextResponse.json({
               success: true,
               order: duplicateOrder,
@@ -419,44 +527,13 @@ export async function POST(request: Request) {
       }
     }
 
-    // Escrow aligné sur POST /api/orders
-    await admin.from("escrow_transactions").insert({
-      order_id: order.id,
-      tranche_numero: 1,
-      montant_fcfa: Math.round(totalAmount),
-      pourcentage: 100,
-      status: "pending",
-      due_event: "livraison",
-      due_days: 7,
-    })
-
-    await admin.from("order_audit_log").insert({
-      order_id: order.id,
-      performed_by: user.id,
-      action: "order_created",
-      new_value: "pending",
-      notes: `Créée via négociation chat (offre ${messageId})`,
-    })
-
-    await admin.from("notifications").insert({
-      user_id: sellerId,
-      type: "order",
-      title: "Commande au prix négocié",
-      message: `Commande ${orderNumber} — ${unitPrice.toLocaleString("fr-FR")} FCFA × ${quantity}`,
-      body: `Prix négocié accepté`,
-      link: `/dashboard/commandes`,
-      is_read: false,
-      read: false,
-    })
-
-    // Notifier l'autre partie (push)
-    const notifyUser = user.id === buyerId ? sellerId : buyerId
-    void sendPushToUser(admin as never, notifyUser, {
-      title: "Commande au prix négocié",
-      body: `${unitPrice.toLocaleString("fr-FR")} FCFA × ${quantity}`,
-      url: `/dashboard/commandes`,
-      data: { type: "negotiated_order", order_id: order.id },
-    })
+    const finalized = await finalizeOrder(order, unitPrice, quantity, true)
+    if (!finalized) {
+      return NextResponse.json(
+        { error: "Finalisation de la commande en attente", code: "ORDER_FINALIZATION_PENDING" },
+        { status: 503 },
+      )
+    }
 
     return NextResponse.json({
       success: true,

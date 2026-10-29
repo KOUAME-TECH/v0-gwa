@@ -22,6 +22,20 @@ CREATE UNIQUE INDEX IF NOT EXISTS order_items_source_offer_message_id_key
   ON public.order_items(source_offer_message_id)
   WHERE source_offer_message_id IS NOT NULL;
 
+ALTER TABLE public.order_audit_log
+  ADD COLUMN IF NOT EXISTS source_offer_message_id UUID
+    REFERENCES public.messages(id) ON DELETE SET NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS order_audit_log_source_offer_message_id_key
+  ON public.order_audit_log(source_offer_message_id);
+
+ALTER TABLE public.notifications
+  ADD COLUMN IF NOT EXISTS source_offer_message_id UUID
+    REFERENCES public.messages(id) ON DELETE SET NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS notifications_source_offer_message_id_key
+  ON public.notifications(source_offer_message_id);
+
 DROP POLICY IF EXISTS "messages_select_own" ON public.messages;
 DROP POLICY IF EXISTS "messages_insert_own" ON public.messages;
 DROP POLICY IF EXISTS "messages_update_own" ON public.messages;
