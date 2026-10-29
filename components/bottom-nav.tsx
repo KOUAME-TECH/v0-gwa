@@ -76,13 +76,13 @@ export function BottomNav() {
   }
 
   const navItems: NavItem[] = [
-    { href: "/", icon: Home, label: "Feed", world: "social" },
+    { href: "/", icon: Home, label: "Accueil", world: "social" },
     {
       href: "/marketplace",
       icon: Store,
-      label: "Shop",
+      label: "Boutique",
       world: "commerce",
-      badge: ordersCount > 0 ? ordersCount : undefined,
+      badge: cartCount > 0 ? cartCount : ordersCount > 0 ? ordersCount : undefined,
     },
     {
       href: isSeller ? "/publier" : "/recherche",
@@ -94,14 +94,14 @@ export function BottomNav() {
     {
       href: "/messages",
       icon: MessageCircle,
-      label: "Chat",
+      label: "Messages",
       world: "messaging",
       badge: unreadMessages > 0 ? unreadMessages : undefined,
     },
     {
       href: user ? "/profil" : "/auth/login",
       icon: User,
-      label: user ? "Moi" : "Connexion",
+      label: user ? "Profil" : "Connexion",
       world: "profile",
       badge: unreadNotifications > 0 ? unreadNotifications : undefined,
     },

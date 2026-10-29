@@ -227,8 +227,21 @@
     @apply border-border;
     -webkit-tap-highlight-color: transparent;
   }
-  
-  html {
+
+  :focus-visible {
+    outline: 3px solid hsl(var(--accent));
+    outline-offset: 3px;
+  }
+
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    touch-action: manipulation;
+  }
+
+  html { 
     font-size: 16px;
     -webkit-text-size-adjust: 100%;
   }
@@ -238,15 +251,16 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    html:not(.gwa-allow-motion) *,
-    html:not(.gwa-allow-motion) *::before,
-    html:not(.gwa-allow-motion) *::after {
+    *,
+    *::before,
+    *::after {
       animation-duration: 0.01ms !important;
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
     }
   }
+
 
   html.gwa-reduce-motion *,
   html.gwa-reduce-motion *::before,
