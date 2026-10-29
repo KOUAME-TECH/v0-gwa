@@ -76,6 +76,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   const [isPlayingPreview, setIsPlayingPreview] = useState(false)
   const [loadingMsgs, setLoadingMsgs] = useState(true)
   const [showOfferSheet, setShowOfferSheet] = useState(false)
+  const [counteringOffer, setCounteringOffer] = useState<Message | null>(null)
   const [offerAmount, setOfferAmount] = useState("")
   const [offerNote, setOfferNote] = useState("")
   const [offerBusy, setOfferBusy] = useState(false)
@@ -504,6 +505,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   }
 
   async function openOfferSheet() {
+    setCounteringOffer(null)
     setShowAttach(false)
     setShowOfferSheet(true)
     // Produits actifs des deux participants (acheteur négocie sur produit vendeur)
@@ -724,6 +726,23 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     }
   }
 
+  async function openCounterOffer(msg: Message, offer: PriceOfferPayload) {
+    setCounteringOffer(msg)
+    setOfferAmount(String(offer.amount))
+    setOfferNote(`Contre-proposition à ${formatOfferAmount(offer.amount)} FCFA`)
+    setShowOfferSheet(true)
+    setShowAttach(false)
+    if (!offerProducts.some((p) => p.id === offer.productId) && offer.productId) {
+      const { data } = await supabase.from("products").select("id, name, price, seller_id").eq("id", offer.productId).maybeSingle()
+      if (data) {
+        setOfferProducts((prev) => prev.some((p) => p.id === data.id) ? prev : [data, ...prev])
+        setOfferProductId(data.id)
+      }
+    } else if (offer.productId) {
+      setOfferProductId(offer.productId)
+    }
+  }
+
   async function sendPriceOffer() {
     const amount = Number.parseInt(offerAmount.replace(/\D/g, ""), 10)
     if (!Number.isFinite(amount) || amount < 1) {
@@ -777,6 +796,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
           .update({ last_message_at: new Date().toISOString() })
           .eq("id", conversation.id)
         setShowOfferSheet(false)
+        setCounteringOffer(null)
         setOfferAmount("")
         setOfferNote("")
         toast.success("Offre envoyée")
@@ -891,7 +911,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
           )}
           <p className="text-[11px] text-[#667781]">{statusLabel[offer.status] || offer.status}</p>
           {!own && offer.status === "pending" && (
-            <div className="flex gap-1.5 pt-1">
+            <div className="flex flex-wrap gap-1.5 pt-1">
               <button
                 type="button"
                 onClick={(e) => {
@@ -911,6 +931,16 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
                 className="flex-1 h-8 rounded-full border border-[#E5E7EB] text-[12px] font-medium text-[#54656f] active:scale-95"
               >
                 Refuser
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void openCounterOffer(msg, offer)
+                }}
+                className="w-full h-8 rounded-full border border-[#C27D10]/40 text-[#9A6508] text-[12px] font-semibold active:scale-95"
+              >
+                Faire une contre-offre
               </button>
             </div>
           )}
@@ -1255,15 +1285,15 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       {/* OFFRE DE PRIX — négociation commande */}
       {showOfferSheet && (
         <>
-          <div className="fixed inset-0 bg-black/40 z-[108]" onClick={() => setShowOfferSheet(false)} />
+          <div className="fixed inset-0 bg-black/40 z-[108]" onClick={() => { setShowOfferSheet(false); setCounteringOffer(null) }} />
           <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl z-[109] p-5 pb-8 safe-bottom animate-slideUp">
             <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-4" />
             <div className="flex items-center gap-2 mb-1">
               <HandCoins className="h-5 w-5 text-[#C27D10]" />
-              <h3 className="text-lg font-semibold text-[#111]">Proposer un prix</h3>
+              <h3 className="text-lg font-semibold text-[#111]">{counteringOffer ? "Faire une contre-offre" : "Proposer un prix"}</h3>
             </div>
             <p className="text-sm text-[#667781] mb-4">
-              Proposez un prix. S&apos;il accepte, la commande part toute seule.
+              {counteringOffer ? "Ajustez le montant et envoyez votre proposition." : "Proposez un prix. S&apos;il accepte, la commande part toute seule."}
             </p>
             {offerProducts.length > 0 && (
               <>
@@ -1311,7 +1341,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
               onClick={() => void sendPriceOffer()}
               className="w-full h-12 rounded-xl bg-[#1F5C2E] text-white font-semibold active:scale-[0.98] disabled:opacity-50"
             >
-              {offerBusy ? "Envoi…" : "Envoyer l'offre"}
+              {offerBusy ? "Envoi…" : counteringOffer ? "Envoyer la contre-offre" : "Envoyer l'offre"}
             </button>
           </div>
         </>
