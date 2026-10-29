@@ -5,6 +5,8 @@ ALTER TABLE public.messages
 ALTER TABLE public.orders
   ADD COLUMN IF NOT EXISTS source_offer_message_id UUID
     REFERENCES public.messages(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS source_offer_product_id UUID
+    REFERENCES public.products(id),
   ADD COLUMN IF NOT EXISTS source_offer_quantity INTEGER
     CHECK (source_offer_quantity IS NULL OR source_offer_quantity > 0);
 

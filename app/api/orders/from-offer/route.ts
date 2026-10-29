@@ -100,6 +100,7 @@ export async function POST(request: Request) {
       if (
         existingItem &&
         existingItem.order_id === existingOrder.id &&
+        existingItem.product_id === existingOrder.source_offer_product_id &&
         Number(existingItem.quantity) === Number(existingOrder.source_offer_quantity) &&
         Number(existingItem.total_price) === Number(existingOrder.subtotal) &&
         Number(existingItem.unit_price) * Number(existingItem.quantity) ===
@@ -126,7 +127,7 @@ export async function POST(request: Request) {
     const otherId =
       conv.participant_1 === offererId ? conv.participant_2 : conv.participant_1
 
-    let productId = offer.productId || null
+    let productId = offer.productId || existingOrder?.source_offer_product_id || null
     let sellerId = otherId
     let buyerId = offererId
     let catalogPrice: number | null = null
@@ -144,7 +145,10 @@ export async function POST(request: Request) {
         (!existingOrder && product.status !== "active") ||
         !isAgriculturalProductType(product.product_type)
       ) {
-        return NextResponse.json({ error: "Produit de l'offre indisponible" }, { status: 400 })
+        return NextResponse.json(
+          { error: "Produit de l'offre indisponible", code: existingOrder ? "ORDER_ITEM_REPAIR_FAILED" : undefined },
+          { status: existingOrder ? 409 : 400 },
+        )
       }
       sellerId = product.seller_id
       // L'acheteur est l'autre participant que le vendeur
@@ -156,16 +160,19 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Accès refusé" }, { status: 403 })
       }
     } else {
+      if (existingOrder) {
+        return NextResponse.json(
+          { error: "Le produit lié à la commande est introuvable", code: "ORDER_ITEM_REPAIR_FAILED" },
+          { status: 409 },
+        )
+      }
       // Sans produit : prendre le 1er produit actif du vendeur (autre participant)
       // Si l'offreur est vendeur, seller = offerer
-      const sellerProductsQuery = supabase
+      const { data: sellerProducts } = await supabase
         .from("products")
         .select("id, seller_id, name, status, price, stock_quantity")
-        .eq("seller_id", existingOrder?.seller_id || otherId)
+        .eq("seller_id", otherId)
         .eq("product_type", "agriculture")
-      const { data: sellerProducts } = existingOrder
-        ? await sellerProductsQuery.limit(1)
-        : await sellerProductsQuery.eq("status", "active").limit(1)
 
       if (sellerProducts?.[0]) {
         productId = sellerProducts[0].id
@@ -176,7 +183,7 @@ export async function POST(request: Request) {
           sellerProducts[0].stock_quantity == null
             ? null
             : Number(sellerProducts[0].stock_quantity)
-      } else if (!existingOrder) {
+      } else {
         const { data: offererProducts } = await supabase
           .from("products")
           .select("id, seller_id, name, status, price, stock_quantity")
@@ -215,6 +222,7 @@ export async function POST(request: Request) {
       if (
         existingOrder.buyer_id !== buyerId ||
         existingOrder.seller_id !== sellerId ||
+          existingOrder.source_offer_product_id !== productId ||
         !Number.isInteger(savedQuantity) ||
         savedQuantity < 1 ||
         !Number.isInteger(savedUnitPrice) ||
@@ -311,6 +319,7 @@ export async function POST(request: Request) {
       .from("orders")
       .insert({
         source_offer_message_id: msg.id,
+        source_offer_product_id: productId,
         source_offer_quantity: quantity,
         buyer_id: buyerId,
         seller_id: sellerId,
