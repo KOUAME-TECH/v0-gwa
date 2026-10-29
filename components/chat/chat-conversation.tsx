@@ -16,12 +16,13 @@ import {
   areBothParticipantsConfirmed,
   buildAgreementConfirmationContent,
   buildAgreementContent,
+  findConfirmedAgreement,
   parseAgreementConfirmation,
   parseAgreementContent,
-  type AgreementTerms,
 } from "@/lib/chat/agreement"
 import { buildLocationContent, isLocationMessage } from "@/lib/chat/location"
 import { ChatLocationBubble } from "@/components/chat/chat-location-bubble"
+import { LitigeDialog } from "@/components/orders/litige-dialog"
 import { EMOJI_CATEGORIES } from "@/lib/chat/emojis"
 import {
   ORDER_FLOW,
@@ -69,6 +70,7 @@ interface NegotiatedOrder {
   id: string
   order_number: string
   status: string
+  total_amount?: number
   payment_status: string | null
   escrow_status: string | null
   source_offer_message_id: string
@@ -111,6 +113,10 @@ function getChatUploadPath(conversationId: string, fileName: string) {
   return `chat/${conversationId}/${Date.now()}.${ext}`
 }
 
+function getTemporaryMessageId() {
+  return `tmp-${Date.now()}`
+}
+
 export function ChatConversation({
   conversation,
   userId,
@@ -122,12 +128,14 @@ export function ChatConversation({
 }: ChatConversationProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [negotiatedOrders, setNegotiatedOrders] = useState<Record<string, NegotiatedOrder>>({})
+  const [demoOrderIds, setDemoOrderIds] = useState<Record<string, boolean>>({})
   const [creatingOrderId, setCreatingOrderId] = useState<string | null>(null)
   const [confirmingOrderId, setConfirmingOrderId] = useState<string | null>(null)
   const [confirmingAgreementId, setConfirmingAgreementId] = useState<string | null>(null)
   const [paymentOrder, setPaymentOrder] = useState<NegotiatedOrder | null>(null)
   const [paymentBusy, setPaymentBusy] = useState(false)
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null)
+  const [litigeOrderId, setLitigeOrderId] = useState<string | null>(null)
   const [newMessage, setNewMessage] = useState("")
   const [sending, setSending] = useState(false)
   const [replyTo, setReplyTo] = useState<Message | null>(null)
@@ -148,7 +156,7 @@ export function ChatConversation({
   const [offerNote, setOfferNote] = useState("")
   const [offerBusy, setOfferBusy] = useState(false)
   const [offerProducts, setOfferProducts] = useState<
-    { id: string; name: string; price: number; unit?: string }[]
+    { id: string; name: string; price: number; unit?: string; seller_id?: string }[]
   >([])
   const [offerProductId, setOfferProductId] = useState<string>("")
   const [offerQuantity, setOfferQuantity] = useState("1")
@@ -207,7 +215,7 @@ export function ChatConversation({
 
     const { data, error } = await supabase
       .from("orders")
-      .select("id, order_number, status, payment_status, escrow_status, source_offer_message_id, buyer_id, currency, payment_method")
+      .select("id, order_number, total_amount, status, payment_status, escrow_status, source_offer_message_id, buyer_id, currency, payment_method")
       .in("source_offer_message_id", acceptedOfferIds)
 
     if (error) return
@@ -494,10 +502,22 @@ export function ChatConversation({
     e.preventDefault()
     const text = newMessage.trim()
     if (!text || sending) return
+    const aiMention = text.match(/@IA\b/i)
+    if (aiMention) {
+      const question = text.replace(/@IA\b/i, "").trim()
+      setNewMessage("")
+      if (question) {
+        await requestYellyAdvice(question)
+      } else {
+        setShowYelly(true)
+        setYellyQuestion("")
+      }
+      return
+    }
     setSending(true)
     setNewMessage("")
 
-    const tempId = `tmp-${Date.now()}`
+    const tempId = getTemporaryMessageId()
     const temp: Message = {
       id: tempId, conversation_id: conversation.id, sender_id: userId,
       content: text, message_type: "text", is_read: false, is_edited: false,
@@ -690,6 +710,15 @@ export function ChatConversation({
     const rest = list.filter((p) => p.seller_id !== other?.id)
     const ordered = preferred.length > 0 ? [...preferred, ...rest] : list
     setOfferProducts(ordered)
+    setOfferDeliveryPlace(
+      counter?.offer.deliveryPlace || currentUserCity || "À convenir",
+    )
+    const defaultDate = new Date()
+    defaultDate.setDate(defaultDate.getDate() + 2)
+    setOfferDeliveryDate(
+      counter?.offer.deliveryDate || defaultDate.toISOString().slice(0, 10),
+    )
+    setOfferConditions(counter?.offer.conditions || "")
     const preferredProductId = counter?.offer.productId || context?.productId || initialProductId
     const selected = ordered.find((p) => p.id === preferredProductId) || ordered[0]
     if (selected) {
@@ -698,7 +727,7 @@ export function ChatConversation({
         setOfferAmount(String(Math.round(selected.price)))
       }
     }
-  }, [initialAmount, initialProductId, initialQuantity, other?.id, supabase, userId])
+  }, [currentUserCity, initialAmount, initialProductId, initialQuantity, other?.id, supabase, userId])
 
   useEffect(() => {
     if (
@@ -941,9 +970,13 @@ export function ChatConversation({
         amount,
         quantity,
         unit: selected?.unit,
+        sellerId: selected?.seller_id || other?.id,
         note: offerNote.trim() || undefined,
         productId: offerProductId || undefined,
         productName: selected?.name,
+        deliveryPlace: offerDeliveryPlace.trim() || "À convenir",
+        deliveryDate: offerDeliveryDate || "À convenir",
+        conditions: offerConditions.trim() || undefined,
       })
       const { data: refreshed } = await supabase.auth.refreshSession()
       const authUser =
@@ -1112,9 +1145,204 @@ export function ChatConversation({
     }
   }
 
+  async function confirmAgreement(message: Message, offer: PriceOfferPayload) {
+    if (confirmingAgreementId) return
+    setConfirmingAgreementId(message.id)
+    try {
+      let sellerId =
+        offer.sellerId ||
+        offerProducts.find((product) => product.id === offer.productId)?.seller_id
+      if (!sellerId && offer.productId) {
+        const { data: product } = await supabase
+          .from("products")
+          .select("seller_id")
+          .eq("id", offer.productId)
+          .maybeSingle()
+        sellerId = product?.seller_id
+      }
+      sellerId ||= other?.id
+      const participantIds = [conversation.participant_1, conversation.participant_2]
+      if (!sellerId || !participantIds.includes(sellerId)) {
+        toast.error("Impossible d’identifier le vendeur de cette offre")
+        return
+      }
+      const { data: confirmation, error } = await supabase
+        .from("messages")
+        .insert({
+          conversation_id: conversation.id,
+          sender_id: userId,
+          content: buildAgreementConfirmationContent(message.id),
+          message_type: "text",
+        })
+        .select()
+        .single()
+      if (error || !confirmation) {
+        toast.error("Votre confirmation n’a pas été enregistrée")
+        return
+      }
+
+      const { data: latestMessages } = await supabase
+        .from("messages")
+        .select("*")
+        .eq("conversation_id", conversation.id)
+        .order("created_at", { ascending: true })
+      const updatedMessages = latestMessages
+        ? (latestMessages as Message[])
+        : [...messages, confirmation as Message]
+      setMessages(updatedMessages)
+      const bothConfirmed = areBothParticipantsConfirmed(
+        message.id,
+        participantIds as [string, string],
+        updatedMessages,
+      )
+      if (!bothConfirmed) {
+        toast.success("Confirmation enregistrée — en attente de l’autre partie")
+        return
+      }
+      const latestConfirmation = updatedMessages
+        .filter(
+          (entry) =>
+            parseAgreementConfirmation(entry.content)?.offerMessageId === message.id,
+        )
+        .at(-1)
+      if (latestConfirmation?.sender_id !== userId) return
+      if (
+        findConfirmedAgreement(
+          message.id,
+          participantIds as [string, string],
+          updatedMessages,
+        )
+      ) {
+        return
+      }
+
+      const buyerId = sellerId === userId ? other?.id : userId
+      const sellerName = sellerId === userId ? currentUserName || "Vendeur" : otherName
+      const buyerName = buyerId === userId ? currentUserName || "Acheteur" : otherName
+      const agreementContent = buildAgreementContent({
+        offerMessageId: message.id,
+        productId: offer.productId,
+        productName: offer.productName || "Produit convenu",
+        quantity: offer.quantity || 1,
+        unit: offer.unit,
+        unitPrice: offer.amount,
+        deliveryPlace: offer.deliveryPlace || "À convenir",
+        deliveryDate: offer.deliveryDate || "À convenir",
+        conditions: offer.conditions || offer.note || "Aucune condition précisée",
+        buyerId: buyerId || "",
+        buyerName,
+        sellerId,
+        sellerName,
+        confirmedBy: participantIds,
+        createdAt: new Date().toISOString(),
+      })
+      const { data: agreementMessage, error: agreementError } = await supabase
+        .from("messages")
+        .insert({
+          conversation_id: conversation.id,
+          sender_id: userId,
+          content: agreementContent,
+          message_type: "text",
+        })
+        .select()
+        .single()
+      if (agreementError || !agreementMessage) {
+        toast.error("Accord confirmé, mais le document n’a pas pu être ajouté au chat")
+        return
+      }
+      setMessages((current) =>
+        current.some((entry) => entry.id === agreementMessage.id)
+          ? current
+          : [...current, agreementMessage as Message],
+      )
+      toast.success("Accord confirmé par les deux parties et ajouté au chat")
+    } catch {
+      toast.error("Erreur lors de la confirmation de l’accord")
+    } finally {
+      setConfirmingAgreementId(null)
+    }
+  }
+
+  async function startOrderPayment(order: NegotiatedOrder) {
+    if (paymentBusy) return
+    setPaymentBusy(true)
+    try {
+      const response = await fetch(`/api/orders/${order.id}/pay`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        toast.error(result.error || "Paiement impossible pour le moment")
+        return
+      }
+      if (result.status === "paid_simulated") {
+        const demoNote = `MODE DÉMO — ${order.order_number} : paiement simulé, aucune transaction réelle.`
+        setNegotiatedOrders((current) => ({
+          ...current,
+          [order.source_offer_message_id]: {
+            ...order,
+            payment_status: "paid",
+            escrow_status: "held",
+            status: "confirmed",
+            payment_method: "geniuspay",
+          },
+        }))
+        setDemoOrderIds((current) => ({ ...current, [order.id]: true }))
+        const { data: demoMessage, error: demoMessageError } = await supabase
+          .from("messages")
+          .insert({
+            conversation_id: conversation.id,
+            sender_id: userId,
+            content: demoNote,
+            message_type: "text",
+          })
+          .select()
+          .single()
+        if (demoMessage) {
+          setMessages((current) =>
+            current.some((message) => message.id === demoMessage.id)
+              ? current
+              : [...current, demoMessage as Message],
+          )
+        }
+        if (demoMessageError) {
+          toast.error("La commande est simulée ; l’annotation de démo n’a pas été ajoutée au chat")
+        }
+        setPaymentOrder(null)
+        toast.success("MODE DÉMO : paiement simulé, aucune transaction réelle")
+        await refreshNegotiatedOrders()
+        return
+      }
+      if (result.status !== "redirect_required" || typeof result.payment_url !== "string") {
+        toast.error("Réponse de paiement invalide. Ne relancez pas le paiement.")
+        return
+      }
+      const checkout = new URL(result.payment_url)
+      if (
+        checkout.protocol !== "https:" ||
+        (checkout.hostname !== "geniuspay.ci" &&
+          !checkout.hostname.endsWith(".geniuspay.ci"))
+      ) {
+        toast.error("URL de paiement non vérifiée. Contactez le support.")
+        return
+      }
+      setCheckoutUrl(checkout.toString())
+    } catch {
+      toast.error("Erreur réseau lors de l’initialisation du paiement")
+    } finally {
+      setPaymentBusy(false)
+    }
+  }
+
   async function askYelly(e: React.FormEvent) {
     e.preventDefault()
-    const question = yellyQuestion.trim()
+    await requestYellyAdvice(yellyQuestion)
+  }
+
+  async function requestYellyAdvice(questionText: string) {
+    const question = questionText.trim()
     if (!question || yellyBusy) return
 
     const currentOfferMessage = [...messages].reverse().find((message) => {
@@ -1129,7 +1357,7 @@ export function ChatConversation({
     const productDetails = currentOffer
       ? `Produit : ${currentOffer.productName || "non précisé"}. Offre : ${formatOfferAmount(currentOffer.amount)} FCFA.`
       : "Aucune offre de prix n'est encore en cours."
-    const message = `Aide-moi à négocier avec tact sur GWA. ${productDetails} Ma question : ${question}`.slice(0, 800)
+    const message = `Reste neutre entre acheteur et vendeur, n'engage personne et ne conclus aucun accord. Aide-moi à négocier avec tact sur GWA. ${productDetails} Ma question : ${question}`.slice(0, 800)
 
     setYellyBusy(true)
     setYellyError("")
@@ -1154,7 +1382,32 @@ export function ChatConversation({
         if (typeof data.conversationId === "string") {
           setYellyConversationId(data.conversationId)
         }
-        setYellyReply(String(data.reply || "Je n'ai pas pu préparer de conseil."))
+        const reply = String(data.reply || "Je n'ai pas pu préparer de conseil.")
+        setYellyReply(reply)
+        const { data: posted, error: postError } = await supabase
+          .from("messages")
+          .insert({
+            conversation_id: conversation.id,
+            sender_id: userId,
+            content: `✨ Conseil de l’IA\n${reply}`,
+            message_type: "text",
+          })
+          .select()
+          .single()
+        if (postError) {
+          toast.error("Conseil obtenu, mais impossible de l’ajouter au chat")
+        } else if (posted) {
+          setMessages((current) =>
+            current.some((message) => message.id === posted.id)
+              ? current
+              : [...current, posted as Message],
+          )
+          await supabase
+            .from("conversations")
+            .update({ last_message_at: new Date().toISOString() })
+            .eq("id", conversation.id)
+          scroll()
+        }
       }
     } catch {
       setYellyError("Réseau indisponible. Réessayez.")
@@ -1189,6 +1442,64 @@ export function ChatConversation({
   }
 
   function renderContent(msg: Message) {
+    const parsedAgreement = parseAgreementContent(msg.content)
+    if (parsedAgreement) {
+      const agreement = findConfirmedAgreement(
+        parsedAgreement.offerMessageId,
+        [conversation.participant_1, conversation.participant_2],
+        messages,
+      )
+      if (!agreement) {
+        return <p className="text-sm text-amber-900">Ce récapitulatif ne correspond pas à un accord confirmé.</p>
+      }
+      return (
+        <section className="printable-agreement space-y-3 rounded-xl border border-[#1F5C2E]/20 bg-white p-3 text-[#111b21]">
+          <div className="flex items-center gap-2 text-[#1F5C2E]">
+            <ShieldCheck className="h-5 w-5 shrink-0" />
+            <div>
+              <p className="text-sm font-bold">Accord confirmé</p>
+              <p className="text-[11px]">Confirmé par l’acheteur et le vendeur · trace conservée dans ce chat</p>
+              <p className="text-[10px]">Cette confirmation ne remplace pas une signature électronique qualifiée.</p>
+            </div>
+          </div>
+          <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+            <dt className="text-[#667781]">Produit</dt><dd className="font-medium">{agreement.productName}</dd>
+            <dt className="text-[#667781]">Quantité</dt><dd className="font-medium">{agreement.quantity}{agreement.unit ? ` ${agreement.unit}` : ""}</dd>
+            <dt className="text-[#667781]">Prix unitaire</dt><dd className="font-medium">{formatOfferAmount(agreement.unitPrice)} XOF</dd>
+            <dt className="text-[#667781]">Total</dt><dd className="font-bold">{formatOfferAmount(agreement.total)} XOF</dd>
+            <dt className="text-[#667781]">Lieu</dt><dd className="font-medium">{agreement.deliveryPlace}</dd>
+            <dt className="text-[#667781]">Délai</dt><dd className="font-medium">{agreement.deliveryDate}</dd>
+            <dt className="text-[#667781]">Conditions</dt><dd className="font-medium">{agreement.conditions}</dd>
+            <dt className="text-[#667781]">Acheteur</dt><dd className="font-medium">{agreement.buyerName}</dd>
+            <dt className="text-[#667781]">Vendeur</dt><dd className="font-medium">{agreement.sellerName}</dd>
+            <dt className="text-[#667781]">Date</dt>
+            <dd className="font-medium">{new Date(agreement.createdAt).toLocaleDateString("fr-FR")}</dd>
+          </dl>
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation()
+              window.print()
+            }}
+            className="min-h-11 w-full rounded-full border border-[#1F5C2E]/30 px-3 py-2 text-xs font-semibold text-[#1F5C2E] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1F5C2E]"
+          >
+            <Printer className="mr-1 inline h-4 w-4" /> Imprimer / Enregistrer en PDF
+          </button>
+        </section>
+      )
+    }
+    if (msg.content.startsWith("✨ Conseil de l’IA\n")) {
+      return (
+        <section className="space-y-1 rounded-xl border border-violet-200 bg-violet-50 p-3">
+          <p className="flex items-center gap-1.5 text-xs font-semibold text-violet-800">
+            <Sparkles className="h-4 w-4" /> Conseil de l’IA · neutre
+          </p>
+          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-[#111b21]">
+            {msg.content.slice("✨ Conseil de l’IA\n".length)}
+          </p>
+        </section>
+      )
+    }
     if (msg.message_type === "location" || isLocationMessage(msg.message_type, msg.content)) {
       return <ChatLocationBubble content={msg.content} messageType={msg.message_type} />
     }
@@ -1205,6 +1516,23 @@ export function ChatConversation({
         countered: "Contre-offre",
       }
       const negotiatedOrder = negotiatedOrders[msg.id]
+      const agreementExists = Boolean(
+        findConfirmedAgreement(
+          msg.id,
+          [conversation.participant_1, conversation.participant_2],
+          messages,
+        ),
+      )
+      const currentParticipantConfirmed = messages.some(
+        (entry) =>
+          entry.sender_id === userId &&
+          parseAgreementConfirmation(entry.content)?.offerMessageId === msg.id,
+      )
+      const bothParticipantsConfirmed = areBothParticipantsConfirmed(
+        msg.id,
+        [conversation.participant_1, conversation.participant_2],
+        messages,
+      )
       const orderStatus = negotiatedOrder
         ? normalizeChatOrderStatus(negotiatedOrder.status)
         : null
@@ -1216,6 +1544,15 @@ export function ChatConversation({
         { status: "shipped", label: "Expédiée" },
         { status: "delivered", label: "Livrée" },
       ]
+      const demoPayment = Boolean(
+        negotiatedOrder &&
+          (demoOrderIds[negotiatedOrder.id] ||
+            messages.some(
+              (entry) =>
+                entry.content ===
+                `MODE DÉMO — ${negotiatedOrder.order_number} : paiement simulé, aucune transaction réelle.`,
+            )),
+      )
       return (
         <div className="min-w-0 max-w-full space-y-2 py-0.5 sm:min-w-[200px] sm:max-w-[260px]">
           <div className="flex items-center gap-1.5 text-[#C27D10]">
@@ -1254,7 +1591,7 @@ export function ChatConversation({
                   e.stopPropagation()
                   void respondToOffer(msg, offer, "accepted")
                 }}
-                className="min-w-[72px] flex-1 h-8 rounded-full bg-[#1F5C2E] text-white text-[12px] font-semibold active:scale-95"
+                className="min-w-[72px] min-h-11 flex-1 rounded-full bg-[#1F5C2E] px-2 text-[12px] font-semibold text-white active:scale-95"
               >
                 Accepter
               </button>
@@ -1264,7 +1601,7 @@ export function ChatConversation({
                   e.stopPropagation()
                   void openOfferSheet({ message: msg, offer })
                 }}
-                className="min-w-[72px] flex-1 h-8 rounded-full border border-[#1F5C2E]/30 text-[12px] font-medium text-[#1F5C2E] active:scale-95"
+                className="min-w-[72px] min-h-11 flex-1 rounded-full border border-[#1F5C2E]/30 px-2 text-[12px] font-medium text-[#1F5C2E] active:scale-95"
               >
                 Contre-offre
               </button>
@@ -1274,13 +1611,50 @@ export function ChatConversation({
                   e.stopPropagation()
                   void respondToOffer(msg, offer, "declined")
                 }}
-                className="min-w-[72px] flex-1 h-8 rounded-full border border-[#E5E7EB] text-[12px] font-medium text-[#54656f] active:scale-95"
+                className="min-w-[72px] min-h-11 flex-1 rounded-full border border-[#E5E7EB] px-2 text-[12px] font-medium text-[#54656f] active:scale-95"
               >
                 Refuser
               </button>
             </div>
           )}
-          {offer.status === "accepted" && !negotiatedOrder && msg.offer_accepted_by === userId && (
+          {offer.status === "accepted" && !agreementExists && (
+            <section className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+              <p className="text-xs font-semibold text-amber-950">Récapitulatif à confirmer</p>
+              <p className="text-[11px] leading-relaxed text-amber-900">
+                {offer.productName || "Produit"} · {offer.quantity || 1}{offer.unit ? ` ${offer.unit}` : ""} ·{" "}
+                {formatOfferAmount(offer.amount)} XOF l’unité · livraison : {offer.deliveryPlace || "À convenir"} ·{" "}
+                {offer.deliveryDate || "À convenir"}{offer.conditions ? ` · ${offer.conditions}` : ""}
+              </p>
+              {bothParticipantsConfirmed ? (
+                <button
+                  type="button"
+                  disabled={confirmingAgreementId === msg.id}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    void confirmAgreement(msg, offer)
+                  }}
+                  className="min-h-11 w-full rounded-full bg-[#1F5C2E] px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                >
+                  {confirmingAgreementId === msg.id ? "Préparation…" : "Finaliser l’accord"}
+                </button>
+              ) : currentParticipantConfirmed ? (
+                <p className="text-xs text-amber-900">Votre confirmation est enregistrée. En attente de l’autre partie.</p>
+              ) : (
+                <button
+                  type="button"
+                  disabled={confirmingAgreementId === msg.id}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    void confirmAgreement(msg, offer)
+                  }}
+                  className="min-h-11 w-full rounded-full bg-[#1F5C2E] px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                >
+                  {confirmingAgreementId === msg.id ? "Confirmation…" : "Je confirme l’accord"}
+                </button>
+              )}
+            </section>
+          )}
+          {offer.status === "accepted" && agreementExists && !negotiatedOrder && msg.offer_accepted_by === userId && (
             <button
               type="button"
               onClick={(event) => {
@@ -1290,10 +1664,10 @@ export function ChatConversation({
               disabled={creatingOrderId === msg.id}
               className="w-full rounded-full bg-[#1F5C2E] px-3 py-2 text-xs font-semibold text-white active:scale-95 disabled:opacity-60"
             >
-              {creatingOrderId === msg.id ? "Création…" : "Passer commande"}
+              {creatingOrderId === msg.id ? "Création…" : "Créer la commande"}
             </button>
           )}
-          {offer.status === "accepted" && !negotiatedOrder && msg.offer_accepted_by !== userId && (
+          {offer.status === "accepted" && agreementExists && !negotiatedOrder && msg.offer_accepted_by !== userId && (
             <p className="rounded-xl bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900">
               Accord trouvé. La personne qui a accepté peut maintenant passer commande.
             </p>
@@ -1341,6 +1715,50 @@ export function ChatConversation({
                   {ORDER_STATUS_LABELS[orderStatus] || "La commande est interrompue."}
                 </p>
               ) : null}
+              {negotiatedOrder.buyer_id === userId && negotiatedOrder.payment_status !== "paid" && (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    setPaymentOrder(negotiatedOrder)
+                    setCheckoutUrl(null)
+                  }}
+                  className="min-h-11 w-full rounded-full bg-[#1F5C2E] px-3 py-2 text-xs font-semibold text-white"
+                >
+                  <CreditCard className="mr-1 inline h-4 w-4" /> Payer maintenant
+                </button>
+              )}
+              {negotiatedOrder.payment_status === "paid" && (
+                <div className={`space-y-1 rounded-lg bg-white p-2 text-[11px] ${demoPayment ? "text-amber-900" : "text-[#1F5C2E]"}`}>
+                  <p className="font-semibold">
+                    {demoPayment ? (
+                      "MODE DÉMO — paiement simulé, aucune transaction réelle."
+                    ) : (
+                      <><CheckCheck className="mr-1 inline h-4 w-4" /> Paiement confirmé par le serveur</>
+                    )}
+                  </p>
+                  <a
+                    href={`/commandes/confirmation?order=${encodeURIComponent(negotiatedOrder.id)}`}
+                    className="inline-block min-h-11 py-3 underline"
+                  >
+                    {demoPayment ? "Voir le statut de la commande" : "Voir le reçu et le suivi"}
+                  </a>
+                </div>
+              )}
+              {negotiatedOrder.buyer_id === userId &&
+                negotiatedOrder.payment_status === "paid" &&
+                negotiatedOrder.escrow_status === "held" && (
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      setLitigeOrderId(negotiatedOrder.id)
+                    }}
+                    className="min-h-11 w-full rounded-full border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900"
+                  >
+                    Signaler un problème
+                  </button>
+                )}
               {canBuyerConfirmReception({
                 isSeller: negotiatedOrder.buyer_id !== userId,
                 payment_status: negotiatedOrder.payment_status,
@@ -1444,18 +1862,6 @@ export function ChatConversation({
 
         <button
           type="button"
-          onClick={() => {
-            setShowYelly(true)
-            setYellyError("")
-          }}
-          className="p-2 rounded-full active:bg-white/20"
-          aria-label="Conseil de négociation Yelly"
-          title="Conseil de négociation Yelly"
-        >
-          <Sparkles className="h-5 w-5" />
-        </button>
-        <button
-          type="button"
           onClick={() => void callOther("audio")}
           className="p-2.5 rounded-full active:bg-white/20"
           aria-label="Appel audio"
@@ -1507,6 +1913,26 @@ export function ChatConversation({
           )}
         </div>
       </header>
+
+      <nav aria-label="Actions de négociation" className="flex shrink-0 gap-2 border-b border-black/5 bg-white px-3 py-2">
+        <button
+          type="button"
+          onClick={() => void openOfferSheet()}
+          className="min-h-11 flex-1 rounded-full bg-[#1F5C2E] px-3 text-xs font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1F5C2E]"
+        >
+          <HandCoins className="mr-1 inline h-4 w-4" /> Proposer un prix
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setShowYelly(true)
+            setYellyError("")
+          }}
+          className="min-h-11 flex-1 rounded-full border border-violet-200 bg-violet-50 px-3 text-xs font-semibold text-violet-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-700"
+        >
+          <Sparkles className="mr-1 inline h-4 w-4" /> Demander conseil à l’IA
+        </button>
+      </nav>
 
       {/* MESSAGES AREA — fond terre / motif wax Afrique */}
       <div
@@ -1744,6 +2170,95 @@ export function ChatConversation({
         </>
       )}
 
+      {paymentOrder && (
+        <div className="fixed inset-0 z-[155] flex items-end justify-center bg-black/50 sm:items-center sm:p-4">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="chat-payment-title"
+            className="w-full rounded-t-3xl bg-white p-5 pb-8 shadow-2xl safe-bottom sm:max-w-md sm:rounded-2xl"
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <h3 id="chat-payment-title" className="flex items-center gap-2 text-lg font-semibold">
+                <CreditCard className="h-5 w-5 text-[#1F5C2E]" /> Paiement de commande
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setPaymentOrder(null)
+                  setCheckoutUrl(null)
+                }}
+                aria-label="Fermer le paiement"
+                className="min-h-11 min-w-11 rounded-full text-[#667781]"
+              >
+                <X className="mx-auto h-5 w-5" />
+              </button>
+            </div>
+            <dl className="mb-4 space-y-2 rounded-xl bg-[#F4F8F3] p-4 text-sm">
+              <div className="flex justify-between gap-3">
+                <dt className="text-[#667781]">Commande</dt>
+                <dd className="font-medium">{paymentOrder.order_number}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-[#667781]">Montant</dt>
+                <dd className="font-bold text-[#1F5C2E]">
+                  {formatOfferAmount(
+                    paymentOrder.total_amount ??
+                      (() => {
+                        const offerMessage = messages.find(
+                          (message) => message.id === paymentOrder.source_offer_message_id,
+                        )
+                        const offer = offerMessage ? parseOfferContent(offerMessage.content) : null
+                        return offer ? offer.amount * (offer.quantity || 1) : 0
+                      })(),
+                  )} XOF
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-[#667781]">Mode</dt>
+                <dd className="font-medium">Mobile Money · GeniusPay</dd>
+              </div>
+            </dl>
+            <p className="mb-4 text-xs leading-relaxed text-[#667781]">
+              Les frais éventuels et le moyen Mobile Money sont présentés par GeniusPay avant paiement.
+              La confirmation affichée ici dépend du statut vérifié côté serveur, pas du retour navigateur.
+            </p>
+            {!checkoutUrl && (
+              <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-950">
+                Le paiement utilise le checkout sécurisé GeniusPay. Une simulation n’est possible que si le serveur l’autorise hors production ; elle est signalée comme mode démo.
+              </p>
+            )}
+            {checkoutUrl ? (
+              <button
+                type="button"
+                onClick={() => window.location.assign(checkoutUrl)}
+                className="min-h-12 w-full rounded-xl bg-[#1F5C2E] px-4 font-semibold text-white"
+              >
+                Continuer vers le checkout GeniusPay
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={paymentBusy}
+                onClick={() => void startOrderPayment(paymentOrder)}
+                className="min-h-12 w-full rounded-xl bg-[#1F5C2E] px-4 font-semibold text-white disabled:opacity-60"
+              >
+                {paymentBusy ? "Préparation…" : "Confirmer le paiement"}
+              </button>
+            )}
+          </section>
+        </div>
+      )}
+
+      <LitigeDialog
+        orderId={litigeOrderId}
+        open={Boolean(litigeOrderId)}
+        onOpenChange={(open) => {
+          if (!open) setLitigeOrderId(null)
+        }}
+        onSuccess={() => void refreshNegotiatedOrders()}
+      />
+
       {showYelly && (
         <div className="fixed inset-0 z-[150] flex items-end justify-center bg-black/40 sm:items-center sm:p-4">
           <section
@@ -1778,7 +2293,11 @@ export function ChatConversation({
               </div>
             )}
             <form onSubmit={askYelly} className="space-y-3">
+              <label htmlFor="yelly-chat-question" className="text-sm font-medium text-[#111]">
+                Ta question
+              </label>
               <textarea
+                id="yelly-chat-question"
                 value={yellyQuestion}
                 onChange={(event) => setYellyQuestion(event.target.value)}
                 maxLength={500}
@@ -1798,17 +2317,7 @@ export function ChatConversation({
             {yellyReply && (
               <div className="mt-4 rounded-xl bg-[#F8F9F8] p-3">
                 <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#111b21]">{yellyReply}</p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setNewMessage(yellyReply)
-                    setShowYelly(false)
-                    inputRef.current?.focus()
-                  }}
-                  className="mt-3 text-sm font-semibold text-[#1F5C2E] hover:underline"
-                >
-                  Ajouter au brouillon
-                </button>
+                <p className="mt-3 text-xs font-medium text-[#1F5C2E]">Le conseil a aussi été ajouté à la conversation.</p>
               </div>
             )}
           </section>
@@ -1834,10 +2343,11 @@ export function ChatConversation({
             </p>
             {offerProducts.length > 0 && (
               <>
-                <label className="text-sm font-medium text-[#111] mb-1.5 block">
+                <label htmlFor="offer-product" className="text-sm font-medium text-[#111] mb-1.5 block">
                   Produit
                 </label>
                 <select
+                  id="offer-product"
                   value={offerProductId}
                   onChange={(e) => {
                     setOfferProductId(e.target.value)
@@ -1854,8 +2364,9 @@ export function ChatConversation({
                 </select>
               </>
             )}
-            <label className="text-sm font-medium text-[#111] mb-1.5 block">Prix unitaire proposé (FCFA)</label>
+            <label htmlFor="offer-amount" className="text-sm font-medium text-[#111] mb-1.5 block">Prix unitaire proposé (FCFA)</label>
             <input
+              id="offer-amount"
               type="number"
               inputMode="numeric"
               min={1}
@@ -1864,12 +2375,13 @@ export function ChatConversation({
               placeholder="15000"
               className="w-full h-12 rounded-xl border border-[#E5E7EB] px-4 text-lg font-semibold tabular-nums mb-3 focus:outline-none focus:ring-2 focus:ring-[#1F5C2E]/30"
             />
-            <label className="text-sm font-medium text-[#111] mb-1.5 block">
+            <label htmlFor="offer-quantity" className="text-sm font-medium text-[#111] mb-1.5 block">
               Quantité{offerProducts.find((product) => product.id === offerProductId)?.unit
                 ? ` (${offerProducts.find((product) => product.id === offerProductId)?.unit})`
                 : ""}
             </label>
             <input
+              id="offer-quantity"
               type="number"
               inputMode="numeric"
               min={1}
@@ -1886,12 +2398,47 @@ export function ChatConversation({
                 )} FCFA
               </p>
             )}
-            <label className="text-sm font-medium text-[#111] mb-1.5 block">Message</label>
+            <label htmlFor="offer-delivery-place" className="text-sm font-medium text-[#111] mb-1.5 block">
+              Lieu de livraison
+            </label>
             <input
+              id="offer-delivery-place"
+              type="text"
+              value={offerDeliveryPlace}
+              onChange={(event) => setOfferDeliveryPlace(event.target.value)}
+              maxLength={160}
+              placeholder="À convenir"
+              className="mb-3 h-11 w-full rounded-xl border border-[#E5E7EB] px-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#1F5C2E]/30"
+            />
+            <label htmlFor="offer-delivery-date" className="text-sm font-medium text-[#111] mb-1.5 block">
+              Date ou délai de livraison
+            </label>
+            <input
+              id="offer-delivery-date"
+              type="date"
+              value={offerDeliveryDate}
+              onChange={(event) => setOfferDeliveryDate(event.target.value)}
+              className="mb-3 h-11 w-full rounded-xl border border-[#E5E7EB] px-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#1F5C2E]/30"
+            />
+            <label htmlFor="offer-conditions" className="text-sm font-medium text-[#111] mb-1.5 block">
+              Conditions
+            </label>
+            <textarea
+              id="offer-conditions"
+              value={offerConditions}
+              onChange={(event) => setOfferConditions(event.target.value)}
+              maxLength={500}
+              rows={2}
+              placeholder="Qualité, emballage, modalités de livraison…"
+              className="mb-3 w-full resize-y rounded-xl border border-[#E5E7EB] px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#1F5C2E]/30"
+            />
+            <label htmlFor="offer-note" className="text-sm font-medium text-[#111] mb-1.5 block">Message</label>
+            <input
+              id="offer-note"
               type="text"
               value={offerNote}
               onChange={(e) => setOfferNote(e.target.value)}
-              placeholder="2 sacs, livraison demain"
+              placeholder="Un détail utile à partager"
               className="w-full h-11 rounded-xl border border-[#E5E7EB] px-4 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-[#1F5C2E]/30"
             />
             <button
@@ -1923,7 +2470,7 @@ export function ChatConversation({
                   setNewMessage(e.target.value)
                   signalTyping()
                 }}
-                placeholder="Message"
+                placeholder="Message · @IA pour demander conseil"
                 className="flex-1 bg-transparent border-0 text-[15px] h-[48px] focus:outline-none placeholder:text-[#8696a0] px-1"
                 enterKeyHint="send"
                 autoComplete="off"

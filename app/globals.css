@@ -478,3 +478,32 @@
     background-attachment: fixed;
   }
 }
+
+@media print {
+  @page {
+    margin: 14mm;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .printable-agreement,
+  .printable-agreement * {
+    visibility: visible !important;
+  }
+
+  .printable-agreement {
+    position: fixed !important;
+    inset: 0 auto auto 0;
+    width: 100%;
+    max-width: none !important;
+    break-inside: avoid;
+    border: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .printable-agreement button {
+    display: none !important;
+  }
+}

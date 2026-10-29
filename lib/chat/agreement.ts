@@ -1,3 +1,5 @@
+import { parseOfferContent } from "@/lib/chat/offer"
+
 export interface AgreementTerms {
   v: 1
   kind: "gwa_agreement"
@@ -98,11 +100,25 @@ export function parseAgreementContent(content: string): AgreementTerms | null {
       value?.kind !== "gwa_agreement" ||
       typeof value.offerMessageId !== "string" ||
       typeof value.productName !== "string" ||
-      typeof value.quantity !== "number" ||
-      typeof value.unitPrice !== "number" ||
-      typeof value.total !== "number" ||
+      !Number.isSafeInteger(value.quantity) ||
+      value.quantity < 1 ||
+      (value.unit !== undefined && typeof value.unit !== "string") ||
+      !Number.isSafeInteger(value.unitPrice) ||
+      value.unitPrice < 1 ||
+      !Number.isSafeInteger(value.total) ||
+      value.total < 1 ||
+      (value.productId !== undefined && typeof value.productId !== "string") ||
+      typeof value.deliveryPlace !== "string" ||
+      typeof value.deliveryDate !== "string" ||
+      typeof value.conditions !== "string" ||
+      typeof value.buyerId !== "string" ||
+      typeof value.buyerName !== "string" ||
+      typeof value.sellerId !== "string" ||
+      typeof value.sellerName !== "string" ||
       !Array.isArray(value.confirmedBy) ||
-      value.confirmedBy.length < 2
+      value.confirmedBy.length < 2 ||
+      !value.confirmedBy.every((participantId: unknown) => typeof participantId === "string") ||
+      typeof value.createdAt !== "string"
     ) {
       return null
     }
@@ -123,4 +139,50 @@ export function areBothParticipantsConfirmed(
       .map((message) => message.sender_id),
   )
   return participantIds.every((participantId) => confirmations.has(participantId))
+}
+
+export function findConfirmedAgreement(
+  offerMessageId: string,
+  participantIds: [string, string],
+  messages: Array<{ id?: string; sender_id: string; content: string; message_type?: string }>,
+): AgreementTerms | null {
+  const offerMessage = messages.find((message) => message.id === offerMessageId)
+  const offer = offerMessage ? parseOfferContent(offerMessage.content) : null
+  if (!offer || offer.status !== "accepted" || !areBothParticipantsConfirmed(offerMessageId, participantIds, messages)) {
+    return null
+  }
+
+  const participantSet = new Set(participantIds)
+  const expectedQuantity = offer.quantity || 1
+  const expectedConditions = offer.conditions || offer.note || "Aucune condition précisée"
+  const expectedSellerId = offer.sellerId
+  for (const message of messages) {
+    const agreement = parseAgreementContent(message.content)
+    if (!agreement || agreement.offerMessageId !== offerMessageId) continue
+    const confirmedBy = new Set(agreement.confirmedBy)
+    if (
+      confirmedBy.size !== 2 ||
+      !participantSet.has(agreement.buyerId) ||
+      !participantSet.has(agreement.sellerId) ||
+      agreement.buyerId === agreement.sellerId ||
+      !participantIds.every((participantId) => confirmedBy.has(participantId)) ||
+      agreement.productId !== offer.productId ||
+      agreement.productName !== (offer.productName || "Produit convenu") ||
+      agreement.quantity !== expectedQuantity ||
+      agreement.unit !== offer.unit ||
+      agreement.unitPrice !== offer.amount ||
+      agreement.total !== offer.amount * expectedQuantity ||
+      agreement.deliveryPlace !== (offer.deliveryPlace || "À convenir") ||
+      agreement.deliveryDate !== (offer.deliveryDate || "À convenir") ||
+      agreement.conditions !== expectedConditions ||
+      (expectedSellerId && agreement.sellerId !== expectedSellerId) ||
+      !agreement.buyerName.trim() ||
+      !agreement.sellerName.trim() ||
+      !Number.isFinite(Date.parse(agreement.createdAt))
+    ) {
+      continue
+    }
+    return agreement
+  }
+  return null
 }
