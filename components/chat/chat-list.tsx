@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { GwaMark } from "@/components/brand/gwa-mark"
 import { resolveReadReceipt } from "@/lib/chat/read-receipt"
+import { formatOfferAmount, parseOfferContent } from "@/lib/chat/offer"
 
 interface ConversationItem {
   id: string
@@ -72,6 +73,10 @@ export function ChatList({ conversations, userId, onSelectConversation }: ChatLi
     if (c.last_message_type === "image") return "Photo"
     if (c.last_message_type === "file") return "Document"
     if (c.last_message_type === "location") return "Position"
+    if (c.last_message_type === "offer") {
+      const offer = parseOfferContent(c.last_message || "")
+      return offer ? `Offre · ${formatOfferAmount(offer.amount)} FCFA` : "Offre de prix"
+    }
     return c.last_message || "Nouvelle conversation"
   }
 

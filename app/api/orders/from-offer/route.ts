@@ -35,7 +35,9 @@ export async function POST(request: Request) {
 
     const { data: msg, error: msgErr } = await supabase
       .from("messages")
-      .select("id, conversation_id, sender_id, content, message_type")
+      .select(
+        "id, conversation_id, sender_id, content, message_type, offer_accepted_by",
+      )
       .eq("id", messageId)
       .maybeSingle()
 
@@ -62,8 +64,34 @@ export async function POST(request: Request) {
     }
 
     const participants = [conv.participant_1, conv.participant_2]
-    if (!participants.includes(user.id)) {
+    if (
+      !participants.includes(user.id) ||
+      !msg.offer_accepted_by ||
+      msg.offer_accepted_by === msg.sender_id ||
+      !participants.includes(msg.offer_accepted_by)
+    ) {
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 })
+    }
+    if (user.id !== msg.offer_accepted_by) {
+      return NextResponse.json(
+        { error: "Seule la personne qui accepte l'offre peut finaliser la commande" },
+        { status: 403 },
+      )
+    }
+
+    const admin = createAdminClient()
+    const { data: existingOrder } = await admin
+      .from("orders")
+      .select("*")
+      .eq("source_offer_message_id", msg.id)
+      .maybeSingle()
+    if (existingOrder) {
+      return NextResponse.json({
+        success: true,
+        order: existingOrder,
+        negotiated_unit_price: offer.amount,
+        redirect_to: "/dashboard/commandes",
+      })
     }
 
     // Offreur = souvent acheteur ; l'autre = vendeur (ou inverse selon contexte produit)
@@ -148,14 +176,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Acheteur/vendeur invalides" }, { status: 400 })
     }
 
-    // Seul l'acheteur finalise la commande négociée
-    if (user.id !== buyerId) {
-      return NextResponse.json(
-        { error: "Seul l'acheteur peut créer la commande" },
-        { status: 403 },
-      )
-    }
-
     let unitPrice = Math.round(Number(offer.amount))
     if (!Number.isFinite(unitPrice) || unitPrice < 1) {
       return NextResponse.json({ error: "Montant négocié invalide" }, { status: 400 })
@@ -190,10 +210,10 @@ export async function POST(request: Request) {
     const vendeurRecoit = commission.vendeurRecoitFcfa
     const orderNumber = `GWA-N-${Date.now().toString(36).toUpperCase()}`
 
-    const admin = createAdminClient()
     const { data: order, error: orderError } = await admin
       .from("orders")
       .insert({
+        source_offer_message_id: msg.id,
         buyer_id: buyerId,
         seller_id: sellerId,
         order_number: orderNumber,
@@ -217,6 +237,21 @@ export async function POST(request: Request) {
       .single()
 
     if (orderError || !order) {
+      if (orderError?.code === "23505") {
+        const { data: duplicateOrder } = await admin
+          .from("orders")
+          .select("*")
+          .eq("source_offer_message_id", msg.id)
+          .maybeSingle()
+        if (duplicateOrder) {
+          return NextResponse.json({
+            success: true,
+            order: duplicateOrder,
+            negotiated_unit_price: offer.amount,
+            redirect_to: "/dashboard/commandes",
+          })
+        }
+      }
       console.error("[orders/from-offer]", orderError?.message)
       return NextResponse.json(
         { error: orderError?.message || "Création commande échouée" },

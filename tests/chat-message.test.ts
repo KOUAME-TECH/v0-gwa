@@ -38,6 +38,17 @@ describe("payload message chat (P10)", () => {
     expect(p.media_url).toBe("https://x/voice.webm")
   })
 
+  it("accepte une position sans media_url", () => {
+    const p = buildMessagePayload({
+      conversationId: "c1",
+      senderId: "u1",
+      content: '{"lat":5.3,"lon":-4.0}',
+      type: "location",
+    })
+    expect(p.message_type).toBe("location")
+    expect(p.media_url).toBeUndefined()
+  })
+
   it("refuse un texte vide et un média sans url", () => {
     expect(() => buildMessagePayload({ conversationId: "c1", senderId: "u1", content: "   " })).toThrow(
       InvalidMessageError,

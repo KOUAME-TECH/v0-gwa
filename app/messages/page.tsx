@@ -1,6 +1,6 @@
 "use client"
 
-import React, { Suspense, useEffect, useState, useRef, useCallback } from "react"
+import React, { Suspense, useEffect, useState, useRef, useCallback, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ChatList } from "@/components/chat/chat-list"
@@ -21,6 +21,7 @@ interface Conversation {
     user_type: string
   }
   last_message?: string
+  last_message_id?: string
   last_message_type?: string
   last_message_sender_id?: string
   last_message_is_read?: boolean
@@ -39,7 +40,7 @@ function MessagesContent() {
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null)
   const [loading, setLoading] = useState(true)
   const handledRef = useRef<string | null>(null)
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   const loadConversations = useCallback(async (uid: string): Promise<Conversation[]> => {
     const { data: rawConvs } = await supabase
@@ -64,7 +65,7 @@ function MessagesContent() {
     const msgResults = await Promise.all(
       convIds.map(cid =>
         supabase.from("messages")
-          .select("content, message_type, conversation_id, sender_id, is_read")
+          .select("id, content, message_type, conversation_id, sender_id, is_read")
           .eq("conversation_id", cid)
           .order("created_at", { ascending: false })
           .limit(1)
@@ -73,6 +74,7 @@ function MessagesContent() {
     )
 
     const lastMsgMap = new Map<string, {
+      id: string
       content: string
       message_type: string
       sender_id: string
@@ -81,6 +83,7 @@ function MessagesContent() {
     for (const r of msgResults) {
       if (r.data) {
         lastMsgMap.set(r.data.conversation_id, {
+          id: r.data.id,
           content: r.data.content,
           message_type: r.data.message_type,
           sender_id: r.data.sender_id,
@@ -108,6 +111,7 @@ function MessagesContent() {
       return {
         ...c,
         other_user: profileMap.get(otherId) || undefined,
+        last_message_id: lm?.id,
         last_message: lm?.content,
         last_message_type: lm?.message_type,
         last_message_sender_id: lm?.sender_id,
@@ -115,8 +119,7 @@ function MessagesContent() {
         unread_count: unreadMap.get(c.id) || 0,
       }
     })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [supabase])
 
   useEffect(() => {
     let mounted = true
@@ -143,12 +146,11 @@ function MessagesContent() {
     }
     init()
     return () => { mounted = false }
-  }, [])
+  }, [loadConversations, router, supabase])
 
   // ── Supabase Realtime : nouveaux messages entrants ──────────────────────────
   useEffect(() => {
     if (!user) return
-    const supabase = createClient()
 
     const channel = supabase
       .channel(`inbox:${user.id}`)
@@ -158,7 +160,6 @@ function MessagesContent() {
           event: 'INSERT',
           schema: 'public',
           table: 'messages',
-          filter: `recipient_id=eq.${user.id}`,
         },
         (payload) => {
           const newMsg = payload.new as {
@@ -167,30 +168,79 @@ function MessagesContent() {
             sender_id: string
             content: string
             created_at: string
-            status: string
+            message_type?: string
+            is_read?: boolean
           }
 
-          // Mettre à jour le badge non-lu sur la bonne conversation
-          setConversations((prev) =>
-            prev.map((conv) =>
-              conv.id === newMsg.conversation_id
-                ? { ...conv, unread_count: (conv.unread_count ?? 0) + 1, last_message: newMsg.content }
-                : conv
-            )
-          )
+          // RLS limite les événements aux messages des conversations de l'utilisateur.
+          setConversations((prev) => {
+            const conversation = prev.find((conv) => conv.id === newMsg.conversation_id)
+            if (!conversation) return prev
+            const isIncoming = newMsg.sender_id !== user.id
+            const updated = {
+              ...conversation,
+              last_message_id: newMsg.id,
+              last_message: newMsg.content,
+              last_message_type: newMsg.message_type || "text",
+              last_message_sender_id: newMsg.sender_id,
+              last_message_is_read: !!newMsg.is_read,
+              last_message_at: newMsg.created_at,
+              unread_count:
+                (conversation.unread_count ?? 0) +
+                (isIncoming && selectedConv?.id !== newMsg.conversation_id ? 1 : 0),
+            }
+            return [updated, ...prev.filter((conv) => conv.id !== newMsg.conversation_id)]
+          })
 
           // Son de notification si pas dans cette conversation
-          if (!selectedConv || selectedConv.id !== newMsg.conversation_id) {
+          if (newMsg.sender_id !== user.id && (!selectedConv || selectedConv.id !== newMsg.conversation_id)) {
             new Audio('/sounds/message.mp3').play().catch(() => null)
           }
         }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "messages" },
+        (payload) => {
+          const message = payload.new as {
+            id: string
+            conversation_id: string
+            sender_id: string
+            is_read: boolean
+          }
+          setConversations((prev) =>
+            prev.map((conversation) =>
+              conversation.id === message.conversation_id &&
+              conversation.last_message_id === message.id
+                ? { ...conversation, last_message_is_read: message.is_read }
+                : conversation,
+            ),
+          )
+          if (message.is_read && message.sender_id !== user.id) {
+            void supabase
+              .from("messages")
+              .select("id", { count: "exact", head: true })
+              .eq("conversation_id", message.conversation_id)
+              .eq("is_read", false)
+              .neq("sender_id", user.id)
+              .then(({ count }) => {
+                setConversations((prev) =>
+                  prev.map((conversation) =>
+                    conversation.id === message.conversation_id
+                      ? { ...conversation, unread_count: count || 0 }
+                      : conversation,
+                  ),
+                )
+              })
+          }
+        },
       )
       .subscribe()
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [user, selectedConv])
+  }, [user, selectedConv, supabase])
 
   // Handle "to" param - open existing or create new conversation
   useEffect(() => {
@@ -244,8 +294,7 @@ function MessagesContent() {
       }
     }
     openOrCreate()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, recipientId, loading])
+  }, [user, recipientId, loading, conversations, convType, supabase])
 
   if (loading) {
     return (

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useRef, useEffect, useCallback } from "react"
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { toast } from "sonner"
@@ -18,7 +18,8 @@ import { EMOJI_CATEGORIES } from "@/lib/chat/emojis"
 import {
   ArrowLeft, Send, Mic, Smile, Phone, Video, MoreVertical,
   Check, CheckCheck, ImageIcon, FileText, X, Trash2, Copy, Reply,
-  Pin, BellOff, UserCircle, Flag, Paperclip, Camera, MapPin, HandCoins
+  Pin, BellOff, UserCircle, Flag, Paperclip, Camera, MapPin, HandCoins,
+  Sparkles,
 } from "lucide-react"
 
 interface Message {
@@ -31,6 +32,7 @@ interface Message {
   reply_to_id?: string
   is_read: boolean
   is_edited: boolean
+  offer_accepted_by?: string | null
   created_at: string
 }
 
@@ -60,6 +62,11 @@ const userTypeLabels: Record<string, string> = {
   business: "Entreprise", entreprise: "Entreprise", transformateur: "Transformateur",
 }
 
+function getChatUploadPath(conversationId: string, fileName: string) {
+  const ext = fileName.split(".").pop()?.replace(/[^a-zA-Z0-9]/g, "") || "bin"
+  return `chat/${conversationId}/${Date.now()}.${ext}`
+}
+
 export function ChatConversation({ conversation, userId, onBack }: ChatConversationProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState("")
@@ -74,7 +81,9 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   const [emojiCat, setEmojiCat] = useState(EMOJI_CATEGORIES[0]?.id ?? "smileys")
   const [audioPreview, setAudioPreview] = useState<{ blob: Blob; url: string; duration: string } | null>(null)
   const [isPlayingPreview, setIsPlayingPreview] = useState(false)
-  const [loadingMsgs, setLoadingMsgs] = useState(true)
+  const [loadedConversationId, setLoadedConversationId] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState(false)
+  const [reloadAttempt, setReloadAttempt] = useState(0)
   const [showOfferSheet, setShowOfferSheet] = useState(false)
   const [offerAmount, setOfferAmount] = useState("")
   const [offerNote, setOfferNote] = useState("")
@@ -83,6 +92,13 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     { id: string; name: string; price: number }[]
   >([])
   const [offerProductId, setOfferProductId] = useState<string>("")
+  const [counterOfferId, setCounterOfferId] = useState<string | null>(null)
+  const [showYelly, setShowYelly] = useState(false)
+  const [yellyQuestion, setYellyQuestion] = useState("")
+  const [yellyReply, setYellyReply] = useState("")
+  const [yellyConversationId, setYellyConversationId] = useState<string | null>(null)
+  const [yellyBusy, setYellyBusy] = useState(false)
+  const [yellyError, setYellyError] = useState("")
   const [muted, setMuted] = useState(false)
   const [pinned, setPinned] = useState(false)
   const [liveCameraOpen, setLiveCameraOpen] = useState(false)
@@ -103,7 +119,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   const mediaRecorder = useRef<MediaRecorder | null>(null)
   const audioChunks = useRef<Blob[]>([])
   const previewAudio = useRef<HTMLAudioElement | null>(null)
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   const other = conversation.other_user
   const otherName = other?.full_name || "Utilisateur"
@@ -111,15 +127,18 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   const prefsKey = `gwa-chat-prefs:${userId}:${conversation.id}`
 
   useEffect(() => {
+    let prefs: { muted?: boolean; pinned?: boolean } = {}
     try {
       const raw = localStorage.getItem(prefsKey)
-      if (!raw) return
-      const p = JSON.parse(raw) as { muted?: boolean; pinned?: boolean }
-      setMuted(!!p.muted)
-      setPinned(!!p.pinned)
+      if (raw) prefs = JSON.parse(raw) as { muted?: boolean; pinned?: boolean }
     } catch {
       /* ignore */
     }
+    const timeout = window.setTimeout(() => {
+      setMuted(!!prefs.muted)
+      setPinned(!!prefs.pinned)
+    }, 0)
+    return () => window.clearTimeout(timeout)
   }, [prefsKey])
 
   function savePrefs(next: { muted?: boolean; pinned?: boolean }) {
@@ -253,29 +272,42 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   useEffect(() => {
     let mounted = true
     async function load() {
-      const { data } = await supabase
-        .from("messages")
-        .select("*")
-        .eq("conversation_id", conversation.id)
-        .order("created_at", { ascending: true })
-
-      if (data && mounted) {
-        setMessages(data)
-        setLoadingMsgs(false)
-        scroll()
-      }
-
-      // Mark unread as read only when l'utilisateur voit vraiment la conversation
-      if (typeof document !== "undefined" && document.visibilityState === "visible") {
-        await supabase
+      try {
+        const { data, error } = await supabase
           .from("messages")
-          .update({ is_read: true })
+          .select("*")
           .eq("conversation_id", conversation.id)
-          .neq("sender_id", userId)
-          .eq("is_read", false)
+          .order("created_at", { ascending: true })
+
+        if (!mounted) return
+        if (error) {
+          setLoadError(true)
+          toast.error("Impossible de charger les messages")
+        } else {
+          setLoadError(false)
+          setMessages(data || [])
+          scroll()
+        }
+        setLoadedConversationId(conversation.id)
+
+        // Mark unread as read only when l'utilisateur voit vraiment la conversation
+        if (!error && typeof document !== "undefined" && document.visibilityState === "visible") {
+          await supabase
+            .from("messages")
+            .update({ is_read: true })
+            .eq("conversation_id", conversation.id)
+            .neq("sender_id", userId)
+            .eq("is_read", false)
+        }
+      } catch {
+        if (mounted) {
+          setLoadError(true)
+          setLoadedConversationId(conversation.id)
+          toast.error("Impossible de charger les messages")
+        }
       }
     }
-    load()
+    void load()
 
     // Focus after a tick
     setTimeout(() => inputRef.current?.focus(), 400)
@@ -318,7 +350,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       if (typingTimer.current) clearTimeout(typingTimer.current)
       supabase.removeChannel(channel)
     }
-  }, [conversation.id])
+  }, [conversation.id, reloadAttempt, scroll, supabase, userId])
 
   const signalTyping = () => {
     const now = Date.now()
@@ -407,8 +439,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     setShowAttach(false)
     const toastId = toast.loading(type === "image" ? "Envoi de l'image..." : "Envoi du fichier...")
 
-    const ext = file.name.split(".").pop()
-    const path = `chat/${conversation.id}/${Date.now()}.${ext}`
+    const path = getChatUploadPath(conversation.id, file.name)
     const { error: upErr } = await supabase.storage.from("chat-media").upload(path, file)
 
     if (upErr) {
@@ -503,9 +534,12 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     )
   }
 
-  async function openOfferSheet() {
+  async function openOfferSheet(counter?: { message: Message; offer: PriceOfferPayload }) {
     setShowAttach(false)
     setShowOfferSheet(true)
+    setCounterOfferId(counter?.message.id ?? null)
+    setOfferNote("")
+    if (counter) setOfferAmount(String(counter.offer.amount))
     // Produits actifs des deux participants (acheteur négocie sur produit vendeur)
     const sellerIds = [other?.id, userId].filter(Boolean) as string[]
     const { data } = await supabase
@@ -526,9 +560,10 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     const rest = list.filter((p) => p.seller_id !== other?.id)
     const ordered = preferred.length > 0 ? [...preferred, ...rest] : list
     setOfferProducts(ordered)
-    if (ordered[0]) {
-      setOfferProductId(ordered[0].id)
-      if (!offerAmount) setOfferAmount(String(Math.round(ordered[0].price)))
+    const selected = ordered.find((p) => p.id === counter?.offer.productId) || ordered[0]
+    if (selected) {
+      setOfferProductId(selected.id)
+      if (!counter && !offerAmount) setOfferAmount(String(Math.round(selected.price)))
     }
   }
 
@@ -660,16 +695,17 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       return
     }
     if (a === "clear") {
-      const ok = window.confirm("Effacer tous les messages de cette conversation ?")
+      const ok = window.confirm("Effacer tous tes messages de cette conversation ?")
       if (!ok) return
       const { error } = await supabase
         .from("messages")
         .delete()
         .eq("conversation_id", conversation.id)
+        .eq("sender_id", userId)
       if (error) toast.error("Impossible d'effacer")
       else {
-        setMessages([])
-        toast.success("Historique effacé")
+        setMessages((prev) => prev.filter((message) => message.sender_id !== userId))
+        toast.success("Tes messages ont été effacés")
       }
       return
     }
@@ -718,9 +754,13 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     if (a === "reply") { setReplyTo(msg); inputRef.current?.focus() }
     else if (a === "copy") { navigator.clipboard.writeText(msg.content); toast.success("Copié") }
     else if (a === "delete" && msg.sender_id === userId) {
-      setMessages(prev => prev.filter(m => m.id !== msg.id))
-      toast.success("Supprimé")
-      await supabase.from("messages").delete().eq("id", msg.id)
+      const { error } = await supabase.from("messages").delete().eq("id", msg.id)
+      if (error) {
+        toast.error("Impossible de supprimer ce message")
+      } else {
+        setMessages((prev) => prev.filter((message) => message.id !== msg.id))
+        toast.success("Message supprimé")
+      }
     }
   }
 
@@ -754,6 +794,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
           sender_id: authUser.id,
           content,
           message_type: "offer",
+          reply_to_id: counterOfferId || undefined,
         })
         .select()
         .single()
@@ -762,6 +803,23 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       } else if (data) {
         setMessages((prev) => [...prev, data])
         scroll()
+        if (counterOfferId) {
+          const response = await fetch("/api/messages/offer-response", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ messageId: counterOfferId, status: "countered" }),
+          })
+          const result = await response.json().catch(() => ({}))
+          if (response.ok && result.message) {
+            setMessages((prev) =>
+              prev.map((message) =>
+                message.id === counterOfferId ? result.message : message,
+              ),
+            )
+          } else {
+            toast.error("Contre-offre envoyée, mais l'offre précédente reste ouverte")
+          }
+        }
         void fetch("/api/messages/notify", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -777,9 +835,10 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
           .update({ last_message_at: new Date().toISOString() })
           .eq("id", conversation.id)
         setShowOfferSheet(false)
+        setCounterOfferId(null)
         setOfferAmount("")
         setOfferNote("")
-        toast.success("Offre envoyée")
+        toast.success(counterOfferId ? "Contre-offre envoyée" : "Offre envoyée")
       }
     } catch {
       toast.error("Erreur réseau")
@@ -792,57 +851,117 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     offer: PriceOfferPayload,
     status: "accepted" | "declined",
   ) {
-    const next = { ...offer, status }
-    const content = JSON.stringify(next)
-    const { error } = await supabase
-      .from("messages")
-      .update({ content, is_edited: true })
-      .eq("id", msg.id)
-    if (error) {
-      toast.error("Mise à jour impossible")
-      return
-    }
-    setMessages((prev) =>
-      prev.map((m) => (m.id === msg.id ? { ...m, content, is_edited: true } : m)),
-    )
-    const replyText =
-      status === "accepted"
-        ? `J'accepte l'offre de ${formatOfferAmount(offer.amount)} FCFA`
-        : `Je refuse l'offre de ${formatOfferAmount(offer.amount)} FCFA`
-    await supabase.from("messages").insert({
-      conversation_id: conversation.id,
-      sender_id: userId,
-      content: replyText,
-      message_type: "text",
-      reply_to_id: msg.id,
-    })
-
-    if (status === "accepted") {
-      const toastId = toast.loading("Création de la commande au prix négocié…")
-      try {
-        const res = await fetch("/api/orders/from-offer", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message_id: msg.id, quantity: 1 }),
-        })
-        const data = await res.json().catch(() => ({}))
-        toast.dismiss(toastId)
-        if (!res.ok) {
-          toast.error(data.error || "Offre acceptée, commande à finaliser")
-        } else {
-          toast.success("Commande créée au prix négocié")
-          if (data.redirect_to) {
-            window.setTimeout(() => {
-              window.location.href = data.redirect_to
-            }, 600)
-          }
-        }
-      } catch {
-        toast.dismiss(toastId)
-        toast.error("Erreur réseau commande")
+    try {
+      const response = await fetch("/api/messages/offer-response", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messageId: msg.id, status }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok || !result.message) {
+        toast.error(result.error || "Mise à jour impossible")
+        return
       }
-    } else {
-      toast.success("Offre refusée")
+      setMessages((prev) => prev.map((m) => (m.id === msg.id ? result.message : m)))
+      const replyText =
+        status === "accepted"
+          ? `J'accepte l'offre de ${formatOfferAmount(offer.amount)} FCFA`
+          : `Je refuse l'offre de ${formatOfferAmount(offer.amount)} FCFA`
+      const { error: replyError } = await supabase.from("messages").insert({
+        conversation_id: conversation.id,
+        sender_id: userId,
+        content: replyText,
+        message_type: "text",
+        reply_to_id: msg.id,
+      })
+      if (replyError) {
+        toast.error("Réponse enregistrée, mais le message de confirmation n'a pas été envoyé")
+      }
+
+      if (status === "accepted") {
+        await createOrderFromOffer(msg.id)
+      } else {
+        toast.success("Offre refusée")
+      }
+    } catch {
+      toast.error("Erreur réseau, réessayez")
+    }
+  }
+
+  async function createOrderFromOffer(messageId: string) {
+    const toastId = toast.loading("Création de la commande au prix négocié…")
+    try {
+      const response = await fetch("/api/orders/from-offer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message_id: messageId, quantity: 1 }),
+      })
+      const data = await response.json().catch(() => ({}))
+      toast.dismiss(toastId)
+      if (!response.ok) {
+        toast.error(data.error || "Offre acceptée, commande à finaliser")
+      } else {
+        toast.success("Commande créée au prix négocié")
+        if (data.redirect_to) {
+          window.setTimeout(() => {
+            window.location.href = data.redirect_to
+          }, 600)
+        }
+      }
+    } catch {
+      toast.dismiss(toastId)
+      toast.error("Erreur réseau commande")
+    }
+  }
+
+  async function askYelly(e: React.FormEvent) {
+    e.preventDefault()
+    const question = yellyQuestion.trim()
+    if (!question || yellyBusy) return
+
+    const currentOfferMessage = [...messages].reverse().find((message) => {
+      const offer = message.message_type === "offer"
+        ? parseOfferContent(message.content)
+        : null
+      return offer?.status === "pending"
+    })
+    const currentOffer = currentOfferMessage
+      ? parseOfferContent(currentOfferMessage.content)
+      : null
+    const productDetails = currentOffer
+      ? `Produit : ${currentOffer.productName || "non précisé"}. Offre : ${formatOfferAmount(currentOffer.amount)} FCFA.`
+      : "Aucune offre de prix n'est encore en cours."
+    const message = `Aide-moi à négocier avec tact sur GWA. ${productDetails} Ma question : ${question}`.slice(0, 800)
+
+    setYellyBusy(true)
+    setYellyError("")
+    setYellyReply("")
+    try {
+      const response = await fetch("/api/yelly/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message,
+          page: "/messages",
+          conversationId: yellyConversationId,
+          context: currentOffer?.productId
+            ? { productId: currentOffer.productId }
+            : undefined,
+        }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        setYellyError(data.error || "Yelly est indisponible pour le moment.")
+      } else {
+        if (typeof data.conversationId === "string") {
+          setYellyConversationId(data.conversationId)
+        }
+        setYellyReply(String(data.reply || "Je n'ai pas pu préparer de conseil."))
+      }
+    } catch {
+      setYellyError("Réseau indisponible. Réessayez.")
+    } finally {
+      setYellyBusy(false)
     }
   }
 
@@ -852,6 +971,22 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     if (msg.media_url) {
       const a = new Audio(msg.media_url)
       a.play().catch(() => toast.error("Impossible de lire le vocal"))
+    }
+  }
+
+  function handleAttachmentAction(action: "gallery" | "camera" | "document" | "offer" | "location") {
+    if (action === "gallery") {
+      imgRef.current?.click()
+      setShowAttach(false)
+    } else if (action === "camera") {
+      void openCameraCapture()
+    } else if (action === "document") {
+      fileRef.current?.click()
+      setShowAttach(false)
+    } else if (action === "offer") {
+      void openOfferSheet()
+    } else {
+      void shareLocation()
     }
   }
 
@@ -872,7 +1007,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
         countered: "Contre-offre",
       }
       return (
-        <div className="min-w-[200px] max-w-[260px] space-y-2 py-0.5">
+        <div className="min-w-0 max-w-full space-y-2 py-0.5 sm:min-w-[200px] sm:max-w-[260px]">
           <div className="flex items-center gap-1.5 text-[#C27D10]">
             <HandCoins className="h-4 w-4 shrink-0" />
             <span className="text-[11px] font-semibold uppercase tracking-wide">
@@ -891,14 +1026,14 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
           )}
           <p className="text-[11px] text-[#667781]">{statusLabel[offer.status] || offer.status}</p>
           {!own && offer.status === "pending" && (
-            <div className="flex gap-1.5 pt-1">
+            <div className="flex flex-wrap gap-1.5 pt-1">
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation()
                   void respondToOffer(msg, offer, "accepted")
                 }}
-                className="flex-1 h-8 rounded-full bg-[#1F5C2E] text-white text-[12px] font-semibold active:scale-95"
+                className="min-w-[72px] flex-1 h-8 rounded-full bg-[#1F5C2E] text-white text-[12px] font-semibold active:scale-95"
               >
                 Accepter
               </button>
@@ -906,13 +1041,35 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation()
+                  void openOfferSheet({ message: msg, offer })
+                }}
+                className="min-w-[72px] flex-1 h-8 rounded-full border border-[#1F5C2E]/30 text-[12px] font-medium text-[#1F5C2E] active:scale-95"
+              >
+                Contre-offre
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
                   void respondToOffer(msg, offer, "declined")
                 }}
-                className="flex-1 h-8 rounded-full border border-[#E5E7EB] text-[12px] font-medium text-[#54656f] active:scale-95"
+                className="min-w-[72px] flex-1 h-8 rounded-full border border-[#E5E7EB] text-[12px] font-medium text-[#54656f] active:scale-95"
               >
                 Refuser
               </button>
             </div>
+          )}
+          {offer.status === "accepted" && msg.offer_accepted_by === userId && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation()
+                void createOrderFromOffer(msg.id)
+              }}
+              className="w-full rounded-full bg-[#1F5C2E] px-3 py-2 text-xs font-semibold text-white active:scale-95"
+            >
+              Finaliser la commande
+            </button>
           )}
         </div>
       )
@@ -958,6 +1115,17 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     return <p className="text-[15px] whitespace-pre-wrap break-words leading-relaxed">{msg.content}</p>
   }
 
+  const activeOfferEntry = [...messages]
+    .reverse()
+    .map((message) => ({
+      message,
+      offer:
+        message.message_type === "offer"
+          ? parseOfferContent(message.content)
+          : null,
+    }))
+    .find((entry) => entry.offer?.status === "pending")
+
   return (
     <div
       className="fixed inset-0 z-[100] flex flex-col lg:static lg:inset-auto lg:z-0 lg:h-full lg:min-h-[calc(100dvh-3.5rem)] lg:flex-1"
@@ -982,6 +1150,18 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
           </div>
         </button>
 
+        <button
+          type="button"
+          onClick={() => {
+            setShowYelly(true)
+            setYellyError("")
+          }}
+          className="p-2 rounded-full active:bg-white/20"
+          aria-label="Conseil de négociation Yelly"
+          title="Conseil de négociation Yelly"
+        >
+          <Sparkles className="h-5 w-5" />
+        </button>
         <button
           type="button"
           onClick={() => void callOther("audio")}
@@ -1019,7 +1199,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
                     icon: BellOff,
                     label: muted ? "Réactiver les notifs" : "Mettre en sourdine",
                   },
-                  { key: "clear", icon: Trash2, label: "Effacer les messages" },
+                  { key: "clear", icon: Trash2, label: "Effacer mes messages" },
                 ].map((item) => (
                   <button key={item.key} onClick={() => menuAction(item.key)}
                     className="w-full flex items-center gap-3 px-4 py-3 active:bg-gray-100 text-sm">
@@ -1044,9 +1224,23 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
           backgroundImage: CHAT_AFRICA_BG.image,
         }}
       >
-        {loadingMsgs ? (
+        {loadedConversationId !== conversation.id ? (
           <div className="flex items-center justify-center h-full">
             <div className="w-8 h-8 border-3 border-[#1F5C2E] border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : loadError ? (
+          <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+            <p className="text-sm text-[#667781]">Les messages ne sont pas disponibles.</p>
+            <button
+              type="button"
+              onClick={() => {
+                setLoadedConversationId(null)
+                setReloadAttempt((attempt) => attempt + 1)
+              }}
+              className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#1F5C2E] shadow-sm"
+            >
+              Réessayer
+            </button>
           </div>
         ) : messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center px-6">
@@ -1072,9 +1266,23 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
                 )}
                 <div className={`flex mb-1 ${own ? "justify-end" : "justify-start"}`}>
                   <div className="relative max-w-[82%]">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedMsg(selectedMsg === msg.id ? null : msg.id)}
+                    <div
+                      role="group"
+                      tabIndex={0}
+                      aria-label={`Message de ${own ? "vous" : otherName}`}
+                      onClick={(event) => {
+                        if ((event.target as HTMLElement).closest("button, a")) return
+                        setSelectedMsg(selectedMsg === msg.id ? null : msg.id)
+                      }}
+                      onKeyDown={(event) => {
+                        if (
+                          event.target === event.currentTarget &&
+                          (event.key === "Enter" || event.key === " ")
+                        ) {
+                          event.preventDefault()
+                          setSelectedMsg(selectedMsg === msg.id ? null : msg.id)
+                        }
+                      }}
                       className={`text-left rounded-2xl shadow-sm px-3 py-1.5 ${
                         own ? "bg-[#d9fdd3] rounded-tr-md" : "bg-white rounded-tl-md"
                       }`}
@@ -1096,7 +1304,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
                           : <Check className="h-[14px] w-[14px] text-[#667781]" />
                         )}
                       </div>
-                    </button>
+                    </div>
 
                     {selectedMsg === msg.id && (
                       <>
@@ -1157,7 +1365,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
           </span>
           <div className="flex-1 flex items-center gap-[2px] overflow-hidden">
             {Array.from({ length: 40 }).map((_, i) => (
-              <div key={i} className="w-[2px] bg-red-400/60 rounded-full shrink-0" style={{ height: `${3 + Math.sin((recordSec + i) * 0.5) * 10 + Math.random() * 4}px` }} />
+              <div key={i} className="w-[2px] bg-red-400/60 rounded-full shrink-0" style={{ height: `${3 + Math.sin((recordSec + i) * 0.5) * 10 + Math.sin(i * 1.7) * 2}px` }} />
             ))}
           </div>
           <button onClick={toggleVoice} className="w-11 h-11 rounded-full bg-[#1F5C2E] text-white flex items-center justify-center active:scale-90 transition-transform">
@@ -1205,42 +1413,34 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
                   icon: ImageIcon,
                   color: "bg-violet-500",
                   label: "Galerie",
-                  action: () => {
-                    imgRef.current?.click()
-                    setShowAttach(false)
-                  },
+                  action: "gallery" as const,
                 },
                 {
                   icon: Camera,
                   color: "bg-pink-500",
                   label: "Caméra",
-                  action: () => {
-                    void openCameraCapture()
-                  },
+                  action: "camera" as const,
                 },
                 {
                   icon: FileText,
                   color: "bg-blue-500",
                   label: "Document",
-                  action: () => {
-                    fileRef.current?.click()
-                    setShowAttach(false)
-                  },
+                  action: "document" as const,
                 },
                 {
                   icon: HandCoins,
                   color: "bg-[#C27D10]",
                   label: "Négocier",
-                  action: () => void openOfferSheet(),
+                  action: "offer" as const,
                 },
                 {
                   icon: MapPin,
                   color: "bg-green-500",
                   label: "Position",
-                  action: () => void shareLocation(),
+                  action: "location" as const,
                 },
               ].map((item) => (
-                <button key={item.label} onClick={item.action} className="flex flex-col items-center gap-2">
+                <button key={item.label} onClick={() => handleAttachmentAction(item.action)} className="flex flex-col items-center gap-2">
                   <div className={`w-14 h-14 ${item.color} rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform`}>
                     <item.icon className="h-6 w-6 text-white" />
                   </div>
@@ -1252,18 +1452,93 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
         </>
       )}
 
+      {showYelly && (
+        <div className="fixed inset-0 z-[150] flex items-end justify-center bg-black/40 sm:items-center sm:p-4">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="yelly-negotiation-title"
+            className="max-h-[85dvh] w-full overflow-y-auto rounded-t-3xl bg-white p-5 pb-8 shadow-2xl safe-bottom sm:max-w-lg sm:rounded-2xl"
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-[#1F5C2E]" />
+                <h3 id="yelly-negotiation-title" className="text-lg font-semibold text-[#111]">
+                  Yelly, aide à la négociation
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowYelly(false)}
+                className="rounded-full p-2 text-[#667781] active:bg-gray-100"
+                aria-label="Fermer les conseils Yelly"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="mb-3 text-sm text-[#667781]">
+              Yelly reçoit ta question et, s&apos;il y en a une, les détails du produit et de l&apos;offre en cours. Elle ne reçoit pas l&apos;historique du chat.
+            </p>
+            {activeOfferEntry?.offer && (
+              <div className="mb-3 rounded-xl bg-[#F3F7F2] px-3 py-2 text-sm text-[#1F5C2E]">
+                {activeOfferEntry.offer.productName || "Offre en cours"} ·{" "}
+                {formatOfferAmount(activeOfferEntry.offer.amount)} FCFA
+              </div>
+            )}
+            <form onSubmit={askYelly} className="space-y-3">
+              <textarea
+                value={yellyQuestion}
+                onChange={(event) => setYellyQuestion(event.target.value)}
+                maxLength={500}
+                rows={3}
+                placeholder="Comment répondre à cette offre ?"
+                className="w-full resize-none rounded-xl border border-[#E5E7EB] px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#1F5C2E]/30"
+              />
+              <button
+                type="submit"
+                disabled={yellyBusy || !yellyQuestion.trim()}
+                className="h-11 w-full rounded-xl bg-[#1F5C2E] font-semibold text-white disabled:opacity-50"
+              >
+                {yellyBusy ? "Yelly réfléchit…" : "Demander un conseil"}
+              </button>
+            </form>
+            {yellyError && <p role="alert" className="mt-3 text-sm text-red-600">{yellyError}</p>}
+            {yellyReply && (
+              <div className="mt-4 rounded-xl bg-[#F8F9F8] p-3">
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#111b21]">{yellyReply}</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewMessage(yellyReply)
+                    setShowYelly(false)
+                    inputRef.current?.focus()
+                  }}
+                  className="mt-3 text-sm font-semibold text-[#1F5C2E] hover:underline"
+                >
+                  Ajouter au brouillon
+                </button>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+
       {/* OFFRE DE PRIX — négociation commande */}
       {showOfferSheet && (
         <>
           <div className="fixed inset-0 bg-black/40 z-[108]" onClick={() => setShowOfferSheet(false)} />
-          <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl z-[109] p-5 pb-8 safe-bottom animate-slideUp">
+          <div className="fixed bottom-0 left-0 right-0 max-h-[85dvh] overflow-y-auto bg-white rounded-t-3xl z-[109] p-5 pb-8 safe-bottom animate-slideUp">
             <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-4" />
             <div className="flex items-center gap-2 mb-1">
               <HandCoins className="h-5 w-5 text-[#C27D10]" />
-              <h3 className="text-lg font-semibold text-[#111]">Proposer un prix</h3>
+              <h3 className="text-lg font-semibold text-[#111]">
+                {counterOfferId ? "Envoyer une contre-offre" : "Proposer un prix"}
+              </h3>
             </div>
             <p className="text-sm text-[#667781] mb-4">
-              Proposez un prix. S&apos;il accepte, la commande part toute seule.
+              {counterOfferId
+                ? "Ajustez le prix et ajoutez vos conditions avant de répondre."
+                : "Proposez un prix et précisez les conditions de votre offre."}
             </p>
             {offerProducts.length > 0 && (
               <>
@@ -1311,7 +1586,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
               onClick={() => void sendPriceOffer()}
               className="w-full h-12 rounded-xl bg-[#1F5C2E] text-white font-semibold active:scale-[0.98] disabled:opacity-50"
             >
-              {offerBusy ? "Envoi…" : "Envoyer l'offre"}
+            {offerBusy ? "Envoi…" : counterOfferId ? "Envoyer la contre-offre" : "Envoyer l'offre"}
             </button>
           </div>
         </>

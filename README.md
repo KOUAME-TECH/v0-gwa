@@ -53,6 +53,7 @@ npm test
 
 - Push `main` → Vercel prod.
 - La prod Supabase est déclarée au niveau 064 d’après le schéma fourni. La nouvelle fonctionnalité de versement nécessite la migration additive `scripts/schema/065_manual_seller_payouts.sql` ; ne rejouez pas 058–064 sans vérifier l’état réel de la base.
+- La négociation du chat nécessite ensuite la migration additive `scripts/schema/066_secure_chat_negotiation.sql`, à examiner puis appliquer explicitement. Elle corrige les politiques de messages qui dépendaient d’un `recipient_id` absent, enregistre l’auteur d’une acceptation et rend la création de commande idempotente par offre.
 - GitHub Supabase Deploy = **OFF**.
 
 ## Ops urgents
