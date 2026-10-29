@@ -33,6 +33,10 @@ function MessagesContent() {
   const searchParams = useSearchParams()
   const recipientId = searchParams.get("to")
   const convType = searchParams.get("type")
+  const productId = searchParams.get("product")
+  const productAmount = Number(searchParams.get("amount"))
+  const productQuantity = Number(searchParams.get("quantity"))
+  const openNegotiation = searchParams.get("negotiate") === "1"
 
   const [user, setUser] = useState<{ id: string } | null>(null)
   const [userType, setUserType] = useState<string | null>(null)
@@ -126,7 +130,11 @@ function MessagesContent() {
     async function init() {
       try {
         const { data: { user: u } } = await supabase.auth.getUser()
-        if (!u) { router.push("/auth/login?redirect=/messages"); return }
+        if (!u) {
+          const returnTo = `${window.location.pathname}${window.location.search}`
+          router.push(`/auth/login?redirect=${encodeURIComponent(returnTo)}`)
+          return
+        }
         if (!mounted) return
         setUser(u)
 
@@ -333,6 +341,16 @@ function MessagesContent() {
           <ChatConversation
             conversation={selectedConv}
             userId={user.id}
+            initialProductId={
+              selectedConv.participant_1 === recipientId || selectedConv.participant_2 === recipientId
+                ? productId || undefined
+                : undefined
+            }
+            initialAmount={Number.isFinite(productAmount) && productAmount > 0 ? productAmount : undefined}
+            initialQuantity={
+              Number.isInteger(productQuantity) && productQuantity > 0 ? productQuantity : undefined
+            }
+            openNegotiation={openNegotiation}
             onBack={async () => {
               setSelectedConv(null)
               if (user) {

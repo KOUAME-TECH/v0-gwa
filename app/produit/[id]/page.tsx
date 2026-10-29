@@ -15,6 +15,7 @@ import {
   BadgeCheck,
   ShoppingBag,
   MessageCircle,
+  HandCoins,
   Star,
   Minus,
   Plus,
@@ -275,6 +276,7 @@ export default function ProduitPage() {
   const totalPrice = product.price * quantity
   const verified = shouldShowVerifiedBadge(profile)
   const minQty = product.min_order_quantity || 1
+  const negotiationHref = `/messages?to=${encodeURIComponent(product.seller_id)}&product=${encodeURIComponent(product.id)}&amount=${Math.round(product.price)}&quantity=${quantity}&negotiate=1`
 
   const QtyControl = ({ className }: { className?: string }) => (
     <div className={cn("flex items-center gap-1 rounded-full bg-neutral-100 p-1", className)}>
@@ -339,12 +341,25 @@ export default function ProduitPage() {
           </div>
         </div>
       </Link>
-      <Link href={`/messages?to=${profile?.id}`} className="mt-4 block">
-        <Button variant="outline" className="h-11 w-full rounded-full bg-white font-medium">
-          <MessageCircle className="mr-2 h-4 w-4" />
-          Contacter
-        </Button>
-      </Link>
+      {user?.id !== product.seller_id && (
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <Link href={negotiationHref} className="min-w-0">
+            <Button className="h-11 w-full rounded-full bg-[#1F5C2E] px-2 text-sm font-semibold hover:bg-[#184a25]">
+              <HandCoins className="mr-1.5 h-4 w-4 shrink-0" />
+              Négocier
+            </Button>
+          </Link>
+          <Link
+            href={`/messages?to=${encodeURIComponent(product.seller_id)}&product=${encodeURIComponent(product.id)}&amount=${Math.round(product.price)}&quantity=${quantity}`}
+            className="min-w-0"
+          >
+            <Button variant="outline" className="h-11 w-full rounded-full bg-white px-2 text-sm font-medium">
+              <MessageCircle className="mr-1.5 h-4 w-4 shrink-0" />
+              Contacter
+            </Button>
+          </Link>
+        </div>
+      )}
     </div>
   )
 
@@ -471,6 +486,14 @@ export default function ProduitPage() {
                 <span className="text-lg font-bold tabular-nums">{formatPrice(totalPrice)} FCFA</span>
               </p>
             </div>
+            {user?.id !== product.seller_id && (
+              <Link href={negotiationHref} className="block">
+                <Button variant="outline" className="h-11 w-full rounded-full border-[#1F5C2E]/30 bg-white font-semibold text-[#1F5C2E]">
+                  <HandCoins className="mr-2 h-4 w-4" />
+                  Négocier ce produit
+                </Button>
+              </Link>
+            )}
             <div className="flex gap-2">
               <Button
                 disabled={adding}

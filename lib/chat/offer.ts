@@ -10,6 +10,8 @@ export type PriceOfferPayload = {
   kind: "price_offer"
   amount: number
   currency: "XOF"
+  quantity?: number
+  unit?: string
   productName?: string
   productId?: string
   status: OfferStatus
@@ -18,6 +20,8 @@ export type PriceOfferPayload = {
 
 export function buildOfferContent(input: {
   amount: number
+  quantity?: number
+  unit?: string
   productName?: string
   productId?: string
   note?: string
@@ -34,6 +38,9 @@ export function buildOfferContent(input: {
     currency: "XOF",
     status: input.status || "pending",
   }
+  const quantity = Math.floor(Number(input.quantity))
+  if (Number.isFinite(quantity) && quantity > 0) payload.quantity = quantity
+  if (input.unit) payload.unit = input.unit
   if (input.productName) payload.productName = input.productName
   if (input.productId) payload.productId = input.productId
   if (input.note) payload.note = input.note

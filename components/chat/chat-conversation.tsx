@@ -16,6 +16,13 @@ import { buildLocationContent, isLocationMessage } from "@/lib/chat/location"
 import { ChatLocationBubble } from "@/components/chat/chat-location-bubble"
 import { EMOJI_CATEGORIES } from "@/lib/chat/emojis"
 import {
+  ORDER_FLOW,
+  ORDER_STATUS_LABELS,
+  canBuyerConfirmReception,
+  normalizeOrderStatus,
+  orderFlowIndex,
+} from "@/lib/orders/escrow-flow"
+import {
   ArrowLeft, Send, Mic, Smile, Phone, Video, MoreVertical,
   Check, CheckCheck, ImageIcon, FileText, X, Trash2, Copy, Reply,
   Pin, BellOff, UserCircle, Flag, Paperclip, Camera, MapPin, HandCoins,
@@ -50,9 +57,23 @@ interface ConversationData {
   }
 }
 
+interface NegotiatedOrder {
+  id: string
+  order_number: string
+  status: string
+  payment_status: string | null
+  escrow_status: string | null
+  source_offer_message_id: string
+  buyer_id: string
+}
+
 interface ChatConversationProps {
   conversation: ConversationData
   userId: string
+  initialProductId?: string
+  initialAmount?: number
+  initialQuantity?: number
+  openNegotiation?: boolean
   onBack: () => void
 }
 
@@ -62,13 +83,37 @@ const userTypeLabels: Record<string, string> = {
   business: "Entreprise", entreprise: "Entreprise", transformateur: "Transformateur",
 }
 
+function normalizeChatOrderStatus(status: string) {
+  const normalized = normalizeOrderStatus(status)
+  const aliases: Record<string, string> = {
+    en_preparation: "processing",
+    en_transit: "shipped",
+    en_route: "shipped",
+    confirme: "confirmed",
+    livre: "delivered",
+    paiement_escrow: "confirmed",
+  }
+  return aliases[normalized] || normalized
+}
+
 function getChatUploadPath(conversationId: string, fileName: string) {
   const ext = fileName.split(".").pop()?.replace(/[^a-zA-Z0-9]/g, "") || "bin"
   return `chat/${conversationId}/${Date.now()}.${ext}`
 }
 
-export function ChatConversation({ conversation, userId, onBack }: ChatConversationProps) {
+export function ChatConversation({
+  conversation,
+  userId,
+  initialProductId,
+  initialAmount,
+  initialQuantity,
+  openNegotiation,
+  onBack,
+}: ChatConversationProps) {
   const [messages, setMessages] = useState<Message[]>([])
+  const [negotiatedOrders, setNegotiatedOrders] = useState<Record<string, NegotiatedOrder>>({})
+  const [creatingOrderId, setCreatingOrderId] = useState<string | null>(null)
+  const [confirmingOrderId, setConfirmingOrderId] = useState<string | null>(null)
   const [newMessage, setNewMessage] = useState("")
   const [sending, setSending] = useState(false)
   const [replyTo, setReplyTo] = useState<Message | null>(null)
@@ -89,9 +134,10 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   const [offerNote, setOfferNote] = useState("")
   const [offerBusy, setOfferBusy] = useState(false)
   const [offerProducts, setOfferProducts] = useState<
-    { id: string; name: string; price: number }[]
+    { id: string; name: string; price: number; unit?: string }[]
   >([])
   const [offerProductId, setOfferProductId] = useState<string>("")
+  const [offerQuantity, setOfferQuantity] = useState("1")
   const [counterOfferId, setCounterOfferId] = useState<string | null>(null)
   const [showYelly, setShowYelly] = useState(false)
   const [yellyQuestion, setYellyQuestion] = useState("")
@@ -119,12 +165,49 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   const mediaRecorder = useRef<MediaRecorder | null>(null)
   const audioChunks = useRef<Blob[]>([])
   const previewAudio = useRef<HTMLAudioElement | null>(null)
+  const autoNegotiationKey = useRef<string | null>(null)
   const supabase = useMemo(() => createClient(), [])
 
   const other = conversation.other_user
   const otherName = other?.full_name || "Utilisateur"
   const otherInitial = otherName.charAt(0).toUpperCase()
   const prefsKey = `gwa-chat-prefs:${userId}:${conversation.id}`
+  const acceptedOfferIds = useMemo(
+    () =>
+      messages
+        .filter((message) => {
+          if (message.message_type !== "offer") return false
+          return parseOfferContent(message.content)?.status === "accepted"
+        })
+        .map((message) => message.id),
+    [messages],
+  )
+
+  const refreshNegotiatedOrders = useCallback(async () => {
+    if (acceptedOfferIds.length === 0) {
+      setNegotiatedOrders({})
+      return
+    }
+
+    const { data, error } = await supabase
+      .from("orders")
+      .select("id, order_number, status, payment_status, escrow_status, source_offer_message_id, buyer_id")
+      .in("source_offer_message_id", acceptedOfferIds)
+
+    if (error) return
+    const nextOrders: Record<string, NegotiatedOrder> = {}
+    for (const order of (data || []) as NegotiatedOrder[]) {
+      nextOrders[order.source_offer_message_id] = order
+    }
+    setNegotiatedOrders(nextOrders)
+  }, [acceptedOfferIds, supabase])
+
+  useEffect(() => {
+    void refreshNegotiatedOrders()
+    if (acceptedOfferIds.length === 0) return
+    const interval = window.setInterval(() => void refreshNegotiatedOrders(), 20_000)
+    return () => window.clearInterval(interval)
+  }, [acceptedOfferIds.length, refreshNegotiatedOrders])
 
   useEffect(() => {
     let prefs: { muted?: boolean; pinned?: boolean } = {}
@@ -534,17 +617,24 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     )
   }
 
-  async function openOfferSheet(counter?: { message: Message; offer: PriceOfferPayload }) {
+  const openOfferSheet = useCallback(async (
+    counter?: { message: Message; offer: PriceOfferPayload },
+    context?: { productId?: string; amount?: number; quantity?: number },
+  ) => {
     setShowAttach(false)
     setShowOfferSheet(true)
     setCounterOfferId(counter?.message.id ?? null)
     setOfferNote("")
+    setOfferQuantity(String(counter?.offer.quantity ?? context?.quantity ?? initialQuantity ?? 1))
     if (counter) setOfferAmount(String(counter.offer.amount))
+    else if ((context?.amount ?? initialAmount) && (context?.amount ?? initialAmount)! > 0) {
+      setOfferAmount(String(Math.round((context?.amount ?? initialAmount)!)))
+    }
     // Produits actifs des deux participants (acheteur négocie sur produit vendeur)
     const sellerIds = [other?.id, userId].filter(Boolean) as string[]
     const { data } = await supabase
       .from("products")
-      .select("id, name, price, seller_id")
+      .select("id, name, price, unit, seller_id")
       .in("seller_id", sellerIds)
       .eq("status", "active")
       .order("created_at", { ascending: false })
@@ -553,6 +643,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       id: string
       name: string
       price: number
+      unit?: string
       seller_id?: string
     }[]
     // Préférer les produits de l'interlocuteur (cas acheteur → vendeur)
@@ -560,12 +651,41 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     const rest = list.filter((p) => p.seller_id !== other?.id)
     const ordered = preferred.length > 0 ? [...preferred, ...rest] : list
     setOfferProducts(ordered)
-    const selected = ordered.find((p) => p.id === counter?.offer.productId) || ordered[0]
+    const preferredProductId = counter?.offer.productId || context?.productId || initialProductId
+    const selected = ordered.find((p) => p.id === preferredProductId) || ordered[0]
     if (selected) {
       setOfferProductId(selected.id)
-      if (!counter && !offerAmount) setOfferAmount(String(Math.round(selected.price)))
+      if (!counter && !(context?.amount ?? initialAmount)) {
+        setOfferAmount(String(Math.round(selected.price)))
+      }
     }
-  }
+  }, [initialAmount, initialProductId, initialQuantity, other?.id, supabase, userId])
+
+  useEffect(() => {
+    if (
+      !openNegotiation ||
+      !initialProductId ||
+      loadedConversationId !== conversation.id
+    ) {
+      return
+    }
+    const key = `${conversation.id}:${initialProductId}`
+    if (autoNegotiationKey.current === key) return
+    autoNegotiationKey.current = key
+    void openOfferSheet(undefined, {
+      productId: initialProductId,
+      amount: initialAmount,
+      quantity: initialQuantity,
+    })
+  }, [
+    conversation.id,
+    initialAmount,
+    initialProductId,
+    initialQuantity,
+    loadedConversationId,
+    openNegotiation,
+    openOfferSheet,
+  ])
 
   // Voice -- real MediaRecorder
   async function toggleVoice() {
@@ -766,8 +886,13 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
 
   async function sendPriceOffer() {
     const amount = Number.parseInt(offerAmount.replace(/\D/g, ""), 10)
+    const quantity = Number.parseInt(offerQuantity, 10)
     if (!Number.isFinite(amount) || amount < 1) {
       toast.error("Indiquez un montant valide")
+      return
+    }
+    if (!Number.isInteger(quantity) || quantity < 1) {
+      toast.error("Indiquez une quantité valide")
       return
     }
     setOfferBusy(true)
@@ -775,6 +900,8 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       const selected = offerProducts.find((p) => p.id === offerProductId)
       const content = buildOfferContent({
         amount,
+        quantity,
+        unit: selected?.unit,
         note: offerNote.trim() || undefined,
         productId: offerProductId || undefined,
         productName: selected?.name,
@@ -838,6 +965,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
         setCounterOfferId(null)
         setOfferAmount("")
         setOfferNote("")
+        setOfferQuantity("1")
         toast.success(counterOfferId ? "Contre-offre envoyée" : "Offre envoyée")
       }
     } catch {
@@ -879,7 +1007,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       }
 
       if (status === "accepted") {
-        await createOrderFromOffer(msg.id)
+        toast.success("Offre acceptée — passez commande depuis cette offre.")
       } else {
         toast.success("Offre refusée")
       }
@@ -888,13 +1016,15 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     }
   }
 
-  async function createOrderFromOffer(messageId: string) {
+  async function createOrderFromOffer(messageId: string, quantity = 1) {
+    if (creatingOrderId) return
+    setCreatingOrderId(messageId)
     const toastId = toast.loading("Création de la commande au prix négocié…")
     try {
       const response = await fetch("/api/orders/from-offer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message_id: messageId, quantity: 1 }),
+        body: JSON.stringify({ message_id: messageId, quantity }),
       })
       const data = await response.json().catch(() => ({}))
       toast.dismiss(toastId)
@@ -902,15 +1032,44 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
         toast.error(data.error || "Offre acceptée, commande à finaliser")
       } else {
         toast.success("Commande créée au prix négocié")
-        if (data.redirect_to) {
-          window.setTimeout(() => {
-            window.location.href = data.redirect_to
-          }, 600)
-        }
+        await refreshNegotiatedOrders()
       }
     } catch {
       toast.dismiss(toastId)
       toast.error("Erreur réseau commande")
+    } finally {
+      setCreatingOrderId(null)
+    }
+  }
+
+  async function confirmOrderReceipt(order: NegotiatedOrder) {
+    if (confirmingOrderId) return
+    setConfirmingOrderId(order.id)
+    try {
+      const response = await fetch(`/api/orders/${order.id}/confirm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        toast.error(result.error || "Confirmation de réception impossible")
+        return
+      }
+      setNegotiatedOrders((current) => ({
+        ...current,
+        [order.source_offer_message_id]: {
+          ...order,
+          status: "delivered",
+          escrow_status: "released",
+        },
+      }))
+      toast.success("Réception confirmée. Merci !")
+      await refreshNegotiatedOrders()
+    } catch {
+      toast.error("Erreur réseau, réessayez")
+    } finally {
+      setConfirmingOrderId(null)
     }
   }
 
@@ -1006,6 +1165,18 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
         declined: "Refusée",
         countered: "Contre-offre",
       }
+      const negotiatedOrder = negotiatedOrders[msg.id]
+      const orderStatus = negotiatedOrder
+        ? normalizeChatOrderStatus(negotiatedOrder.status)
+        : null
+      const orderProgress = negotiatedOrder ? orderFlowIndex(orderStatus || "") : -1
+      const orderSteps = [
+        { status: "pending", label: "Commande créée" },
+        { status: "confirmed", label: "Confirmée" },
+        { status: "processing", label: "En préparation" },
+        { status: "shipped", label: "Expédiée" },
+        { status: "delivered", label: "Livrée" },
+      ]
       return (
         <div className="min-w-0 max-w-full space-y-2 py-0.5 sm:min-w-[200px] sm:max-w-[260px]">
           <div className="flex items-center gap-1.5 text-[#C27D10]">
@@ -1016,6 +1187,11 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
           </div>
           {offer.productName && (
             <p className="text-[12px] text-[#667781] truncate">{offer.productName}</p>
+          )}
+          {offer.quantity && (
+            <p className="text-[12px] text-[#667781]">
+              Quantité : {offer.quantity}{offer.unit ? ` ${offer.unit}` : ""}
+            </p>
           )}
           <p className="text-xl font-bold text-[#1F5C2E] tabular-nums">
             {formatOfferAmount(offer.amount)}{" "}
@@ -1059,17 +1235,88 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
               </button>
             </div>
           )}
-          {offer.status === "accepted" && msg.offer_accepted_by === userId && (
+          {offer.status === "accepted" && !negotiatedOrder && msg.offer_accepted_by === userId && (
             <button
               type="button"
               onClick={(event) => {
                 event.stopPropagation()
-                void createOrderFromOffer(msg.id)
+                void createOrderFromOffer(msg.id, offer.quantity || 1)
               }}
-              className="w-full rounded-full bg-[#1F5C2E] px-3 py-2 text-xs font-semibold text-white active:scale-95"
+              disabled={creatingOrderId === msg.id}
+              className="w-full rounded-full bg-[#1F5C2E] px-3 py-2 text-xs font-semibold text-white active:scale-95 disabled:opacity-60"
             >
-              Finaliser la commande
+              {creatingOrderId === msg.id ? "Création…" : "Passer commande"}
             </button>
+          )}
+          {offer.status === "accepted" && !negotiatedOrder && msg.offer_accepted_by !== userId && (
+            <p className="rounded-xl bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900">
+              Accord trouvé. La personne qui a accepté peut maintenant passer commande.
+            </p>
+          )}
+          {negotiatedOrder && (
+            <section className="space-y-2 rounded-xl border border-[#1F5C2E]/15 bg-[#F4F8F3] p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-[#1F5C2E]">
+                    Suivi de commande
+                  </p>
+                  <p className="text-xs font-semibold text-[#111b21]">
+                    {negotiatedOrder.order_number || "Commande créée"}
+                  </p>
+                </div>
+                <span className="rounded-full bg-white px-2 py-1 text-[10px] font-medium text-[#1F5C2E]">
+                  {orderStatus === "pending"
+                    ? "Commande créée"
+                    : ORDER_STATUS_LABELS[orderStatus || ""] || orderStatus || "En cours"}
+                </span>
+              </div>
+              <ol className="space-y-1">
+                {orderSteps.map((step, index) => {
+                  const stepStatus = ORDER_FLOW[index]
+                  const complete = orderProgress >= index
+                  return (
+                    <li key={step.status} className="flex items-center gap-2 text-[11px]">
+                      <span
+                        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] ${
+                          complete ? "bg-[#1F5C2E] text-white" : "bg-white text-[#667781]"
+                        }`}
+                      >
+                        {complete ? "✓" : index + 1}
+                      </span>
+                      <span className={complete ? "font-medium text-[#1F5C2E]" : "text-[#667781]"}>
+                        {step.label}
+                      </span>
+                      <span className="sr-only">{stepStatus}</span>
+                    </li>
+                  )
+                })}
+              </ol>
+              {orderStatus === "cancelled" || orderStatus === "disputed" ? (
+                <p className="text-[11px] text-amber-900">
+                  {ORDER_STATUS_LABELS[orderStatus] || "La commande est interrompue."}
+                </p>
+              ) : null}
+              {canBuyerConfirmReception({
+                isSeller: negotiatedOrder.buyer_id !== userId,
+                payment_status: negotiatedOrder.payment_status,
+                escrow_status: negotiatedOrder.escrow_status as "pending" | "held" | "released" | "frozen" | null,
+                status: orderStatus,
+              }) && (
+                <button
+                  type="button"
+                  disabled={confirmingOrderId === negotiatedOrder.id}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    void confirmOrderReceipt(negotiatedOrder)
+                  }}
+                  className="w-full rounded-full bg-[#1F5C2E] px-3 py-2 text-xs font-semibold text-white active:scale-95 disabled:opacity-60"
+                >
+                  {confirmingOrderId === negotiatedOrder.id
+                    ? "Confirmation…"
+                    : "Confirmer la réception"}
+                </button>
+              )}
+            </section>
           )}
         </div>
       )
@@ -1562,7 +1809,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
                 </select>
               </>
             )}
-            <label className="text-sm font-medium text-[#111] mb-1.5 block">Montant (FCFA)</label>
+            <label className="text-sm font-medium text-[#111] mb-1.5 block">Prix unitaire proposé (FCFA)</label>
             <input
               type="number"
               inputMode="numeric"
@@ -1572,6 +1819,24 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
               placeholder="15000"
               className="w-full h-12 rounded-xl border border-[#E5E7EB] px-4 text-lg font-semibold tabular-nums mb-3 focus:outline-none focus:ring-2 focus:ring-[#1F5C2E]/30"
             />
+            <label className="text-sm font-medium text-[#111] mb-1.5 block">Quantité</label>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              step={1}
+              value={offerQuantity}
+              onChange={(e) => setOfferQuantity(e.target.value)}
+              placeholder="1"
+              className="w-full h-11 rounded-xl border border-[#E5E7EB] px-4 text-sm tabular-nums mb-3 focus:outline-none focus:ring-2 focus:ring-[#1F5C2E]/30"
+            />
+            {Number.parseInt(offerAmount, 10) > 0 && Number.parseInt(offerQuantity, 10) > 0 && (
+              <p className="mb-3 text-right text-xs text-[#667781]">
+                Total indicatif : {formatOfferAmount(
+                  Number.parseInt(offerAmount, 10) * Number.parseInt(offerQuantity, 10),
+                )} FCFA
+              </p>
+            )}
             <label className="text-sm font-medium text-[#111] mb-1.5 block">Message</label>
             <input
               type="text"

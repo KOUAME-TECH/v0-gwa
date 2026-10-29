@@ -10,11 +10,13 @@ describe("price offer chat", () => {
   it("serialise et parse une offre", () => {
     const raw = buildOfferContent({
       amount: 15000,
+      quantity: 3,
       productName: "Cacao",
       note: "2 sacs",
     })
     const parsed = parseOfferContent(raw)
     expect(parsed?.amount).toBe(15000)
+    expect(parsed?.quantity).toBe(3)
     expect(parsed?.productName).toBe("Cacao")
     expect(parsed?.status).toBe("pending")
     expect(formatOfferAmount(15000)).toMatch(/15/)
