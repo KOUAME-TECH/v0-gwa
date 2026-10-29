@@ -406,15 +406,31 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
 
   async function handleFileUpload(file: File, type: "image" | "file") {
     setShowAttach(false)
+    if (!file || file.size === 0) {
+      toast.error("Le fichier est vide")
+      return
+    }
+    if (type === "image" && !file.type.startsWith("image/")) {
+      toast.error("Choisis une image valide")
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Le fichier doit faire moins de 10 Mo")
+      return
+    }
     const toastId = toast.loading(type === "image" ? "Envoi de l'image..." : "Envoi du fichier...")
 
-    const ext = file.name.split(".").pop()
-    const path = `chat/${conversation.id}/${Date.now()}.${ext}`
-    const { error: upErr } = await supabase.storage.from("chat-media").upload(path, file)
+    const extension = file.name.split(".").pop()?.toLowerCase() || (type === "image" ? "jpg" : "bin")
+    const path = `chat/${conversation.id}/${crypto.randomUUID()}.${extension}`
+    const { error: upErr } = await supabase.storage.from("chat-media").upload(path, file, {
+      contentType: file.type || "application/octet-stream",
+      cacheControl: "3600",
+      upsert: false,
+    })
 
     if (upErr) {
       toast.dismiss(toastId)
-      toast.error("Envoi échoué, réessayez")
+      toast.error(upErr.message.includes("Bucket not found") ? "Le stockage média n'est pas configuré" : "Envoi échoué, réessayez")
       return
     }
 
@@ -535,6 +551,12 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   }
 
   // Voice -- real MediaRecorder
+  function supportedAudioMimeType() {
+    if (typeof MediaRecorder === "undefined") return ""
+    return ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/aac"]
+      .find((mime) => MediaRecorder.isTypeSupported(mime)) || ""
+  }
+
   async function toggleVoice() {
     if (isRecording) {
       // Stop -> preview
@@ -544,9 +566,14 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     } else {
       // Start recording
       try {
+        if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+          toast.error("Les messages vocaux ne sont pas pris en charge par ce navigateur")
+          return
+        }
+        const mimeType = supportedAudioMimeType()
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
         audioChunks.current = []
-        const mr = new MediaRecorder(stream, { mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4' })
+        const mr = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
 
         mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.current.push(e.data) }
         mr.onstop = () => {
@@ -593,13 +620,22 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     if (!audioPreview) return
     if (previewAudio.current) { previewAudio.current.pause(); setIsPlayingPreview(false) }
 
-    const { data: { user: authUser } } = await supabase.auth.getUser()
-    if (!authUser) return
+    const { data: refreshed } = await supabase.auth.refreshSession()
+    const authUser = refreshed.session?.user ?? (await supabase.auth.getUser()).data.user
+    if (!authUser) {
+      toast.error("Session expirée, reconnecte-toi")
+      return
+    }
 
     // Upload audio blob to storage
-    const ext = audioPreview.blob.type.includes('webm') ? 'webm' : 'mp4'
-    const path = `chat/${conversation.id}/${Date.now()}.${ext}`
-    const { error: upErr } = await supabase.storage.from("chat-media").upload(path, audioPreview.blob)
+    const mimeType = audioPreview.blob.type || "audio/webm"
+    const ext = mimeType.includes("webm") ? "webm" : mimeType.includes("mp4") || mimeType.includes("aac") ? "m4a" : "ogg"
+    const path = `chat/${conversation.id}/${crypto.randomUUID()}.${ext}`
+    const { error: upErr } = await supabase.storage.from("chat-media").upload(path, audioPreview.blob, {
+      contentType: mimeType,
+      cacheControl: "3600",
+      upsert: false,
+    })
     if (upErr) {
       toast.error("Envoi vocal échoué, réessayez")
       return
