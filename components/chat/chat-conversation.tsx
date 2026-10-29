@@ -627,8 +627,11 @@ export function ChatConversation({
     setOfferNote("")
     setOfferQuantity(String(counter?.offer.quantity ?? context?.quantity ?? initialQuantity ?? 1))
     if (counter) setOfferAmount(String(counter.offer.amount))
-    else if ((context?.amount ?? initialAmount) && (context?.amount ?? initialAmount)! > 0) {
-      setOfferAmount(String(Math.round((context?.amount ?? initialAmount)!)))
+    else {
+      const presetAmount = context?.amount ?? initialAmount
+      if (presetAmount && presetAmount > 0) {
+        setOfferAmount(String(Math.round(presetAmount)))
+      }
     }
     // Produits actifs des deux participants (acheteur négocie sur produit vendeur)
     const sellerIds = [other?.id, userId].filter(Boolean) as string[]
@@ -1194,9 +1197,15 @@ export function ChatConversation({
             </p>
           )}
           <p className="text-xl font-bold text-[#1F5C2E] tabular-nums">
+            <span className="sr-only">Prix unitaire : </span>
             {formatOfferAmount(offer.amount)}{" "}
             <span className="text-xs font-medium text-[#667781]">FCFA</span>
           </p>
+          {offer.quantity && (
+            <p className="text-[11px] text-[#667781]">
+              Total indicatif : {formatOfferAmount(offer.amount * offer.quantity)} FCFA
+            </p>
+          )}
           {offer.note && (
             <p className="text-[13px] text-[#111b21] leading-snug">{offer.note}</p>
           )}
@@ -1803,7 +1812,7 @@ export function ChatConversation({
                 >
                   {offerProducts.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.name} · {formatOfferAmount(p.price)} FCFA
+                      {p.name} · {formatOfferAmount(p.price)} FCFA{p.unit ? ` / ${p.unit}` : ""}
                     </option>
                   ))}
                 </select>
@@ -1819,7 +1828,11 @@ export function ChatConversation({
               placeholder="15000"
               className="w-full h-12 rounded-xl border border-[#E5E7EB] px-4 text-lg font-semibold tabular-nums mb-3 focus:outline-none focus:ring-2 focus:ring-[#1F5C2E]/30"
             />
-            <label className="text-sm font-medium text-[#111] mb-1.5 block">Quantité</label>
+            <label className="text-sm font-medium text-[#111] mb-1.5 block">
+              Quantité{offerProducts.find((product) => product.id === offerProductId)?.unit
+                ? ` (${offerProducts.find((product) => product.id === offerProductId)?.unit})`
+                : ""}
+            </label>
             <input
               type="number"
               inputMode="numeric"
