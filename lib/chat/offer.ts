@@ -12,8 +12,12 @@ export type PriceOfferPayload = {
   currency: "XOF"
   quantity?: number
   unit?: string
+  sellerId?: string
   productName?: string
   productId?: string
+  deliveryPlace?: string
+  deliveryDate?: string
+  conditions?: string
   status: OfferStatus
   note?: string
 }
@@ -22,8 +26,12 @@ export function buildOfferContent(input: {
   amount: number
   quantity?: number
   unit?: string
+  sellerId?: string
   productName?: string
   productId?: string
+  deliveryPlace?: string
+  deliveryDate?: string
+  conditions?: string
   note?: string
   status?: OfferStatus
 }): string {
@@ -41,8 +49,12 @@ export function buildOfferContent(input: {
   const quantity = Math.floor(Number(input.quantity))
   if (Number.isFinite(quantity) && quantity > 0) payload.quantity = quantity
   if (input.unit) payload.unit = input.unit
+  if (input.sellerId) payload.sellerId = input.sellerId
   if (input.productName) payload.productName = input.productName
   if (input.productId) payload.productId = input.productId
+  if (input.deliveryPlace) payload.deliveryPlace = input.deliveryPlace.trim()
+  if (input.deliveryDate) payload.deliveryDate = input.deliveryDate.trim()
+  if (input.conditions) payload.conditions = input.conditions.trim()
   if (input.note) payload.note = input.note
   return JSON.stringify(payload)
 }

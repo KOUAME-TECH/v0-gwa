@@ -12,6 +12,14 @@ import {
   formatOfferAmount,
   type PriceOfferPayload,
 } from "@/lib/chat/offer"
+import {
+  areBothParticipantsConfirmed,
+  buildAgreementConfirmationContent,
+  buildAgreementContent,
+  parseAgreementConfirmation,
+  parseAgreementContent,
+  type AgreementTerms,
+} from "@/lib/chat/agreement"
 import { buildLocationContent, isLocationMessage } from "@/lib/chat/location"
 import { ChatLocationBubble } from "@/components/chat/chat-location-bubble"
 import { EMOJI_CATEGORIES } from "@/lib/chat/emojis"
@@ -23,7 +31,7 @@ import {
   orderFlowIndex,
 } from "@/lib/orders/escrow-flow"
 import {
-  ArrowLeft, Send, Mic, Smile, Phone, Video, MoreVertical,
+  ArrowLeft, Send, Mic, Smile, Phone, Video, MoreVertical, Printer, CreditCard, ShieldCheck,
   Check, CheckCheck, ImageIcon, FileText, X, Trash2, Copy, Reply,
   Pin, BellOff, UserCircle, Flag, Paperclip, Camera, MapPin, HandCoins,
   Sparkles,
@@ -65,6 +73,8 @@ interface NegotiatedOrder {
   escrow_status: string | null
   source_offer_message_id: string
   buyer_id: string
+  currency?: string | null
+  payment_method?: string | null
 }
 
 interface ChatConversationProps {
@@ -114,6 +124,10 @@ export function ChatConversation({
   const [negotiatedOrders, setNegotiatedOrders] = useState<Record<string, NegotiatedOrder>>({})
   const [creatingOrderId, setCreatingOrderId] = useState<string | null>(null)
   const [confirmingOrderId, setConfirmingOrderId] = useState<string | null>(null)
+  const [confirmingAgreementId, setConfirmingAgreementId] = useState<string | null>(null)
+  const [paymentOrder, setPaymentOrder] = useState<NegotiatedOrder | null>(null)
+  const [paymentBusy, setPaymentBusy] = useState(false)
+  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null)
   const [newMessage, setNewMessage] = useState("")
   const [sending, setSending] = useState(false)
   const [replyTo, setReplyTo] = useState<Message | null>(null)
@@ -138,6 +152,9 @@ export function ChatConversation({
   >([])
   const [offerProductId, setOfferProductId] = useState<string>("")
   const [offerQuantity, setOfferQuantity] = useState("1")
+  const [offerDeliveryPlace, setOfferDeliveryPlace] = useState("")
+  const [offerDeliveryDate, setOfferDeliveryDate] = useState("")
+  const [offerConditions, setOfferConditions] = useState("")
   const [counterOfferId, setCounterOfferId] = useState<string | null>(null)
   const [showYelly, setShowYelly] = useState(false)
   const [yellyQuestion, setYellyQuestion] = useState("")
@@ -150,6 +167,8 @@ export function ChatConversation({
   const [liveCameraOpen, setLiveCameraOpen] = useState(false)
   const [cameraBusy, setCameraBusy] = useState(false)
   const [peerTyping, setPeerTyping] = useState(false)
+  const [currentUserName, setCurrentUserName] = useState("")
+  const [currentUserCity, setCurrentUserCity] = useState("")
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -188,7 +207,7 @@ export function ChatConversation({
 
     const { data, error } = await supabase
       .from("orders")
-      .select("id, order_number, status, payment_status, escrow_status, source_offer_message_id, buyer_id")
+      .select("id, order_number, status, payment_status, escrow_status, source_offer_message_id, buyer_id, currency, payment_method")
       .in("source_offer_message_id", acceptedOfferIds)
 
     if (error) return
@@ -198,6 +217,23 @@ export function ChatConversation({
     }
     setNegotiatedOrders(nextOrders)
   }, [acceptedOfferIds, supabase])
+
+  useEffect(() => {
+    let active = true
+    void supabase
+      .from("profiles")
+      .select("full_name, city")
+      .eq("id", userId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!active || !data) return
+        setCurrentUserName(data.full_name || "")
+        setCurrentUserCity(data.city || "")
+      })
+    return () => {
+      active = false
+    }
+  }, [supabase, userId])
 
   useEffect(() => {
     if (acceptedOfferIds.length === 0) return
