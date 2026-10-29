@@ -1102,9 +1102,16 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
                 )}
                 <div className={`flex mb-1 ${own ? "justify-end" : "justify-start"}`}>
                   <div className="relative max-w-[82%]">
-                    <button
-                      type="button"
+                    <div
+                      role="button"
+                      tabIndex={0}
                       onClick={() => setSelectedMsg(selectedMsg === msg.id ? null : msg.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault()
+                          setSelectedMsg(selectedMsg === msg.id ? null : msg.id)
+                        }
+                      }}
                       className={`text-left rounded-2xl shadow-sm px-3 py-1.5 ${
                         own ? "bg-[#d9fdd3] rounded-tr-md" : "bg-white rounded-tl-md"
                       }`}
@@ -1126,7 +1133,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
                           : <Check className="h-[14px] w-[14px] text-[#667781]" />
                         )}
                       </div>
-                    </button>
+                    </div>
 
                     {selectedMsg === msg.id && (
                       <>
