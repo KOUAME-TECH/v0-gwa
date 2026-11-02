@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { sendPushToUser } from "@/lib/notifications/push"
 import { getOneSignalAppId, getOneSignalRestApiKey } from "@/lib/notifications/onesignal-config"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
+import { assertSameOrigin } from "@/lib/security/csrf"
 
 /**
  * GET /api/push/status — diagnostic OneSignal (auth).
