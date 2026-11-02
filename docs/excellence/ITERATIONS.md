@@ -57,3 +57,49 @@ Supabase, Playwright, Notion (si page créée), cursor-cloud, gh
 ### Lien Notion
 
 https://app.notion.com/p/40ca6d3a76b481d3949fdb46d9a0081e
+
+---
+
+## ITÉRATION 2
+
+**Scores** : Global **76** | UI/UX **82** | Frontend **82** | Backend **72** | Audio **62** | Négociation **78** | Sécurité **86** | IA **76** | Continuité **58**
+
+### Corrections [FAIT VÉRIFIÉ]
+- STT parallèle Web Speech + affichage transcription sous vocal
+- Refus jailbreak conseil IA + prompt encapsulé
+- Sign media : suppression fallback URL publique
+- Spinner messages brand GWA + aria attach
+
+### Preuves
+- tests `voice-stt.test.ts`, adversarial IA
+- route `sign` 404 si sign échoue
+
+### Décision
+Itération suivante
+
+---
+
+## ITÉRATION 3
+
+**Scores** : Global **79** | UI/UX **84** | Frontend **84** | Backend **74** | Audio **68** | Négociation **82** | Sécurité **86** | IA **78** | Continuité **60**
+
+### Corrections
+- Offre : `role=dialog`, focus `#offer-amount`, champs qty/lieu/délai (suite)
+- TTS « Écouter » sur bulles Conseil
+- Glyphe SVG suivi sur bon imprimable (+ code vérif)
+- Migration `067_chat_group_fk_indexes.sql` (fichier)
+
+### Décision
+Itération suivante
+
+---
+
+## ITÉRATION 4 (plan immédiat / suite session)
+
+Cibles pour monter Global → 85+ :
+1. Appliquer indexes 067 (staging/prod) [ACTION HUMAINE ou MCP apply]
+2. QR ISO réel (lib) — glyphe actuel = [RISQUE RÉSIDUEL]
+3. Noise reduction DSP / vraie pipeline audio studio
+4. Exercice restore backup documenté
+5. Playwright parcours offre→PO authentifié
+6. Bucket chat-media non-public

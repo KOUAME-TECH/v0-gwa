@@ -85,14 +85,9 @@ export async function POST(request: NextRequest) {
       .createSignedUrl(path, CHAT_SIGNED_URL_TTL_SEC)
 
     if (error || !data?.signedUrl) {
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from(CHAT_MEDIA_BUCKET).getPublicUrl(path)
-      return NextResponse.json({
-        url: publicUrl,
-        expiresIn: null,
-        fallback: "public",
-      })
+      // Pas de fallback URL publique : évite d’exposer un lien durable si le sign échoue.
+      console.error("[chat/media/sign] signed url failed", error?.message)
+      return NextResponse.json({ error: "Lien impossible" }, { status: 404 })
     }
 
     return NextResponse.json({

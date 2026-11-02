@@ -73,10 +73,10 @@ describe("bon de commande", () => {
       origin: "https://mygwa.org",
     })
     expect(html).not.toMatch(/<script>/i)
-    expect(html).not.toMatch(/<img\s/i)
-    expect(html).toMatch(/&lt;img/)
+    expect(html).toMatch(/&lt;img src=x/)
     expect(html).toMatch(/&lt;script&gt;/)
     expect(html).toMatch(/&amp;/)
     expect(html).toMatch(/Code de vérification/)
+    expect(html).toMatch(/data:image\/svg\+xml/)
   })
 })

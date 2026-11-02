@@ -46,8 +46,16 @@ import {
   type PendingChatMessage,
 } from "@/lib/chat/local-store"
 import {
+  formatVoiceMessageContent,
+  parseVoiceDuration,
+  parseVoiceTranscript,
+  startParallelStt,
+} from "@/lib/chat/voice-stt"
+import {
+  adversarialAdviceRefusal,
   buildAiAdviceUserPrompt,
   formatAiAdviceMessage,
+  isAdversarialAiQuestion,
   stripAiAdvicePrefix,
 } from "@/lib/chat/ai-advice"
 import {
@@ -69,8 +77,9 @@ import {
   ArrowLeft, Send, Mic, Smile, Phone, Video, MoreVertical,
   Check, CheckCheck, ImageIcon, FileText, X, Trash2, Copy, Reply,
   Pin, BellOff, UserCircle, Flag, Paperclip, Camera, MapPin, HandCoins,
-  LifeBuoy, Search, SmilePlus, WifiOff, Printer, CreditCard,
+  LifeBuoy, Search, SmilePlus, WifiOff, Printer, CreditCard, Volume2,
 } from "lucide-react"
+import { speakFrench } from "@/lib/chat/tts"
 
 interface Message {
   id: string
@@ -131,7 +140,12 @@ export function ChatConversation({
   const [recordSec, setRecordSec] = useState(0)
   const [showEmojis, setShowEmojis] = useState(false)
   const [emojiCat, setEmojiCat] = useState(EMOJI_CATEGORIES[0]?.id ?? "smileys")
-  const [audioPreview, setAudioPreview] = useState<{ blob: Blob; url: string; duration: string } | null>(null)
+  const [audioPreview, setAudioPreview] = useState<{
+    blob: Blob
+    url: string
+    duration: string
+    transcript?: string
+  } | null>(null)
   const [isPlayingPreview, setIsPlayingPreview] = useState(false)
   const [loadingMsgs, setLoadingMsgs] = useState(true)
   const [showOfferSheet, setShowOfferSheet] = useState(false)
@@ -186,6 +200,8 @@ export function ChatConversation({
   const audioChunks = useRef<Blob[]>([])
   const previewAudio = useRef<HTMLAudioElement | null>(null)
   const cancelVoiceRef = useRef(false)
+  const sttSessionRef = useRef<{ stop: () => Promise<string> } | null>(null)
+  const voiceTranscriptRef = useRef("")
   const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const supabase = createClient()
 
@@ -598,8 +614,35 @@ export function ChatConversation({
   }
 
   async function requestInThreadAdvice(question: string) {
-    const prompt = buildAiAdviceUserPrompt(question)
     const userLine = question.trim() || "Conseil demandé"
+    if (isAdversarialAiQuestion(userLine)) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `tmp-q-${Date.now()}`,
+          conversation_id: conversation.id,
+          sender_id: userId,
+          content: userLine,
+          message_type: "text",
+          is_read: false,
+          is_edited: false,
+          created_at: new Date().toISOString(),
+        },
+        {
+          id: `tmp-ai-${Date.now()}`,
+          conversation_id: conversation.id,
+          sender_id: userId,
+          content: adversarialAdviceRefusal(),
+          message_type: "ai",
+          is_read: true,
+          is_edited: false,
+          created_at: new Date().toISOString(),
+        },
+      ])
+      scroll()
+      return
+    }
+    const prompt = buildAiAdviceUserPrompt(question)
     const tempUser = `tmp-q-${Date.now()}`
     const tempAi = `tmp-ai-${Date.now()}`
 
@@ -982,6 +1025,9 @@ export function ChatConversation({
   async function openOfferSheet() {
     setShowAttach(false)
     setShowOfferSheet(true)
+    requestAnimationFrame(() => {
+      document.getElementById("offer-amount")?.focus()
+    })
     // Produits actifs des deux participants (acheteur négocie sur produit vendeur)
     const sellerIds = [other?.id, userId].filter(Boolean) as string[]
     const { data } = await supabase
@@ -1008,17 +1054,21 @@ export function ChatConversation({
     }
   }
 
-  // Voice -- real MediaRecorder
+  // Voice -- MediaRecorder + STT parallèle (Web Speech) si dispo
   async function toggleVoice() {
     if (isRecording) {
-      // Stop -> preview
+      const stt = sttSessionRef.current
+      sttSessionRef.current = null
+      if (stt) {
+        voiceTranscriptRef.current = (await stt.stop().catch(() => "")) || ""
+      }
       mediaRecorder.current?.stop()
       setIsRecording(false)
       if (recInterval.current) clearInterval(recInterval.current)
     } else {
-      // Start recording
       try {
         cancelVoiceRef.current = false
+        voiceTranscriptRef.current = ""
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: {
             echoCancellation: true,
@@ -1044,6 +1094,8 @@ export function ChatConversation({
             audioChunks.current = []
             cancelVoiceRef.current = false
             setRecordSec(0)
+            sttSessionRef.current = null
+            voiceTranscriptRef.current = ""
             return
           }
           const blob = new Blob(audioChunks.current, { type: mr.mimeType })
@@ -1052,11 +1104,23 @@ export function ChatConversation({
           const dur = `${Math.floor(sec / 60)}:${(sec % 60).toString().padStart(2, "0")}`
           setRecordSec(0)
           if (sec > 0) {
-            setAudioPreview({ blob, url, duration: dur })
+            setAudioPreview({
+              blob,
+              url,
+              duration: dur,
+              transcript: voiceTranscriptRef.current || undefined,
+            })
           }
         }
 
         mediaRecorder.current = mr
+        const stt = startParallelStt({
+          lang: "fr-FR",
+          onPartial: (t) => {
+            voiceTranscriptRef.current = t
+          },
+        })
+        sttSessionRef.current = stt.available ? stt : null
         mr.start()
         setIsRecording(true)
         setRecordSec(0)
@@ -1152,7 +1216,10 @@ export function ChatConversation({
         .insert({
           conversation_id: conversation.id,
           sender_id: authUser.id,
-          content: `Message vocal (${audioPreview.duration})`,
+          content: formatVoiceMessageContent(
+            audioPreview.duration,
+            audioPreview.transcript,
+          ),
           message_type: "voice",
           media_url: uploaded.displayUrl,
         })
@@ -1715,11 +1782,26 @@ export function ChatConversation({
       msg.message_type === "ai" ||
       /^\s*\[conseil\s*ia\]/i.test(msg.content)
     ) {
+      const adviceBody = stripAiAdvicePrefix(msg.content)
       return (
-        <div className="space-y-1 py-0.5">
+        <div className="space-y-1.5 py-0.5">
           <p className="text-[15px] whitespace-pre-wrap break-words leading-relaxed text-[#111b21]">
-            {stripAiAdvicePrefix(msg.content)}
+            {adviceBody}
           </p>
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation()
+              const r = speakFrench(adviceBody)
+              if (!r.ok) toast.message("Lecture vocale indisponible sur cet appareil")
+            }}
+            className="inline-flex items-center gap-1.5 min-h-[36px] px-2 rounded-full text-[12px] font-medium text-[#1F5C2E] active:bg-[#1F5C2E]/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#1F5C2E]"
+            aria-label="Écouter le conseil"
+          >
+            <Volume2 className="h-3.5 w-3.5" aria-hidden />
+            Écouter
+          </button>
         </div>
       )
     }
@@ -1801,31 +1883,44 @@ export function ChatConversation({
       )
     }
     if (msg.message_type === "voice") {
+      const transcript = parseVoiceTranscript(msg.content)
+      const duration = parseVoiceDuration(msg.content)
       return (
-        <button
-          type="button"
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation()
-            playVoiceMsg(msg)
-          }}
-          className="flex items-center gap-2 min-w-[180px] min-h-[44px] rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#1F5C2E]"
-          aria-label="Écouter le message vocal"
-        >
-          <div className="w-10 h-10 bg-[#1F5C2E] rounded-full flex items-center justify-center shrink-0">
-            {mediaSrc(msg) ? (
-              <svg viewBox="0 0 24 24" className="h-4 w-4 text-white fill-current"><polygon points="6,4 20,12 6,20" /></svg>
-            ) : (
-              <Mic className="h-4 w-4 text-white" />
-            )}
-          </div>
-          <div className="flex-1 flex items-center gap-0.5" aria-hidden>
-            {Array.from({ length: 24 }).map((_, i) => (
-              <div key={i} className="w-[3px] rounded-full bg-[#1F5C2E]/40" style={{ height: `${4 + Math.sin(i * 0.7) * 8}px` }} />
-            ))}
-          </div>
-          <span className="text-[11px] opacity-70 shrink-0">{msg.content.match(/\((.*?)\)/)?.[1] || "0:00"}</span>
-        </button>
+        <div className="space-y-1.5 min-w-[180px]">
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation()
+              playVoiceMsg(msg)
+            }}
+            className="flex items-center gap-2 w-full min-h-[44px] rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#1F5C2E]"
+            aria-label={
+              transcript
+                ? `Écouter le message vocal. Transcription : ${transcript}`
+                : "Écouter le message vocal"
+            }
+          >
+            <div className="w-10 h-10 bg-[#1F5C2E] rounded-full flex items-center justify-center shrink-0">
+              {mediaSrc(msg) ? (
+                <svg viewBox="0 0 24 24" className="h-4 w-4 text-white fill-current"><polygon points="6,4 20,12 6,20" /></svg>
+              ) : (
+                <Mic className="h-4 w-4 text-white" />
+              )}
+            </div>
+            <div className="flex-1 flex items-center gap-0.5" aria-hidden>
+              {Array.from({ length: 24 }).map((_, i) => (
+                <div key={i} className="w-[3px] rounded-full bg-[#1F5C2E]/40" style={{ height: `${4 + Math.sin(i * 0.7) * 8}px` }} />
+              ))}
+            </div>
+            <span className="text-[11px] opacity-70 shrink-0">{duration}</span>
+          </button>
+          {transcript ? (
+            <p className="text-[12px] leading-snug text-[#54656f] px-1 whitespace-pre-wrap break-words">
+              {transcript}
+            </p>
+          ) : null}
+        </div>
       )
     }
     if (msg.message_type === "image") {
@@ -2399,9 +2494,15 @@ export function ChatConversation({
                   },
                 },
               ].map((item) => (
-                <button key={item.label} onClick={item.action} className="flex flex-col items-center gap-2">
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={item.action}
+                  aria-label={item.label}
+                  className="flex flex-col items-center gap-2 min-h-[44px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1F5C2E] rounded-lg"
+                >
                   <div className={`w-14 h-14 ${item.color} rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform`}>
-                    <item.icon className="h-6 w-6 text-white" />
+                    <item.icon className="h-6 w-6 text-white" aria-hidden />
                   </div>
                   <span className="text-xs text-[#667781] font-medium">{item.label}</span>
                 </button>
@@ -2415,11 +2516,16 @@ export function ChatConversation({
       {showOfferSheet && (
         <>
           <div className="fixed inset-0 bg-black/40 z-[108]" onClick={() => setShowOfferSheet(false)} />
-          <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl z-[109] p-5 pb-8 safe-bottom animate-slideUp">
-            <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-4" />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="offer-sheet-title"
+            className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl z-[109] p-5 pb-8 safe-bottom animate-slideUp"
+          >
+            <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-4" aria-hidden />
             <div className="flex items-center gap-2 mb-1">
-              <HandCoins className="h-5 w-5 text-[#C27D10]" />
-              <h3 className="text-lg font-semibold text-[#111]">Proposer un prix</h3>
+              <HandCoins className="h-5 w-5 text-[#C27D10]" aria-hidden />
+              <h3 id="offer-sheet-title" className="text-lg font-semibold text-[#111]">Proposer un prix</h3>
             </div>
             <p className="text-sm text-[#667781] mb-4">
               Propose un prix. Si l’autre confirme, une commande est créée au montant convenu.
