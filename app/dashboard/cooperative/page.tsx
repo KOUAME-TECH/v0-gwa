@@ -10,12 +10,12 @@ import { Badge } from "@/components/ui/badge"
 import {
   Users, Package, MapPin, Bell, ArrowLeft,
   ChevronRight, UserPlus, BarChart3, Settings,
-  Building2, Sprout, CheckCircle2, AlertCircle, Globe, Plus, Copy
+  Building2, Sprout, CheckCircle2, AlertCircle, Globe, Plus, Copy,
+  Banknote, Volume2,
 } from 'lucide-react'
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { isFactoringEligible } from "@/lib/factoring/eligibility"
-import { Banknote } from "lucide-react"
 import {
   canAssignCoopRoles,
   canInviteMembers,
@@ -29,6 +29,7 @@ import {
 } from "@/lib/cooperatives/validation-policy"
 import { YellyAideButton } from "@/components/yelly/yelly-aide-button"
 import { trackCoopEvent } from "@/lib/cooperatives/observability"
+import { speakFrench } from "@/lib/chat/tts"
 
 interface Member {
   id: string
@@ -404,7 +405,20 @@ export default function CooperativeDashboard() {
       <main id="coop-main" className="-mt-2 space-y-4 px-4 pt-4">
         {qualificationBanner && (
           <div className="rounded-2xl bg-white p-4 text-sm text-[#4B5563] ring-1 ring-[#1F5C2E]/10">
-            <p className="font-semibold text-[#111827] mb-1">Checklist qualification</p>
+            <div className="mb-1 flex items-start justify-between gap-2">
+              <p className="font-semibold text-[#111827]">Checklist qualification</p>
+              <button
+                type="button"
+                className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full text-[#1F5C2E] hover:bg-[#E8F5E9] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1F5C2E]"
+                aria-label="Écouter la checklist de qualification"
+                onClick={() => {
+                  const r = speakFrench(qualificationBanner)
+                  if (!r.ok) toast.info("Lecture vocale indisponible sur cet appareil")
+                }}
+              >
+                <Volume2 className="h-5 w-5" aria-hidden />
+              </button>
+            </div>
             <p>{qualificationBanner}</p>
             <div className="mt-3 flex flex-wrap gap-2 text-xs">
               <Badge variant={stats.totalMembers >= COOP_MIN_ACTIVE_MEMBERS ? "default" : "secondary"}>

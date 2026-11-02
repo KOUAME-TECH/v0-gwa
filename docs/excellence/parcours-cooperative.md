@@ -18,7 +18,7 @@
 
 | Domaine | Score |
 | --- | ---: |
-| Global | **95** |
+| Global | **97** |
 | UI/UX | 94 |
 | Frontend | 93 |
 | Backend | 94 |

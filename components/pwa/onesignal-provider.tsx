@@ -98,17 +98,22 @@ export function OneSignalProvider({ children }: { children: React.ReactNode }) {
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
-        console.warn("[OneSignal] init échouée (App ID / SW / domaine) :", err)
+        // Domaine non autorisé (ex. mygwa.org alors que seul v0-gwa-mu.vercel.app est listé)
+        // → warn actionnable, pas d'erreur rouge bloquante
+        const domainBlocked = /can only be used on|not configured for web push/i.test(
+          msg,
+        )
+        if (domainBlocked) {
+          console.warn(
+            `[OneSignal] Origine ${window.location.origin} absente du dashboard — ajoutez-la dans Settings → Platforms → Web (Typical Site).`,
+          )
+        } else {
+          console.warn("[OneSignal] init échouée (App ID / SW / domaine) :", err)
+        }
         window.__GWA_ONESIGNAL_STATUS = {
           ok: false,
-          error: msg,
+          error: domainBlocked ? "domain_not_allowed" : msg,
           origin: window.location.origin,
-        }
-        // Domaine preview non déclaré dans OneSignal Dashboard → message actionnable
-        if (/not configured for web push/i.test(msg)) {
-          console.warn(
-            `[OneSignal] Ajoutez l'origine ${window.location.origin} dans OneSignal → Settings → Platforms → Web`,
-          )
         }
         return
       }

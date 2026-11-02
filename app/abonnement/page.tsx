@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, Check, Crown, Loader2, MessageCircle } from "lucide-react"
+import { ArrowLeft, Check, Crown, Loader2, MessageCircle, Volume2 } from "lucide-react"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -16,6 +16,7 @@ import {
 import { WHATSAPP_LINK } from "@/lib/contact"
 import { isSellerRole } from "@/lib/dashboard/routing"
 import { cn } from "@/lib/utils"
+import { speakFrench } from "@/lib/chat/tts"
 
 export default function AbonnementPage() {
   const router = useRouter()
@@ -147,9 +148,24 @@ export default function AbonnementPage() {
           )}
         </div>
 
-        <p className="text-sm text-[#4B5563]">
-          Acheteurs : gratuit. Toi vendeur : moins de commission = plus tu montes de palier.
-        </p>
+        <div className="flex items-start gap-2">
+          <p className="flex-1 text-sm text-[#4B5563]">
+            Acheteurs : gratuit. Toi vendeur : moins de commission = plus tu montes de palier.
+          </p>
+          <button
+            type="button"
+            className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full text-[#2F7D32] hover:bg-[#E8F5E9] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2F7D32]"
+            aria-label="Écouter l’explication des paliers"
+            onClick={() => {
+              const r = speakFrench(
+                "Acheteurs : gratuit. Toi vendeur : moins de commission, plus tu montes de palier. Demande ton palier puis finalise sur WhatsApp.",
+              )
+              if (!r.ok) toast.info("Lecture vocale indisponible sur cet appareil")
+            }}
+          >
+            <Volume2 className="h-5 w-5" aria-hidden />
+          </button>
+        </div>
 
         <div className="space-y-3">
           {SELLER_PLANS.map((plan) => {

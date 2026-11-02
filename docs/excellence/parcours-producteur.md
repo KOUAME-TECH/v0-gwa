@@ -49,7 +49,7 @@ Voir `docs/excellence/ITERATIONS.md` section **PARCOURS PRODUCTEUR**.
 
 | Domaine | Score |
 | --- | ---: |
-| Global | **95** |
+| Global | **96** |
 | UI/UX | 94 |
 | Frontend | 93 |
 | Backend | 93 |

@@ -56,3 +56,29 @@ describe("isAdminRole — pas d’escalade silencieuse", () => {
     expect(isAdminRole(null)).toBe(false)
   })
 })
+
+describe("CSRF same-origin — mutations produit/social", () => {
+  it("refuse Origin croisée sur host mygwa", () => {
+    const req = new Request("https://mygwa.org/api/products/x/favorite", {
+      method: "POST",
+      headers: {
+        host: "mygwa.org",
+        Origin: "https://evil.example",
+      },
+    })
+    const res = assertSameOrigin(req)
+    expect(res).not.toBeNull()
+    expect(res!.status).toBe(403)
+  })
+
+  it("accepte same-origin mygwa.org", () => {
+    const req = new Request("https://mygwa.org/api/places", {
+      method: "POST",
+      headers: {
+        host: "mygwa.org",
+        Origin: "https://mygwa.org",
+      },
+    })
+    expect(assertSameOrigin(req)).toBeNull()
+  })
+})

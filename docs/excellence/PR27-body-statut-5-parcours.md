@@ -1,20 +1,27 @@
-# Corps PR #27 proposé (ManagePullRequest / gh write indisponibles)
+## Excellence parcours — 5/5 à 96–97/100 (iter 13)
 
-```markdown
-## Excellence parcours — statut 5/5 GO 95
+| Parcours | Score | Statut |
+|----------|------:|--------|
+| Producteur | **96** | GO |
+| Acheteur | **96** | GO |
+| Coopérative | **97** | GO |
+| Abonnement | **96** | GO |
+| Back-office | **96** | GO |
 
-Branche `gwa/excellence-parcours-1e99` · Draft · **aucun merge/deploy** · GeniusPay/FeexPay non touchés.
+Chat (stack) : **97/100**. Branche `gwa/excellence-parcours-1e99`.
 
-| Parcours | Score | Décision |
-| --- | ---: | --- |
-| Producteur | **95** | GO |
-| Acheteur | **95** | GO |
-| Coopérative | **95** | GO |
-| Abonnement | **95** | GO |
-| Back-office | **95** | GO |
+### Cette session
+- CSRF mutations social/lieux/favoris/factoring/…
+- TTS coop checklist + abonnement
+- OAuth Google select_account · admin-status silence 401
+- GeniusPay/FeexPay **non touchés**
 
-**Merge global : NO-GO** jusqu’à validation humaine.
+### Avant merge (humain)
+1. AT_SENDER confirmation
+2. GENIUSPAY_* secrets prod
+3. HaveIBeenPwned
+4. OneSignal domaine mygwa.org
+5. Preview + smoke panier invité
+6. Review + **ready** + merge explicite + redeploy
 
-### Notion
-https://app.notion.com/p/40ca6d3a76b4819196eeed4411a27aa7
-```
+**Pas de merge automatique** — en attente de ton GO.

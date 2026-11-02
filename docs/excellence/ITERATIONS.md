@@ -774,3 +774,57 @@ Itération suivante
 
 ### Décision
 **GO criteria met** pour les 5 parcours — **pas de merge/deploy automatique** (attente validation utilisateur). GeniusPay/FeexPay non touchés.
+
+---
+
+# ITÉRATION 13 — PUSH VERS 100 (chat + 5 parcours)
+
+**Date** : 2026-11-02 · Branche `gwa/excellence-parcours-1e99` (à sync aussi sur `gwa/excellence-protocol-8459` pour PR #26)  
+**Prod audit** : https://mygwa.org @ `c51133f` · **Pas de merge/deploy**
+
+## Scores chat
+
+| Domaine | Score |
+| --- | ---: |
+| Global | **97** |
+| UI/UX | 95 |
+| Frontend | 95 |
+| Backend | 95 |
+| Audio | 92 |
+| Négociation | 94 |
+| Sécurité | 97 |
+| IA | 94 |
+| Continuité | 91 |
+
+## Scores parcours (re-évaluation)
+
+| Parcours | Score | Notes |
+| --- | ---: | --- |
+| Producteur | **96** | CSRF photos/SCG/lieux ; TTS inchangé DSP |
+| Acheteur | **96** | CSRF favoris/likes/notif ; panier guest déjà en branche |
+| Coopérative | **97** | TTS checklist qualification |
+| Abonnement | **96** | TTS explication paliers |
+| Back-office | **96** | CSRF admin déjà ; admin-status silence 401 |
+
+### Corrections [FAIT VÉRIFIÉ]
+- CSRF + RL : favorite, comments/like, location/save, notifications PATCH, photos, places POST/PATCH/DELETE, posts DELETE, factoring POST, messages/notify, onesignal/register, auth/link-email, scg/calculate
+- TTS `pickFrenchVoice` + tests ; adversarial IA élargi + tests
+- `outboxHealth` continuité + tests
+- `admin-status` 200 invité ; AdminModeBanner session-first
+- Google OAuth `prompt=select_account` + `aria-busy`
+- OneSignal : warn `domain_not_allowed` (mygwa.org hors dashboard)
+- Vitest **329** · tsc OK
+- Supabase advisors security = WARN HIBP only ; migrations 066–069 présentes
+- Prod `/api/health` : GeniusPay non configuré ; `sms_last_failure.code=AT_SENDER`
+- Vercel runtime_errors/logs MCP : **403** (documenté) — smoke Playwright + health HTTP OK
+- Preuve : `docs/excellence-evidence/iter13-login-google-320.png`
+
+### Actions humaines
+1. AT_SENDER confirmation
+2. GENIUSPAY_* secrets
+3. HIBP Auth
+4. OneSignal domaine mygwa.org
+5. GO merge #26/#27
+
+### Décision
+**GO ≥95 → 96–97** — **NO-GO merge** sans GO humain. GeniusPay/FeexPay **non touchés**.

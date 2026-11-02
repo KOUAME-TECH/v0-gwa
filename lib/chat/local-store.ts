@@ -210,6 +210,27 @@ export function pruneFailedOutbox(maxAttempts = 8): number {
   return removed
 }
 
+/** Snapshot outbox sans PII (continuité / métriques). */
+export function outboxHealth(userId?: string): {
+  pending: number
+  failing: number
+  oldestAgeMs: number | null
+} {
+  const items = loadOutbox(userId)
+  const now = Date.now()
+  let oldestAgeMs: number | null = null
+  let failing = 0
+  for (const m of items) {
+    if (m.attempts >= 3) failing += 1
+    const t = Date.parse(m.createdAt)
+    if (Number.isFinite(t)) {
+      const age = Math.max(0, now - t)
+      if (oldestAgeMs === null || age > oldestAgeMs) oldestAgeMs = age
+    }
+  }
+  return { pending: items.length, failing, oldestAgeMs }
+}
+
 export function isBrowserOffline(): boolean {
   return typeof navigator !== "undefined" && navigator.onLine === false
 }

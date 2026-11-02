@@ -26,13 +26,18 @@ export function isAdversarialAiQuestion(question: string): boolean {
     /DAN\s*mode/i,
     /révèle\s+(le\s+)?(system\s+)?prompt/,
     /reveal\s+(the\s+)?system\s+prompt/,
+    /show\s+(me\s+)?(your\s+)?(hidden\s+)?(system\s+)?prompt/,
     /tu\s+es\s+maintenant\s+(un\s+)?(hacker|root|admin)/,
+    /act\s+as\s+(a\s+)?(developer|dan|jailbroken)/,
     /bypass\s+(safety|security|filtre)/,
     /oublie\s+(tes|toutes?\s+tes)\s+(consignes|règles|instructions)/,
     /pretend\s+you\s+have\s+no\s+restrictions/,
     /désactive\s+(tes\s+)?(filtres|gardes|garde[- ]fous)/,
     /exfiltre|exfiltrate|dump\s+(the\s+)?(secrets?|keys?|env)/,
     /contourne\s+(le\s+)?paiement|fraud(e|er)?\s+(genius|feex)?pay/i,
+    /donne[- ]moi\s+(les\s+)?(clés?|api[_\s-]?key|webhook\s+secret)/i,
+    /sql\s+injection|drop\s+table|union\s+select/i,
+    /override\s+(your\s+)?(rules|policies|safety)/i,
   ]
   return patterns.some((re) => re.test(q))
 }
