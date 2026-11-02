@@ -13,6 +13,7 @@ import {
   loadYellyProductHint,
   persistYellyTurn,
 } from "@/lib/yelly/context"
+import { redactPiiForAi } from "@/lib/yelly/pii"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 30
@@ -103,7 +104,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { message, page, context } = parsed.data
+    const { message: rawMessage, page, context } = parsed.data
+    const message = redactPiiForAi(rawMessage, 800)
     const conversationId =
       typeof body?.conversationId === "string" &&
       /^[0-9a-f-]{36}$/i.test(body.conversationId)
@@ -112,7 +114,7 @@ export async function POST(request: NextRequest) {
 
     const contextHint = await loadYellyProductHint(supabase, context?.productId)
     const cityHint = context?.city
-      ? `Ville utilisateur: ${context.city}`
+      ? `Ville: ${redactPiiForAi(context.city, 80)}`
       : undefined
 
     const result = await askYelly({

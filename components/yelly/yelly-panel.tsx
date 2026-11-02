@@ -331,7 +331,7 @@ export function YellyPanel({
       className="fixed inset-0 z-[60] flex items-end justify-end lg:items-end lg:p-6"
       role="dialog"
       aria-modal="true"
-      aria-label="Yelly assistante GWA"
+      aria-label="Conseil de l’IA — Neutre"
     >
       <button
         type="button"
@@ -342,8 +342,8 @@ export function YellyPanel({
       <div
         ref={panelRef}
         className={cn(
-          "relative z-10 flex h-[min(78dvh,560px)] w-full flex-col overflow-hidden",
-          "rounded-t-2xl lg:rounded-2xl lg:max-w-md",
+          "relative z-10 flex h-[min(92dvh,100dvh)] w-full flex-col overflow-hidden sm:h-[min(78dvh,560px)]",
+          "rounded-t-2xl lg:rounded-2xl lg:max-w-md lg:h-[min(78dvh,560px)]",
           "border border-[#1F5C2E]/15 bg-[#F7F4EE] shadow-2xl",
           "animate-in slide-in-from-bottom-4 duration-300",
         )}

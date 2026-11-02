@@ -17,6 +17,12 @@ import { buildLocationContent, isLocationMessage } from "@/lib/chat/location"
 import { ChatLocationBubble } from "@/components/chat/chat-location-bubble"
 import { EMOJI_CATEGORIES } from "@/lib/chat/emojis"
 import {
+  ChatUploadError,
+  uploadChatMedia,
+  resolveChatMediaUrl,
+  type UploadProgress,
+} from "@/lib/chat/upload"
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -104,9 +110,15 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     msg: Message
     offer: PriceOfferPayload
   } | null>(null)
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null)
+  const [mediaUrlCache, setMediaUrlCache] = useState<Record<string, string>>({})
 
   const yelly = useYellyOptional()
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const supabaseUrl =
+    typeof process !== "undefined"
+      ? process.env.NEXT_PUBLIC_SUPABASE_URL || ""
+      : ""
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastTypingSent = useRef(0)
   const channelRef = useRef<ReturnType<ReturnType<typeof createClient>["channel"]> | null>(null)
@@ -118,8 +130,10 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   const liveStreamRef = useRef<MediaStream | null>(null)
   const recInterval = useRef<ReturnType<typeof setInterval> | null>(null)
   const mediaRecorder = useRef<MediaRecorder | null>(null)
+  const audioStream = useRef<MediaStream | null>(null)
   const audioChunks = useRef<Blob[]>([])
   const previewAudio = useRef<HTMLAudioElement | null>(null)
+  const cancelVoiceRef = useRef(false)
   const supabase = createClient()
 
   const other = conversation.other_user
@@ -286,7 +300,11 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       if (typeof document !== "undefined" && document.visibilityState === "visible") {
         await supabase
           .from("messages")
-          .update({ is_read: true })
+          .update({
+            is_read: true,
+            status: "read",
+            read_at: new Date().toISOString(),
+          })
           .eq("conversation_id", conversation.id)
           .neq("sender_id", userId)
           .eq("is_read", false)
@@ -306,7 +324,14 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
           setMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg])
           scroll()
           if (msg.sender_id !== userId && document.visibilityState === "visible") {
-            supabase.from("messages").update({ is_read: true }).eq("id", msg.id)
+            void supabase
+              .from("messages")
+              .update({
+                is_read: true,
+                status: "read",
+                read_at: new Date().toISOString(),
+              })
+              .eq("id", msg.id)
           }
         }
       )
@@ -436,37 +461,118 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
 
   async function handleFileUpload(file: File, type: "image" | "file") {
     setShowAttach(false)
-    const toastId = toast.loading(type === "image" ? "Envoi de l'image..." : "Envoi du fichier...")
-
-    const ext = file.name.split(".").pop()
-    const path = `chat/${conversation.id}/${Date.now()}.${ext}`
-    const { error: upErr } = await supabase.storage.from("chat-media").upload(path, file)
-
-    if (upErr) {
-      toast.dismiss(toastId)
-      toast.error("Envoi échoué, réessayez")
+    if (!supabaseUrl) {
+      toast.error("Envoi indisponible. Réessaie plus tard.")
       return
     }
 
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from("chat-media").getPublicUrl(path)
+    const toastId = toast.loading(
+      type === "image" ? "Envoi de la photo…" : "Envoi du document…",
+    )
+    setUploadProgress({ percent: 2, stage: "check" })
 
-    const content = type === "image" ? file.name : `[${file.name}]`
-    const { error: msgErr } = await supabase.from("messages").insert({
-      conversation_id: conversation.id,
-      sender_id: userId,
-      content,
-      message_type: type,
-      media_url: publicUrl,
-    })
-    await supabase
-      .from("conversations")
-      .update({ last_message_at: new Date().toISOString() })
-      .eq("id", conversation.id)
-    toast.dismiss(toastId)
-    if (msgErr) toast.error(msgErr.message)
-    else toast.success(type === "image" ? "Photo envoyée" : "Fichier envoyé")
+    try {
+      // Rate-limit + chemin sanitisé côté serveur
+      const prep = await fetch("/api/chat/media/prepare", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          conversationId: conversation.id,
+          kind: type,
+          mime: file.type || (type === "image" ? "image/jpeg" : "application/octet-stream"),
+          size: file.size,
+          fileName: file.name || (type === "image" ? "photo.jpg" : "document.bin"),
+        }),
+      })
+      const prepData = await prep.json().catch(() => ({}))
+      if (!prep.ok) {
+        toast.dismiss(toastId)
+        setUploadProgress(null)
+        toast.error(
+          typeof prepData.error === "string"
+            ? prepData.error
+            : "Envoi refusé. Réessaie.",
+        )
+        return
+      }
+
+      const { data: refreshed } = await supabase.auth.refreshSession()
+      const authUser =
+        refreshed.session?.user ?? (await supabase.auth.getUser()).data.user
+      if (!authUser) {
+        toast.dismiss(toastId)
+        setUploadProgress(null)
+        toast.error("Session expirée, reconnecte-toi")
+        return
+      }
+
+      const uploaded = await uploadChatMedia({
+        supabase,
+        supabaseUrl,
+        userId: authUser.id,
+        conversationId: conversation.id,
+        file,
+        fileName: file.name || (type === "image" ? "photo.jpg" : "document.bin"),
+        mime: file.type || "application/octet-stream",
+        kind: type,
+        onProgress: setUploadProgress,
+      })
+
+      const content =
+        type === "image"
+          ? file.name || "Photo"
+          : `[${file.name || "Document"}]`
+      const { data, error: msgErr } = await supabase
+        .from("messages")
+        .insert({
+          conversation_id: conversation.id,
+          sender_id: authUser.id,
+          content,
+          message_type: type,
+          media_url: uploaded.displayUrl,
+        })
+        .select()
+        .single()
+
+      await supabase
+        .from("conversations")
+        .update({ last_message_at: new Date().toISOString() })
+        .eq("id", conversation.id)
+
+      toast.dismiss(toastId)
+      setUploadProgress(null)
+      if (msgErr) {
+        toast.error("Fichier envoyé mais message non enregistré. Réessaie.")
+        return
+      }
+      if (data) {
+        setMessages((prev) =>
+          prev.some((m) => m.id === data.id) ? prev : [...prev, data],
+        )
+        setMediaUrlCache((prev) => ({
+          ...prev,
+          [data.id]: uploaded.displayUrl,
+        }))
+        scroll()
+      }
+      void fetch("/api/messages/notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          conversation_id: conversation.id,
+          preview: type === "image" ? "📷 Photo" : "📎 Document",
+        }),
+      })
+      toast.success(type === "image" ? "Photo envoyée" : "Document envoyé")
+    } catch (err) {
+      toast.dismiss(toastId)
+      setUploadProgress(null)
+      const msg =
+        err instanceof ChatUploadError
+          ? err.message
+          : "Envoi échoué. Réessaie."
+      toast.error(msg)
+    }
   }
 
   async function shareLocation() {
@@ -573,17 +679,32 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     } else {
       // Start recording
       try {
+        cancelVoiceRef.current = false
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        audioStream.current = stream
         audioChunks.current = []
-        const mr = new MediaRecorder(stream, { mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4' })
+        const mr = new MediaRecorder(stream, {
+          mimeType: MediaRecorder.isTypeSupported("audio/webm")
+            ? "audio/webm"
+            : "audio/mp4",
+        })
 
-        mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.current.push(e.data) }
+        mr.ondataavailable = (e) => {
+          if (e.data.size > 0) audioChunks.current.push(e.data)
+        }
         mr.onstop = () => {
-          stream.getTracks().forEach(t => t.stop())
+          stream.getTracks().forEach((t) => t.stop())
+          audioStream.current = null
+          if (cancelVoiceRef.current) {
+            audioChunks.current = []
+            cancelVoiceRef.current = false
+            setRecordSec(0)
+            return
+          }
           const blob = new Blob(audioChunks.current, { type: mr.mimeType })
           const url = URL.createObjectURL(blob)
           const sec = recordSec
-          const dur = `${Math.floor(sec / 60)}:${(sec % 60).toString().padStart(2, '0')}`
+          const dur = `${Math.floor(sec / 60)}:${(sec % 60).toString().padStart(2, "0")}`
           setRecordSec(0)
           if (sec > 0) {
             setAudioPreview({ blob, url, duration: dur })
@@ -595,7 +716,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
         setIsRecording(true)
         setRecordSec(0)
         setAudioPreview(null)
-        recInterval.current = setInterval(() => setRecordSec(p => p + 1), 1000)
+        recInterval.current = setInterval(() => setRecordSec((p) => p + 1), 1000)
       } catch (err) {
         console.warn("[chat] mic", err)
         toast.error("Micro inaccessible — autorise le micro dans le navigateur")
@@ -620,51 +741,187 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
 
   async function sendVoiceMessage() {
     if (!audioPreview) return
-    if (previewAudio.current) { previewAudio.current.pause(); setIsPlayingPreview(false) }
-
-    const { data: { user: authUser } } = await supabase.auth.getUser()
-    if (!authUser) return
-
-    // Upload audio blob to storage
-    const ext = audioPreview.blob.type.includes('webm') ? 'webm' : 'mp4'
-    const path = `chat/${conversation.id}/${Date.now()}.${ext}`
-    const { error: upErr } = await supabase.storage.from("chat-media").upload(path, audioPreview.blob)
-    if (upErr) {
-      toast.error("Envoi vocal échoué, réessayez")
+    if (previewAudio.current) {
+      previewAudio.current.pause()
+      setIsPlayingPreview(false)
+    }
+    if (!supabaseUrl) {
+      toast.error("Envoi indisponible. Réessaie plus tard.")
       return
     }
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from("chat-media").getPublicUrl(path)
 
-    const { error: msgErr } = await supabase.from("messages").insert({
-      conversation_id: conversation.id,
-      sender_id: authUser.id,
-      content: `Message vocal (${audioPreview.duration})`,
-      message_type: "voice",
-      media_url: publicUrl,
-    })
-    await supabase
-      .from("conversations")
-      .update({ last_message_at: new Date().toISOString() })
-      .eq("id", conversation.id)
+    const toastId = toast.loading("Envoi du vocal…")
+    setUploadProgress({ percent: 2, stage: "check" })
 
-    URL.revokeObjectURL(audioPreview.url)
-    setAudioPreview(null)
-    if (msgErr) toast.error(msgErr.message)
-    else toast.success("Message vocal envoyé")
+    try {
+      const { data: refreshed } = await supabase.auth.refreshSession()
+      const authUser =
+        refreshed.session?.user ?? (await supabase.auth.getUser()).data.user
+      if (!authUser) {
+        toast.dismiss(toastId)
+        setUploadProgress(null)
+        toast.error("Session expirée, reconnecte-toi")
+        return
+      }
+
+      const mime = audioPreview.blob.type || "audio/webm"
+      const fileName = `vocal-${Date.now()}.${mime.includes("webm") ? "webm" : "m4a"}`
+
+      const prep = await fetch("/api/chat/media/prepare", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          conversationId: conversation.id,
+          kind: "voice",
+          mime,
+          size: audioPreview.blob.size,
+          fileName,
+        }),
+      })
+      const prepData = await prep.json().catch(() => ({}))
+      if (!prep.ok) {
+        toast.dismiss(toastId)
+        setUploadProgress(null)
+        toast.error(
+          typeof prepData.error === "string"
+            ? prepData.error
+            : "Vocal refusé. Réessaie.",
+        )
+        return
+      }
+
+      const uploaded = await uploadChatMedia({
+        supabase,
+        supabaseUrl,
+        userId: authUser.id,
+        conversationId: conversation.id,
+        file: audioPreview.blob,
+        fileName,
+        mime,
+        kind: "voice",
+        onProgress: setUploadProgress,
+      })
+
+      const { data, error: msgErr } = await supabase
+        .from("messages")
+        .insert({
+          conversation_id: conversation.id,
+          sender_id: authUser.id,
+          content: `Message vocal (${audioPreview.duration})`,
+          message_type: "voice",
+          media_url: uploaded.displayUrl,
+        })
+        .select()
+        .single()
+
+      await supabase
+        .from("conversations")
+        .update({ last_message_at: new Date().toISOString() })
+        .eq("id", conversation.id)
+
+      URL.revokeObjectURL(audioPreview.url)
+      setAudioPreview(null)
+      toast.dismiss(toastId)
+      setUploadProgress(null)
+
+      if (msgErr) {
+        toast.error("Vocal envoyé mais message non enregistré.")
+        return
+      }
+      if (data) {
+        setMessages((prev) =>
+          prev.some((m) => m.id === data.id) ? prev : [...prev, data],
+        )
+        setMediaUrlCache((prev) => ({
+          ...prev,
+          [data.id]: uploaded.displayUrl,
+        }))
+        scroll()
+      }
+      void fetch("/api/messages/notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          conversation_id: conversation.id,
+          preview: "🎤 Message vocal",
+        }),
+      })
+      toast.success("Message vocal envoyé")
+    } catch (err) {
+      toast.dismiss(toastId)
+      setUploadProgress(null)
+      toast.error(
+        err instanceof ChatUploadError
+          ? err.message
+          : "Envoi vocal échoué. Réessaie.",
+      )
+    }
   }
 
   function cancelRecording() {
-    if (mediaRecorder.current?.state === 'recording') {
-      mediaRecorder.current.stop()
+    cancelVoiceRef.current = true
+    audioChunks.current = []
+    if (mediaRecorder.current?.state === "recording") {
+      try {
+        mediaRecorder.current.stop()
+      } catch {
+        /* ignore */
+      }
     }
+    audioStream.current?.getTracks().forEach((t) => t.stop())
+    audioStream.current = null
     setIsRecording(false)
-    if (audioPreview) { URL.revokeObjectURL(audioPreview.url); setAudioPreview(null) }
-    if (previewAudio.current) { previewAudio.current.pause(); setIsPlayingPreview(false) }
+    if (audioPreview) {
+      URL.revokeObjectURL(audioPreview.url)
+      setAudioPreview(null)
+    }
+    if (previewAudio.current) {
+      previewAudio.current.pause()
+      setIsPlayingPreview(false)
+    }
     if (recInterval.current) clearInterval(recInterval.current)
     setRecordSec(0)
+    toast.message("Enregistrement annulé")
   }
+
+  // Rafraîchir les liens média (signés) pour l’affichage
+  useEffect(() => {
+    let cancelled = false
+    async function refreshMedia() {
+      const need = messages.filter(
+        (m) =>
+          m.media_url &&
+          (m.message_type === "image" ||
+            m.message_type === "voice" ||
+            m.message_type === "file"),
+      )
+      if (need.length === 0) return
+      const next: Record<string, string> = {}
+      await Promise.all(
+        need.slice(-20).map(async (m) => {
+          const url = await resolveChatMediaUrl(supabase, m.media_url)
+          if (url) next[m.id] = url
+        }),
+      )
+      if (!cancelled && Object.keys(next).length > 0) {
+        setMediaUrlCache((prev) => {
+          let changed = false
+          const merged = { ...prev }
+          for (const [id, url] of Object.entries(next)) {
+            if (merged[id] !== url) {
+              merged[id] = url
+              changed = true
+            }
+          }
+          return changed ? merged : prev
+        })
+      }
+    }
+    void refreshMedia()
+    return () => {
+      cancelled = true
+    }
+  }, [messages, conversation.id, supabase])
 
   // Menu actions — comportement réel (prefs locales + actions)
   async function menuAction(a: string) {
@@ -888,9 +1145,14 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
 
   const fmtTime = (d: string) => new Date(d).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
 
+  function mediaSrc(msg: Message): string | undefined {
+    return mediaUrlCache[msg.id] || msg.media_url
+  }
+
   function playVoiceMsg(msg: Message) {
-    if (msg.media_url) {
-      const a = new Audio(msg.media_url)
+    const src = mediaSrc(msg)
+    if (src) {
+      const a = new Audio(src)
       a.play().catch(() => toast.error("Impossible de lire le vocal"))
     }
   }
@@ -964,7 +1226,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
         <button type="button" onClick={(e) => { e.stopPropagation(); playVoiceMsg(msg) }}
           className="flex items-center gap-2 min-w-[180px]">
           <div className="w-8 h-8 bg-[#1F5C2E] rounded-full flex items-center justify-center shrink-0">
-            {msg.media_url ? (
+            {mediaSrc(msg) ? (
               <svg viewBox="0 0 24 24" className="h-4 w-4 text-white fill-current"><polygon points="6,4 20,12 6,20" /></svg>
             ) : (
               <Mic className="h-4 w-4 text-white" />
@@ -980,21 +1242,29 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       )
     }
     if (msg.message_type === "image") {
-      return msg.media_url ? (
-        <img src={msg.media_url || "/placeholder.svg"} alt="Photo envoyée dans la conversation" className="rounded-lg max-w-[240px] max-h-[280px] object-cover" crossOrigin="anonymous" />
+      const src = mediaSrc(msg)
+      return src ? (
+        <img src={src} alt="Photo envoyée dans la conversation" className="rounded-lg max-w-[240px] max-h-[280px] object-cover" crossOrigin="anonymous" />
       ) : (
         <div className="flex items-center gap-2"><ImageIcon className="h-4 w-4 text-[#1F5C2E]" /><span className="text-sm">{msg.content}</span></div>
       )
     }
     if (msg.message_type === "file") {
+      const href = mediaSrc(msg)
       return (
-        <div className="flex items-center gap-2 bg-black/5 rounded-lg p-2.5 min-w-[180px]">
+        <a
+          href={href || undefined}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="flex items-center gap-2 bg-black/5 rounded-lg p-2.5 min-w-[180px] active:bg-black/10"
+        >
           <FileText className="h-8 w-8 text-[#1F5C2E] shrink-0" />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium truncate">{msg.content.replace(/^\[|\]$/g, '')}</p>
             <p className="text-[11px] opacity-50">Document</p>
           </div>
-        </div>
+        </a>
       )
     }
     return <p className="text-[15px] whitespace-pre-wrap break-words leading-relaxed">{msg.content}</p>
@@ -1028,11 +1298,14 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
           <button
             type="button"
             onClick={() => yelly.openYelly("chat_header_conseil")}
-            className="p-2.5 rounded-full active:bg-white/20"
-            aria-label="Demander un conseil neutre"
-            title="Conseil"
+            className="flex items-center gap-1 rounded-full px-2 py-1.5 active:bg-white/20"
+            aria-label="Demander conseil à l’IA"
+            title="Demander conseil à l’IA"
           >
             <LifeBuoy className="h-5 w-5" />
+            <span className="hidden sm:inline text-[11px] font-medium max-w-[72px] leading-tight">
+              Conseil IA
+            </span>
           </button>
         ) : null}
         <button
@@ -1187,6 +1460,37 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
         ) : null}
       </div>
 
+      {/* UPLOAD PROGRESS */}
+      {uploadProgress && (
+        <div
+          className="bg-white border-t border-gray-200 px-4 py-2 shrink-0"
+          role="status"
+          aria-live="polite"
+          aria-label={`Envoi en cours ${uploadProgress.percent} pour cent`}
+        >
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-medium text-[#54656f]">
+              {uploadProgress.stage === "check"
+                ? "Vérification…"
+                : uploadProgress.stage === "sign"
+                  ? "Sécurisation du lien…"
+                  : uploadProgress.stage === "done"
+                    ? "Terminé"
+                    : "Envoi…"}
+            </span>
+            <span className="text-xs tabular-nums text-[#1F5C2E] font-semibold">
+              {uploadProgress.percent}%
+            </span>
+          </div>
+          <div className="h-1.5 w-full rounded-full bg-[#e9edef] overflow-hidden">
+            <div
+              className="h-full rounded-full bg-[#1F5C2E] transition-[width] duration-150 ease-out"
+              style={{ width: `${uploadProgress.percent}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* REPLY PREVIEW */}
       {replyTo && (
         <div className="bg-white border-t border-gray-200 px-3 py-2 flex items-center gap-2 shrink-0">
@@ -1296,6 +1600,19 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
                   label: "Position",
                   action: () => void shareLocation(),
                 },
+                ...(yelly
+                  ? [
+                      {
+                        icon: LifeBuoy,
+                        color: "bg-[#1F5C2E]",
+                        label: "Conseil IA",
+                        action: () => {
+                          setShowAttach(false)
+                          yelly.openYelly("chat_attach_conseil")
+                        },
+                      },
+                    ]
+                  : []),
               ].map((item) => (
                 <button key={item.label} onClick={item.action} className="flex flex-col items-center gap-2">
                   <div className={`w-14 h-14 ${item.color} rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform`}>
@@ -1370,6 +1687,19 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
             >
               {offerBusy ? "Envoi…" : "Envoyer l'offre"}
             </button>
+            {yelly ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowOfferSheet(false)
+                  yelly.openYelly("chat_offer_conseil")
+                }}
+                className="w-full mt-2 h-11 rounded-xl border border-[#1F5C2E]/25 text-[#1F5C2E] text-sm font-medium active:scale-[0.98] flex items-center justify-center gap-2"
+              >
+                <LifeBuoy className="h-4 w-4" />
+                Demander conseil à l’IA
+              </button>
+            ) : null}
           </div>
         </>
       )}
