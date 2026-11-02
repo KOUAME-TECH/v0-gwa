@@ -12,7 +12,7 @@ import {
   getOneSignalAppId,
   getOneSignalRestApiKey,
 } from '@/lib/notifications/onesignal-config'
-import { isOtpStoreReady } from '@/lib/auth/otp-store'
+import { getSmsOpsFailure, isOtpStoreReady } from '@/lib/auth/otp-store'
 import {
   resolveGeniusPayCredentials,
   resolveGeniusPayWebhookSecret,
@@ -97,6 +97,12 @@ export async function GET() {
       payout_ready: false,
     },
     sms_delivery_ready: atKey && atLive && atSender,
+    // Dernier échec OTP/SMS (codes ops only) — aide à distinguer config OK vs rejet AT réel
+    sms_last_failure: await getSmsOpsFailure(),
+    deploy: {
+      git_sha: (process.env.VERCEL_GIT_COMMIT_SHA || process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA || '').slice(0, 12) || null,
+      vercel_env: process.env.VERCEL_ENV || null,
+    },
     resilience: {
       onesignal_app_id_fallback: true,
       cron_auth: ['bearer', 'x-vercel-cron', 'digest_internal_key'],

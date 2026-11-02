@@ -14,6 +14,7 @@ import {
   canSendOtp,
   releaseSendOtp,
   isOtpStoreReady,
+  recordSmsOpsFailure,
 } from "@/lib/auth/otp-store"
 import {
   hasSmsProvider,
@@ -24,10 +25,27 @@ import {
 function mapSmsFailureCode(error?: string): string {
   const msg = (error || "").toLowerCase()
   if (msg.includes("sandbox") || msg.includes("at_username")) return "AT_SANDBOX"
-  if (msg.includes("balance") || msg.includes("credit") || msg.includes("insufficient"))
+  if (
+    msg.includes("balance") ||
+    msg.includes("credit") ||
+    msg.includes("insufficient") ||
+    msg.includes("userisinactive") ||
+    msg.includes("not enough")
+  )
     return "SMS_CREDITS"
-  if (msg.includes("sender") || msg.includes("from")) return "AT_SENDER"
-  if (msg.includes("invalid") && msg.includes("number")) return "SMS_INVALID_NUMBER"
+  if (
+    msg.includes("sender") ||
+    msg.includes("from") ||
+    msg.includes("invalidsenderid") ||
+    msg.includes("alphanumeric")
+  )
+    return "AT_SENDER"
+  if (msg.includes("invalid") && (msg.includes("number") || msg.includes("phone")))
+    return "SMS_INVALID_NUMBER"
+  if (msg.includes("rejected") || msg.includes("blocked") || msg.includes("risk"))
+    return "SMS_REJECTED"
+  if (msg.includes("timeout") || msg.includes("network") || msg.includes("econn"))
+    return "SMS_NETWORK"
   if (msg.includes("non configuré") || msg.includes("aucun fournisseur"))
     return "SMS_UNCONFIGURED"
   return "SMS_PROVIDER_REJECTED"
@@ -206,6 +224,11 @@ export async function POST(request: Request) {
         console.error("[auth/send-otp] rollback after SMS failure", rollbackErr)
       }
       const failureCode = mapSmsFailureCode(sms.error)
+      try {
+        await recordSmsOpsFailure(failureCode, sms.provider || null)
+      } catch (opsErr) {
+        console.error("[auth/send-otp] recordSmsOpsFailure", opsErr)
+      }
       console.error(
         "[auth/send-otp] SMS provider rejected OTP",
         sms.provider || "unknown",
@@ -217,6 +240,8 @@ export async function POST(request: Request) {
             "Impossible d'envoyer le SMS pour le moment. Réessayez plus tard.",
           code: failureCode,
           provider: sms.provider || null,
+          // Cooldown libéré → le client peut renvoyer immédiatement.
+          retry_after: 0,
         },
         { status: 502 },
       )

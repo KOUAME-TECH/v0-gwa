@@ -5,6 +5,7 @@ import { checkRateLimit } from "@/lib/security/rate-limiter";
 import { sendPushToUser } from "@/lib/notifications/push";
 import {
   createGeniusPayPayment,
+  getGeniusPayPayment,
   isGeniusPayConfigured,
 } from "@/lib/payment/geniuspay";
 
@@ -77,6 +78,28 @@ export async function POST(request: NextRequest, context: Ctx) {
     const reference = `GWA-${id}-${Date.now().toString(36)}`;
 
     if (await isGeniusPayConfigured()) {
+      // Idempotence : si un checkout GeniusPay est déjà en cours, ne pas en recréer.
+      if (
+        order.payment_status === "processing" &&
+        order.payment_method === "geniuspay" &&
+        order.payment_reference
+      ) {
+        const existing = await getGeniusPayPayment(String(order.payment_reference))
+        const existingUrl =
+          existing.ok
+            ? existing.data.payment_url || existing.data.checkout_url
+            : null
+        if (existingUrl) {
+          return NextResponse.json({
+            status: "redirect_required",
+            reference: order.payment_reference,
+            payment_url: existingUrl,
+            idempotent: true,
+          })
+        }
+        // Référence orpheline / expirée → on laisse créer un nouveau checkout ci-dessous.
+      }
+
       const payment = await createGeniusPayPayment({
         amount,
         orderId: id,
@@ -105,7 +128,8 @@ export async function POST(request: NextRequest, context: Ctx) {
           { status: 502 },
         );
       }
-      const { error: orderUpdateError } = await admin
+      // Update conditionnel : évite d'écraser un paiement déjà marqué paid en course.
+      const { data: updatedRows, error: orderUpdateError } = await admin
         .from("orders")
         .update({
           payment_status: "processing",
@@ -113,7 +137,9 @@ export async function POST(request: NextRequest, context: Ctx) {
           payment_method: "geniuspay",
           updated_at: new Date().toISOString(),
         })
-        .eq("id", id);
+        .eq("id", id)
+        .not("payment_status", "eq", "paid")
+        .select("id");
       if (orderUpdateError) {
         console.error("[api/orders/pay] order update", orderUpdateError);
         return NextResponse.json(
@@ -122,6 +148,12 @@ export async function POST(request: NextRequest, context: Ctx) {
             code: "PAYMENT_STATE_FAILED",
           },
           { status: 500 },
+        );
+      }
+      if (!updatedRows?.length) {
+        return NextResponse.json(
+          { error: "État de paiement concurrent — réessayez", code: "PAYMENT_RACE" },
+          { status: 409 },
         );
       }
       await admin
