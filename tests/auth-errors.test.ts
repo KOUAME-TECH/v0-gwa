@@ -15,4 +15,10 @@ describe("mapAuthErrorMessage", () => {
   it("garde un message inconnu lisible", () => {
     expect(mapAuthErrorMessage("Something weird")).toBe("Something weird")
   })
+
+  it("explique un provider Google non activé", () => {
+    expect(mapAuthErrorMessage("Unsupported provider: provider is not enabled")).toMatch(
+      /Google/i,
+    )
+  })
 })

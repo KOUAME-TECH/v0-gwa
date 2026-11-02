@@ -32,6 +32,7 @@ import {
 import { mergeGuestCartToUser } from "@/lib/cart/guest"
 import { cn } from "@/lib/utils"
 import { HibpPasswordBanner } from "@/components/auth/hibp-password-banner"
+import { GoogleOAuthButton } from "@/components/auth/google-oauth-button"
 import { useRealtimeLocation, formatCoords } from "@/hooks/use-realtime-location"
 import { GwaMark } from "@/components/brand/gwa-mark"
 
@@ -458,6 +459,20 @@ function SignupForm() {
                 <p className="mt-2 text-[15px] leading-relaxed text-[#4B5563]">
                   Ton numéro ou ton email — on s'occupe du reste.
                 </p>
+              </div>
+
+              <div className="mb-4 space-y-3">
+                <GoogleOAuthButton
+                  label="S'inscrire avec Google"
+                  onError={setError}
+                />
+                <div className="flex items-center gap-3">
+                  <div className="h-px flex-1 bg-[#1F5C2E]/15" />
+                  <span className="text-xs font-medium uppercase tracking-wide text-[#6B7280]">
+                    ou
+                  </span>
+                  <div className="h-px flex-1 bg-[#1F5C2E]/15" />
+                </div>
               </div>
 
               <Tabs

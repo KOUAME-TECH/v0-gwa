@@ -20,6 +20,10 @@ export async function updateSession(request: NextRequest) {
       path === "/confidentialite" ||
       path === "/contact" ||
       path === "/download" ||
+      path === "/auth/callback" ||
+      path === "/auth/login" ||
+      path === "/auth/signup" ||
+      path === "/auth/error" ||
       path.startsWith("/produit/") ||
       path.startsWith("/post/") ||
       (path.startsWith("/profil/") && !path.startsWith("/profil/edit")))
