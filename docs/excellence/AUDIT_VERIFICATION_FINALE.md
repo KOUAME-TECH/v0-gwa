@@ -14,7 +14,7 @@
 | RLS products / orders / messages | **PASS** | RLS enabled. Anon REST : `orders=[]`, `messages=[]`. |
 | RLS « users » | **PASS après correctif** | Table = `profiles`. Anon lisait `email`/`phone` (PII). Migration `profiles_anon_hide_pii_columns` : select email/phone → `42501` ; colonnes marketplace OK. |
 | RLS subscriptions | **PASS** | Table = `subscription_requests` · RLS on · anon `[]` · policy `user_id = auth.uid()`. |
-| Redis / rate-limit IA 10/min | **FAIL prod** | Burst Yelly **25/25 HTTP 200**, 0×429. Upstash MCP : 0 DB. Code corrigé : `YELLY_CHAT`/`AI_ADVICE` = 10/min + `requireRedis` fail-closed. **Non déployé** tant que KV_* absent. |
+| Redis / rate-limit IA 10/min | **FAIL prod** (Redis OK, env/deploy KO) | Upstash **`gwa-prod`** créé (free, `eu-west-1`, id `4ee7d138-…77279`, PING OK). **`KV_REST_*` pas encore sur Vercel** (SSO team bloqué). Prod SHA `c51133f` sans `rate_limit_redis` / sans 10/min fail-closed. Voir `docs/excellence/REDIS-PROD-STATUS.md`. |
 | Notion rapports parcours | **PARTIEL** | Hub + Producteur + Acheteur + Coopérative OK. **Abonnement / Back-office** : pas de pages Notion détaillées (docs repo seulement). |
 | CSRF 11+ mutations admin | **PASS** | 15/15 routes admin mutantes avec `assertSameOrigin`. Tests `tests/security-admin-csrf.test.ts` verts. Probe cross-origin admin → **403**. |
 
@@ -47,7 +47,7 @@
 - CWV (Playwright home) : FCP ~100 ms · CLS 0 · TTFB home ~77 ms · LCP API null (instrumentation limitée) — **pas de preuve LCP>2.5s**.
 - Headers prod : HSTS, CSP, XFO, nosniff, Referrer-Policy, Permissions-Policy **présents**.
 - `NEXT_PUBLIC_*` : anon Supabase / OneSignal App ID / Sentry DSN — **pas de secrets serveur**.
-- Redis rate-limit : **fail-closed code** ; **Redis prod non prouvé** (humain).
+- Redis rate-limit : **fail-closed code** (PR #27) ; Redis DB **provisionnée** ; **env Vercel + deploy + burst 429** encore humains / SSO.
 - ADR + plans manuels : présents pour Producteur/Acheteur/Chat ; Abonnement/Back-office docs minces → renforcés ci-dessous + report.
 
 **AXE 5 — RED TEAM** :
@@ -68,7 +68,7 @@
 
 (Score « 95 » revendiqué non confirmé à 100 : rate-limit IA ouvert en prod, HIBP off, preview PR #27 en échec, Notion Abonnement/BO incomplets, contraste or résiduel. Correctifs agent poussés sur la branche PR #27 — re-score 100 **impossible** sans actions humaines Redis + HIBP + preview.)
 
-**PROCHAINE ACTION UNIQUE** : Provisionner **Upstash Redis** sur le projet Vercel prod (`KV_REST_API_URL` + `KV_REST_API_TOKEN`), redéployer la branche, rejouer un burst Yelly et exiger **HTTP 429 après 10 req/min**.
+**PROCHAINE ACTION UNIQUE** : Poser **`KV_REST_API_URL` + `KV_REST_API_TOKEN`** sur Vercel `v0-gwa` (prod+preview) depuis Upstash `gwa-prod`, redéployer le code PR #27 (10/min + `requireRedis`), burst Yelly → **HTTP 429 après 10 req/min**. Détail : `docs/excellence/REDIS-PROD-STATUS.md`.
 
 ---
 
