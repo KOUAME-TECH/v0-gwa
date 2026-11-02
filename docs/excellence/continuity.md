@@ -9,6 +9,7 @@
 | --- | --- | --- |
 | RTO app (Vercel) | ≤ 1 h | Redeploy Git / rollback alias |
 | RPO base | ≤ 24 h | Backups managés Supabase (plan projet) |
+| RTO rate-limit Redis | ≤ 5 min | Upstash `gwa-prod` PING PONG · `KV_REST_*` |
 | Chat offline | Messages file locale | `lib/chat/local-store.ts` outbox + brouillons |
 
 ## Sauvegardes

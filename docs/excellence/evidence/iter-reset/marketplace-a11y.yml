@@ -1,0 +1,56 @@
+- generic [active] [ref=f69e1]:
+  - generic [ref=f69e2]:
+    - link "Aller au contenu" [ref=f69e3] [cursor=pointer]:
+      - /url: "#main-content"
+    - navigation "Navigation bureau" [ref=f69e4]:
+      - generic [ref=f69e5]:
+        - link "GWA accueil" [ref=f69e6] [cursor=pointer]:
+          - /url: /
+          - generic [ref=f69e7]:
+            - img "GWA" [ref=f69e8]
+            - generic [ref=f69e9]: GWA
+        - navigation [ref=f69e10]:
+          - link "Accueil" [ref=f69e11] [cursor=pointer]:
+            - /url: /
+          - link "Boutique" [ref=f69e12] [cursor=pointer]:
+            - /url: /marketplace
+          - link "Explorer" [ref=f69e14] [cursor=pointer]:
+            - /url: /recherche
+          - link "Messages" [ref=f69e15] [cursor=pointer]:
+            - /url: /messages
+          - link "Profil" [ref=f69e16] [cursor=pointer]:
+            - /url: /profil
+        - generic [ref=f69e17]:
+          - button "Demander un conseil" [ref=f69e18]: Aide
+          - link "Digest" [ref=f69e19] [cursor=pointer]:
+            - /url: /marketplace?digest=1
+          - link "Publier" [ref=f69e20] [cursor=pointer]:
+            - /url: /publier
+    - main [ref=f69e22]:
+      - generic [ref=f69e25]:
+        - generic [ref=f69e26]:
+          - generic [ref=f69e27]:
+            - generic [ref=f69e28]
+            - button "Parcours vocal du marketplace" [ref=f69e31]
+            - link "Panier" [ref=f69e37] [cursor=pointer]:
+              - /url: /panier
+          - generic [ref=f69e42]:
+            - textbox "Rechercher..." [ref=f69e47]
+            - button [ref=f69e48]
+          - generic [ref=f69e49]:
+            - button "Tout" [ref=f69e50]
+            - button "Agriculture" [ref=f69e51]
+        - main [ref=f69e52]:
+          - button "Écouter le Harmattan Digest" [ref=f69e53] [cursor=pointer]:
+            - generic [ref=f69e58]
+            - button [disabled] [aria-hidden]
+          - paragraph [ref=f69e61]: 3 produits
+          - generic [ref=f69e62]:
+            - link "piment piment Écouter le texte à voix haute YAO PRODUCTEUR Pro 500 FCFA/kg" [ref=f69e63] [cursor=pointer]:
+              - /url: /produit/4a93f0e4-7367-4cf4-9c2b-0a331ee7425b
+            - link "cacao bio cacao bio Écouter le texte à voix haute YAO PRODUCTEUR Pro 3 000 FCFA/kg" [ref=f69e84] [cursor=pointer]:
+              - /url: /produit/880f3f2a-9af5-4006-928f-26eb128db0ae
+            - link "Tomate Tomate Écouter le texte à voix haute YAO PRODUCTEUR Pro 1 000 FCFA/kg" [ref=f69e105] [cursor=pointer]:
+              - /url: /produit/fc72fe25-1180-42cd-baf4-4ba6e1fb6568
+    - region "Notifications alt+T"
+  - alert [ref=f69e24]

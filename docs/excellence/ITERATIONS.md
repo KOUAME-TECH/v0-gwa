@@ -828,3 +828,195 @@ Itération suivante
 
 ### Décision
 **GO ≥95 → 96–97** — **NO-GO merge** sans GO humain. GeniusPay/FeexPay **non touchés**.
+
+---
+
+# ═══════════════════════════════════════════
+# RESET BASELINE 45/100 — session 2026-11-02
+# Prior 91–100 / GO 95–97 claims INVALIDATED
+# Branche : gwa/excellence-parcours-1e99
+# GeniusPay/FeexPay FROZEN · NO MERGE
+# ═══════════════════════════════════════════
+
+Voir `docs/excellence/BASELINE-RESET-45.md`.
+
+## ITÉRATION 1 — Audit ruthless + Mission A cleanup
+
+**Scores** : Global **52** | UI/UX **54** | Frontend **52** | Backend **60** | Audio **48** | Négociation **55** | Sécurité **64** | SEO **28** | IA **55** | Continuité **42**
+
+### Écarts
+- Junk posts publics en prod (« comment vendre mieux », marketing démo, média vide)
+- robots.txt / sitemap.xml → 404 prod
+- H1 absent/AT-hidden (aria-hidden sticky header)
+- Scores 95+ non prouvés (test data + SEO)
+
+### Corrections
+- Archive `visibility=private` de 4 posts junk (Supabase SQL) — pas de delete users/orders
+- Critères documentés `evidence/test-data/cleanup-2026-11-02.md`
+- Filtre `isLowQualityPostContent` élargi (comment vendre / premier sur GWA / empty)
+
+### Preuves
+- SQL après : 1 public (Alloco) / 4 private
+- Playwright home : `hasCommentVendre=false`, `hasAventure=false`, `hasAlloco=true`, `hasPiment=true`
+- Health prod : `rate_limit_redis:true` (conservé)
+
+### MCP utilisés
+Supabase, Playwright, Upstash (list DB), Vercel (indirect health), Notion, cursor-cloud
+
+### Décision
+**suivante** (52 < 95)
+
+### Notion
+https://app.notion.com/p/40ca6d3a76b4819196eeed4411a27aa7
+
+---
+
+## ITÉRATION 2 — SEO foundation (code)
+
+**Scores** : Global **58** | UI/UX **56** | Frontend **58** | Backend **60** | Audio **48** | Négociation **55** | Sécurité **64** | SEO **45** | IA **55** | Continuité **42**
+
+### Corrections
+- `app/robots.ts` + `app/sitemap.ts`
+- Metadata layouts : marketplace, login, recherche, cooperatives, aide
+- Root `metadataBase` + title template + OG/Twitter + robots index
+- `generateMetadata` produit `[id]/layout.tsx`
+- Tests `tests/seo-robots-sitemap.test.ts`
+
+### Preuves
+- vitest SEO 2/2 PASS · tsc OK
+- **Prod encore 404 robots/sitemap** jusqu’au deploy PR #27 (gap documenté)
+
+### Décision
+**suivante**
+
+---
+
+## ITÉRATION 3 — a11y H1 / nested main / favoris
+
+**Scores** : Global **63** | UI/UX **66** | Frontend **64** | Backend **60** | Audio **48** | Négociation **55** | Sécurité **65** | SEO **48** | IA **55** | Continuité **42**
+
+### Corrections
+- Marketplace : H1 `sr-only` permanent ; suppression `aria-hidden` sur header sticky ; `<main>` imbriqué → `role=region`
+- Home feed : H1 `sr-only` ; chrome sticky sans aria-hidden
+- Bouton favoris : `aria-label` / `aria-pressed` / cible ≥44px
+
+### Preuves
+- eslint changed files : 0 errors
+- vitest content-quality 4/4
+
+### Décision
+**suivante**
+
+---
+
+## ITÉRATION 4 — Chat WhatsApp polish
+
+**Scores** : Global **66** | UI/UX **72** | Frontend **66** | Backend **61** | Audio **50** | Négociation **58** | Sécurité **65** | SEO **48** | IA **56** | Continuité **44**
+
+### Corrections
+- Bouton « Récents » (jump to latest) quand scroll >140px du bas
+- Annuler réponse : aria-label + cible 44px
+- Conservé : bulles, timestamps, receipts Check/CheckCheck, typing, composer ≥44, offline banner, DSP/STT
+
+### Preuves
+- eslint chat : 0 errors (1 warning legacy disable)
+- Code review + smoke structure
+
+### Décision
+**suivante**
+
+---
+
+## ITÉRATION 5 — Sécurité / Redis / preuves batch
+
+**Scores** : Global **70** | UI/UX **72** | Frontend **68** | Backend **72** | Audio **52** | Négociation **60** | Sécurité **74** | SEO **50** | IA **60** | Continuité **48**
+
+### Corrections / vérifs
+- Supabase advisors security : WARN HIBP only (pas High/Critical schema)
+- Upstash `gwa-prod` active · health `rate_limit_redis:true`
+- Yelly POST sans session → 403 CSRF (fail-closed)
+- Docs baseline + evidence test-data + PR body refresh
+
+### Preuves
+- `curl /api/health` → redis true · SHA prod `2f9d54b` (code SEO non encore déployé)
+- vitest 12/12 focused · tsc --noEmit OK
+
+### Décision
+**suivante** (70 < 95) — besoin ≥10 iters + deploy SEO + E2E audio/nego + HIBP humain
+
+### Notion
+https://app.notion.com/p/40ca6d3a76b4819196eeed4411a27aa7
+
+---
+
+## ITÉRATION 6 — Gouvernance IA + continuité refresh
+
+**Scores** : Global **72** | UI/UX **72** | Frontend **68** | Backend **72** | Audio **52** | Négociation **60** | Sécurité **74** | SEO **50** | IA **68** | Continuité **55**
+
+### Corrections
+- Renforcer `ai-governance.md` (adversarial + retention) et `continuity.md` (Redis RTO note)
+- validation-report reset + PR27 body status
+
+### Décision
+**suivante** (72 < 95) — **NO-GO merge**
+
+
+## ITÉRATION 7 — Adversarial IA + messages noindex
+
+**Scores** : Global **74** | UI/UX **72** | Frontend **69** | Backend **72** | Audio **52** | Négociation **60** | Sécurité **76** | SEO **52** | IA **74** | Continuité **55**
+
+### Corrections
+- Patterns adversarial : FeexPay wire, CRON/OTP secrets, bypass rate-limit / spam Yelly
+- Tests adversarial élargis (17 cas)
+- `app/messages/layout.tsx` robots noindex
+
+### Preuves
+- vitest adversarial + SEO + content-quality **23/23**
+- tsc OK · Notion hub prepend RESET
+
+### Décision
+**suivante** (74 < 95) — besoin encore ≥3 iters documentées min pour gate ≥10 total post-reset, puis preuves E2E + deploy SEO
+
+
+## ITÉRATION 8 — Audio studio feedback
+
+**Scores** : Global **76** | UI/UX **74** | Frontend **70** | Backend **72** | Audio **68** | Négociation **62** | Sécurité **76** | SEO **52** | IA **74** | Continuité **55**
+
+### Corrections
+- Toast si STT indisponible (vocal continue)
+- Métrique `chat.voice.record` enrichie (stt/dsp)
+- Annonce sr-only studio bruit / transcription pendant record
+- Suites `chat-audio-dsp` + `audio-accessibility` **PASS**
+
+### Décision
+**suivante**
+
+---
+
+## ITÉRATION 9 — Négociation offre a11y
+
+**Scores** : Global **78** | UI/UX **76** | Frontend **71** | Backend **72** | Audio **68** | Négociation **72** | Sécurité **76** | SEO **52** | IA **74** | Continuité **55**
+
+### Corrections
+- Offer sheet `aria-describedby` + copy QR/PDF/bon de commande
+- Suites offre→PO + brand QR **PASS** (11 tests audio/nego)
+
+### Décision
+**suivante**
+
+---
+
+## ITÉRATION 10 — Gates compile + self-score
+
+**Scores** : Global **80** | UI/UX **76** | Frontend **72** | Backend **74** | Audio **70** | Négociation **74** | Sécurité **78** | SEO **55** | IA **75** | Continuité **58**
+
+### Preuves gates
+- `pnpm exec tsc --noEmit` OK
+- vitest focused (SEO/feed/adversarial/audio/nego) PASS
+- Redis Upstash PING PONG · health `rate_limit_redis:true`
+- Mission A cleanup proven (SQL + Playwright)
+- SEO prod robots/sitemap still 404 until deploy
+
+### Décision
+**suivante** (80 < 95) — **NO-GO merge** malgré ≥10 iters post-reset. Besoin : deploy SEO, E2E auth audio/nego, HIBP, PITR drill.
+

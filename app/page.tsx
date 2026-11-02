@@ -890,14 +890,16 @@ export default function HomePage() {
         </div>
       )}
 
+      {/* H1 permanent (WCAG/SEO) — hors chrome sticky aria-hidden */}
+      <h1 className="sr-only">GWA — fil social et marketplace africain</h1>
+
       {/* Header mobile — disparaît au scroll bas comme bottom nav */}
       <header
         className={cn(
           "sticky top-0 z-40 bg-white border-b border-[#E5E7EB] lg:hidden",
           "transition-transform duration-300 ease-out will-change-transform",
-          headerHidden && "-translate-y-full",
+          headerHidden && "-translate-y-full pointer-events-none",
         )}
-        aria-hidden={headerHidden}
       >
         <div className="px-4 py-3">
           <div className="flex items-center justify-between">

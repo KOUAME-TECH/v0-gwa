@@ -21,6 +21,10 @@ type ChatMetricProps = {
   ms?: number
   code?: string
   offline?: boolean
+  /** Transcription Web Speech active (vocal). */
+  stt?: boolean
+  /** Pipeline DSP bruit/compression actif. */
+  dsp?: boolean
 }
 
 function safeSentry(): typeof import("@sentry/nextjs") | null {
@@ -44,6 +48,8 @@ export function trackChatMetric(
   }
   if (props.code) data.code = String(props.code).slice(0, 40)
   if (typeof props.offline === "boolean") data.offline = props.offline
+  if (typeof props.stt === "boolean") data.stt = props.stt
+  if (typeof props.dsp === "boolean") data.dsp = props.dsp
 
   const Sentry = safeSentry()
   if (Sentry?.addBreadcrumb) {

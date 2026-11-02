@@ -85,6 +85,7 @@ import {
   Check, CheckCheck, ImageIcon, FileText, X, Trash2, Copy, Reply,
   Pin, BellOff, UserCircle, Flag, Paperclip, Camera, MapPin, HandCoins,
   LifeBuoy, Search, SmilePlus, WifiOff, Printer, CreditCard, Volume2,
+  ChevronDown,
 } from "lucide-react"
 import { speakFrench } from "@/lib/chat/tts"
 
@@ -191,6 +192,8 @@ export function ChatConversation({
   const [mediaUrlCache, setMediaUrlCache] = useState<Record<string, string>>({})
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const [showJumpLatest, setShowJumpLatest] = useState(false)
   const supabaseUrl =
     typeof process !== "undefined"
       ? process.env.NEXT_PUBLIC_SUPABASE_URL || ""
@@ -461,7 +464,17 @@ export function ChatConversation({
   }, [liveCameraOpen])
 
   const scroll = useCallback(() => {
-    requestAnimationFrame(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }))
+    requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+      setShowJumpLatest(false)
+    })
+  }, [])
+
+  const onMessagesScroll = useCallback(() => {
+    const el = messagesContainerRef.current
+    if (!el) return
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    setShowJumpLatest(distanceFromBottom > 140)
   }, [])
 
   // Load messages + realtime
@@ -1184,11 +1197,21 @@ export function ChatConversation({
           },
         })
         sttSessionRef.current = stt.available ? stt : null
+        if (!stt.available) {
+          toast.message("Transcription indisponible", {
+            description: "Le vocal s’enregistre quand même (Web Speech absent).",
+          })
+        }
         mr.start()
         setIsRecording(true)
         setRecordSec(0)
         setAudioPreview(null)
-        trackChatMetric("chat.voice.record", { ok: true, kind: "start" })
+        trackChatMetric("chat.voice.record", {
+          ok: true,
+          kind: "start",
+          stt: stt.available,
+          dsp: true,
+        })
         recInterval.current = setInterval(() => setRecordSec((p) => p + 1), 1000)
       } catch (err) {
         console.warn("[chat] mic", err)
@@ -2200,7 +2223,9 @@ export function ChatConversation({
       {/* MESSAGES AREA — fond terre / motif wax Afrique */}
       <div
         id="gwa-chat-messages"
-        className="flex-1 overflow-y-auto overscroll-contain px-3 py-3"
+        ref={messagesContainerRef}
+        onScroll={onMessagesScroll}
+        className="flex-1 overflow-y-auto overscroll-contain px-3 py-3 relative"
         role="log"
         aria-live="polite"
         aria-relevant="additions"
@@ -2456,11 +2481,30 @@ export function ChatConversation({
             </p>
             <p className="text-[12px] text-[#667781] truncate">{replyTo.content}</p>
           </div>
-          <button onClick={() => setReplyTo(null)} className="p-1.5 rounded-full active:bg-gray-100">
-            <X className="h-4 w-4 text-[#667781]" />
+          <button
+            type="button"
+            onClick={() => setReplyTo(null)}
+            className="min-h-[44px] min-w-[44px] p-1.5 rounded-full active:bg-gray-100"
+            aria-label="Annuler la réponse"
+          >
+            <X className="h-4 w-4 text-[#667781]" aria-hidden />
           </button>
         </div>
       )}
+
+      {showJumpLatest ? (
+        <div className="relative z-10 flex justify-center -mt-3 mb-1 pointer-events-none">
+          <button
+            type="button"
+            onClick={scroll}
+            className="pointer-events-auto inline-flex items-center gap-1.5 min-h-[40px] rounded-full bg-white text-[#1F5C2E] text-xs font-semibold px-3 shadow-md border border-[#E5E7EB] active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#1F5C2E]"
+            aria-label="Aller aux messages récents"
+          >
+            <ChevronDown className="h-4 w-4" aria-hidden />
+            Récents
+          </button>
+        </div>
+      ) : null}
 
       {/* RECORDING BAR */}
       {isRecording && (
@@ -2480,6 +2524,10 @@ export function ChatConversation({
           <div className="w-3 h-3 bg-red-500 rounded-full motion-safe:animate-pulse shrink-0" aria-hidden />
           <span className="text-red-700 font-mono text-sm font-medium w-10 tabular-nums" aria-live="polite">
             {Math.floor(recordSec / 60)}:{(recordSec % 60).toString().padStart(2, '0')}
+          </span>
+          <span className="sr-only">
+            Studio audio : réduction de bruit active
+            {sttSessionRef.current ? ", transcription en cours" : ", sans transcription"}
           </span>
           <div className="flex-1 flex items-center gap-[2px] overflow-hidden" aria-hidden>
             {Array.from({ length: 40 }).map((_, i) => (
@@ -2621,6 +2669,7 @@ export function ChatConversation({
             role="dialog"
             aria-modal="true"
             aria-labelledby="offer-sheet-title"
+            aria-describedby="offer-sheet-desc"
             className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl z-[109] p-5 pb-8 safe-bottom motion-safe:animate-slideUp"
           >
             <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-4" aria-hidden />
@@ -2628,8 +2677,8 @@ export function ChatConversation({
               <HandCoins className="h-5 w-5 text-[#C27D10]" aria-hidden />
               <h3 id="offer-sheet-title" className="text-lg font-semibold text-[#111]">Proposer un prix</h3>
             </div>
-            <p className="text-sm text-[#667781] mb-4">
-              Propose un prix. Si l’autre confirme, une commande est créée au montant convenu.
+            <p id="offer-sheet-desc" className="text-sm text-[#667781] mb-4">
+              Propose un prix structuré (montant, quantité, lieu, délai). Si l’autre confirme, un bon de commande QR/PDF peut être généré.
             </p>
             {offerProducts.length > 0 && (
               <>

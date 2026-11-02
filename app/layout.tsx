@@ -6,9 +6,14 @@ import { AppShell } from "@/components/layout/app-shell"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "GWA - La Super App Africaine",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://mygwa.org"),
+  title: {
+    default: "GWA — La Super App Africaine",
+    template: "%s | GWA",
+  },
   description:
     "Achetez, vendez, discutez et partagez. Le marketplace social africain qui connecte producteurs, coopératives et acheteurs du monde entier.",
+  applicationName: "GWA",
   manifest: "/manifest.json",
   icons: {
     icon: [
@@ -24,6 +29,23 @@ export const metadata: Metadata = {
     capable: true,
     statusBarStyle: "default",
     title: "GWA",
+  },
+  openGraph: {
+    type: "website",
+    locale: "fr_CI",
+    siteName: "GWA",
+    title: "GWA — La Super App Africaine",
+    description:
+      "Marketplace social africain : producteurs, coopératives et acheteurs.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "GWA — La Super App Africaine",
+    description: "Achetez, vendez, discutez — marketplace africain.",
+  },
+  robots: {
+    index: true,
+    follow: true,
   },
 }
 

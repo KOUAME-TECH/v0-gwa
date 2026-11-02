@@ -38,6 +38,9 @@ export function isAdversarialAiQuestion(question: string): boolean {
     /donne[- ]moi\s+(les\s+)?(clés?|api[_\s-]?key|webhook\s+secret)/i,
     /sql\s+injection|drop\s+table|union\s+select/i,
     /override\s+(your\s+)?(rules|policies|safety)/i,
+    /wire\s+feexpay|feexpay\s+payout/i,
+    /cron[_\s-]?secret|otp[_\s-]?pepper|kv[_\s-]?rest/i,
+    /bypass\s+rate\s*limit|spam\s+yelly|flood\s+(l['']?api|yelly)/i,
   ]
   return patterns.some((re) => re.test(q))
 }
