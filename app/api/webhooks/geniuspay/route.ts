@@ -44,30 +44,50 @@ export async function POST(request: Request) {
   if (["completed", "success", "successful", "paid"].includes(status)) {
     if (Number.isFinite(amount) && amount !== Number(order.total_amount))
       return NextResponse.json({ error: "Montant invalide" }, { status: 422 });
-    if (order.payment_status !== "paid") {
-      await admin
-        .from("orders")
-        .update({
-          payment_status: "paid",
-          escrow_status: "held",
-          status: "confirmed",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", order.id);
-      await admin
-        .from("escrow_transactions")
-        .update({ status: "held", paid_at: new Date().toISOString() })
-        .eq("order_id", order.id);
-      await admin
-        .from("order_audit_log")
-        .insert({
-          order_id: order.id,
-          performed_by: null,
-          action: "geniuspay_webhook_paid",
-          new_value: "held",
-          notes: `reference=${reference}`,
-        });
+    // Idempotence : déjà payé → ACK sans double écriture.
+    if (order.payment_status === "paid") {
+      return NextResponse.json({
+        received: true,
+        matched: true,
+        idempotent: true,
+      });
     }
+    // Update conditionnel anti-race (deux webhooks simultanés).
+    const { data: paidRows, error: payErr } = await admin
+      .from("orders")
+      .update({
+        payment_status: "paid",
+        escrow_status: "held",
+        status: "confirmed",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", order.id)
+      .neq("payment_status", "paid")
+      .select("id");
+    if (payErr) {
+      console.error("[webhooks/geniuspay] order update", payErr.message.slice(0, 120));
+      return NextResponse.json({ error: "Update failed" }, { status: 500 });
+    }
+    if (!paidRows?.length) {
+      return NextResponse.json({
+        received: true,
+        matched: true,
+        idempotent: true,
+      });
+    }
+    await admin
+      .from("escrow_transactions")
+      .update({ status: "held", paid_at: new Date().toISOString() })
+      .eq("order_id", order.id);
+    await admin
+      .from("order_audit_log")
+      .insert({
+        order_id: order.id,
+        performed_by: null,
+        action: "geniuspay_webhook_paid",
+        new_value: "held",
+        notes: `reference=${reference}`,
+      });
   }
   return NextResponse.json({ received: true, matched: true });
 }

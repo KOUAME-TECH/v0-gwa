@@ -1,0 +1,25 @@
+# Harness LOCAL uniquement — NE PAS pointer vers la prod Supabase.
+# Usage:
+#   docker compose -f docker-compose.migration065.yml up -d
+#   ./scripts/migration-065-local.sh apply
+#   ./scripts/migration-065-local.sh rollback
+#   docker compose -f docker-compose.migration065.yml down -v
+services:
+  postgres065:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: gwa
+      POSTGRES_PASSWORD: gwa_local_only
+      POSTGRES_DB: gwa_mig065
+    ports:
+      - "55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gwa -d gwa_mig065"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - gwa_mig065_data:/var/lib/postgresql/data
+
+volumes:
+  gwa_mig065_data:

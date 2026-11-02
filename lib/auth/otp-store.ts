@@ -201,3 +201,39 @@ export async function releaseSendOtp(phoneE164: string): Promise<void> {
   }
   memoryStore.delete(key)
 }
+
+export type SmsOpsFailure = {
+  code: string
+  provider: string | null
+  at: string
+}
+
+const SMS_OPS_KEY = "gwa:ops:sms:last_failure"
+const smsOpsMemory: { value: SmsOpsFailure | null } = { value: null }
+
+/** Enregistre le dernier échec SMS (codes ops only — jamais de secret / raw AT). */
+export async function recordSmsOpsFailure(
+  code: string,
+  provider?: string | null,
+): Promise<void> {
+  const payload: SmsOpsFailure = {
+    code: code.slice(0, 64),
+    provider: provider ? provider.slice(0, 32) : null,
+    at: new Date().toISOString(),
+  }
+  const redis = getRedis()
+  if (redis) {
+    await redis.set(SMS_OPS_KEY, payload, { ex: 60 * 60 * 24 * 7 })
+    return
+  }
+  smsOpsMemory.value = payload
+}
+
+export async function getSmsOpsFailure(): Promise<SmsOpsFailure | null> {
+  const redis = getRedis()
+  if (redis) {
+    const val = await redis.get<SmsOpsFailure>(SMS_OPS_KEY)
+    return val ?? null
+  }
+  return smsOpsMemory.value
+}

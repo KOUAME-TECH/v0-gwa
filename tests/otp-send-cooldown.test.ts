@@ -6,6 +6,8 @@ import {
   hashOtpCode,
   verifyOtpHash,
   isOtpStoreReady,
+  recordSmsOpsFailure,
+  getSmsOpsFailure,
 } from "@/lib/auth/otp-store"
 
 describe("OTP send cooldown rollback", () => {
@@ -55,5 +57,13 @@ describe("OTP send cooldown rollback", () => {
 
   it("reports store ready outside production without Upstash", () => {
     expect(isOtpStoreReady()).toBe(true)
+  })
+
+  it("records SMS ops failure codes without secrets", async () => {
+    await recordSmsOpsFailure("SMS_CREDITS", "africastalking")
+    const last = await getSmsOpsFailure()
+    expect(last?.code).toBe("SMS_CREDITS")
+    expect(last?.provider).toBe("africastalking")
+    expect(last?.at).toMatch(/^\d{4}-/)
   })
 })
