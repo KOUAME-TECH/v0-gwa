@@ -4,12 +4,16 @@ export const CHAT_THEME = {
   primaryDark: "#174A24",
   accent: "#C27D10",
   ownBubble: "#D9FDD3",
+  buyerBubble: "#D6EAF8",
   otherBubble: "#FFFFFF",
+  aiBubble: "#FFF8E7",
   readTick: "#C27D10",
   sentTick: "#667781",
   /** Terre battue / savane — fond conversation */
   bg: "#E8D5B5",
   inputBg: "#F0F2F5",
+  /** Cible tactile min. WCAG 2.2 */
+  touchMinPx: 44,
 } as const
 
 /**

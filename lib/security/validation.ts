@@ -100,6 +100,8 @@ export const yellyChatSchema = z.object({
     .max(800)
     .transform((v) => sanitizePlainText(v, 800)),
   page: z.string().max(120).optional(),
+  /** Conversation chat GWA — contexte conseil neutre (Mission 2) */
+  conversationId: z.string().uuid().optional(),
   context: z
     .object({
       productId: z.string().uuid().optional(),

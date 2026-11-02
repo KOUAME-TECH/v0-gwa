@@ -5,7 +5,6 @@ import { createClient } from "@/lib/supabase/client"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { toast } from "sonner"
 import { GwaMark } from "@/components/brand/gwa-mark"
-import { useYellyOptional } from "@/components/yelly/yelly-provider"
 import { CHAT_THEME, CHAT_AFRICA_BG } from "@/lib/chat/theme"
 import {
   buildOfferContent,
@@ -23,6 +22,40 @@ import {
   type UploadProgress,
 } from "@/lib/chat/upload"
 import {
+  bubbleSurfaceClass,
+  resolveBubbleRole,
+  roleBadgeClass,
+  roleLabel,
+} from "@/lib/chat/roles"
+import { filterMessagesByQuery } from "@/lib/chat/search"
+import { LONG_PRESS_MS } from "@/lib/chat/long-press"
+import {
+  QUICK_REACTIONS,
+  clearChatDraft,
+  enqueueOutboxMessage,
+  hideMessageForMe,
+  isBrowserOffline,
+  listOutboxForConversation,
+  loadChatDraft,
+  loadHiddenMessageIds,
+  loadReactions,
+  removeOutboxMessage,
+  saveChatDraft,
+  setMessageReaction,
+  type MessageReactionMap,
+  type PendingChatMessage,
+} from "@/lib/chat/local-store"
+import {
+  buildAiAdviceUserPrompt,
+  formatAiAdviceMessage,
+  stripAiAdvicePrefix,
+} from "@/lib/chat/ai-advice"
+import {
+  buildPurchaseOrderContent,
+  parsePurchaseOrderContent,
+  purchaseOrderPrintHtml,
+} from "@/lib/chat/purchase-order"
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -36,7 +69,7 @@ import {
   ArrowLeft, Send, Mic, Smile, Phone, Video, MoreVertical,
   Check, CheckCheck, ImageIcon, FileText, X, Trash2, Copy, Reply,
   Pin, BellOff, UserCircle, Flag, Paperclip, Camera, MapPin, HandCoins,
-  LifeBuoy,
+  LifeBuoy, Search, SmilePlus, WifiOff, Printer, CreditCard,
 } from "lucide-react"
 
 interface Message {
@@ -69,6 +102,8 @@ interface ConversationData {
 interface ChatConversationProps {
   conversation: ConversationData
   userId: string
+  /** Type profil du viewer (acheteur / producteur…) pour bulles rôle */
+  viewerUserType?: string | null
   onBack: () => void
 }
 
@@ -78,7 +113,12 @@ const userTypeLabels: Record<string, string> = {
   business: "Entreprise", entreprise: "Entreprise", transformateur: "Transformateur",
 }
 
-export function ChatConversation({ conversation, userId, onBack }: ChatConversationProps) {
+export function ChatConversation({
+  conversation,
+  userId,
+  viewerUserType = null,
+  onBack,
+}: ChatConversationProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState("")
   const [sending, setSending] = useState(false)
@@ -86,6 +126,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   const [showAttach, setShowAttach] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
   const [selectedMsg, setSelectedMsg] = useState<string | null>(null)
+  const [reactPickerMsg, setReactPickerMsg] = useState<string | null>(null)
   const [isRecording, setIsRecording] = useState(false)
   const [recordSec, setRecordSec] = useState(0)
   const [showEmojis, setShowEmojis] = useState(false)
@@ -106,6 +147,12 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   const [liveCameraOpen, setLiveCameraOpen] = useState(false)
   const [cameraBusy, setCameraBusy] = useState(false)
   const [peerTyping, setPeerTyping] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set())
+  const [reactions, setReactions] = useState<MessageReactionMap>({})
+  const [pendingOffline, setPendingOffline] = useState<PendingChatMessage[]>([])
+  const [browserOffline, setBrowserOffline] = useState(false)
   const [pendingAccept, setPendingAccept] = useState<{
     msg: Message
     offer: PriceOfferPayload
@@ -113,7 +160,6 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null)
   const [mediaUrlCache, setMediaUrlCache] = useState<Record<string, string>>({})
 
-  const yelly = useYellyOptional()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const supabaseUrl =
     typeof process !== "undefined"
@@ -122,7 +168,10 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastTypingSent = useRef(0)
   const channelRef = useRef<ReturnType<ReturnType<typeof createClient>["channel"]> | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const longPressFired = useRef(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const imgRef = useRef<HTMLInputElement>(null)
   const camRef = useRef<HTMLInputElement>(null)
@@ -134,6 +183,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   const audioChunks = useRef<Blob[]>([])
   const previewAudio = useRef<HTMLAudioElement | null>(null)
   const cancelVoiceRef = useRef(false)
+  const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const supabase = createClient()
 
   const other = conversation.other_user
@@ -152,6 +202,43 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       /* ignore */
     }
   }, [prefsKey])
+
+  // Brouillon + masqués + réactions + file offline
+  useEffect(() => {
+    setHiddenIds(loadHiddenMessageIds(userId, conversation.id))
+    setReactions(loadReactions(userId, conversation.id))
+    setPendingOffline(listOutboxForConversation(conversation.id, userId))
+    const draft = loadChatDraft(userId, conversation.id)
+    if (draft) setNewMessage(draft)
+    setBrowserOffline(isBrowserOffline())
+  }, [userId, conversation.id])
+
+  useEffect(() => {
+    const onOnline = () => setBrowserOffline(false)
+    const onOffline = () => setBrowserOffline(true)
+    window.addEventListener("online", onOnline)
+    window.addEventListener("offline", onOffline)
+    return () => {
+      window.removeEventListener("online", onOnline)
+      window.removeEventListener("offline", onOffline)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (draftTimer.current) clearTimeout(draftTimer.current)
+    draftTimer.current = setTimeout(() => {
+      saveChatDraft(userId, conversation.id, newMessage)
+    }, 280)
+    return () => {
+      if (draftTimer.current) clearTimeout(draftTimer.current)
+    }
+  }, [newMessage, userId, conversation.id])
+
+  useEffect(() => {
+    if (searchOpen) {
+      setTimeout(() => searchRef.current?.focus(), 50)
+    }
+  }, [searchOpen])
 
   function savePrefs(next: { muted?: boolean; pinned?: boolean }) {
     const value = {
@@ -380,84 +467,292 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     return () => { if (recInterval.current) clearInterval(recInterval.current) }
   }, [])
 
+  async function deliverTextMessage(opts: {
+    text: string
+    replyToId?: string
+    tempId: string
+  }): Promise<boolean> {
+    const { text, replyToId, tempId } = opts
+    const { data: refreshed } = await supabase.auth.refreshSession()
+    const authUser =
+      refreshed.session?.user ?? (await supabase.auth.getUser()).data.user
+    if (!authUser) {
+      toast.error("Session expirée, reconnecte-toi")
+      return false
+    }
+
+    const insertPayload: Record<string, unknown> = {
+      conversation_id: conversation.id,
+      sender_id: authUser.id,
+      content: text,
+    }
+    if (replyToId) insertPayload.reply_to_id = replyToId
+
+    const { data, error } = await supabase
+      .from("messages")
+      .insert(insertPayload)
+      .select()
+      .single()
+
+    if (error) {
+      setMessages((prev) => prev.filter((m) => m.id !== tempId))
+      return false
+    }
+    if (data) {
+      setMessages((prev) => prev.map((m) => (m.id === tempId ? data : m)))
+      void fetch("/api/messages/notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          conversation_id: conversation.id,
+          preview: text,
+        }),
+      })
+    }
+    await supabase
+      .from("conversations")
+      .update({ last_message_at: new Date().toISOString() })
+      .eq("id", conversation.id)
+    return true
+  }
+
+  async function flushOutbox() {
+    const queue = listOutboxForConversation(conversation.id, userId)
+    if (queue.length === 0) return
+    for (const item of queue) {
+      const tempId = item.id
+      if (!messages.some((m) => m.id === tempId)) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: tempId,
+            conversation_id: conversation.id,
+            sender_id: userId,
+            content: item.content,
+            message_type: "text",
+            is_read: false,
+            is_edited: false,
+            created_at: item.createdAt,
+            reply_to_id: item.replyToId,
+          },
+        ])
+      }
+      try {
+        const ok = await deliverTextMessage({
+          text: item.content,
+          replyToId: item.replyToId,
+          tempId,
+        })
+        if (ok) {
+          removeOutboxMessage(item.id)
+        }
+      } catch {
+        /* reste en file */
+      }
+    }
+    setPendingOffline(listOutboxForConversation(conversation.id, userId))
+  }
+
+  async function requestInThreadAdvice(question: string) {
+    const prompt = buildAiAdviceUserPrompt(question)
+    const userLine = question.trim() || "Conseil demandé"
+    const tempUser = `tmp-q-${Date.now()}`
+    const tempAi = `tmp-ai-${Date.now()}`
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: tempUser,
+        conversation_id: conversation.id,
+        sender_id: userId,
+        content: userLine,
+        message_type: "text",
+        is_read: false,
+        is_edited: false,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: tempAi,
+        conversation_id: conversation.id,
+        sender_id: userId,
+        content: formatAiAdviceMessage("Le conseil arrive…"),
+        message_type: "ai",
+        is_read: true,
+        is_edited: false,
+        created_at: new Date().toISOString(),
+      },
+    ])
+    scroll()
+
+    try {
+      // Persister la question utilisateur
+      const { data: userMsg } = await supabase
+        .from("messages")
+        .insert({
+          conversation_id: conversation.id,
+          sender_id: userId,
+          content: userLine,
+          message_type: "text",
+        })
+        .select()
+        .single()
+      if (userMsg) {
+        setMessages((prev) => prev.map((m) => (m.id === tempUser ? userMsg : m)))
+      }
+
+      const res = await fetch("/api/yelly/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: prompt.slice(0, 800),
+          page: "messages/chat",
+          conversationId: conversation.id,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      const replyText =
+        typeof data.reply === "string" && data.reply.trim()
+          ? data.reply.trim()
+          : typeof data.error === "string"
+            ? data.error
+            : "Je n’ai pas pu répondre. Réessaie dans un instant."
+
+      const aiContent = formatAiAdviceMessage(replyText)
+      const { data: aiMsg, error: aiErr } = await supabase
+        .from("messages")
+        .insert({
+          conversation_id: conversation.id,
+          sender_id: userId,
+          content: aiContent,
+          message_type: "ai",
+        })
+        .select()
+        .single()
+
+      if (aiErr || !aiMsg) {
+        // Fallback text si type ai refusé côté DB
+        const { data: fallback } = await supabase
+          .from("messages")
+          .insert({
+            conversation_id: conversation.id,
+            sender_id: userId,
+            content: aiContent,
+            message_type: "text",
+          })
+          .select()
+          .single()
+        setMessages((prev) =>
+          prev.map((m) => (m.id === tempAi ? fallback || { ...m, content: aiContent } : m)),
+        )
+      } else {
+        setMessages((prev) => prev.map((m) => (m.id === tempAi ? aiMsg : m)))
+      }
+
+      await supabase
+        .from("conversations")
+        .update({ last_message_at: new Date().toISOString() })
+        .eq("id", conversation.id)
+      scroll()
+    } catch {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === tempAi
+            ? {
+                ...m,
+                content: formatAiAdviceMessage(
+                  "Connexion interrompue. Réessaie le conseil.",
+                ),
+              }
+            : m,
+        ),
+      )
+      toast.error("Conseil indisponible. Réessaie.")
+    }
+  }
+
   // Send text
-  async function handleSend(e: React.FormEvent) {
-    e.preventDefault()
+  async function handleSend(e?: React.FormEvent) {
+    e?.preventDefault()
     const text = newMessage.trim()
     if (!text || sending) return
 
-    // @IA / @Yelly : ouvre l’aide neutre sur sollicitation (ne part pas comme message)
-    if (/(^|\s)@(IA|Yelly)\b/i.test(text)) {
-      const question = text.replace(/(^|\s)@(IA|Yelly)\b/gi, " ").trim()
+    // @IA / @Yelly / Conseil : participant neutre dans le fil (Mission 2)
+    if (/(^|\s)@(IA|Yelly|Conseil)\b/i.test(text)) {
+      const question = text.replace(/(^|\s)@(IA|Yelly|Conseil)\b/gi, " ").trim()
       setNewMessage("")
-      yelly?.openYelly("chat_mention_ia")
-      if (question) {
-        toast.message("Conseil ouvert", {
-          description: "Pose ta question à l’aide — sans conclure à ta place.",
-        })
-      }
+      clearChatDraft(userId, conversation.id)
+      setSending(true)
+      await requestInThreadAdvice(question || "Comment bien avancer dans cette discussion ?")
+      setSending(false)
+      inputRef.current?.focus()
       return
     }
 
     setSending(true)
     setNewMessage("")
+    clearChatDraft(userId, conversation.id)
 
+    const replyId = replyTo?.id
     const tempId = `tmp-${Date.now()}`
     const temp: Message = {
       id: tempId, conversation_id: conversation.id, sender_id: userId,
       content: text, message_type: "text", is_read: false, is_edited: false,
-      created_at: new Date().toISOString(), reply_to_id: replyTo?.id,
+      created_at: new Date().toISOString(), reply_to_id: replyId,
     }
     setMessages(prev => [...prev, temp])
     setReplyTo(null)
     scroll()
 
-    try {
-      // Verify / refresh auth before sending (évite sessions stale après long séjour admin)
-      const { data: refreshed } = await supabase.auth.refreshSession()
-      const authUser = refreshed.session?.user
-        ?? (await supabase.auth.getUser()).data.user
-      if (!authUser) {
-        toast.error("Session expirée, reconnecte-toi")
-        setSending(false)
-        return
-      }
-
-      const insertPayload: Record<string, unknown> = {
-        conversation_id: conversation.id,
-        sender_id: authUser.id,
+    // Hors ligne → file locale
+    if (isBrowserOffline()) {
+      const pending = enqueueOutboxMessage(userId, {
+        id: tempId,
+        conversationId: conversation.id,
         content: text,
-      }
-      if (replyTo?.id) insertPayload.reply_to_id = replyTo.id
+        replyToId: replyId,
+      })
+      setPendingOffline((prev) => [...prev, pending])
+      toast.message("Hors ligne", {
+        description: "Message mis en attente. Il partira dès le retour du réseau.",
+      })
+      setSending(false)
+      inputRef.current?.focus()
+      return
+    }
 
-      const { data, error } = await supabase.from("messages").insert(insertPayload).select().single()
-
-      if (error) {
-        setMessages(prev => prev.filter(m => m.id !== tempId))
+    try {
+      const ok = await deliverTextMessage({
+        text,
+        replyToId: replyId,
+        tempId,
+      })
+      if (!ok) {
         setNewMessage(text)
         toast.error("Message non envoyé. Réessaie.")
-      } else if (data) {
-        setMessages(prev => prev.map(m => m.id === tempId ? data : m))
-        // Push OneSignal + notif in-app pour le destinataire
-        void fetch("/api/messages/notify", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            conversation_id: conversation.id,
-            preview: text,
-          }),
-        })
       }
-
-      await supabase.from("conversations").update({ last_message_at: new Date().toISOString() }).eq("id", conversation.id)
     } catch {
-      setMessages(prev => prev.filter(m => m.id !== tempId))
-      setNewMessage(text)
-      toast.error("Erreur réseau")
+      // Réseau coupé en cours d'envoi → file
+      const pending = enqueueOutboxMessage(userId, {
+        id: tempId,
+        conversationId: conversation.id,
+        content: text,
+        replyToId: replyId,
+      })
+      setPendingOffline((prev) => [...prev, pending])
+      toast.message("Réseau coupé", {
+        description: "Message sauvegardé. Envoi dès reconnexion.",
+      })
     }
     setSending(false)
     inputRef.current?.focus()
   }
+
+  // Flush file offline quand le réseau revient
+  useEffect(() => {
+    if (!browserOffline) {
+      void flushOutbox()
+    }
+  }, [browserOffline, conversation.id])
 
   async function handleFileUpload(file: File, type: "image" | "file") {
     setShowAttach(false)
@@ -1001,15 +1296,76 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     )
   }
 
+  function clearLongPress() {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
+  }
+
+  function openMsgMenu(msgId: string) {
+    setSelectedMsg(msgId)
+    setReactPickerMsg(null)
+  }
+
+  function onBubblePointerDown(msgId: string) {
+    longPressFired.current = false
+    clearLongPress()
+    longPressTimer.current = setTimeout(() => {
+      longPressFired.current = true
+      openMsgMenu(msgId)
+      if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+        try {
+          navigator.vibrate(12)
+        } catch {
+          /* ignore */
+        }
+      }
+    }, LONG_PRESS_MS)
+  }
+
+  function onBubblePointerUp(msgId: string) {
+    clearLongPress()
+    if (!longPressFired.current) {
+      // Tap court : toggle menu (accessibilité + desktop)
+      setSelectedMsg((prev) => (prev === msgId ? null : msgId))
+      setReactPickerMsg(null)
+    }
+  }
+
   async function msgAction(a: string, msg: Message) {
     setSelectedMsg(null)
-    if (a === "reply") { setReplyTo(msg); inputRef.current?.focus() }
-    else if (a === "copy") { navigator.clipboard.writeText(msg.content); toast.success("Copié") }
-    else if (a === "delete" && msg.sender_id === userId) {
-      setMessages(prev => prev.filter(m => m.id !== msg.id))
+    setReactPickerMsg(null)
+    if (a === "reply") {
+      setReplyTo(msg)
+      inputRef.current?.focus()
+    } else if (a === "copy") {
+      try {
+        await navigator.clipboard.writeText(msg.content)
+        toast.success("Copié")
+      } catch {
+        toast.error("Copie impossible")
+      }
+    } else if (a === "react") {
+      setSelectedMsg(msg.id)
+      setReactPickerMsg(msg.id)
+    } else if (a === "delete_me") {
+      const next = hideMessageForMe(userId, conversation.id, msg.id)
+      setHiddenIds(new Set(next))
+      toast.success("Masqué pour toi")
+    } else if (a === "delete" && msg.sender_id === userId) {
+      setMessages((prev) => prev.filter((m) => m.id !== msg.id))
       toast.success("Supprimé")
       await supabase.from("messages").delete().eq("id", msg.id)
     }
+  }
+
+  function applyReaction(msgId: string, emoji: string) {
+    const next = setMessageReaction(userId, conversation.id, msgId, emoji)
+    setReactions({ ...next })
+    setReactPickerMsg(null)
+    setSelectedMsg(null)
+    toast.success("Réaction ajoutée")
   }
 
   async function sendPriceOffer() {
@@ -1127,11 +1483,70 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
               : "Offre acceptée. Finalise la commande depuis ton panier ou tes commandes.",
           )
         } else {
-          toast.success("Commande créée au prix convenu")
-          if (data.redirect_to) {
-            window.setTimeout(() => {
-              window.location.href = data.redirect_to
-            }, 600)
+          toast.success("Commande créée — bon de commande épinglé")
+          const order = data.order as
+            | {
+                id?: string
+                order_number?: string
+                total_amount?: number
+              }
+            | undefined
+          if (order?.id) {
+            const sheetContent = buildPurchaseOrderContent({
+              orderId: order.id,
+              orderNumber: order.order_number,
+              amount:
+                Number(data.negotiated_unit_price) ||
+                Number(order.total_amount) ||
+                offer.amount,
+              quantity: 1,
+              productName: offer.productName,
+              productId: offer.productId,
+              offerMessageId: msg.id,
+              payPath: data.redirect_to || "/dashboard/commandes",
+              pinned: true,
+            })
+            const { data: sheetMsg } = await supabase
+              .from("messages")
+              .insert({
+                conversation_id: conversation.id,
+                sender_id: userId,
+                content: sheetContent,
+                message_type: "order_sheet",
+              })
+              .select()
+              .single()
+            if (sheetMsg) {
+              setMessages((prev) =>
+                prev.some((m) => m.id === sheetMsg.id)
+                  ? prev
+                  : [...prev, sheetMsg],
+              )
+              scroll()
+            } else {
+              // Fallback si type order_sheet refusé
+              const { data: fb } = await supabase
+                .from("messages")
+                .insert({
+                  conversation_id: conversation.id,
+                  sender_id: userId,
+                  content: sheetContent,
+                  message_type: "text",
+                })
+                .select()
+                .single()
+              if (fb) setMessages((prev) => [...prev, fb])
+            }
+            // Épingler la conversation (double confirmation déjà faite)
+            savePrefs({ pinned: true })
+            const col =
+              conversation.participant_1 === userId
+                ? "is_pinned_1"
+                : "is_pinned_2"
+            await supabase
+              .from("conversations")
+              .update({ [col]: true, last_message_at: new Date().toISOString() })
+              .eq("id", conversation.id)
           }
         }
       } catch {
@@ -1143,7 +1558,31 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     }
   }
 
+  function printPurchaseOrder(content: string) {
+    const po = parsePurchaseOrderContent(content)
+    if (!po) {
+      toast.error("Bon de commande illisible")
+      return
+    }
+    const html = purchaseOrderPrintHtml(po, {
+      buyerName: "Partie acheteuse",
+      sellerName: otherName,
+    })
+    const w = window.open("", "_blank", "noopener,noreferrer,width=720,height=900")
+    if (!w) {
+      toast.error("Autorise les pop-ups pour imprimer")
+      return
+    }
+    w.document.write(html)
+    w.document.close()
+  }
+
   const fmtTime = (d: string) => new Date(d).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+
+  const visibleMessages = filterMessagesByQuery(
+    messages.filter((m) => !hiddenIds.has(m.id)),
+    searchQuery,
+  )
 
   function mediaSrc(msg: Message): string | undefined {
     return mediaUrlCache[msg.id] || msg.media_url
@@ -1160,6 +1599,67 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   function renderContent(msg: Message) {
     if (msg.message_type === "location" || isLocationMessage(msg.message_type, msg.content)) {
       return <ChatLocationBubble content={msg.content} messageType={msg.message_type} />
+    }
+    const orderSheet =
+      msg.message_type === "order_sheet"
+        ? parsePurchaseOrderContent(msg.content)
+        : parsePurchaseOrderContent(msg.content)
+    if (orderSheet) {
+      const total = orderSheet.amount * (orderSheet.quantity || 1)
+      return (
+        <div
+          className="min-w-[220px] max-w-[280px] space-y-2 py-1"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center gap-1.5 text-[#1F5C2E]">
+            <Pin className="h-4 w-4 shrink-0" aria-hidden />
+            <span className="text-[11px] font-semibold uppercase tracking-wide">
+              Bon de commande
+              {orderSheet.pinned ? " · épinglé" : ""}
+            </span>
+          </div>
+          {orderSheet.productName && (
+            <p className="text-[13px] font-medium text-[#111b21]">{orderSheet.productName}</p>
+          )}
+          <p className="text-lg font-bold text-[#1F5C2E] tabular-nums">
+            {formatOfferAmount(total)}{" "}
+            <span className="text-xs font-medium text-[#54656f]">FCFA</span>
+          </p>
+          <p className="text-[11px] text-[#54656f]">
+            Qté {orderSheet.quantity}
+            {orderSheet.orderNumber ? ` · N° ${orderSheet.orderNumber}` : ""}
+          </p>
+          <div className="flex flex-col gap-1.5 pt-1">
+            <a
+              href={orderSheet.payPath || "/dashboard/commandes"}
+              className="flex items-center justify-center gap-2 min-h-[44px] rounded-full bg-[#1F5C2E] text-white text-[13px] font-semibold active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C27D10]"
+            >
+              <CreditCard className="h-4 w-4" aria-hidden />
+              Payer maintenant
+            </a>
+            <button
+              type="button"
+              onClick={() => printPurchaseOrder(msg.content)}
+              className="flex items-center justify-center gap-2 min-h-[44px] rounded-full border border-[#E5E7EB] text-[13px] font-medium text-[#54656f] active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#1F5C2E]"
+            >
+              <Printer className="h-4 w-4" aria-hidden />
+              Imprimer
+            </button>
+          </div>
+        </div>
+      )
+    }
+    if (
+      msg.message_type === "ai" ||
+      /^\s*\[conseil\s*ia\]/i.test(msg.content)
+    ) {
+      return (
+        <div className="space-y-1 py-0.5">
+          <p className="text-[15px] whitespace-pre-wrap break-words leading-relaxed text-[#111b21]">
+            {stripAiAdvicePrefix(msg.content)}
+          </p>
+        </div>
+      )
     }
     if (msg.message_type === "offer") {
       const offer = parseOfferContent(msg.content)
@@ -1193,7 +1693,11 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
           )}
           <p className="text-[11px] text-[#667781]">{statusLabel[offer.status] || offer.status}</p>
           {!own && offer.status === "pending" && (
-            <div className="flex gap-1.5 pt-1">
+            <div
+              className="flex gap-1.5 pt-1"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
               <button
                 type="button"
                 aria-label={`Accepter l’offre de ${formatOfferAmount(offer.amount)} FCFA`}
@@ -1201,7 +1705,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
                   e.stopPropagation()
                   requestAcceptOffer(msg, offer)
                 }}
-                className="flex-1 h-8 rounded-full bg-[#1F5C2E] text-white text-[12px] font-semibold active:scale-95"
+                className="flex-1 min-h-[44px] rounded-full bg-[#1F5C2E] text-white text-[12px] font-semibold active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C27D10]"
               >
                 Accepter
               </button>
@@ -1212,7 +1716,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
                   e.stopPropagation()
                   void respondToOffer(msg, offer, "declined")
                 }}
-                className="flex-1 h-8 rounded-full border border-[#E5E7EB] text-[12px] font-medium text-[#54656f] active:scale-95"
+                className="flex-1 min-h-[44px] rounded-full border border-[#E5E7EB] text-[12px] font-medium text-[#54656f] active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#1F5C2E]"
               >
                 Refuser
               </button>
@@ -1223,21 +1727,29 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     }
     if (msg.message_type === "voice") {
       return (
-        <button type="button" onClick={(e) => { e.stopPropagation(); playVoiceMsg(msg) }}
-          className="flex items-center gap-2 min-w-[180px]">
-          <div className="w-8 h-8 bg-[#1F5C2E] rounded-full flex items-center justify-center shrink-0">
+        <button
+          type="button"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation()
+            playVoiceMsg(msg)
+          }}
+          className="flex items-center gap-2 min-w-[180px] min-h-[44px] rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#1F5C2E]"
+          aria-label="Écouter le message vocal"
+        >
+          <div className="w-10 h-10 bg-[#1F5C2E] rounded-full flex items-center justify-center shrink-0">
             {mediaSrc(msg) ? (
               <svg viewBox="0 0 24 24" className="h-4 w-4 text-white fill-current"><polygon points="6,4 20,12 6,20" /></svg>
             ) : (
               <Mic className="h-4 w-4 text-white" />
             )}
           </div>
-          <div className="flex-1 flex items-center gap-0.5">
+          <div className="flex-1 flex items-center gap-0.5" aria-hidden>
             {Array.from({ length: 24 }).map((_, i) => (
               <div key={i} className="w-[3px] rounded-full bg-[#1F5C2E]/40" style={{ height: `${4 + Math.sin(i * 0.7) * 8}px` }} />
             ))}
           </div>
-          <span className="text-[11px] opacity-60 shrink-0">{msg.content.match(/\((.*?)\)/)?.[1] || "0:00"}</span>
+          <span className="text-[11px] opacity-70 shrink-0">{msg.content.match(/\((.*?)\)/)?.[1] || "0:00"}</span>
         </button>
       )
     }
@@ -1277,41 +1789,69 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     >
       {/* HEADER */}
       <header className="text-white flex items-center gap-1 px-1 py-1.5 shrink-0 safe-top" style={{ backgroundColor: CHAT_THEME.primary }}>
-        <button onClick={onBack} className="p-2 rounded-full active:bg-white/20 transition-colors" aria-label="Retour">
+        <button
+          type="button"
+          onClick={onBack}
+          className="min-h-[44px] min-w-[44px] p-2 rounded-full active:bg-white/20 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+          aria-label="Retour"
+        >
           <ArrowLeft className="h-5 w-5" />
         </button>
 
         <GwaMark size={28} className="shrink-0 mr-0.5" />
 
-        <button onClick={() => menuAction("profile")} className="flex items-center gap-2.5 flex-1 min-w-0 py-1">
+        <button
+          type="button"
+          onClick={() => menuAction("profile")}
+          className="flex items-center gap-2.5 flex-1 min-w-0 py-1 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+        >
           <Avatar className="h-10 w-10 border-2 border-white/30">
             <AvatarImage src={other?.avatar_url || ""} />
             <AvatarFallback className="bg-white/20 text-white font-bold text-sm">{otherInitial}</AvatarFallback>
           </Avatar>
-          <div className="min-w-0">
+          <div className="min-w-0 text-left">
             <h2 className="font-semibold text-[15px] truncate leading-tight">{otherName}</h2>
-            <p className="text-[11px] text-white/70 leading-tight">{userTypeLabels[other?.user_type || ""] || "En ligne"}</p>
+            <p className="text-[11px] text-white/80 leading-tight">
+              {peerTyping
+                ? "écrit…"
+                : userTypeLabels[other?.user_type || ""] || "Discussion"}
+            </p>
           </div>
         </button>
 
-        {yelly ? (
-          <button
-            type="button"
-            onClick={() => yelly.openYelly("chat_header_conseil")}
-            className="flex items-center gap-1 rounded-full px-2 py-1.5 active:bg-white/20"
-            aria-label="Demander conseil à l’IA"
-            title="Demander conseil à l’IA"
-          >
-            <LifeBuoy className="h-5 w-5" />
-            <span className="hidden sm:inline text-[11px] font-medium max-w-[72px] leading-tight">
-              Conseil IA
-            </span>
-          </button>
-        ) : null}
+        <button
+          type="button"
+          onClick={() => {
+            setSearchOpen((v) => !v)
+            if (searchOpen) setSearchQuery("")
+          }}
+          className="min-h-[44px] min-w-[44px] p-2.5 rounded-full active:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+          aria-label={searchOpen ? "Fermer la recherche" : "Chercher dans la conversation"}
+          aria-pressed={searchOpen}
+        >
+          <Search className="h-5 w-5" />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            void requestInThreadAdvice(
+              "Donne un conseil neutre pour bien avancer dans cette discussion (prix, confiance, livraison).",
+            )
+          }}
+          className="flex items-center gap-1 rounded-full min-h-[44px] px-2 py-1.5 active:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+          aria-label="Demander conseil"
+          title="Demander conseil"
+        >
+          <LifeBuoy className="h-5 w-5" />
+          <span className="hidden sm:inline text-[11px] font-medium max-w-[72px] leading-tight">
+            Conseil
+          </span>
+        </button>
         <button
           type="button"
           onClick={() => void callOther("audio")}
-          className="p-2.5 rounded-full active:bg-white/20"
+          className="min-h-[44px] min-w-[44px] p-2.5 rounded-full active:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
           aria-label="Appel audio"
         >
           <Phone className="h-5 w-5" />
@@ -1319,14 +1859,19 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
         <button
           type="button"
           onClick={() => void callOther("video")}
-          className="p-2.5 rounded-full active:bg-white/20"
+          className="hidden sm:inline-flex min-h-[44px] min-w-[44px] p-2.5 rounded-full active:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
           aria-label="Appel vidéo"
         >
           <Video className="h-5 w-5" />
         </button>
 
         <div className="relative">
-          <button onClick={() => setShowMenu(!showMenu)} className="p-2.5 rounded-full active:bg-white/20" aria-label="Menu">
+          <button
+            type="button"
+            onClick={() => setShowMenu(!showMenu)}
+            className="min-h-[44px] min-w-[44px] p-2.5 rounded-full active:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            aria-label="Menu"
+          >
             <MoreVertical className="h-5 w-5" />
           </button>
           {showMenu && (
@@ -1362,6 +1907,44 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
         </div>
       </header>
 
+      {searchOpen && (
+        <div className="bg-white border-b border-[#E5E7EB] px-3 py-2 shrink-0 flex items-center gap-2">
+          <Search className="h-4 w-4 text-[#667781] shrink-0" aria-hidden />
+          <input
+            ref={searchRef}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Chercher dans cette discussion…"
+            aria-label="Chercher dans cette discussion"
+            className="flex-1 min-h-[44px] bg-transparent text-[15px] text-[#111b21] placeholder:text-[#8696a0] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1F5C2E]/40 rounded-md px-1"
+          />
+          {searchQuery ? (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full active:bg-gray-100"
+              aria-label="Effacer la recherche"
+            >
+              <X className="h-4 w-4 text-[#667781]" />
+            </button>
+          ) : null}
+        </div>
+      )}
+
+      {(browserOffline || pendingOffline.length > 0) && (
+        <div
+          className="bg-[#FFF8E7] text-[#5C3D00] text-xs px-3 py-2 flex items-center gap-2 shrink-0 border-b border-[#E8D5B5]"
+          role="status"
+        >
+          <WifiOff className="h-4 w-4 shrink-0" aria-hidden />
+          <span>
+            {browserOffline
+              ? "Hors ligne — tes messages sont mis en attente."
+              : `${pendingOffline.length} message${pendingOffline.length > 1 ? "s" : ""} en attente d’envoi…`}
+          </span>
+        </div>
+      )}
+
       {/* MESSAGES AREA — fond terre / motif wax Afrique */}
       <div
         className="flex-1 overflow-y-auto overscroll-contain px-3 py-3"
@@ -1383,13 +1966,33 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
             <div className="w-16 h-16 bg-white/80 rounded-2xl flex items-center justify-center mb-4 shadow-sm">
               <Send className="h-7 w-7 text-[#1F5C2E]" />
             </div>
-            <p className="text-[#5f6368] text-sm font-medium">Envoyez un message pour démarrer la conversation</p>
+            <p className="text-[#5f6368] text-sm font-medium">Envoie un message pour démarrer la discussion</p>
+          </div>
+        ) : visibleMessages.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-center px-6">
+            <p className="text-[#5f6368] text-sm font-medium">Aucun message trouvé</p>
           </div>
         ) : (
-          messages.map((msg, i) => {
+          visibleMessages.map((msg, i) => {
             const own = msg.sender_id === userId
-            const showDate = i === 0 || new Date(msg.created_at).toDateString() !== new Date(messages[i - 1].created_at).toDateString()
-            const replyMsg = msg.reply_to_id ? messages.find(m => m.id === msg.reply_to_id) : null
+            const role = resolveBubbleRole({
+              messageType: msg.message_type,
+              content: msg.content,
+              senderId: msg.sender_id,
+              viewerId: userId,
+              viewerUserType,
+              otherUserType: other?.user_type,
+            })
+            const prev = visibleMessages[i - 1]
+            const showDate =
+              i === 0 ||
+              new Date(msg.created_at).toDateString() !==
+                new Date(prev.created_at).toDateString()
+            const replyMsg = msg.reply_to_id
+              ? messages.find((m) => m.id === msg.reply_to_id)
+              : null
+            const reaction = reactions[msg.id]
+            const pending = msg.id.startsWith("tmp-") || msg.id.startsWith("out:")
 
             return (
               <React.Fragment key={msg.id}>
@@ -1400,15 +2003,35 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
                     </span>
                   </div>
                 )}
-                <div className={`flex mb-1 ${own ? "justify-end" : "justify-start"}`}>
+                <div className={`flex mb-1 ${own && role !== "ai" ? "justify-end" : "justify-start"}`}>
                   <div className="relative max-w-[82%]">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedMsg(selectedMsg === msg.id ? null : msg.id)}
-                      className={`text-left rounded-2xl shadow-sm px-3 py-1.5 ${
-                        own ? "bg-[#d9fdd3] rounded-tr-md" : "bg-white rounded-tl-md"
-                      }`}
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Message ${roleLabel(role)}. Maintenir pour options.`}
+                      onPointerDown={() => onBubblePointerDown(msg.id)}
+                      onPointerUp={() => onBubblePointerUp(msg.id)}
+                      onPointerLeave={clearLongPress}
+                      onPointerCancel={clearLongPress}
+                      onContextMenu={(e) => {
+                        e.preventDefault()
+                        openMsgMenu(msg.id)
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault()
+                          openMsgMenu(msg.id)
+                        }
+                      }}
+                      className={`text-left shadow-sm px-3 py-1.5 select-none touch-manipulation focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1F5C2E] ${bubbleSurfaceClass(role, own)}`}
                     >
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <span
+                          className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${roleBadgeClass(role)}`}
+                        >
+                          {roleLabel(role)}
+                        </span>
+                      </div>
                       {replyMsg && (
                         <div className="border-l-[3px] border-[#1F5C2E] pl-2 mb-1 py-0.5 rounded-r-md bg-black/5">
                           <p className="text-[11px] font-semibold text-[#1F5C2E]">
@@ -1419,29 +2042,99 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
                       )}
                       <div className="text-[#111b21]">{renderContent(msg)}</div>
                       <div className={`flex items-center gap-1 ${own ? "justify-end" : ""} -mb-0.5 mt-0.5`}>
-                        <span className="text-[11px] text-[#667781]">{fmtTime(msg.created_at)}</span>
-                        {msg.is_edited && <span className="text-[10px] text-[#667781] italic">modifié</span>}
-                        {own && (msg.is_read
-                          ? <CheckCheck className="h-[14px] w-[14px] text-[#C27D10]" />
-                          : <Check className="h-[14px] w-[14px] text-[#667781]" />
+                        <span className="text-[11px] text-[#54656f]">{fmtTime(msg.created_at)}</span>
+                        {msg.is_edited && <span className="text-[10px] text-[#54656f] italic">modifié</span>}
+                        {own && role !== "ai" && (
+                          pending ? (
+                            <Check className="h-[14px] w-[14px] text-[#8696a0]" aria-label="En attente" />
+                          ) : msg.is_read ? (
+                            <CheckCheck className="h-[14px] w-[14px] text-[#C27D10]" aria-label="Lu" />
+                          ) : (
+                            <CheckCheck className="h-[14px] w-[14px] text-[#667781]" aria-label="Envoyé" />
+                          )
                         )}
                       </div>
-                    </button>
+                    </div>
+
+                    {reaction ? (
+                      <span
+                        className={`absolute -bottom-2 ${own ? "left-2" : "right-2"} text-sm bg-white rounded-full px-1.5 shadow border border-[#E5E7EB]`}
+                        aria-label={`Réaction ${reaction}`}
+                      >
+                        {reaction}
+                      </span>
+                    ) : null}
 
                     {selectedMsg === msg.id && (
                       <>
-                        <div className="fixed inset-0 z-[105]" onClick={() => setSelectedMsg(null)} />
-                        <div className={`absolute ${own ? 'right-0' : 'left-0'} bottom-full mb-1 bg-white rounded-2xl shadow-2xl z-[110] py-1.5 min-w-[150px]`}>
-                          <button onClick={() => msgAction("reply", msg)} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 active:bg-gray-100 text-sm">
+                        <div
+                          className="fixed inset-0 z-[105]"
+                          onClick={() => {
+                            setSelectedMsg(null)
+                            setReactPickerMsg(null)
+                          }}
+                        />
+                        <div
+                          className={`absolute ${own ? "right-0" : "left-0"} bottom-full mb-1 bg-white rounded-2xl shadow-2xl z-[110] py-1.5 min-w-[180px] border border-[#E5E7EB]`}
+                          role="menu"
+                          aria-label="Actions du message"
+                        >
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => void msgAction("reply", msg)}
+                            className="w-full flex items-center gap-2.5 px-3.5 min-h-[44px] active:bg-gray-100 text-sm focus-visible:bg-gray-50"
+                          >
                             <Reply className="h-4 w-4 text-[#6B7280]" />Répondre
                           </button>
-                          <button onClick={() => msgAction("copy", msg)} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 active:bg-gray-100 text-sm">
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => void msgAction("copy", msg)}
+                            className="w-full flex items-center gap-2.5 px-3.5 min-h-[44px] active:bg-gray-100 text-sm focus-visible:bg-gray-50"
+                          >
                             <Copy className="h-4 w-4 text-[#6B7280]" />Copier
                           </button>
-                          {own && (
-                            <button onClick={() => msgAction("delete", msg)} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 active:bg-gray-100 text-sm text-red-600">
-                              <Trash2 className="h-4 w-4" />Supprimer
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => void msgAction("react", msg)}
+                            className="w-full flex items-center gap-2.5 px-3.5 min-h-[44px] active:bg-gray-100 text-sm focus-visible:bg-gray-50"
+                          >
+                            <SmilePlus className="h-4 w-4 text-[#6B7280]" />Réagir
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => void msgAction("delete_me", msg)}
+                            className="w-full flex items-center gap-2.5 px-3.5 min-h-[44px] active:bg-gray-100 text-sm focus-visible:bg-gray-50"
+                          >
+                            <Trash2 className="h-4 w-4 text-[#6B7280]" />Supprimer pour moi
+                          </button>
+                          {own && !pending && (
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => void msgAction("delete", msg)}
+                              className="w-full flex items-center gap-2.5 px-3.5 min-h-[44px] active:bg-gray-100 text-sm text-red-600 focus-visible:bg-red-50"
+                            >
+                              <Trash2 className="h-4 w-4" />Supprimer pour tous
                             </button>
+                          )}
+                          {reactPickerMsg === msg.id && (
+                            <div className="flex gap-1 px-2 py-2 border-t border-[#F3F4F6]">
+                              {QUICK_REACTIONS.map((emoji) => (
+                                <button
+                                  key={emoji}
+                                  type="button"
+                                  onClick={() => applyReaction(msg.id, emoji)}
+                                  className="min-h-[44px] min-w-[44px] text-xl rounded-full active:bg-gray-100"
+                                  aria-label={`Réagir avec ${emoji}`}
+                                >
+                                  {emoji}
+                                </button>
+                              ))}
+                            </div>
                           )}
                         </div>
                       </>
@@ -1454,9 +2147,18 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
         )}
         <div ref={messagesEndRef} />
         {peerTyping ? (
-          <p className="px-4 pb-2 text-xs italic text-[#6B7280]">
-            {other?.full_name?.split(" ")[0] || "L’autre"} écrit…
-          </p>
+          <div className="flex justify-start mb-1 px-1" aria-live="polite">
+            <div className="bg-white/95 rounded-2xl rounded-tl-md px-3 py-2 shadow-sm">
+              <p className="text-xs text-[#54656f]">
+                {other?.full_name?.split(" ")[0] || "Contact"} écrit…
+              </p>
+              <div className="flex gap-1 mt-1" aria-hidden>
+                <span className="w-1.5 h-1.5 rounded-full bg-[#8696a0] animate-bounce [animation-delay:0ms]" />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#8696a0] animate-bounce [animation-delay:120ms]" />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#8696a0] animate-bounce [animation-delay:240ms]" />
+              </div>
+            </div>
+          </div>
         ) : null}
       </div>
 
@@ -1509,19 +2211,29 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       {/* RECORDING BAR */}
       {isRecording && (
         <div className="bg-white border-t border-gray-200 px-3 py-2.5 flex items-center gap-3 shrink-0">
-          <button onClick={cancelRecording} className="p-2 rounded-full active:bg-red-50">
+          <button
+            type="button"
+            onClick={cancelRecording}
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full active:bg-red-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-500"
+            aria-label="Annuler l’enregistrement"
+          >
             <Trash2 className="h-5 w-5 text-red-500" />
           </button>
-          <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse shrink-0" />
-          <span className="text-red-600 font-mono text-sm font-medium w-10">
+          <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse shrink-0" aria-hidden />
+          <span className="text-red-700 font-mono text-sm font-medium w-10 tabular-nums" aria-live="polite">
             {Math.floor(recordSec / 60)}:{(recordSec % 60).toString().padStart(2, '0')}
           </span>
-          <div className="flex-1 flex items-center gap-[2px] overflow-hidden">
+          <div className="flex-1 flex items-center gap-[2px] overflow-hidden" aria-hidden>
             {Array.from({ length: 40 }).map((_, i) => (
-              <div key={i} className="w-[2px] bg-red-400/60 rounded-full shrink-0" style={{ height: `${3 + Math.sin((recordSec + i) * 0.5) * 10 + Math.random() * 4}px` }} />
+              <div key={i} className="w-[2px] bg-red-400/60 rounded-full shrink-0" style={{ height: `${3 + Math.sin((recordSec + i) * 0.5) * 10 + 4}px` }} />
             ))}
           </div>
-          <button onClick={toggleVoice} className="w-11 h-11 rounded-full bg-[#1F5C2E] text-white flex items-center justify-center active:scale-90 transition-transform">
+          <button
+            type="button"
+            onClick={() => void toggleVoice()}
+            className="min-h-[48px] min-w-[48px] w-12 h-12 rounded-full bg-[#1F5C2E] text-white flex items-center justify-center active:scale-90 transition-transform focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C27D10]"
+            aria-label="Terminer l’enregistrement"
+          >
             <Check className="h-5 w-5" />
           </button>
         </div>
@@ -1600,19 +2312,17 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
                   label: "Position",
                   action: () => void shareLocation(),
                 },
-                ...(yelly
-                  ? [
-                      {
-                        icon: LifeBuoy,
-                        color: "bg-[#1F5C2E]",
-                        label: "Conseil IA",
-                        action: () => {
-                          setShowAttach(false)
-                          yelly.openYelly("chat_attach_conseil")
-                        },
-                      },
-                    ]
-                  : []),
+                {
+                  icon: LifeBuoy,
+                  color: "bg-[#1F5C2E]",
+                  label: "Conseil",
+                  action: () => {
+                    setShowAttach(false)
+                    void requestInThreadAdvice(
+                      "Conseil neutre : comment conclure équitablement cette négociation ?",
+                    )
+                  },
+                },
               ].map((item) => (
                 <button key={item.label} onClick={item.action} className="flex flex-col items-center gap-2">
                   <div className={`w-14 h-14 ${item.color} rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform`}>
@@ -1687,49 +2397,68 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
             >
               {offerBusy ? "Envoi…" : "Envoyer l'offre"}
             </button>
-            {yelly ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setShowOfferSheet(false)
-                  yelly.openYelly("chat_offer_conseil")
-                }}
-                className="w-full mt-2 h-11 rounded-xl border border-[#1F5C2E]/25 text-[#1F5C2E] text-sm font-medium active:scale-[0.98] flex items-center justify-center gap-2"
-              >
-                <LifeBuoy className="h-4 w-4" />
-                Demander conseil à l’IA
-              </button>
-            ) : null}
+            <button
+              type="button"
+              onClick={() => {
+                setShowOfferSheet(false)
+                void requestInThreadAdvice(
+                  "Conseil neutre sur cette offre de prix : points de vigilance pour les deux parties.",
+                )
+              }}
+              className="w-full mt-2 min-h-[44px] h-11 rounded-xl border border-[#1F5C2E]/25 text-[#1F5C2E] text-sm font-medium active:scale-[0.98] flex items-center justify-center gap-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#1F5C2E]"
+            >
+              <LifeBuoy className="h-4 w-4" />
+              Demander conseil
+            </button>
           </div>
         </>
       )}
 
-      {/* INPUT BAR — style WhatsApp : 1 seul micro (bouton vert à droite) */}
+      {/* INPUT BAR — compose fixe multiligne, cibles ≥44px */}
       {!isRecording && !audioPreview && (
-        <div className="bg-[#f0f2f5] px-2 py-1.5 shrink-0 safe-bottom">
+        <div className="bg-[#f0f2f5] px-2 py-1.5 shrink-0 safe-bottom border-t border-[#E5E7EB]">
           <form onSubmit={handleSend} className="flex items-end gap-1.5">
-            <div className="flex-1 flex items-center bg-white rounded-[25px] shadow-sm min-h-[48px] px-1.5">
-              <button type="button" onClick={() => setShowEmojis(!showEmojis)}
-                className={`p-2 shrink-0 ${showEmojis ? "text-[#1F5C2E]" : "text-[#54656f]"} active:text-[#1F5C2E]`} aria-label="Emojis">
+            <div className="flex-1 flex items-end bg-white rounded-[22px] shadow-sm min-h-[48px] px-1.5 py-0.5">
+              <button
+                type="button"
+                onClick={() => setShowEmojis(!showEmojis)}
+                className={`min-h-[44px] min-w-[44px] flex items-center justify-center shrink-0 rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#1F5C2E] ${showEmojis ? "text-[#1F5C2E]" : "text-[#54656f]"} active:text-[#1F5C2E]`}
+                aria-label="Emojis"
+                aria-pressed={showEmojis}
+              >
                 <Smile className="h-6 w-6" />
               </button>
 
-              <input
+              <textarea
                 ref={inputRef}
                 value={newMessage}
-                onChange={e => {
+                rows={1}
+                onChange={(e) => {
                   setNewMessage(e.target.value)
                   signalTyping()
+                  const el = e.target
+                  el.style.height = "auto"
+                  el.style.height = `${Math.min(el.scrollHeight, 120)}px`
                 }}
-                placeholder="Message ou @IA pour un conseil"
-                aria-label="Écrire un message. Tape @IA pour un conseil neutre."
-                className="flex-1 bg-transparent border-0 text-[15px] h-[48px] focus:outline-none placeholder:text-[#8696a0] px-1"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault()
+                    void handleSend()
+                  }
+                }}
+                placeholder="Message… (@IA pour un conseil)"
+                aria-label="Écrire un message. Tape @IA pour un conseil."
+                className="flex-1 bg-transparent border-0 text-[15px] leading-5 min-h-[44px] max-h-[120px] py-3 resize-none focus:outline-none focus-visible:ring-0 placeholder:text-[#8696a0] px-1 text-[#111b21]"
                 enterKeyHint="send"
                 autoComplete="off"
               />
 
-              <button type="button" onClick={() => setShowAttach(true)}
-                className="p-2 text-[#54656f] active:text-[#1F5C2E] shrink-0" aria-label="Joindre">
+              <button
+                type="button"
+                onClick={() => setShowAttach(true)}
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center text-[#54656f] active:text-[#1F5C2E] shrink-0 rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#1F5C2E]"
+                aria-label="Joindre une pièce"
+              >
                 <Paperclip className="h-6 w-6 -rotate-45" />
               </button>
 
@@ -1738,7 +2467,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
                   type="button"
                   onClick={() => void openCameraCapture()}
                   disabled={cameraBusy}
-                  className="p-2 text-[#54656f] active:text-[#1F5C2E] shrink-0 disabled:opacity-50"
+                  className="min-h-[44px] min-w-[44px] flex items-center justify-center text-[#54656f] active:text-[#1F5C2E] shrink-0 disabled:opacity-50 rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#1F5C2E]"
                   aria-label="Caméra"
                 >
                   <Camera className="h-6 w-6" />
@@ -1747,15 +2476,21 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
             </div>
 
             {newMessage.trim() ? (
-              <button type="submit" disabled={sending}
-                className="w-[48px] h-[48px] rounded-full bg-[#1F5C2E] text-white flex items-center justify-center shrink-0 active:scale-90 transition-transform disabled:opacity-50 shadow-sm"
-                aria-label="Envoyer">
+              <button
+                type="submit"
+                disabled={sending}
+                className="min-w-[48px] min-h-[48px] w-12 h-12 rounded-full bg-[#1F5C2E] text-white flex items-center justify-center shrink-0 active:scale-90 transition-transform disabled:opacity-50 shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C27D10]"
+                aria-label="Envoyer"
+              >
                 <Send className="h-5 w-5" />
               </button>
             ) : (
-              <button type="button" onClick={() => void toggleVoice()}
-                className="w-[48px] h-[48px] rounded-full bg-[#1F5C2E] text-white flex items-center justify-center shrink-0 active:scale-90 transition-transform shadow-sm"
-                aria-label="Note vocale">
+              <button
+                type="button"
+                onClick={() => void toggleVoice()}
+                className="min-w-[48px] min-h-[48px] w-12 h-12 rounded-full bg-[#1F5C2E] text-white flex items-center justify-center shrink-0 active:scale-90 transition-transform shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C27D10]"
+                aria-label="Message vocal"
+              >
                 <Mic className="h-5 w-5" />
               </button>
             )}
