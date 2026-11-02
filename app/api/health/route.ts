@@ -18,6 +18,7 @@ import {
   resolveGeniusPayWebhookSecret,
   type GeniusPayEnvironment,
 } from '@/lib/payment/geniuspay'
+import { hasUpstash } from '@/lib/security/upstash'
 
 export const dynamic = 'force-dynamic'
 
@@ -111,6 +112,8 @@ export async function GET() {
       weather_degraded_fallback: true,
       sw_cache: 'gwa-v21-offline',
       sw_worker: 'OneSignalSDKWorker.js',
+      /** Rate-limit IA : Redis Upstash requis (pas de Map mémoire serverless) */
+      rate_limit_redis: hasUpstash(),
     },
   }, { status: healthy ? 200 : 503 })
 }

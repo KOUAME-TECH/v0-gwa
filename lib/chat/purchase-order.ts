@@ -110,20 +110,25 @@ export function purchaseOrderPrintHtml(po: PurchaseOrderPayload, parties: {
   const verifyCode = escapeHtml(po.orderId.replace(/-/g, "").slice(0, 12).toUpperCase())
   const amountFmt = escapeHtml(po.amount.toLocaleString("fr-FR"))
   const totalFmt = escapeHtml(total.toLocaleString("fr-FR"))
+  const markSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="112" fill="#1F5C2E"/><path fill="#C27D10" d="M286 96c52 48 72 118 58 178-38-28-72-40-108-44 18-52 34-94 50-134z"/><path fill="#FFFFFF" d="M256 148c-58 0-104 46-104 108s46 108 104 108c38 0 72-20 90-52l-46-28c-10 16-28 26-44 26-28 0-50-22-50-54s22-54 50-54c16 0 30 8 40 20h-40v44h96c4-18 6-36 6-54 0-62-46-114-102-114z"/></svg>`
   return `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"/><title>Bon de commande ${num}</title>
 <style>
-body{font-family:Georgia,serif;color:#111;padding:24px;max-width:640px;margin:0 auto}
-h1{font-size:22px;margin:0 0 8px;color:#1F5C2E}
-.meta{color:#54656f;font-size:13px;margin-bottom:20px}
-table{width:100%;border-collapse:collapse;margin:16px 0}
+body{font-family:Georgia,serif;color:#111;padding:24px;max-width:640px;margin:0 auto;position:relative}
+body::before{content:"";position:fixed;inset:12% 18%;background:url("data:image/svg+xml,${encodeURIComponent(markSvg)}") center/180px no-repeat;opacity:0.06;pointer-events:none;z-index:0}
+.brand{display:flex;align-items:center;gap:12px;margin-bottom:12px;position:relative;z-index:1}
+.brand svg{flex-shrink:0}
+h1{font-size:22px;margin:0;color:#1F5C2E}
+.meta{color:#54656f;font-size:13px;margin-bottom:20px;position:relative;z-index:1}
+table{width:100%;border-collapse:collapse;margin:16px 0;position:relative;z-index:1}
 th,td{border:1px solid #ddd;padding:10px;text-align:left}
 th{background:#f5f6f6}
-.total{font-size:18px;font-weight:bold;color:#1F5C2E}
-.verify{margin-top:24px;padding:16px;border:1px dashed #1F5C2E;border-radius:8px;text-align:center}
+.total{font-size:18px;font-weight:bold;color:#1F5C2E;position:relative;z-index:1}
+.verify{margin-top:24px;padding:16px;border:1px dashed #1F5C2E;border-radius:8px;text-align:center;position:relative;z-index:1}
 .verify code{font-size:18px;letter-spacing:0.12em;font-weight:bold}
+.accent{color:#C27D10}
 @media print{button{display:none}}
 </style></head><body>
-<h1>Bon de commande GWA</h1>
+<div class="brand">${markSvg}<div><h1>Bon de commande GWA</h1><p class="meta" style="margin:4px 0 0">Marché agricole · escrow</p></div></div>
 <p class="meta">N° ${num} · Prix convenu entre les parties</p>
 <p><strong>Acheteur :</strong> ${buyer}<br/>
 <strong>Vendeur :</strong> ${seller}</p>

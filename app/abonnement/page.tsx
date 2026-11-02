@@ -17,6 +17,7 @@ import { WHATSAPP_LINK } from "@/lib/contact"
 import { isSellerRole } from "@/lib/dashboard/routing"
 import { cn } from "@/lib/utils"
 import { speakFrench } from "@/lib/chat/tts"
+import { GwaMark } from "@/components/brand/gwa-mark"
 
 export default function AbonnementPage() {
   const router = useRouter()
@@ -107,7 +108,7 @@ export default function AbonnementPage() {
   return (
     <div className="min-h-dvh bg-[#FFF6E5] pb-24">
       <header className="sticky top-0 z-40 bg-white border-b border-[#E5E7EB]">
-        <div className="flex items-center h-14 px-4 max-w-lg mx-auto">
+        <div className="flex items-center h-14 px-4 max-w-lg mx-auto gap-2">
           <button
             type="button"
             onClick={() => router.back()}
@@ -116,7 +117,8 @@ export default function AbonnementPage() {
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
-          <h1 className="ml-2 text-lg font-semibold">Abonnement vendeur</h1>
+          <GwaMark size={28} className="shrink-0" />
+          <h1 className="ml-1 text-lg font-semibold text-[#1F5C2E]">Abonnement vendeur</h1>
         </div>
       </header>
 

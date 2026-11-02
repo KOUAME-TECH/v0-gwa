@@ -21,6 +21,8 @@ interface RateLimitConfig {
   maxRequests: number
   windowMs: number
   blockDurationMs?: number
+  /** Si true : sans Upstash Redis, refuse (fail-closed) — obligatoire sur serverless. */
+  requireRedis?: boolean
 }
 
 const rateLimitStore = new Map<
@@ -144,6 +146,15 @@ export async function rateLimit(
   } catch (err) {
     console.error("[rate-limit] upstash fallback", err)
   }
+  if (config.requireRedis) {
+    // Serverless memory Map is not shared — fail closed rather than open the floodgates.
+    return {
+      success: false,
+      remaining: 0,
+      resetAt: Date.now() + config.windowMs,
+      blocked: true,
+    }
+  }
   return rateLimitMemory(key, config)
 }
 
@@ -185,11 +196,19 @@ export const RATE_LIMITS = {
     windowMs: 60 * 1000,
     blockDurationMs: 2 * 60 * 1000,
   },
-  /** Yelly assistant — anti-abus coût LLM */
+  /** Yelly / IA — 10 req/min, Redis obligatoire (pas de fallback mémoire serverless) */
   YELLY_CHAT: {
-    maxRequests: 20,
+    maxRequests: 10,
     windowMs: 60 * 1000,
     blockDurationMs: 5 * 60 * 1000,
+    requireRedis: true,
+  },
+  /** Conseil IA in-thread chat */
+  AI_ADVICE: {
+    maxRequests: 10,
+    windowMs: 60 * 1000,
+    blockDurationMs: 5 * 60 * 1000,
+    requireRedis: true,
   },
 } as const
 

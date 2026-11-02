@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Search, SlidersHorizontal, MapPin, Heart, X, ChevronLeft, Plus, ShoppingBag } from "lucide-react"
+import { Search, SlidersHorizontal, MapPin, Heart, X, Plus, ShoppingBag } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
@@ -30,6 +30,7 @@ import {
   saveCatalogCache,
 } from "@/lib/offline/catalog-cache"
 import { CartIconButton } from "@/components/cart/cart-icon-button"
+import { GwaMark } from "@/components/brand/gwa-mark"
 import { addOrIncrementCart } from "@/lib/cart/add"
 import { prefetchProduct } from "@/lib/products/prefetch"
 import { cn } from "@/lib/utils"
@@ -592,7 +593,14 @@ function MarketplaceContent() {
         aria-hidden={headerHidden}
       >
         <div className="gwa-shell-wide flex items-center gap-3 p-3 md:px-5 lg:py-4">
-          <Link href="/" className="lg:hidden"><ChevronLeft className="h-6 w-6" /></Link>
+          <Link
+            href="/"
+            className="shrink-0 lg:hidden"
+            aria-label="GWA accueil"
+            tabIndex={headerHidden ? -1 : undefined}
+          >
+            <GwaMark size={28} />
+          </Link>
           <div className="flex-1 min-w-0">
             <h1 className="text-lg font-semibold text-[#111827] lg:font-display lg:text-2xl lg:text-[#1F5C2E]">
               Boutique
