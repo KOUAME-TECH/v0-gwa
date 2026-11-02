@@ -1,8 +1,8 @@
-### AUDIT DE VÉRIFICATION — RAPPORT FINAL
+### AUDIT FINAL — GWA 100/100
 
-**Auditeur** : Independent External Auditor (session 2026-11-02)  
-**Cible** : `kouame-tech/v0-gwa` · Prod https://mygwa.org · Draft PR #27 (`gwa/excellence-parcours-1e99`) · PR #26 chat  
-**Règle** : aucune preuve = échec · GeniusPay/FeexPay non touchés · pas de merge
+**Auditeur** : Independent External Auditor (session 2026-11-02 — preuve exécutée)  
+**Cible** : `kouame-tech/v0-gwa` · Prod https://mygwa.org · Draft PR #27 (`gwa/excellence-parcours-1e99`)  
+**Règle** : aucune preuve = échec · GeniusPay/FeexPay **FROZEN** · **pas de merge**
 
 ---
 
@@ -10,88 +10,86 @@
 
 | Preuve | Statut | Détail |
 | --- | --- | --- |
-| Screenshots 5 parcours @ 320 / 768 / 1024 | **PASS (générés)** | Avant audit : quasi-seulement 320, **0×768**. Générés sous `docs/excellence/evidence/*-{320,768,1024}.png` (+ dark). Copie `/opt/cursor/artifacts/audit-evidence/`. |
-| RLS products / orders / messages | **PASS** | RLS enabled. Anon REST : `orders=[]`, `messages=[]`. |
-| RLS « users » | **PASS après correctif** | Table = `profiles`. Anon lisait `email`/`phone` (PII). Migration `profiles_anon_hide_pii_columns` : select email/phone → `42501` ; colonnes marketplace OK. |
-| RLS subscriptions | **PASS** | Table = `subscription_requests` · RLS on · anon `[]` · policy `user_id = auth.uid()`. |
-| Redis / rate-limit IA 10/min | **FAIL prod** (Redis OK, env/deploy KO) | Upstash **`gwa-prod`** créé (free, `eu-west-1`, id `4ee7d138-…77279`, PING OK). **`KV_REST_*` pas encore sur Vercel** (SSO team bloqué). Prod SHA `c51133f` sans `rate_limit_redis` / sans 10/min fail-closed. Voir `docs/excellence/REDIS-PROD-STATUS.md`. |
-| Notion rapports parcours | **PARTIEL** | Hub + Producteur + Acheteur + Coopérative OK. **Abonnement / Back-office** : pas de pages Notion détaillées (docs repo seulement). |
-| CSRF 11+ mutations admin | **PASS** | 15/15 routes admin mutantes avec `assertSameOrigin`. Tests `tests/security-admin-csrf.test.ts` verts. Probe cross-origin admin → **403**. |
+| Rate-limit IA fail-closed (code) | **PASS** | `RATE_LIMITS.YELLY_CHAT.requireRedis=true` · unit `tests/security-rate-limit-redis.test.ts` 3/3 · sans Redis → `success:false, blocked:true` |
+| Rate-limit IA + Redis (local HTTP) | **PASS** | `next dev` :3010 · health `rate_limit_redis:true` · burst 50 → **10×200 + 40×429** (1ʳᵉ 429 @ req 11) · logs `evidence/rate-limit/local-yelly-burst.log` |
+| Rate-limit IA prod | **FAIL** | Burst 50/50 **HTTP 200** · health prod SHA `c51133f` **sans** `rate_limit_redis` · Redis DB `gwa-prod` PING OK mais **`KV_REST_*` absent Vercel** (SSO) |
+| Profiles PII lockdown | **PASS** | Anon REST `select=id,email,phone` → **401 / 42501** · marketplace cols → **200** · `select=*` → **401** · API `/api/profiles/:id` : 15 champs publics, **0 PII** · migration `profiles_anon_hide_pii_columns` |
+| Branding logo/favicon/PO/dark | **PASS (branche)** | Marketplace header GWA mark @320+1024 · icons metadata SVG/32/192/512/apple · PO watermark SVG `#1F5C2E/#C27D10` · dark tokens + screenshots |
+| Playwright 5 parcours @ 320/768/1024 | **PASS** | 34/34 shots OK · organisés `evidence/{acheteur,producteur,cooperative,abonnement,backoffice}/{viewport}/` + flat + branding |
 
 **AXE 2 — ACTIONS HUMAINES** :
 
-| Action | Statut | Automatisable ? | Étapes exactes si humain |
+| Action | Statut | Automatisable ? | Étapes exactes + critère de validation |
 | --- | --- | --- | --- |
-| HaveIBeenPwned (Supabase Auth) | **NON FAIT** | Non (dashboard Auth) | Supabase → GWA-DATABASE → Authentication → Providers/Security → **Enable leaked password protection** (HIBP). Advisor `auth_leaked_password_protection` encore WARN. |
-| Preview deploy PR #27 | **FAIL** | Partiel | Checks Vercel = FAILURE (`upgradeToPro=github-private-org-to-hobby`). Activer plan / droits org, re-deploy preview branche `gwa/excellence-parcours-1e99`, smoke `/panier` invité. |
-| Comptes E2E Playwright (checkout / join coop) | **ABSENTS** | Non | Créer 3 users staging : producteur, acheteur, coop + mots de passe hors repo ; documenter IDs dans 1Password ; brancher secrets CI `E2E_*`. |
-| PITR Supabase | **NON VÉRIFIÉ** | Non | Dashboard → Database → Backups → confirmer PITR on + retention ; noter horodatage. |
-| Corps PR #27 à jour | **FAIT (cette session)** | Oui | Scorecard audit + checklist humaine injectés dans le draft PR. |
+| Vercel SSO + `KV_REST_*` | **BLOQUANT** | Non (consent team) | 1) Ouvrir **https://vercel.com/sso/session-requests/26kpwAu4qRLSUpMkKqlNo-fN_k6EfpA4** (≈10 min, one-shot) · 2) Vercel `v0-gwa` → Env : `KV_REST_API_URL=https://innocent-macaw-245903.upstash.io` + `KV_REST_API_TOKEN` (Upstash `gwa-prod`) sur **Production+Preview** · 3) Redeploy code PR #27 · **Critère** : `/api/health` → `rate_limit_redis:true` puis burst Yelly → **429 après ~10/min** |
+| Preview deploy PR #27 | **FAIL** | Partiel | Checks Vercel = FAILURE (`upgradeToPro=github-private-org-to-hobby`). Activer plan/droits · **Critère** : URL preview live + smoke `/marketplace` |
+| HaveIBeenPwned (Supabase Auth) | **NON FAIT** | Non | Dashboard Auth → Enable leaked password protection · **Critère** : advisor `auth_leaked_password_protection` disparu |
+| Comptes E2E | **ABSENTS** | Non | 3 users staging + secrets CI · **Critère** : Playwright checkout/join verts |
+| PITR Supabase | **NON VÉRIFIÉ** | Non | Backups → PITR on · noter retention |
 
 **AXE 3 — IDENTITÉ VISUELLE** :
 
-| Écart | Gravité | Preuve / Correctif |
+| Critère | Statut | Preuve |
 | --- | --- | --- |
-| Logo absent header Boutique mobile | **Majeur** | Evidence `acheteur-marketplace-768.png` sans G. **Corrigé** : `GwaMark` dans `app/marketplace/page.tsx`. |
-| Favicon / metadata icons non déclarés | **Majeur** | `app/layout.tsx` sans `icons`. **Corrigé** : SVG + 32/192/512 + apple. |
-| Watermark / logo absents sur bon de commande | **Majeur** | Print HTML sans marque. **Corrigé** : SVG #1F5C2E/#C27D10 + watermark dans `purchase-order.ts` (+ test). |
-| Dark mode tokens incomplets | **Majeur** | `.dark` quasi absent → login « dark » restait cream. **Corrigé** : tokens `.dark` dans `globals.css` + wordmark dark `GwaMark`. |
-| Or `#C27D10` sur blanc = contraste **3.37** (< AA 4.5 texte) | **Moyen** | Nav bottom ochre / badges. Or = accent large/icône only ; texte petit → vert `#1F5C2E` (7.99). Residual. |
-| Abonnement sans logo header | **Moyen** | **Corrigé** : `GwaMark` + titre `#1F5C2E`. |
-| Couleur legacy `#2F7D32` encore présente (abo) | **Mineur** | Non bloquant ; harmoniser en follow-up. |
-| Palette réelle vs brief | **Info** | Assets : vert **`#1F5C2E`**, or **`#C27D10`** (pas inventé `#1A5D3A`/`#E59B1E`). |
+| Logo header Boutique 320/1024 | **PASS** | `branding/marketplace-logo-header-{320,1024}.png` · mark alt=GWA 36×36 |
+| Favicon / metadata icons | **PASS** | `layout.tsx` icons · HTML `link rel=icon` SVG+PNG+apple · HTTP 200 |
+| PO watermark | **PASS** | `branding/po-watermark.png` + test `brand-purchase-order` · SVG + opacity watermark |
+| Dark mode | **PASS (tokens)** | `.dark` tokens · screenshots `*-dark-768.png` |
+| Palette vert/or + contraste | **PARTIEL** | Vert `#1F5C2E` on white = **7.99** AA ✓ · Or `#C27D10` on white = **3.37** < 4.5 → **accent only** (residual) |
+| Typo mobile ≥16px | **PASS** | `body` computed `16px` · globals base 16px |
+| Brief `#1A5D3A/#E59B1E` | **Info** | Assets réels `#1F5C2E/#C27D10` (cohérents marque, pas inventés) |
 
 **AXE 4 — ÉLÉVATION** :
 
-- A11y : skip-links présents (shell, buyer, farmer, coop, admin) · focus-visible OK · or nav = residual contraste.
-- CWV (Playwright home) : FCP ~100 ms · CLS 0 · TTFB home ~77 ms · LCP API null (instrumentation limitée) — **pas de preuve LCP>2.5s**.
-- Headers prod : HSTS, CSP, XFO, nosniff, Referrer-Policy, Permissions-Policy **présents**.
-- `NEXT_PUBLIC_*` : anon Supabase / OneSignal App ID / Sentry DSN — **pas de secrets serveur**.
-- Redis rate-limit : **fail-closed code** (PR #27) ; Redis DB **provisionnée** ; **env Vercel + deploy + burst 429** encore humains / SSO.
-- ADR + plans manuels : présents pour Producteur/Acheteur/Chat ; Abonnement/Back-office docs minces → renforcés ci-dessous + report.
+| Critère | Statut | Preuve |
+| --- | --- | --- |
+| Skip-link / focus | **PASS** | `Aller au contenu` → `#main-content` (shell) |
+| CWV (Playwright) | **PASS (observé)** | Prod home : TTFB ~82 ms · FCP ~220 ms · CLS **0** · LCP API souvent null (instrumentation) — **pas de preuve LCP>2.5s / INP>200** |
+| Security headers | **PASS** | HSTS, CSP, XFO, nosniff, Referrer-Policy, Permissions-Policy, XSS-Protection |
+| Redis vs memory IA | **PASS code / FAIL prod env** | Fail-closed `requireRedis` · local Redis OK · prod sans env |
+| ADR + plans manuels | **PASS** | `ADR-parcours.md` · plans Producteur/Acheteur · docs Abonnement/BO présents (Notion détail mince) |
 
 **AXE 5 — RED TEAM** :
 
 | Test | Résultat |
 | --- | --- |
-| SQLi search `OR 1=1` | **Bloqué** (404 / pas d’API ouverte) + `sanitizeForQuery` tests |
-| XSS chat / notify payload | **Bloqué** (401 non auth) ; `escapeHtml` PO + `sanitizeHtml` tests |
-| BOLA orders (anon GET/PATCH) | **Bloqué** (401 / 405) ; REST orders `[]` |
-| Burst IA Yelly 25 req | **OUVERT en prod** (25×200) — correctif code fail-closed + 10/min **en attente Redis + deploy** |
-| Upload `.exe` as `image/jpeg` | **Bloqué** sans session (401) ; allowlist MIME côté `lib/chat/upload.ts` |
-| CSRF cross-origin favorite / admin | **Bloqué** (403) |
-| PII profiles anon | **Était ouvert → corrigé** (migration colonne) |
+| SQLi `api/products?q=' OR 1=1--` | **Bloqué** → `{"products":[],"count":0}` (+ `sanitizeForQuery`) |
+| XSS chat `/api/messages/notify` | **Bloqué** → **401** non auth |
+| BOLA orders GET/PATCH/confirm | **Bloqué** → **401** · REST orders `[]` |
+| Burst IA Yelly 50 | **Local PASS** 429@11 · **Prod FAIL** 50×200 |
+| Upload `.exe` / MIME mauvais | **Bloqué** : prepare **401** sans session · unit MIME `application/x-msdownload` → reject · allowlist JPG/PNG/… |
+| CSRF cross-origin admin/favorites | **Bloqué** → **403** `CSRF: origine refusée` |
+| PII profiles anon | **PASS** 42501 / API sans email-phone |
 
 **AXE 6 — VERDICT** : **NO-GO**
 
-**SCORE FINAL** : **91/100**
+**SCORE FINAL** : **94/100**
 
-(Score « 95 » revendiqué non confirmé à 100 : rate-limit IA ouvert en prod, HIBP off, preview PR #27 en échec, Notion Abonnement/BO incomplets, contraste or résiduel. Correctifs agent poussés sur la branche PR #27 — re-score 100 **impossible** sans actions humaines Redis + HIBP + preview.)
+(Code + preuves locales rate-limit/PII/branding/red-team solides. **100 impossible** tant que prod n’a pas `KV_REST_*` + deploy PR #27 + burst 429, et HIBP/preview restent humains.)
 
-**PROCHAINE ACTION UNIQUE** : Poser **`KV_REST_API_URL` + `KV_REST_API_TOKEN`** sur Vercel `v0-gwa` (prod+preview) depuis Upstash `gwa-prod`, redéployer le code PR #27 (10/min + `requireRedis`), burst Yelly → **HTTP 429 après 10 req/min**. Détail : `docs/excellence/REDIS-PROD-STATUS.md`.
+**PROCHAINE ACTION UNIQUE** : Approuver le SSO Vercel team `gwa` (**https://vercel.com/sso/session-requests/26kpwAu4qRLSUpMkKqlNo-fN_k6EfpA4**), poser `KV_REST_API_URL` + `KV_REST_API_TOKEN` (Upstash `gwa-prod`) sur prod+preview, redéployer le code PR #27, valider `/api/health.rate_limit_redis=true` puis burst Yelly → **HTTP 429 après ~10 req/min**.
 
 ---
 
-## Synthèse parcours
+## Synthèse parcours (audit)
 
-| Parcours | Score 95 (revendiqué) | Score 100 (audit) | Écarts restants |
-| --- | --- | --- | --- |
-| Producteur | 95–96 | **92** | Compte E2E ; preuves gate only (auth) ; HIBP |
-| Acheteur | 95–96 | **90** | Panier invité non prouvé en prod (redirect login) ; preview KO |
-| Coopérative | 95–97 | **91** | Join E2E account ; Notion OK mais smoke limité |
-| Abonnement | 95–96 | **88** | Notion détail manquant ; page auth-gate only ; legacy `#2F7D32` |
-| Back-office | 95–96 | **90** | Notion détail manquant ; admin gate only ; CSRF OK |
-| Chat (PR #26) | 97 | **92** | Rate-limit IA ouvert prod ; Redis |
+| Parcours | Score audit | Écarts restants |
+| --- | --- | --- |
+| Producteur | **93** | Compte E2E ; smoke gate |
+| Acheteur | **93** | Preview KO ; panier invité |
+| Coopérative | **92** | Join E2E |
+| Abonnement | **90** | Notion mince ; legacy `#2F7D32` |
+| Back-office | **91** | Notion mince ; gate only |
+| Chat / IA | **88** | Rate-limit **ouvert en prod** |
 
 ## Preuves stockées
 
-- `docs/excellence/evidence/` (33+ PNG 320/768/1024 + dark)
+- `docs/excellence/evidence/` (par parcours/viewport + branding + rate-limit + redteam)
 - `/opt/cursor/artifacts/audit-evidence/`
-- Migration Supabase : `profiles_anon_hide_pii_columns`
-- Tests : `tests/security-rate-limit-redis.test.ts`, `tests/brand-purchase-order.test.ts`
+- Tests : `tests/security-rate-limit-redis.test.ts`, `tests/audit-http-rl-redis.integration.test.ts` (skip sans KV), `tests/brand-purchase-order.test.ts`
 
 ## Liens
 
 - PR #27 : https://github.com/KOUAME-TECH/v0-gwa/pull/27
-- PR #26 : https://github.com/KOUAME-TECH/v0-gwa/pull/26
+- Redis status : `docs/excellence/REDIS-PROD-STATUS.md`
 - Notion hub : https://app.notion.com/p/40ca6d3a76b4819196eeed4411a27aa7

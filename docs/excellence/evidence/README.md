@@ -1,20 +1,15 @@
-# Evidence Playwright — audit vérification
+# Evidence — audit excellence GWA
 
-Captures générées 2026-11-02 (auditeur externe) sur https://mygwa.org.
+Organisation :
 
-## Matrice
+- `acheteur/{320,768,1024}/` — marketplace, panier, buyer-gate
+- `producteur/{320,768,1024}/` — farmer-gate, publier-gate
+- `cooperative/{320,768,1024}/` — coop-dashboard-gate
+- `abonnement/{320,768,1024}/` — page abonnement
+- `backoffice/{320,768,1024}/` — admin-gate
+- `branding/` — logos header 320/1024, dark mode, PO watermark, favicons meta
+- `rate-limit/` — burst prod (FAIL), burst local (PASS 429@11), health Redis
+- `redteam/` — SQLi / XSS / BOLA / CSRF / upload MIME
+- Flat `*-{320,768,1024}.png` conservés pour compat
 
-| Surface | 320 | 768 | 1024 | Dark 768 |
-| --- | :---: | :---: | :---: | :---: |
-| Accueil | ✓ | ✓ | ✓ | ✓ |
-| Login | ✓ | ✓ | ✓ | ✓ |
-| Boutique (Acheteur) | ✓ | ✓ | ✓ | ✓ |
-| Panier (gate/login) | ✓ | ✓ | ✓ | |
-| Buyer dashboard gate | ✓ | ✓ | ✓ | |
-| Farmer gate | ✓ | ✓ | ✓ | |
-| Publier gate | ✓ | ✓ | ✓ | |
-| Coop dashboard gate | ✓ | ✓ | ✓ | |
-| Abonnement gate | ✓ | ✓ | ✓ | |
-| Admin gate | ✓ | ✓ | ✓ | |
-
-Fichiers : `{surface}-{viewport}.png`.
+Source : Playwright Chromium contre `http://127.0.0.1:3010` (branche PR #27) + probes curl prod `mygwa.org`.

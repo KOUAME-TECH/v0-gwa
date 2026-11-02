@@ -1,0 +1,5 @@
+{"kind":"image","mime":"application/x-msdownload","size":1000,"expect":false,"result":{"ok":false,"error":"Photo non acceptée (JPG, PNG, WebP ou GIF)."},"pass":true}
+{"kind":"image","mime":"application/octet-stream","size":1000,"expect":false,"result":{"ok":false,"error":"Photo non acceptée (JPG, PNG, WebP ou GIF)."},"pass":true}
+{"kind":"file","mime":"application/x-msdownload","size":1000,"expect":false,"result":{"ok":false,"error":"Document non accepté (PDF, Word, Excel, texte ou ZIP)."},"pass":true}
+{"kind":"image","mime":"image/jpeg","size":1000,"expect":true,"result":{"ok":true},"pass":true}
+PASS_UPLOAD_MIME_ALLOWLIST
