@@ -187,3 +187,17 @@ export async function canSendOtp(
   })
   return true
 }
+
+/**
+ * Libère le cooldown d'envoi si le SMS n'a pas pu partir.
+ * Sinon l'utilisateur reste bloqué 55s sans jamais avoir reçu de code.
+ */
+export async function releaseSendOtp(phoneE164: string): Promise<void> {
+  const key = `gwa:otp:send:${phoneE164}`
+  const redis = getRedis()
+  if (redis) {
+    await redis.del(key)
+    return
+  }
+  memoryStore.delete(key)
+}
