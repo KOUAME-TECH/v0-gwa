@@ -34,6 +34,10 @@ Branche `gwa/excellence-parcours-1e99` · baseline **45** · **16 itérations** 
 
 Pas de merge. GeniusPay/FeexPay **FROZEN**.
 
+### Blocker Git Hobby
+
+Vercel status on tip: *Cannot deploy from a private GitHub organization repository on the Hobby plan*. Auto-deploy on push is dead until Pro **or** MCP SSO `create_deployment` (worked once for Redis) **or** CLI token.
+
 ### UNIQUE NEXT (humain — 1 action)
 
 1. **Approve Vercel SSO** (lien dans `evidence/iter14/deploy-status.md`) **ou** Dashboard Redeploy tip branche → Production **ou** secret `VERCEL_TOKEN`  

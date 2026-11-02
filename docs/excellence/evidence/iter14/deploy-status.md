@@ -61,3 +61,22 @@ npx vercel deploy --prod --scope gwa --yes
 ```
 
 Pas de merge. GeniusPay/FeexPay **FROZEN**.
+
+---
+
+## Root cause — Git integration (2026-11-02T21:08Z)
+
+GitHub status on tip `d749a1a` :
+
+> **Cannot deploy from a private GitHub organization repository on the Hobby plan**  
+> target: `https://vercel.com/gwa?upgradeToPro=github-private-org-to-hobby`
+
+Donc push Git **ne crée plus** de preview/prod auto. Le deploy Redis antérieur a passé via **MCP `create_deployment`** (gitSource) quand le grant SSO était valide — pas via Git Hobby.
+
+### Chemins de déblocage (humain)
+
+1. **SSO approve** MCP (liens ci-dessus) → agent `create_deployment` tip → production *(préféré, déjà prouvé une fois)*  
+2. **Upgrade Vercel Pro** (team gwa) pour Git private-org  
+3. **`VERCEL_TOKEN`** + `npx vercel deploy --prod --scope gwa --yes` (upload CLI, hors Git)  
+4. Dashboard Redeploy d’un déploiement existant / promote (si UI le permet hors Git)
+

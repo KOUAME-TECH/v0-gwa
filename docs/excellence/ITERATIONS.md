@@ -1190,3 +1190,24 @@ Vercel (403)
 
 ### Notion
 Score 90 documenté
+
+
+## ITÉRATION 18 — Root cause Hobby + plafond agent
+
+**Scores** : Global **90** | UI/UX **84** | Frontend **82** | Backend **80** | Audio **76** | Négociation **78** | Sécurité **81** | SEO **74** | IA **75** | Continuité **70**
+
+### Écarts
+- [FAIT VÉRIFIÉ] Status Vercel Git : **Hobby refuse private GitHub org** → pas d’auto-deploy au push
+- [FAIT VÉRIFIÉ] MCP create_deployment reste **403** sans SSO grant
+- [FAIT VÉRIFIÉ] Redis prod toujours `rate_limit_redis:true` · SHA stale `2f9d54b`
+- [RISQUE RÉSIDUEL] ≥95 **impossible** sans SEO live (robots/sitemap 200) + HIBP ON
+
+### Corrections
+- Documentation root cause Hobby dans `evidence/iter14/deploy-status.md`
+- Continuité + HUMAN-CHECKLIST déjà à jour
+
+### Décision
+**arrêt productif agent** (90 < 95) — **NO-GO**. UNIQUE NEXT = SSO MCP **ou** Pro **ou** `VERCEL_TOKEN` / Dashboard → deploy tip `d749a1a` → robots/sitemap 200.
+
+### Notion
+Titre hub 45→90
