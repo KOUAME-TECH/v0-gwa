@@ -123,10 +123,11 @@ export function ChatList({ conversations, userId, onSelectConversation }: ChatLi
           <div className="relative pb-3">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/50" />
             <input
-              placeholder="Rechercher une conversation..."
+              placeholder="Rechercher une conversation…"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 bg-white/15 border-0 h-10 rounded-xl text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-white/30 text-sm"
+              aria-label="Rechercher une conversation"
+              className="w-full pl-10 pr-4 bg-white/15 border-0 min-h-[44px] h-11 rounded-xl text-white placeholder:text-white/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 text-sm"
             />
           </div>
         </div>
@@ -181,7 +182,7 @@ function ConvRow({ c, userId, fmtTime, preview, icon, tag, onClick }: {
 }) {
   return (
     <button onClick={onClick}
-      className="w-full flex items-center gap-3 px-4 py-3 active:bg-[#f5f6f6] transition-colors text-left border-b border-gray-50">
+      className="w-full flex items-center gap-3 px-4 py-3 min-h-[72px] active:bg-[#f5f6f6] transition-colors text-left border-b border-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#1F5C2E]">
       <div className="relative shrink-0">
         <Avatar className="h-[52px] w-[52px]">
           <AvatarImage src={c.other_user?.avatar_url || ""} />

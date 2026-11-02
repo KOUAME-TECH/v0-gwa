@@ -294,6 +294,7 @@ function MessagesContent() {
           <ChatConversation
             conversation={selectedConv}
             userId={user.id}
+            viewerUserType={userType}
             onBack={async () => {
               setSelectedConv(null)
               if (user) {
