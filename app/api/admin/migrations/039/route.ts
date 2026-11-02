@@ -47,7 +47,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const csrf = assertSameOrigin(request)
-        if (csrf) return csrf
+    if (csrf) return csrf
 
     const gate = await requireSuperAdmin()
     if (!gate.isAdmin) {

@@ -47,7 +47,7 @@ const bodySchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     const csrf = assertSameOrigin(request)
-        if (csrf) return csrf
+    if (csrf) return csrf
 
     const rate = await checkRateLimit("YELLY_CHAT")
     if (!rate.success) {
