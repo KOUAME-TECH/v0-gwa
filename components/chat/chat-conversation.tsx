@@ -2411,28 +2411,35 @@ export function ChatConversation({
 
       {/* AUDIO PREVIEW BAR */}
       {audioPreview && !isRecording && (
-        <div className="bg-white border-t border-gray-200 px-3 py-2.5 flex items-center gap-3 shrink-0">
-          <button onClick={cancelRecording} className="p-2 rounded-full active:bg-red-50" aria-label="Annuler">
-            <Trash2 className="h-5 w-5 text-red-500" />
-          </button>
-          <div className="flex-1 bg-[#f0f2f5] rounded-full px-4 py-2.5 flex items-center gap-3">
-            <button type="button" onClick={playPreview} className="w-8 h-8 rounded-full bg-[#1F5C2E] flex items-center justify-center shrink-0 active:scale-90 transition-transform" aria-label={isPlayingPreview ? "Pause" : "Ecouter"}>
-              {isPlayingPreview ? (
-                <svg viewBox="0 0 24 24" className="h-4 w-4 text-white fill-current"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
-              ) : (
-                <svg viewBox="0 0 24 24" className="h-4 w-4 text-white fill-current"><polygon points="6,4 20,12 6,20" /></svg>
-              )}
+        <div className="bg-white border-t border-gray-200 px-3 py-2.5 shrink-0 space-y-1.5">
+          <div className="flex items-center gap-3">
+            <button onClick={cancelRecording} className="p-2 rounded-full active:bg-red-50 min-h-[44px] min-w-[44px]" aria-label="Annuler">
+              <Trash2 className="h-5 w-5 text-red-500" />
             </button>
-            <div className="flex-1 flex items-center gap-[2px]">
-              {Array.from({ length: 30 }).map((_, i) => (
-                <div key={i} className="w-[3px] bg-[#1F5C2E]/40 rounded-full shrink-0" style={{ height: `${4 + Math.sin(i * 0.4) * 8}px` }} />
-              ))}
+            <div className="flex-1 bg-[#f0f2f5] rounded-full px-4 py-2.5 flex items-center gap-3">
+              <button type="button" onClick={playPreview} className="w-8 h-8 rounded-full bg-[#1F5C2E] flex items-center justify-center shrink-0 active:scale-90 transition-transform" aria-label={isPlayingPreview ? "Pause" : "Ecouter"}>
+                {isPlayingPreview ? (
+                  <svg viewBox="0 0 24 24" className="h-4 w-4 text-white fill-current"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" className="h-4 w-4 text-white fill-current"><polygon points="6,4 20,12 6,20" /></svg>
+                )}
+              </button>
+              <div className="flex-1 flex items-center gap-[2px]" aria-hidden>
+                {Array.from({ length: 30 }).map((_, i) => (
+                  <div key={i} className="w-[3px] bg-[#1F5C2E]/40 rounded-full shrink-0" style={{ height: `${4 + Math.sin(i * 0.4) * 8}px` }} />
+                ))}
+              </div>
+              <span className="text-sm font-mono text-[#667781] shrink-0">{audioPreview.duration}</span>
             </div>
-            <span className="text-sm font-mono text-[#667781] shrink-0">{audioPreview.duration}</span>
+            <button onClick={sendVoiceMessage} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded-full bg-[#1F5C2E] text-white flex items-center justify-center active:scale-90 transition-transform" aria-label="Envoyer vocal">
+              <Send className="h-5 w-5" />
+            </button>
           </div>
-          <button onClick={sendVoiceMessage} className="w-11 h-11 rounded-full bg-[#1F5C2E] text-white flex items-center justify-center active:scale-90 transition-transform" aria-label="Envoyer vocal">
-            <Send className="h-5 w-5" />
-          </button>
+          {audioPreview.transcript ? (
+            <p className="text-[12px] text-[#54656f] px-12 leading-snug" aria-live="polite">
+              Transcription : {audioPreview.transcript}
+            </p>
+          ) : null}
         </div>
       )}
 

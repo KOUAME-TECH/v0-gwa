@@ -94,12 +94,27 @@ Itération suivante
 
 ---
 
-## ITÉRATION 4 (plan immédiat / suite session)
+## ITÉRATION 4
 
-Cibles pour monter Global → 85+ :
-1. Appliquer indexes 067 (staging/prod) [ACTION HUMAINE ou MCP apply]
-2. QR ISO réel (lib) — glyphe actuel = [RISQUE RÉSIDUEL]
-3. Noise reduction DSP / vraie pipeline audio studio
-4. Exercice restore backup documenté
-5. Playwright parcours offre→PO authentifié
-6. Bucket chat-media non-public
+**Scores** : Global **81** | UI/UX **85** | Frontend **85** | Backend **80** | Audio **70** | Négociation **84** | Sécurité **88** | IA **80** | Continuité **65**
+
+### Corrections [FAIT VÉRIFIÉ]
+- Indexes group chat 067 appliqués (Supabase MCP) — unindexed FK chat groupes résolus
+- Preview vocal affiche transcription avant envoi
+- Plan test manuel + rapport validation §10
+
+### Décision
+Itération suivante (81 < 95) — **NO-GO merge**
+
+---
+
+## ITÉRATIONS 5–10 (plan restant)
+
+| N | Focus | Cible score |
+| --- | --- | ---: |
+| 5 | Bucket chat-media private + clients sign-only | Sécurité 92 |
+| 6 | QR ISO (lib) + Playwright auth offre→PO | Négociation 90 / Global 85 |
+| 7 | DSP / qualité audio + offline STT | Audio 85 |
+| 8 | Observabilité chat (métriques sans PII) | Backend 88 |
+| 9 | Exercice restore + runbook continuité | Continuité 85 |
+| 10 | Audit WCAG complet + score ≥95 ou NO-GO final | Global ≥95 |
