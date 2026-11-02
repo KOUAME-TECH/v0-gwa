@@ -1,7 +1,8 @@
 import type { Metadata } from "next"
 import { createClient } from "@supabase/supabase-js"
+import { JsonLd, productJsonLd } from "@/components/seo/json-ld"
 
-type Props = { params: Promise<{ id: string }> }
+type Props = { params: Promise<{ id: string }>; children: React.ReactNode }
 
 async function loadProductMeta(id: string) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -48,6 +49,24 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 }
 
-export default function ProduitLayout({ children }: { children: React.ReactNode }) {
-  return children
+export default async function ProduitLayout({ children, params }: Props) {
+  const { id } = await params
+  const product = await loadProductMeta(id)
+  return (
+    <>
+      {product ? (
+        <JsonLd
+          data={productJsonLd({
+            id: product.id,
+            name: product.name,
+            description: product.description,
+            price: product.price,
+            unit: product.unit,
+            images: Array.isArray(product.images) ? product.images : null,
+          })}
+        />
+      ) : null}
+      {children}
+    </>
+  )
 }

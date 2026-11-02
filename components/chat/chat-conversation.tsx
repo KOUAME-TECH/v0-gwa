@@ -465,7 +465,12 @@ export function ChatConversation({
 
   const scroll = useCallback(() => {
     requestAnimationFrame(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+      const reduceMotion =
+        typeof window !== "undefined" &&
+        window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches
+      messagesEndRef.current?.scrollIntoView({
+        behavior: reduceMotion ? "auto" : "smooth",
+      })
       setShowJumpLatest(false)
     })
   }, [])

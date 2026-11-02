@@ -14,7 +14,10 @@
 
 ## Sauvegardes
 
-- **Supabase** : backups automatiques plateforme — [ACTION HUMAINE REQUISE] vérifier rétention / PITR dans le dashboard.
+- **Supabase** : backups automatiques plateforme — [ACTION HUMAINE REQUISE] vérifier rétention / PITR dans le dashboard (`GWA-DATABASE` / `frorfexbcyfbydkiwxqv`).
+  - Vérifié agent 2026-11-02 : projet `ACTIVE_HEALTHY`, Postgres 17 — **PITR on/off non exposé via MCP SQL** (dashboard Billing/Database → Point in Time Recovery uniquement). Ne pas inventer un statut PITR.
+  - Restore physique staging : toujours **ACTION HUMAINE**.
+- **Upstash Redis `gwa-prod`** (rate-limit) : plan **free**, state `active`, PING `PONG` (MCP 2026-11-02). `redis_list_backups` → **aucun backup listé** (attendu sur free) — RPO Redis = volatile ; app fail-closed/fail-open selon route.
 - **Storage chat-media** : objets sous `{uid}/{conversationId}/` — restauration = restore bucket + DB messages.
 - **Secrets** : Vercel env — ne pas committer.
 

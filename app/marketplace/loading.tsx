@@ -10,7 +10,7 @@ export default function MarketplaceLoading() {
         </div>
       </div>
 
-      <main className="flex-1">
+      <div className="flex-1" role="status" aria-busy="true" aria-label="Chargement boutique">
         <section className="bg-gradient-to-br from-primary/5 to-secondary/5 py-12 border-b">
           <div className="container px-4">
             <div className="max-w-3xl space-y-4">
@@ -39,7 +39,7 @@ export default function MarketplaceLoading() {
             ))}
           </div>
         </div>
-      </main>
+      </div>
     </div>
   )
 }

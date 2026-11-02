@@ -1020,3 +1020,66 @@ https://app.notion.com/p/40ca6d3a76b4819196eeed4411a27aa7
 ### Décision
 **suivante** (80 < 95) — **NO-GO merge** malgré ≥10 iters post-reset. Besoin : deploy SEO, E2E auth audio/nego, HIBP, PITR drill.
 
+
+---
+
+## ITÉRATION 11 — SEO JSON-LD + sitemap produits + deploy blocked
+
+**Scores** : Global **84** | UI/UX **78** | Frontend **76** | Backend **76** | Audio **70** | Négociation **74** | Sécurité **78** | SEO **64** | IA **75** | Continuité **60**
+
+### Écarts
+- [FAIT VÉRIFIÉ] Prod `robots.txt`/`sitemap.xml` encore **404** (SHA `2f9d54b`)
+- [FAIT VÉRIFIÉ] Vercel MCP deploy preview+prod → **403** ; CLI login_required ; GH workflow_dispatch → **403**
+- [FAIT VÉRIFIÉ] JSON-LD Organization/WebSite/Product + sitemap async produits actifs
+- [RISQUE RÉSIDUEL] Preuve SEO live impossible sans restore deploy scope
+
+### Corrections
+- `components/seo/json-ld.tsx` · inject root layout + product layout
+- `app/sitemap.ts` async + produits `status=active` (anon)
+- `app/marketplace/loading.tsx` : nested `<main>` → `role=status`
+- Tests SEO JSON-LD
+
+### Preuves
+- vitest SEO+CWV focused PASS
+- `evidence/iter11/deploy-blocked.md` · Playwright marketplace prod a11y (stale SHA)
+- robots/sitemap generated/expected bodies
+
+### MCP
+Vercel (403), Playwright, Supabase (products SQL), Notion
+
+### Décision
+**suivante** (84 < 95) — **NO-GO**
+
+---
+
+## ITÉRATION 12 — CWV beacon + chat reduced-motion
+
+**Scores** : Global **85** | UI/UX **78** | Frontend **78** | Backend **78** | Audio **70** | Négociation **74** | Sécurité **78** | SEO **66** | IA **75** | Continuité **60**
+
+### Corrections
+- `WebVitalsReporter` (LCP/CLS/INP/FCP/TTFB) → `POST /api/metrics/web-vitals` (rate-limit, no PII)
+- Chat jump-to-latest : `prefers-reduced-motion` → `behavior:auto`
+- Tests `web-vitals-route.test.ts`
+
+### Décision
+**suivante**
+
+---
+
+## ITÉRATION 13 — Continuité PITR honesty + Redis backups
+
+**Scores** : Global **86** | UI/UX **78** | Frontend **78** | Backend **78** | Audio **70** | Négociation **74** | Sécurité **78** | SEO **68** | IA **75** | Continuité **64**
+
+### Vérifs [FAIT VÉRIFIÉ — pas inventé]
+- Supabase `ACTIVE_HEALTHY` · advisors security WARN HIBP only
+- PITR on/off **non exposé MCP** → documenté ACTION HUMAINE
+- Upstash `gwa-prod` PING PONG · plan free · **backups list vide**
+- Test data : 1 public / 4 private posts · 0 demo/test profiles
+
+### Preuves
+- `evidence/iter11/pitr-redis-status.md`
+- `continuity.md` mis à jour
+
+### Décision
+**suivante** (86 < 95) — **NO-GO merge**. UNIQUE NEXT = restore Vercel deploy pour SEO live 200.
+

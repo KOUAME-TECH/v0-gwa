@@ -3,6 +3,8 @@ import { Analytics } from "@vercel/analytics/next"
 import { OneSignalProvider } from "@/components/pwa/onesignal-provider"
 import { ServiceWorkerRegister } from "@/components/pwa/service-worker-register"
 import { AppShell } from "@/components/layout/app-shell"
+import { JsonLd, organizationJsonLd, websiteJsonLd } from "@/components/seo/json-ld"
+import { WebVitalsReporter } from "@/components/observability/web-vitals"
 import "./globals.css"
 
 export const metadata: Metadata = {
@@ -73,9 +75,11 @@ export default function RootLayout({
         <link rel="dns-prefetch" href="https://cdn.onesignal.com" />
       </head>
       <body className="font-sans antialiased min-h-dvh bg-background text-foreground">
+        <JsonLd data={[organizationJsonLd(), websiteJsonLd()]} />
         <OneSignalProvider>
           <ServiceWorkerRegister />
           <AppShell>{children}</AppShell>
+          <WebVitalsReporter />
           <Analytics />
         </OneSignalProvider>
       </body>
