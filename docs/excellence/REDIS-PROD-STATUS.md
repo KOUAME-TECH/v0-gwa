@@ -53,6 +53,18 @@ Token REST (redacted) : `gQAAAAAA…djZA` · URL : `https://innocent-macaw-24590
 
 ---
 
+## Follow-up tip `39c6900` (SEO live) — 2026-11-02
+
+| Item | Status |
+| --- | --- |
+| Tip branch | `gwa/excellence-parcours-1e99` @ `39c6900` (JSON-LD / robots / sitemap code) |
+| Prod SHA | **encore `2f9d54b`** — deploy tip **BLOQUÉ** (MCP 403 · CLI no token · GH dispatch 403) |
+| Health Redis | **`rate_limit_redis: true`** inchangé |
+| `/robots.txt` · `/sitemap.xml` | encore **404** jusqu’au deploy tip |
+| UNIQUE NEXT | SSO consent — voir `docs/excellence/evidence/iter11/deploy-status.md` |
+
+---
+
 ## Fallback CLI (si MCP SSO expire)
 
 ```bash

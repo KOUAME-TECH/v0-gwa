@@ -21,7 +21,9 @@ Pas de merge. GeniusPay/FeexPay **FROZEN**. Redis `KV_REST_*` intact.
 
 ### UNIQUE NEXT (humain / token)
 
-1. **Restore deploy** : Vercel Dashboard Redeploy de `gwa/excellence-parcours-1e99` **ou** redonner scope MCP/token → preuve `curl -I https://mygwa.org/robots.txt` → 200  
+1. **Approve Vercel team access (SSO)** — one-time link (~10 min):  
+   https://vercel.com/sso/session-requests/Q0gxtIpcF_-K2BMyvQFxGDn_WHIIWWrH  
+   puis retry MCP `create_deployment` tip `39c6900` (preview → prod) **ou** Dashboard Redeploy / secret `VERCEL_TOKEN` → preuve `curl -I https://mygwa.org/robots.txt` → 200  
 2. Enable **HaveIBeenPwned** (Supabase Auth) — seul WARN security  
 3. Compte E2E auth pour audio/nego Playwright (si besoin ≥95)
 
