@@ -24,7 +24,7 @@ export function YellyAideButton({
         compact && "h-8 px-2 text-xs rounded-xl",
         className,
       )}
-      aria-label="Ouvrir l'aide Yelly"
+      aria-label="Demander un conseil"
     >
       Aide
     </button>
