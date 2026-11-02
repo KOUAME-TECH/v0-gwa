@@ -1083,3 +1083,88 @@ Vercel (403), Playwright, Supabase (products SQL), Notion
 ### Décision
 **suivante** (86 < 95) — **NO-GO merge**. UNIQUE NEXT = restore Vercel deploy pour SEO live 200.
 
+
+
+## ITÉRATION 14 — Deploy unblock attempt + a11y chrome
+
+**Scores** : Global **87** | UI/UX **80** | Frontend **80** | Backend **80** | Audio **72** | Négociation **75** | Sécurité **80** | SEO **70** | IA **75** | Continuité **66**
+
+### Écarts
+- [FAIT VÉRIFIÉ] MCP create_deployment prod+preview **403** ; CLI logged out ; GH workflow_dispatch **403**
+- [FAIT VÉRIFIÉ] Prod SHA encore `2f9d54b` · robots/sitemap **404** · `rate_limit_redis:true`
+- [FAIT VÉRIFIÉ] SSO consent URLs émises (`evidence/iter14/deploy-status.md`)
+- [FAIT VÉRIFIÉ] Nav desktop + bottom-nav : `inert` + `aria-hidden` au scroll-hide
+- [FAIT VÉRIFIÉ] Headers prod HSTS/CSP/XFO/nosniff/referrer OK
+
+### Corrections
+- `components/navigation.tsx` / `bottom-nav.tsx` : inert scroll-hidden
+- `app/layout.tsx` : Open Graph + Twitter images + canonical
+- Campagne HIBP bannière prolongée → **2026-11-16**
+- Docs `HUMAN-CHECKLIST.md` + deploy-status iter14
+
+### Preuves
+- `evidence/iter14/deploy-status.md` · `prod-health.json` · `robots-prod.status`
+- `evidence/security/prod-headers-2026-11-02.txt`
+- `evidence/iter14/home-feed-clean-1024.png` (piment + Alloco, pas de junk)
+- vitest focused + tsc OK
+
+### MCP
+Vercel (403 deploy), Supabase advisors/SQL, Playwright, Upstash list DBs, Notion search
+
+### Décision
+**suivante** (87 < 95) — **NO-GO**. UNIQUE NEXT = SSO Vercel approve → deploy tip.
+
+### Notion
+Hub RESET 45→86 à mettre à jour (iter14+)
+
+
+## ITÉRATION 15 — Chat WhatsApp UX + offre a11y + studio copy
+
+**Scores** : Global **88** | UI/UX **82** | Frontend **81** | Backend **80** | Audio **76** | Négociation **78** | Sécurité **80** | SEO **71** | IA **75** | Continuité **66**
+
+### Écarts
+- [FAIT VÉRIFIÉ] Typing header `aria-live` + dots `motion-safe:animate-bounce`
+- [FAIT VÉRIFIÉ] Offre : `htmlFor` produit (`offer-product`)
+- [FAIT VÉRIFIÉ] `voice-studio-copy` + tests ; toast STT branché
+
+### Corrections
+- `chat-conversation.tsx` typing live / motion / offer-product / studio labels
+- `lib/chat/voice-studio-copy.ts` + `tests/voice-studio-copy.test.ts`
+
+### Preuves
+- vitest voice-studio + offer + audio + hibp PASS
+
+### MCP
+Playwright home snapshot
+
+### Décision
+**suivante**
+
+
+## ITÉRATION 16 — SEO layouts pages publiques + test-data re-proof
+
+**Scores** : Global **89** | UI/UX **82** | Frontend **82** | Backend **80** | Audio **76** | Négociation **78** | Sécurité **81** | SEO **74** | IA **75** | Continuité **68**
+
+### Écarts
+- [FAIT VÉRIFIÉ] SQL : profiles_junk=0 · posts_public=1 · junk_public=0 · products_active=3
+- [FAIT VÉRIFIÉ] Layouts metadata agriculture/contact/artisans/cooperatives
+- [FAIT VÉRIFIÉ] Security advisor : seul WARN = HIBP (humain)
+- [FAIT VÉRIFIÉ] Perf advisor : unused_index INFO ×73 (pas de DROP agressif)
+- [RISQUE RÉSIDUEL] SEO live robots/sitemap toujours 404 sans deploy
+
+### Corrections
+- `app/{agriculture,contact,artisans,cooperatives}/layout.tsx`
+- `marketplace/layout.tsx` OG image
+- Checklist humaine HIBP/PITR/E2E/Redis backups
+
+### Preuves
+- SQL MCP counts · Playwright feed · HUMAN-CHECKLIST.md
+
+### MCP
+Supabase execute_sql + advisors, Playwright
+
+### Décision
+**suivante** (89 < 95) — **NO-GO merge**. Plafond agent sans deploy tip ≈89–90. UNIQUE NEXT = SSO / `VERCEL_TOKEN` / Dashboard Redeploy → robots+sitemap 200 puis re-score (cible ≥95 avec SEO live + HIBP toggle).
+
+### Notion
+Mettre à jour page RESET avec score 89 + UNIQUE NEXT SSO

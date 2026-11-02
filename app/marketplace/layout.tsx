@@ -11,6 +11,14 @@ export const metadata: Metadata = {
     siteName: "GWA",
     locale: "fr_CI",
     type: "website",
+    images: [
+      {
+        url: "https://mygwa.org/icon-512.png",
+        width: 512,
+        height: 512,
+        alt: "GWA",
+      },
+    ],
   },
   alternates: {
     canonical: "https://mygwa.org/marketplace",

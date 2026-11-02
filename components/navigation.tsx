@@ -55,7 +55,8 @@ export function Navigation() {
       )}
       role="navigation"
       aria-label="Navigation bureau"
-      aria-hidden={scrollHidden}
+      aria-hidden={scrollHidden || undefined}
+      inert={scrollHidden || undefined}
     >
       <div className="gwa-shell-wide flex h-16 items-center gap-8 px-6 xl:px-8">
         <Link href="/" className="shrink-0" aria-label="GWA accueil" tabIndex={scrollHidden ? -1 : undefined}>

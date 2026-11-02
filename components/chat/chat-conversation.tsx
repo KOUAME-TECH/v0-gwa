@@ -27,6 +27,10 @@ import {
   voiceCaptureConstraints,
   type VoiceDspHandles,
 } from "@/lib/chat/audio-dsp"
+import {
+  voiceStudioStatusLabel,
+  voiceSttUnavailableToast,
+} from "@/lib/chat/voice-studio-copy"
 import { trackChatMetric } from "@/lib/chat/observability"
 import {
   bubbleSurfaceClass,
@@ -1204,7 +1208,7 @@ export function ChatConversation({
         sttSessionRef.current = stt.available ? stt : null
         if (!stt.available) {
           toast.message("Transcription indisponible", {
-            description: "Le vocal s’enregistre quand même (Web Speech absent).",
+            description: voiceSttUnavailableToast(),
           })
         }
         mr.start()
@@ -2083,9 +2087,13 @@ export function ChatConversation({
           </Avatar>
           <div className="min-w-0 text-left">
             <h2 className="font-semibold text-[15px] truncate leading-tight">{otherName}</h2>
-            <p className="text-[11px] text-white/80 leading-tight">
+            <p
+              className="text-[11px] text-white/80 leading-tight"
+              aria-live="polite"
+              aria-atomic="true"
+            >
               {peerTyping
-                ? "écrit…"
+                ? `${other?.full_name?.split(" ")[0] || "Contact"} écrit…`
                 : userTypeLabels[other?.user_type || ""] || "Discussion"}
             </p>
           </div>
@@ -2437,9 +2445,9 @@ export function ChatConversation({
                 {other?.full_name?.split(" ")[0] || "Contact"} écrit…
               </p>
               <div className="flex gap-1 mt-1" aria-hidden>
-                <span className="w-1.5 h-1.5 rounded-full bg-[#8696a0] animate-bounce [animation-delay:0ms]" />
-                <span className="w-1.5 h-1.5 rounded-full bg-[#8696a0] animate-bounce [animation-delay:120ms]" />
-                <span className="w-1.5 h-1.5 rounded-full bg-[#8696a0] animate-bounce [animation-delay:240ms]" />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#8696a0] motion-safe:animate-bounce [animation-delay:0ms]" />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#8696a0] motion-safe:animate-bounce [animation-delay:120ms]" />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#8696a0] motion-safe:animate-bounce [animation-delay:240ms]" />
               </div>
             </div>
           </div>
@@ -2531,8 +2539,10 @@ export function ChatConversation({
             {Math.floor(recordSec / 60)}:{(recordSec % 60).toString().padStart(2, '0')}
           </span>
           <span className="sr-only">
-            Studio audio : réduction de bruit active
-            {sttSessionRef.current ? ", transcription en cours" : ", sans transcription"}
+            {voiceStudioStatusLabel({
+              recording: true,
+              sttActive: Boolean(sttSessionRef.current),
+            })}
           </span>
           <div className="flex-1 flex items-center gap-[2px] overflow-hidden" aria-hidden>
             {Array.from({ length: 40 }).map((_, i) => (
@@ -2687,10 +2697,14 @@ export function ChatConversation({
             </p>
             {offerProducts.length > 0 && (
               <>
-                <label className="text-sm font-medium text-[#111] mb-1.5 block">
+                <label
+                  className="text-sm font-medium text-[#111] mb-1.5 block"
+                  htmlFor="offer-product"
+                >
                   Produit
                 </label>
                 <select
+                  id="offer-product"
                   value={offerProductId}
                   onChange={(e) => {
                     setOfferProductId(e.target.value)

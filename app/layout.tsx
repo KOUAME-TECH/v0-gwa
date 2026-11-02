@@ -39,11 +39,23 @@ export const metadata: Metadata = {
     title: "GWA — La Super App Africaine",
     description:
       "Marketplace social africain : producteurs, coopératives et acheteurs.",
+    images: [
+      {
+        url: "/icon-512.png",
+        width: 512,
+        height: 512,
+        alt: "GWA — marque Harmattan (G vert & or)",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "GWA — La Super App Africaine",
     description: "Achetez, vendez, discutez — marketplace africain.",
+    images: ["/icon-512.png"],
+  },
+  alternates: {
+    canonical: "/",
   },
   robots: {
     index: true,
