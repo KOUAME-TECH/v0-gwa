@@ -34,7 +34,7 @@ export const ADMIN_NAV: { name: string; href: string; section: AdminSection }[] 
   { name: "Utilisateurs", href: "/admin/users", section: "users" },
   { name: "Produits", href: "/admin/products", section: "products" },
   { name: "Commandes", href: "/admin/orders", section: "orders" },
-  { name: "Cooperatives", href: "/admin/cooperatives", section: "cooperatives" },
+  { name: "Coopératives", href: "/admin/cooperatives", section: "cooperatives" },
   { name: "Signalements", href: "/admin/reports", section: "reports" },
   { name: "Support", href: "/admin/support", section: "support" },
   { name: "Litiges", href: "/admin/disputes", section: "disputes" },
@@ -45,7 +45,7 @@ export const ADMIN_NAV: { name: string; href: string; section: AdminSection }[] 
   { name: "Abonnements", href: "/admin/subscriptions", section: "subscriptions" },
   { name: "Yelly Ops", href: "/admin/ai", section: "ai" },
   { name: "Statistiques", href: "/admin/analytics", section: "analytics" },
-  { name: "Parametres", href: "/admin/settings", section: "settings" },
+  { name: "Paramètres", href: "/admin/settings", section: "settings" },
 ]
 
 const ALL_SECTIONS: AdminSection[] = ADMIN_NAV.map((n) => n.section)

@@ -107,14 +107,19 @@ export default function AbonnementPage() {
     <div className="min-h-dvh bg-[#FFF6E5] pb-24">
       <header className="sticky top-0 z-40 bg-white border-b border-[#E5E7EB]">
         <div className="flex items-center h-14 px-4 max-w-lg mx-auto">
-          <button onClick={() => router.back()} className="p-2 -ml-2" aria-label="Retour">
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="-ml-2 inline-flex h-11 w-11 items-center justify-center"
+            aria-label="Retour"
+          >
             <ArrowLeft className="h-5 w-5" />
           </button>
-          <h1 className="text-lg font-semibold ml-2">Abonnement vendeur</h1>
+          <h1 className="ml-2 text-lg font-semibold">Abonnement vendeur</h1>
         </div>
       </header>
 
-      <main className="max-w-lg mx-auto px-4 pt-4 space-y-4">
+      <main id="abo-main" className="mx-auto max-w-lg space-y-4 px-4 pt-4">
         {!seller && (
           <div className="rounded-2xl bg-white border border-[#E5E7EB] p-4 text-sm text-[#4B5563]">
             Les abonnements sont pour les vendeurs (producteurs / coopératives).{" "}
@@ -196,7 +201,7 @@ export default function AbonnementPage() {
 
                 {seller && plan.tier !== "free" && (
                   <Button
-                    className="w-full mt-4 bg-[#2F7D32] hover:bg-[#256025]"
+                    className="mt-4 min-h-11 w-full bg-[#2F7D32] hover:bg-[#256025]"
                     disabled={isCurrent || busy === plan.tier}
                     onClick={() => void requestPlan(plan)}
                   >

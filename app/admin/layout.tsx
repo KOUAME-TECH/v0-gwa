@@ -60,11 +60,13 @@ const NAV_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   Utilisateurs: Users,
   Produits: Package,
   Commandes: ShoppingCart,
+  Coopératives: Building2,
   Cooperatives: Building2,
   Signalements: Flag,
   Support: MessageSquare,
   Litiges: AlertTriangle,
   Verifications: Shield,
+  Vérifications: Shield,
   Vérification: Shield,
   "SCG Config": Shield,
   Finances: TrendingUp,
@@ -73,6 +75,7 @@ const NAV_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   "Yelly Ops": Sparkles,
   Statistiques: TrendingUp,
   Parametres: Settings,
+  Paramètres: Settings,
 }
 
 interface AdminUser {
@@ -196,6 +199,12 @@ export default function AdminLayout({
 
   return (
     <div className="min-h-screen bg-muted/30">
+      <a
+        href="#admin-main"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[60] focus:rounded-lg focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:shadow"
+      >
+        Aller au contenu
+      </a>
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div 
@@ -381,7 +390,7 @@ export default function AdminLayout({
         </header>
 
         {/* Page content */}
-        <main className="p-4 md:p-6 lg:p-8">
+        <main id="admin-main" className="p-4 md:p-6 lg:p-8">
           {children}
         </main>
       </div>

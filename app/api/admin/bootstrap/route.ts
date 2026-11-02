@@ -1,15 +1,19 @@
-import { NextResponse } from "next/server"
+import { NextResponse, type NextRequest } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
+import { assertSameOrigin } from "@/lib/security/csrf"
 
 /**
  * POST /api/admin/bootstrap
  * Si aucun admin actif : promeut l'utilisateur connecté en super_admin (seed 1er admin).
  * Si des admins existent déjà : 403 (sauf déjà admin).
  */
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
+    const csrf = assertSameOrigin(request)
+    if (csrf) return csrf
+
     const rate = await checkRateLimit("API_CREATE")
     if (!rate.success) {
       return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })

@@ -9,12 +9,13 @@ import { Textarea } from "@/components/ui/textarea"
 import { ArrowLeft, Loader2, Upload } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { trackCoopEvent } from "@/lib/cooperatives/observability"
 
 const TYPES = [
   { value: "agriculture", label: "Agriculture" },
   { value: "commerce", label: "Commerce" },
-  { value: "elevage", label: "Elevage" },
-  { value: "peche", label: "Peche" },
+  { value: "elevage", label: "Élevage" },
+  { value: "peche", label: "Pêche" },
   { value: "transformation", label: "Transformation" },
 ]
 
@@ -40,7 +41,11 @@ export default function CreateCooperativePage() {
     setSaving(true)
     try {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push("/auth/login"); return }
+      if (!user) {
+        router.push("/auth/login?redirect=/cooperatives/create")
+        return
+      }
+      trackCoopEvent("coop.create.start")
 
       let logoUrl: string | null = null
       if (logo) {
@@ -84,13 +89,15 @@ export default function CreateCooperativePage() {
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || "Création impossible")
 
+      trackCoopEvent("coop.create.success")
       toast.success(
         "Coopérative créée — statut « en validation ». Ajoute 15 membres en 14 jours.",
       )
       router.push("/dashboard/cooperative")
     } catch (err: any) {
       console.error(err)
-      toast.error(err.message || "Erreur lors de la creation")
+      trackCoopEvent("coop.create.error")
+      toast.error(err.message || "Erreur lors de la création")
     } finally {
       setSaving(false)
     }
@@ -100,8 +107,15 @@ export default function CreateCooperativePage() {
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 bg-background border-b">
         <div className="flex items-center h-14 px-4">
-          <button onClick={() => router.back()} className="p-2 -ml-2"><ArrowLeft className="h-5 w-5" /></button>
-          <h1 className="text-lg font-semibold ml-2">Creer une cooperative</h1>
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="-ml-2 inline-flex h-11 w-11 items-center justify-center"
+            aria-label="Retour"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+          <h1 className="ml-2 text-lg font-semibold">Créer une coopérative</h1>
         </div>
       </header>
 

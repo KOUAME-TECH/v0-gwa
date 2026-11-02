@@ -3,11 +3,11 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { assertSameOrigin } from "@/lib/security/csrf"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
-import { sanitizePlainText } from "@/lib/security/validation"
 import {
   COOP_DOCS_DEADLINE_MONTHS,
   COOP_MEMBERS_DEADLINE_DAYS,
 } from "@/lib/cooperatives/validation-policy"
+import { coopCreateSchema } from "@/lib/cooperatives/create-schema"
 
 /**
  * POST /api/cooperatives
@@ -32,19 +32,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
     }
 
-    const body = await request.json().catch(() => null)
-    if (!body || typeof body !== "object") {
-      return NextResponse.json({ error: "Corps invalide" }, { status: 400 })
-    }
-
-    const name = sanitizePlainText(String(body.name || ""), 120)
-    const city = sanitizePlainText(String(body.city || ""), 80)
-    if (!name || !city) {
+    const rawBody = await request.json().catch(() => null)
+    const parsed = coopCreateSchema.safeParse(rawBody)
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "Nom et ville sont obligatoires" },
+        {
+          error: parsed.error.issues[0]?.message || "Données invalides",
+          code: "VALIDATION",
+        },
         { status: 400 },
       )
     }
+    const body = parsed.data
+    const name = body.name
+    const city = body.city
 
     const now = new Date()
     const membersDeadline = new Date(
@@ -69,17 +70,16 @@ export async function POST(request: NextRequest) {
       .insert({
         name,
         slug,
-        description: sanitizePlainText(String(body.description || ""), 2000) || null,
-        sector: sanitizePlainText(String(body.sector || body.cooperative_type || "agriculture"), 60),
-        country: sanitizePlainText(String(body.country || "Cote d'Ivoire"), 80),
+        description: body.description || null,
+        sector: body.sector || body.cooperative_type || "agriculture",
+        country: body.country || "Cote d'Ivoire",
         city,
-        address: sanitizePlainText(String(body.address || ""), 200) || null,
-        phone: sanitizePlainText(String(body.phone || ""), 30) || null,
-        email: sanitizePlainText(String(body.email || ""), 120) || null,
-        registration_number:
-          sanitizePlainText(String(body.registration_number || ""), 80) || null,
-        founded_year: Number.parseInt(String(body.founded_year || ""), 10) || null,
-        logo_url: typeof body.logo_url === "string" ? body.logo_url.slice(0, 500) : null,
+        address: body.address || null,
+        phone: body.phone || null,
+        email: body.email || null,
+        registration_number: body.registration_number || null,
+        founded_year: body.founded_year ?? null,
+        logo_url: body.logo_url || null,
         admin_id: user.id,
         is_verified: false,
         validation_status: "pending_validation",

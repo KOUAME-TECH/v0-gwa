@@ -119,7 +119,7 @@ async function countByStatus(admin: ReturnType<
 export async function POST(request: NextRequest) {
   try {
     const csrf = assertSameOrigin(request)
-    if (csrf) return csrf
+        if (csrf) return csrf
 
     const rate = await checkRateLimit("API_CREATE")
     if (!rate.success) {

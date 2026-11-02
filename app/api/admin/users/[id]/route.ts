@@ -11,6 +11,7 @@ import {
 import { requireAdminAction, requireSuperAdmin } from "@/lib/auth/require-admin"
 
 import { checkRateLimit } from "@/lib/security/rate-limiter"
+import { assertSameOrigin } from "@/lib/security/csrf"
 
 
 
@@ -33,8 +34,12 @@ const ROLE_ACTIONS = new Set(["grant_support", "grant_admin", "revoke_admin"])
  */
 
 export async function PATCH(request: NextRequest, context: Ctx) {
+try {
 
-  try {
+  const csrf = assertSameOrigin(request)
+
+      if (csrf) return csrf
+
 
     const rate = await checkRateLimit("API_CREATE")
 

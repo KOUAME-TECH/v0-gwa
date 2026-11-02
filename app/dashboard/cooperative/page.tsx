@@ -27,6 +27,8 @@ import {
   COOP_MIN_ACTIVE_MEMBERS,
   evaluateCoopQualification,
 } from "@/lib/cooperatives/validation-policy"
+import { YellyAideButton } from "@/components/yelly/yelly-aide-button"
+import { trackCoopEvent } from "@/lib/cooperatives/observability"
 
 interface Member {
   id: string
@@ -80,6 +82,7 @@ export default function CooperativeDashboard() {
     }
     try {
       await navigator.clipboard.writeText(inviteLink)
+      trackCoopEvent("coop.invite.copy", { ok: true })
       toast.success("Lien d'invitation copié — partagez-le avec vos producteurs")
     } catch {
       toast.info(inviteLink)
@@ -131,7 +134,7 @@ export default function CooperativeDashboard() {
       const { data: { user: authUser } } = await supabase.auth.getUser()
 
       if (!authUser) {
-        router.push("/auth/login")
+        router.push("/auth/login?redirect=/dashboard/cooperative")
         return
       }
 
@@ -198,6 +201,7 @@ export default function CooperativeDashboard() {
 
       setCoop(coopData)
       setMyRole(resolvedRole)
+      let memberCount = 0
 
       if (coopData) {
         const { data: memberRows } = await supabase
@@ -241,6 +245,7 @@ export default function CooperativeDashboard() {
           })
         )
         setMembers(membersWithProducts)
+        memberCount = membersWithProducts.length
 
         const farmers = membersWithProducts.filter(m => m.user_type === 'producteur').length
         const managers = membersWithProducts.filter((m) => isCoopManagerRole(m.role)).length
@@ -267,6 +272,10 @@ export default function CooperativeDashboard() {
         }
       }
 
+      trackCoopEvent("coop.dashboard.load", {
+        members: memberCount,
+        hasCoop: Boolean(coopData),
+      })
       setIsLoading(false)
     }
     fetchData()
@@ -319,13 +328,22 @@ export default function CooperativeDashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#E8F5E9] to-[#FFF6E5] pb-24">
+      <a
+        href="#coop-main"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:text-[#1F5C2E] focus:shadow"
+      >
+        Aller au contenu
+      </a>
       {/* Header Coopérative */}
       <header className="bg-gradient-to-br from-[#1F5C2E] to-[#2d7a3e] text-white px-4 pt-8 pb-6 rounded-b-3xl">
-        <div className="flex items-center justify-between mb-4">
+        <div className="mb-4 flex items-center justify-between">
           <h1 className="text-lg font-semibold">{coop.name}</h1>
-          <Link href="/notifications" aria-label="Notifications">
-            <Bell className="h-6 w-6" />
-          </Link>
+          <div className="flex items-center gap-2">
+            <YellyAideButton source="coop_dashboard" className="text-white/90 hover:text-white" />
+            <Link href="/notifications" aria-label="Notifications" className="inline-flex h-11 w-11 items-center justify-center">
+              <Bell className="h-6 w-6" />
+            </Link>
+          </div>
         </div>
 
         <div className="mb-4">
@@ -335,7 +353,14 @@ export default function CooperativeDashboard() {
               {stats.totalMembers}/{COOP_MIN_ACTIVE_MEMBERS}
             </span>
           </div>
-          <div className="h-2 overflow-hidden rounded-full bg-white/20">
+          <div
+            className="h-2 overflow-hidden rounded-full bg-white/20"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={COOP_MIN_ACTIVE_MEMBERS}
+            aria-valuenow={stats.totalMembers}
+            aria-label="Progression membres actifs"
+          >
             <div
               className="h-full rounded-full bg-[#F39A1F] transition-all"
               style={{
@@ -349,7 +374,7 @@ export default function CooperativeDashboard() {
           <div className="space-y-2">
             <Button
               onClick={handleInvite}
-              className="w-full rounded-full bg-white text-[#1F5C2E] hover:bg-white/90"
+              className="min-h-11 w-full rounded-full bg-white text-[#1F5C2E] hover:bg-white/90"
             >
               <UserPlus className="mr-2 h-4 w-4" />
               Copier le lien d’invitation
@@ -360,13 +385,13 @@ export default function CooperativeDashboard() {
                   href={`https://wa.me/?text=${encodeURIComponent(`Rejoins notre coop sur GWA : ${inviteLink}`)}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex-1 rounded-full bg-[#25D366] py-2 text-center text-xs font-semibold text-white"
+                  className="flex min-h-11 flex-1 items-center justify-center rounded-full bg-[#25D366] text-center text-xs font-semibold text-white"
                 >
                   WhatsApp
                 </a>
                 <a
                   href={`sms:?body=${encodeURIComponent(`Rejoins notre coop GWA : ${inviteLink}`)}`}
-                  className="flex-1 rounded-full bg-white/20 py-2 text-center text-xs font-semibold text-white"
+                  className="flex min-h-11 flex-1 items-center justify-center rounded-full bg-white/20 text-center text-xs font-semibold text-white"
                 >
                   SMS
                 </a>
@@ -376,7 +401,7 @@ export default function CooperativeDashboard() {
         ) : null}
       </header>
 
-      <main className="px-4 -mt-2 pt-4 space-y-4">
+      <main id="coop-main" className="-mt-2 space-y-4 px-4 pt-4">
         {qualificationBanner && (
           <div className="rounded-2xl bg-white p-4 text-sm text-[#4B5563] ring-1 ring-[#1F5C2E]/10">
             <p className="font-semibold text-[#111827] mb-1">Checklist qualification</p>

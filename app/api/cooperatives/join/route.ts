@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { assertSameOrigin } from "@/lib/security/csrf"
+import { coopJoinSchema } from "@/lib/cooperatives/create-schema"
 
 /**
  * POST /api/cooperatives/join
@@ -29,11 +30,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
     }
 
-    const body = await request.json().catch(() => null)
-    const coopId = String(body?.coop_id || "")
-    if (!coopId) {
-      return NextResponse.json({ error: "coop_id requis" }, { status: 400 })
+    const raw = await request.json().catch(() => null)
+    const parsed = coopJoinSchema.safeParse(raw)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message || "coop_id requis", code: "VALIDATION" },
+        { status: 400 },
+      )
     }
+    const coopId = parsed.data.coop_id
 
     const admin = createAdminClient()
 

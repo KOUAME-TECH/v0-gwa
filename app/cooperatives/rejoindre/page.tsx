@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { ArrowLeft, Building2, Loader2, CheckCircle2, MapPin } from "lucide-react"
 import { toast } from "sonner"
+import { trackCoopEvent } from "@/lib/cooperatives/observability"
 
 interface Coop {
   id: string
@@ -31,7 +32,8 @@ function RejoindreContent() {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
-        router.push(`/auth/login?redirect=/cooperatives/rejoindre?coop=${coopId || ""}`)
+        const dest = `/cooperatives/rejoindre${coopId ? `?coop=${encodeURIComponent(coopId)}` : ""}`
+        router.push(`/auth/login?redirect=${encodeURIComponent(dest)}`)
         return
       }
       if (!coopId) { setLoading(false); return }
@@ -50,6 +52,7 @@ function RejoindreContent() {
   async function handleJoin() {
     if (!coopId) return
     setJoining(true)
+    trackCoopEvent("coop.join.start")
     try {
       const res = await fetch("/api/cooperatives/join", {
         method: "POST",
@@ -58,8 +61,9 @@ function RejoindreContent() {
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json?.error || "Erreur")
-      toast.success("Vous avez rejoint la coopérative")
-      router.push("/dashboard")
+      trackCoopEvent("coop.join.success")
+      toast.success("Tu as rejoint la coopérative")
+      router.push("/dashboard/cooperative")
     } catch (err: any) {
       toast.error(err.message || "Impossible de rejoindre")
     } finally {
@@ -78,8 +82,15 @@ function RejoindreContent() {
   return (
     <div className="min-h-screen bg-[#F0FDF4]">
       <header className="flex items-center h-14 px-4 bg-white border-b">
-        <button onClick={() => router.back()} className="p-2 -ml-2"><ArrowLeft className="h-5 w-5" /></button>
-        <h1 className="text-lg font-semibold ml-2">Rejoindre une coopérative</h1>
+        <button
+          type="button"
+          onClick={() => router.back()}
+          className="-ml-2 inline-flex h-11 w-11 items-center justify-center"
+          aria-label="Retour"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </button>
+        <h1 className="ml-2 text-lg font-semibold">Rejoindre une coopérative</h1>
       </header>
 
       <div className="p-4">

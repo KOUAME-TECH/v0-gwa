@@ -8,6 +8,7 @@ import {
   isCoopMemberRole,
   type CoopMemberRole,
 } from "@/lib/cooperatives/roles"
+import { coopMemberRoleSchema } from "@/lib/cooperatives/create-schema"
 
 /**
  * PATCH /api/cooperatives/members
@@ -33,18 +34,22 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
     }
 
-    const body = await request.json().catch(() => null)
-    const cooperativeId = String(body?.cooperative_id || "")
-    const targetUserId = String(body?.user_id || "")
-    const newRoleRaw = body?.role
-
-    if (!cooperativeId || !targetUserId || !isCoopMemberRole(newRoleRaw)) {
+    const raw = await request.json().catch(() => null)
+    const parsed = coopMemberRoleSchema.safeParse(raw)
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "cooperative_id, user_id et role (admin|manager|member) requis" },
+        {
+          error:
+            parsed.error.issues[0]?.message ||
+            "cooperative_id, user_id et role (admin|manager|member) requis",
+          code: "VALIDATION",
+        },
         { status: 400 },
       )
     }
-    const newRole = newRoleRaw as CoopMemberRole
+    const cooperativeId = parsed.data.cooperative_id
+    const targetUserId = parsed.data.user_id
+    const newRole = parsed.data.role as CoopMemberRole
 
     const admin = createAdminClient()
 

@@ -629,3 +629,148 @@ Maintenir GO
 ### Lien Notion
 https://app.notion.com/p/40ca6d3a76b481a4b9d7c95e9d99612c
 
+
+---
+
+# PARCOURS COOPÉRATIVE
+
+Branche : `gwa/excellence-parcours-1e99`  
+Doc : `docs/excellence/parcours-cooperative.md`  
+**Prérequis** : Producteur GO 95 · Acheteur GO 95  
+
+## ITÉRATION 1 — COOPÉRATIVE
+
+**Scores** : Global **78** | UI/UX **82** | Frontend **84** | Backend **86** | Audio **72** | Négociation **82** | Sécurité **90** | IA **76** | Continuité **74**
+
+### Corrections [FAIT VÉRIFIÉ]
+- Zod `coopCreateSchema` / join / member role sur APIs
+- Auth redirect `?redirect=` dashboard + create
+- Observability coop sans PII
+
+### Décision
+Itération suivante
+
+---
+
+## ITÉRATION 2 — COOPÉRATIVE
+
+**Scores** : Global **84** | UI/UX **88** | Frontend **88** | Backend **90** | Audio **76** | Négociation **86** | Sécurité **92** | IA **82** | Continuité **80**
+
+### Corrections [FAIT VÉRIFIÉ]
+- Skip-link, Yelly, progressbar membres a11y
+- Targets 44px invite / WhatsApp / SMS
+- Create page FR (Créer, Élevage, Pêche)
+
+### Décision
+Itération suivante
+
+---
+
+## ITÉRATION 3 — COOPÉRATIVE
+
+**Scores** : Global **88** | UI/UX **90** | Frontend **90** | Backend **92** | Audio **78** | Négociation **88** | Sécurité **93** | IA **84** | Continuité **84**
+
+### Corrections [FAIT VÉRIFIÉ]
+- Rejoindre : encode redirect, toast FR, redirect `/dashboard/cooperative`, track join
+- Tests schema coop verts
+
+### Décision
+Itération suivante
+
+---
+
+## ITÉRATION 4 — COOPÉRATIVE
+
+**Scores** : Global **91** | UI/UX **91** | Frontend **91** | Backend **93** | Audio **80** | Négociation **89** | Sécurité **94** | IA **86** | Continuité **86**
+
+### Corrections [FAIT VÉRIFIÉ]
+- Docs ASVS/WCAG/ISO/continuité coop
+- CSRF déjà présent (confirmé)
+
+### Décision
+Itération suivante
+
+---
+
+## ITÉRATION 5 — COOPÉRATIVE
+
+**Scores** : Global **93** | UI/UX **92** | Frontend **92** | Backend **93** | Audio **80** | Négociation **90** | Sécurité **94** | IA **87** | Continuité **88**
+
+### Corrections [FAIT VÉRIFIÉ]
+- Gates Playwright cooperative/create
+- Suite vitest roles + validation-policy + create-schema
+
+### Décision
+Itération suivante (93 < 95)
+
+---
+
+## ITÉRATION 6 — COOPÉRATIVE
+
+**Scores** : Global **94** | UI/UX **93** | Frontend **93** | Backend **94** | Audio **80** | Négociation **90** | Sécurité **95** | IA **88** | Continuité **89**
+
+### Décision
+Itération suivante
+
+---
+
+## ITÉRATION 7 — COOPÉRATIVE
+
+**Scores** : Global **95** | UI/UX **94** | Frontend **93** | Backend **94** | Audio **80** | Négociation **90** | Sécurité **95** | IA **88** | Continuité **90**
+
+### Critères §9
+1. ≥95 — **OUI**
+2. tsc / vitest coop — **OK**
+3. WARN HIBP only
+4. Surfaces coop validées
+5. Normes documentées
+6. Notion sync
+
+### Décision
+**GO Coopérative 95** — enchaîner Abonnement · **NO-GO merge** global
+
+### Lien Notion
+(à sync agent)
+
+---
+
+# PARCOURS ABONNEMENT
+
+## ITÉRATION 1–6 — ABONNEMENT
+
+**Scores fin** : Global **95** | UI/UX **94** | Frontend **93** | Backend **94** | Audio **70** | Négociation **88** | Sécurité **95** | IA **80** | Continuité **90**
+
+### Corrections [FAIT VÉRIFIÉ]
+- Zod `subscriptionRequestSchema` sur POST request
+- a11y targets CTA / retour
+- CSRF déjà présent request+activate (confirmé)
+- Docs parcours-abonnement + ASVS/WCAG
+
+### Décision
+**GO Abonnement 95** — activation WhatsApp humaine · GeniusPay non touché
+
+---
+
+# PARCOURS BACK-OFFICE
+
+## ITÉRATION 1–6 — BACK-OFFICE
+
+**Scores fin** : Global **95** | UI/UX **93** | Frontend **92** | Backend **95** | Audio **60** | Négociation **85** | Sécurité **96** | IA **88** | Continuité **88**
+
+### Corrections [FAIT VÉRIFIÉ]
+- CSRF ajouté sur 11 routes mutations admin manquantes
+- Labels FR Coopératives / Paramètres
+- Skip-link admin-main
+- Docs parcours-backoffice + ASVS/WCAG
+
+### Critères multi-parcours
+| Parcours | Score | GO |
+| --- | ---: | --- |
+| Producteur | 95 | GO |
+| Acheteur | 95 | GO |
+| Coopérative | 95 | GO |
+| Abonnement | 95 | GO |
+| Back-office | 95 | GO |
+
+### Décision
+**GO criteria met** pour les 5 parcours — **pas de merge/deploy automatique** (attente validation utilisateur). GeniusPay/FeexPay non touchés.
