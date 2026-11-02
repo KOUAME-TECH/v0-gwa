@@ -36,7 +36,7 @@ Evidence curl timestamps ~2026-11-02T20:40Z.
 ## UNIQUE NEXT (humain)
 
 1. **Approve Vercel team access** (one-time, ~10 min) — open:  
-   https://vercel.com/sso/session-requests/Q0gxtIpcF_-K2BMyvQFxGDn_WHIIWWrH  
+   https://vercel.com/sso/session-requests/zAjbp32jdtUB8aUWtzAjrUH-_pXyfXlV  
    Then reply so agent retries `create_deployment` preview → production for `gwa/excellence-parcours-1e99` @ `39c6900`.
 2. **Or** add env secret `VERCEL_TOKEN` (deploy scope, team `gwa`) and retry CLI.
 3. **Or** Vercel Dashboard → Redeploy commit `39c6900` / branch `gwa/excellence-parcours-1e99` to production.
