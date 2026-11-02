@@ -19,8 +19,15 @@ import {
   ChatUploadError,
   uploadChatMedia,
   resolveChatMediaUrl,
+  isChatStoragePath,
   type UploadProgress,
 } from "@/lib/chat/upload"
+import {
+  createVoiceDspPipeline,
+  voiceCaptureConstraints,
+  type VoiceDspHandles,
+} from "@/lib/chat/audio-dsp"
+import { trackChatMetric } from "@/lib/chat/observability"
 import {
   bubbleSurfaceClass,
   resolveBubbleRole,
@@ -197,6 +204,7 @@ export function ChatConversation({
   const recInterval = useRef<ReturnType<typeof setInterval> | null>(null)
   const mediaRecorder = useRef<MediaRecorder | null>(null)
   const audioStream = useRef<MediaStream | null>(null)
+  const voiceDspRef = useRef<VoiceDspHandles | null>(null)
   const audioChunks = useRef<Blob[]>([])
   const previewAudio = useRef<HTMLAudioElement | null>(null)
   const cancelVoiceRef = useRef(false)
@@ -233,13 +241,19 @@ export function ChatConversation({
   }, [userId, conversation.id])
 
   useEffect(() => {
-    const onOnline = () => setBrowserOffline(false)
+    const onOnline = () => {
+      setBrowserOffline(false)
+      trackChatMetric("chat.message.outbox_flush", { offline: false })
+      // flush via effet [browserOffline] pour éviter double-envoi stale
+    }
     const onOffline = () => setBrowserOffline(true)
     window.addEventListener("online", onOnline)
     window.addEventListener("offline", onOffline)
+    window.addEventListener("gwa:online-sync", onOnline as EventListener)
     return () => {
       window.removeEventListener("online", onOnline)
       window.removeEventListener("offline", onOffline)
+      window.removeEventListener("gwa:online-sync", onOnline as EventListener)
     }
   }, [])
 
@@ -253,6 +267,7 @@ export function ChatConversation({
       }
       if (showOfferSheet) {
         setShowOfferSheet(false)
+        setTimeout(() => inputRef.current?.focus(), 50)
         return
       }
       if (showAttach) {
@@ -579,6 +594,11 @@ export function ChatConversation({
   async function flushOutbox() {
     const queue = listOutboxForConversation(conversation.id, userId)
     if (queue.length === 0) return
+    const { markOutboxAttempt, pruneFailedOutbox } = await import(
+      "@/lib/chat/local-store"
+    )
+    pruneFailedOutbox(8)
+    let flushed = 0
     for (const item of queue) {
       const tempId = item.id
       if (!messages.some((m) => m.id === tempId)) {
@@ -605,17 +625,28 @@ export function ChatConversation({
         })
         if (ok) {
           removeOutboxMessage(item.id)
+          flushed += 1
+        } else {
+          markOutboxAttempt(item.id, "deliver_false")
         }
-      } catch {
-        /* reste en file */
+      } catch (err) {
+        markOutboxAttempt(
+          item.id,
+          err instanceof Error ? err.message.slice(0, 80) : "flush_error",
+        )
       }
     }
     setPendingOffline(listOutboxForConversation(conversation.id, userId))
+    trackChatMetric("chat.message.outbox_flush", {
+      ok: flushed > 0,
+      ms: flushed,
+    })
   }
 
   async function requestInThreadAdvice(question: string) {
     const userLine = question.trim() || "Conseil demandé"
     if (isAdversarialAiQuestion(userLine)) {
+      trackChatMetric("chat.ai.blocked", { ok: true, kind: "adversarial" })
       setMessages((prev) => [
         ...prev,
         {
@@ -739,8 +770,10 @@ export function ChatConversation({
         .from("conversations")
         .update({ last_message_at: new Date().toISOString() })
         .eq("id", conversation.id)
+      trackChatMetric("chat.ai.advice", { ok: true })
       scroll()
     } catch {
+      trackChatMetric("chat.ai.advice", { ok: false, code: "network" })
       setMessages((prev) =>
         prev.map((m) =>
           m.id === tempAi
@@ -911,7 +944,8 @@ export function ChatConversation({
           sender_id: authUser.id,
           content,
           message_type: type,
-          media_url: uploaded.displayUrl,
+          // Persiste le path Storage (bucket privé) — affichage via resolve/sign
+          media_url: uploaded.path,
         })
         .select()
         .single()
@@ -925,6 +959,7 @@ export function ChatConversation({
       setUploadProgress(null)
       if (msgErr) {
         toast.error("Fichier envoyé mais message non enregistré. Réessaie.")
+        trackChatMetric("chat.media.upload", { ok: false, kind: type })
         return
       }
       if (data) {
@@ -937,6 +972,7 @@ export function ChatConversation({
         }))
         scroll()
       }
+      trackChatMetric("chat.media.upload", { ok: true, kind: type })
       void fetch("/api/messages/notify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1054,7 +1090,7 @@ export function ChatConversation({
     }
   }
 
-  // Voice -- MediaRecorder + STT parallèle (Web Speech) si dispo
+  // Voice -- DSP studio + MediaRecorder + STT parallèle (Web Speech)
   async function toggleVoice() {
     if (isRecording) {
       const stt = sttSessionRef.current
@@ -1065,20 +1101,20 @@ export function ChatConversation({
       mediaRecorder.current?.stop()
       setIsRecording(false)
       if (recInterval.current) clearInterval(recInterval.current)
+      trackChatMetric("chat.voice.record", { ok: true, kind: "stop" })
     } else {
       try {
         cancelVoiceRef.current = false
         voiceTranscriptRef.current = ""
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-          },
-        })
-        audioStream.current = stream
+        const rawStream = await navigator.mediaDevices.getUserMedia(
+          voiceCaptureConstraints(),
+        )
+        const dsp = await createVoiceDspPipeline(rawStream)
+        voiceDspRef.current = dsp
+        audioStream.current = dsp.processedStream
         audioChunks.current = []
-        const mr = new MediaRecorder(stream, {
+        const recordStream = dsp.processedStream
+        const mr = new MediaRecorder(recordStream, {
           mimeType: MediaRecorder.isTypeSupported("audio/webm")
             ? "audio/webm"
             : "audio/mp4",
@@ -1088,7 +1124,8 @@ export function ChatConversation({
           if (e.data.size > 0) audioChunks.current.push(e.data)
         }
         mr.onstop = () => {
-          stream.getTracks().forEach((t) => t.stop())
+          voiceDspRef.current?.stop()
+          voiceDspRef.current = null
           audioStream.current = null
           if (cancelVoiceRef.current) {
             audioChunks.current = []
@@ -1125,6 +1162,7 @@ export function ChatConversation({
         setIsRecording(true)
         setRecordSec(0)
         setAudioPreview(null)
+        trackChatMetric("chat.voice.record", { ok: true, kind: "start" })
         recInterval.current = setInterval(() => setRecordSec((p) => p + 1), 1000)
       } catch (err) {
         console.warn("[chat] mic", err)
@@ -1221,7 +1259,7 @@ export function ChatConversation({
             audioPreview.transcript,
           ),
           message_type: "voice",
-          media_url: uploaded.displayUrl,
+          media_url: uploaded.path,
         })
         .select()
         .single()
@@ -1238,6 +1276,7 @@ export function ChatConversation({
 
       if (msgErr) {
         toast.error("Vocal envoyé mais message non enregistré.")
+        trackChatMetric("chat.media.upload", { ok: false, kind: "voice" })
         return
       }
       if (data) {
@@ -1250,6 +1289,7 @@ export function ChatConversation({
         }))
         scroll()
       }
+      trackChatMetric("chat.media.upload", { ok: true, kind: "voice" })
       void fetch("/api/messages/notify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1280,7 +1320,8 @@ export function ChatConversation({
         /* ignore */
       }
     }
-    audioStream.current?.getTracks().forEach((t) => t.stop())
+    voiceDspRef.current?.stop()
+    voiceDspRef.current = null
     audioStream.current = null
     setIsRecording(false)
     if (audioPreview) {
@@ -1700,10 +1741,12 @@ export function ChatConversation({
     const w = window.open("", "_blank", "noopener,noreferrer,width=720,height=900")
     if (!w) {
       toast.error("Autorise les pop-ups pour imprimer")
+      trackChatMetric("chat.po.print", { ok: false, code: "popup_blocked" })
       return
     }
     w.document.write(html)
     w.document.close()
+    trackChatMetric("chat.po.print", { ok: true })
   }
 
   const fmtTime = (d: string) => new Date(d).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
@@ -1714,7 +1757,12 @@ export function ChatConversation({
   )
 
   function mediaSrc(msg: Message): string | undefined {
-    return mediaUrlCache[msg.id] || msg.media_url
+    if (mediaUrlCache[msg.id]) return mediaUrlCache[msg.id]
+    const raw = msg.media_url
+    if (!raw) return undefined
+    // Path Storage brut (bucket privé) — attendre resolve signé
+    if (isChatStoragePath(raw)) return undefined
+    return raw
   }
 
   function playVoiceMsg(msg: Message) {
@@ -2115,13 +2163,23 @@ export function ChatConversation({
         </div>
       )}
 
+      {/* WCAG 2.4.1 — lien d’évitement vers la zone messages */}
+      <a
+        href="#gwa-chat-messages"
+        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-2 focus:left-2 focus:bg-white focus:text-[#1F5C2E] focus:px-3 focus:py-2 focus:rounded-md focus:shadow"
+      >
+        Aller aux messages
+      </a>
+
       {/* MESSAGES AREA — fond terre / motif wax Afrique */}
       <div
+        id="gwa-chat-messages"
         className="flex-1 overflow-y-auto overscroll-contain px-3 py-3"
         role="log"
         aria-live="polite"
         aria-relevant="additions"
         aria-label="Messages de la conversation"
+        tabIndex={-1}
         style={{
           backgroundColor: CHAT_AFRICA_BG.color,
           backgroundImage: CHAT_AFRICA_BG.image,
@@ -2380,7 +2438,11 @@ export function ChatConversation({
 
       {/* RECORDING BAR */}
       {isRecording && (
-        <div className="bg-white border-t border-gray-200 px-3 py-2.5 flex items-center gap-3 shrink-0">
+        <div
+          className="bg-white border-t border-gray-200 px-3 py-2.5 flex items-center gap-3 shrink-0"
+          role="status"
+          aria-label="Enregistrement vocal en cours"
+        >
           <button
             type="button"
             onClick={cancelRecording}
@@ -2389,7 +2451,7 @@ export function ChatConversation({
           >
             <Trash2 className="h-5 w-5 text-red-500" />
           </button>
-          <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse shrink-0" aria-hidden />
+          <div className="w-3 h-3 bg-red-500 rounded-full motion-safe:animate-pulse shrink-0" aria-hidden />
           <span className="text-red-700 font-mono text-sm font-medium w-10 tabular-nums" aria-live="polite">
             {Math.floor(recordSec / 60)}:{(recordSec % 60).toString().padStart(2, '0')}
           </span>
@@ -2522,12 +2584,18 @@ export function ChatConversation({
       {/* OFFRE DE PRIX — négociation commande */}
       {showOfferSheet && (
         <>
-          <div className="fixed inset-0 bg-black/40 z-[108]" onClick={() => setShowOfferSheet(false)} />
+          <div
+            className="fixed inset-0 bg-black/40 z-[108]"
+            onClick={() => {
+              setShowOfferSheet(false)
+              setTimeout(() => inputRef.current?.focus(), 50)
+            }}
+          />
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="offer-sheet-title"
-            className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl z-[109] p-5 pb-8 safe-bottom animate-slideUp"
+            className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl z-[109] p-5 pb-8 safe-bottom motion-safe:animate-slideUp"
           >
             <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-4" aria-hidden />
             <div className="flex items-center gap-2 mb-1">
@@ -2727,8 +2795,9 @@ export function ChatConversation({
                 onClick={() => void toggleVoice()}
                 className="min-w-[48px] min-h-[48px] w-12 h-12 rounded-full bg-[#1F5C2E] text-white flex items-center justify-center shrink-0 active:scale-90 transition-transform shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C27D10]"
                 aria-label="Message vocal"
+                aria-pressed={isRecording}
               >
-                <Mic className="h-5 w-5" />
+                <Mic className="h-5 w-5" aria-hidden />
               </button>
             )}
           </form>

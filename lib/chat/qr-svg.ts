@@ -1,52 +1,31 @@
 /**
- * QR Code SVG minimal (byte mode, version auto) — bon de commande imprimable.
- * Implémentation compacte sans dépendance npm.
- * Source adaptée / simplifiée pour URLs courtes GWA.
+ * QR Code ISO/IEC 18004 — SVG data-URI pour bon de commande imprimable.
+ * Utilise la lib `qrcode` (encodeur conforme) + rendu SVG sync.
  */
 
-/** Encode payload en matrice QR via API canvas-free pure math — fallback texte si trop long. */
-export function qrMatrix(text: string, size = 21): boolean[][] {
-  // Hash-based visual code (pas un QR ISO complet) — scannable limité.
-  // Pour conformité scannable : URL courte + code vérif déjà dans le HTML.
-  // Ici : motif déterministe type « data glyph » pour impression.
+import QRCode from "qrcode"
+
+/** Encode payload en matrice QR (modules booléens) — ISO byte mode. */
+export function qrMatrix(text: string): boolean[][] {
+  const qr = QRCode.create(text, {
+    errorCorrectionLevel: "M",
+  })
+  const size = qr.modules.size
   const matrix: boolean[][] = Array.from({ length: size }, () =>
     Array.from({ length: size }, () => false),
   )
-  // Finder patterns (coins)
-  const paintFinder = (ox: number, oy: number) => {
-    for (let y = 0; y < 7; y++) {
-      for (let x = 0; x < 7; x++) {
-        const border = x === 0 || y === 0 || x === 6 || y === 6
-        const core = x >= 2 && x <= 4 && y >= 2 && y <= 4
-        matrix[oy + y][ox + x] = border || core
-      }
-    }
-  }
-  paintFinder(0, 0)
-  paintFinder(size - 7, 0)
-  paintFinder(0, size - 7)
-
-  // Données pseudo-QR à partir du hash du texte
-  let h = 2166136261
-  for (let i = 0; i < text.length; i++) {
-    h ^= text.charCodeAt(i)
-    h = Math.imul(h, 16777619)
-  }
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      if (x < 8 && y < 8) continue
-      if (x >= size - 8 && y < 8) continue
-      if (x < 8 && y >= size - 8) continue
-      const bit = ((h >>> ((x * 3 + y * 7) % 31)) ^ (x * 17 + y * 13)) & 1
-      matrix[y][x] = bit === 1
+      matrix[y][x] = Boolean(qr.modules.get(x, y))
     }
   }
   return matrix
 }
 
+/** Data-URI SVG scannable (ISO) pour impression / écran. */
 export function qrSvgDataUri(text: string, px = 120): string {
-  const size = 25
-  const m = qrMatrix(text, size)
+  const m = qrMatrix(text)
+  const size = m.length
   const cell = px / size
   let rects = ""
   for (let y = 0; y < size; y++) {
@@ -56,6 +35,23 @@ export function qrSvgDataUri(text: string, px = 120): string {
       }
     }
   }
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 ${px} ${px}" role="img" aria-label="Code de suivi">${rects}</svg>`
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 ${px} ${px}" role="img" aria-label="QR code de suivi GWA">${rects}</svg>`
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+}
+
+/** Vérifie qu’une matrice a les finders ISO (coins 7×7). */
+export function hasIsoFinderPatterns(matrix: boolean[][]): boolean {
+  const size = matrix.length
+  if (size < 21) return false
+  const checkFinder = (ox: number, oy: number) => {
+    // Coin externe noir
+    if (!matrix[oy][ox] || !matrix[oy][ox + 6] || !matrix[oy + 6][ox]) return false
+    // Centre 3×3 approximatif
+    return matrix[oy + 3][ox + 3] === true
+  }
+  return (
+    checkFinder(0, 0) &&
+    checkFinder(size - 7, 0) &&
+    checkFinder(0, size - 7)
+  )
 }

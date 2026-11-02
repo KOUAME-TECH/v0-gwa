@@ -27,7 +27,9 @@
 - Libellé visible « Conseil » / participant IA distinct des humains.
 - L’IA ne crée pas de commande ni ne déclenche GeniusPay/FeexPay.
 
-## Robustesse (à étendre itérations suivantes)
+## Robustesse
 
-- Tests unitaires préfixe / prompt.
-- Tests adversariaux (jailbreak « ignore instructions ») — backlog.
+- Tests unitaires préfixe / prompt (`tests/chat-ai-order.test.ts`).
+- Tests adversariaux jailbreak (`isAdversarialAiQuestion` / `adversarialAdviceRefusal`) — **OK**.
+- Métriques Sentry sans PII (`trackChatMetric("chat.ai.*")`).
+- L’IA ne déclenche jamais GeniusPay / FeexPay.

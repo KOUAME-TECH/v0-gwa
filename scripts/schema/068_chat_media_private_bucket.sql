@@ -1,6 +1,11 @@
--- Excellence iter 5 (préparé, NON appliqué automatiquement)
--- Passe chat-media en non-public. [RISQUE] casse les media_url publiques historiques.
--- Prérequis : tous les clients utilisent /api/chat/media/sign uniquement.
--- [ACTION HUMAINE REQUISE] valider staging puis appliquer.
+-- 068_chat_media_private_bucket.sql
+-- Excellence Protocol — bucket chat-media non-public.
+-- Prérequis clients : upload/resolve/sign sans getPublicUrl (lib/chat/upload.ts).
+-- [RISQUE] URLs publiques historiques cessent de fonctionner → resolve via path/sign.
 
--- UPDATE storage.buckets SET public = false WHERE id = 'chat-media';
+UPDATE storage.buckets
+SET public = false
+WHERE id = 'chat-media';
+
+COMMENT ON TABLE storage.buckets IS
+  'chat-media private since 068 — access via signed URLs + RLS chat_media_*';

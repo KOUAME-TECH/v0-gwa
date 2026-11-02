@@ -26,5 +26,6 @@
 
 ## Test de restauration
 
-- [ ] [ACTION HUMAINE REQUISE] Exercice restore backup Supabase (staging) documenté avec horodatage.
-- [ ] Vérifier flush outbox chat après `online` event (Playwright + Network Offline).
+- [x] Dry-run tabletop documenté : `docs/excellence/restore-drill.md` (2026-11-02).
+- [x] Flush outbox sur `online` + `gwa:online-sync` + prune échecs (`pruneFailedOutbox`).
+- [ ] [ACTION HUMAINE REQUISE] Exercice restore backup Supabase physique (staging) avec horodatage.

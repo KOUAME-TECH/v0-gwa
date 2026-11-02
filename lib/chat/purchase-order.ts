@@ -139,7 +139,7 @@ ${location || delivery ? `<p class="meta">${location ? `Lieu : ${location}` : ""
 <p class="meta">Paiement sécurisé via GWA. Ce document confirme l’accord négocié dans le chat.</p>
 <div class="verify">
   <p class="meta" style="margin:0 0 8px">Code de vérification</p>
-  <img src="${qrSvgDataUri(payUrl, 128)}" width="128" height="128" alt="Glyphe de suivi GWA"/>
+  <img src="${qrSvgDataUri(payUrl, 128)}" width="128" height="128" alt="QR code ISO de suivi et paiement GWA"/>
   <p><code>${verifyCode}</code></p>
   <p class="meta" style="margin:12px 0 0">Suivi / paiement : ${payUrl}</p>
 </div>

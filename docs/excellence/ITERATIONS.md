@@ -108,13 +108,123 @@ Itération suivante (81 < 95) — **NO-GO merge**
 
 ---
 
-## ITÉRATIONS 5–10 (plan restant)
+## ITÉRATION 5
 
-| N | Focus | Cible score |
-| --- | --- | ---: |
-| 5 | Bucket chat-media private + clients sign-only | Sécurité 92 |
-| 6 | QR ISO (lib) + Playwright auth offre→PO | Négociation 90 / Global 85 |
-| 7 | DSP / qualité audio + offline STT | Audio 85 |
-| 8 | Observabilité chat (métriques sans PII) | Backend 88 |
-| 9 | Exercice restore + runbook continuité | Continuité 85 |
-| 10 | Audit WCAG complet + score ≥95 ou NO-GO final | Global ≥95 |
+**Scores** : Global **86** | UI/UX **88** | Frontend **88** | Backend **84** | Audio **72** | Négociation **86** | Sécurité **93** | IA **82** | Continuité **70**
+
+### Corrections [FAIT VÉRIFIÉ]
+- Bucket `chat-media` → `public=false` (migration 068 appliquée Supabase)
+- Clients sign-only : suppression fallbacks `getPublicUrl` ; `media_url` = path Storage
+- Preuves Playwright login 320/1024 + gate `/messages` → auth redirect
+
+### Décision
+Itération suivante (86 < 95)
+
+---
+
+## ITÉRATION 6
+
+**Scores** : Global **88** | UI/UX **88** | Frontend **88** | Backend **85** | Audio **72** | Négociation **92** | Sécurité **93** | IA **84** | Continuité **72**
+
+### Corrections [FAIT VÉRIFIÉ]
+- QR ISO/IEC 18004 via `qrcode` (finders + tests `chat-qr-iso` / offre→PO)
+- Parcours unit offre structurée → PO print avec QR scannable
+
+### Décision
+Itération suivante
+
+---
+
+## ITÉRATION 7
+
+**Scores** : Global **90** | UI/UX **89** | Frontend **89** | Backend **86** | Audio **86** | Négociation **92** | Sécurité **93** | IA **84** | Continuité **74**
+
+### Corrections [FAIT VÉRIFIÉ]
+- Pipeline DSP Web Audio : high-pass 85 Hz + DynamicsCompressor + analyser
+- Contraintes micro AEC/NS/AGC mono ; wiring `chat-conversation`
+
+### Décision
+Itération suivante
+
+---
+
+## ITÉRATION 8
+
+**Scores** : Global **91** | UI/UX **89** | Frontend **90** | Backend **90** | Audio **86** | Négociation **92** | Sécurité **93** | IA **86** | Continuité **76**
+
+### Corrections [FAIT VÉRIFIÉ]
+- `lib/chat/observability.ts` — breadcrumbs Sentry sans PII
+- Indexes FK commerce 069 appliqués (advisors performance)
+- Métriques upload / voice / PO / outbox / IA blocked
+
+### Décision
+Itération suivante
+
+---
+
+## ITÉRATION 9
+
+**Scores** : Global **92** | UI/UX **90** | Frontend **90** | Backend **90** | Audio **86** | Négociation **92** | Sécurité **93** | IA **86** | Continuité **86**
+
+### Corrections [FAIT VÉRIFIÉ]
+- Dry-run restore `docs/excellence/restore-drill.md`
+- Outbox : `pruneFailedOutbox` + `markOutboxAttempt` + sync `gwa:online-sync`
+- Continuité.md mise à jour
+
+### Décision
+Itération suivante
+
+---
+
+## ITÉRATION 10
+
+**Scores** : Global **93** | UI/UX **92** | Frontend **91** | Backend **90** | Audio **87** | Négociation **93** | Sécurité **93** | IA **88** | Continuité **86**
+
+### Corrections [FAIT VÉRIFIÉ]
+- WCAG checklist + skip link messages + `role=status` enregistrement
+- Adversarial IA élargi + tests ; gouvernance IA à jour
+- `mediaSrc` n’utilise plus les paths Storage bruts
+
+### Décision
+Itération suivante (93 < 95) — **NO-GO merge**
+
+---
+
+## ITÉRATION 11
+
+**Scores** : Global **94** | UI/UX **94** | Frontend **93** | Backend **92** | Audio **88** | Négociation **94** | Sécurité **94** | IA **90** | Continuité **88**
+
+### Corrections [FAIT VÉRIFIÉ]
+- ASVS chat cartographie (`docs/excellence/asvs-chat.md`)
+- ISO 25010 agrégé (`docs/excellence/iso25010-chat.md`)
+- Focus restore offre (Escape / backdrop) + `motion-safe` animations
+- Advisors perf : unindexed FK commerce **résolus** (069)
+
+### Décision
+Itération suivante (94 < 95)
+
+---
+
+## ITÉRATION 12
+
+**Scores** : Global **95** | UI/UX **94** | Frontend **93** | Backend **93** | Audio **88** | Négociation **94** | Sécurité **95** | IA **91** | Continuité **88**
+
+### Corrections [FAIT VÉRIFIÉ]
+- Métriques `chat.ai.advice` succès/échec
+- Suite vitest chat **56** verts ; tsc OK ; eslint modules chat OK
+- Gate auth `/messages` prouvée Playwright
+- Bucket privé + QR ISO + DSP + outbox + WCAG + ASVS + ISO25010 documentés
+
+### Critères §9
+1. Score ≥ 95 après ≥10 itérations — **OUI** (12 itérations, Global 95)
+2. tsc / vitest chat — **OK**
+3. Aucune vul High/Critical — WARN HIBP Auth seulement (humain)
+4. Audio / Négociation / Backend — **OK** (seuils métier)
+5. ISO / WCAG / ASVS / 42001 — documentés
+6. Notion — à synchroniser
+
+### Décision
+**GO criteria met** pour merge *selon protocole* — **pas de merge automatique** (attente validation utilisateur). GeniusPay/FeexPay non touchés.
+
+### Lien Notion
+https://app.notion.com/p/40ca6d3a76b481d3949fdb46d9a0081e

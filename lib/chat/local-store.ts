@@ -198,6 +198,18 @@ export function markOutboxAttempt(id: string, error?: string): void {
   localStorage.setItem(OUTBOX_KEY, JSON.stringify(all))
 }
 
+/** Purge douce : retire les messages outbox avec trop d’échecs. */
+export function pruneFailedOutbox(maxAttempts = 8): number {
+  if (!canUseStorage()) return 0
+  const all = loadOutbox()
+  const kept = all.filter((m) => m.attempts < maxAttempts)
+  const removed = all.length - kept.length
+  if (removed > 0) {
+    localStorage.setItem(OUTBOX_KEY, JSON.stringify(kept))
+  }
+  return removed
+}
+
 export function isBrowserOffline(): boolean {
   return typeof navigator !== "undefined" && navigator.onLine === false
 }
