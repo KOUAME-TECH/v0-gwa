@@ -36,7 +36,10 @@ export async function GET() {
   })
 }
 
-export async function POST() {
+export async function POST(request: Request) {
+  const csrf = assertSameOrigin(request)
+  if (csrf) return csrf
+
   const rate = await checkRateLimit("API_CREATE")
   if (!rate.success) {
     return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })

@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { assertSameOrigin } from "@/lib/security/csrf"
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
+    const csrf = assertSameOrigin(request)
+    if (csrf) return csrf
+
     const supabase = await createClient()
     const { error } = await supabase.auth.signOut()
 
