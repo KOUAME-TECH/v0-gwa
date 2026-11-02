@@ -1,16 +1,12 @@
 import { createClient } from "@/lib/supabase/server"
 import { resolvePostAuthRedirect } from "@/lib/auth/post-auth"
+import { safeOAuthNextPath } from "@/lib/auth/oauth"
 import { NextResponse } from "next/server"
-
-function safeNextPath(next: string | null): string | null {
-  if (!next || !next.startsWith("/") || next.startsWith("//")) return null
-  return next
-}
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get("code")
-  const next = safeNextPath(searchParams.get("next"))
+  const next = safeOAuthNextPath(searchParams.get("next"))
   const error = searchParams.get("error")
   const error_description = searchParams.get("error_description")
 

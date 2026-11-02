@@ -13,6 +13,7 @@ import { PhoneInput } from "@/components/auth/phone-input"
 import { OtpInput, OtpCountdown } from "@/components/auth/otp-input"
 import { maskPhone } from "@/lib/auth/phone"
 import { HibpPasswordBanner } from "@/components/auth/hibp-password-banner"
+import { GoogleOAuthButton } from "@/components/auth/google-oauth-button"
 import { GwaMark } from "@/components/brand/gwa-mark"
 import { mergeGuestCartToUser } from "@/lib/cart/guest"
 
@@ -216,6 +217,20 @@ function LoginForm() {
             {error}
           </div>
         )}
+
+        <div className="mb-5 space-y-3">
+          <GoogleOAuthButton
+            nextPath={redirectTo}
+            onError={setError}
+          />
+          <div className="flex items-center gap-3">
+            <div className="h-px flex-1 bg-[#1F5C2E]/15" />
+            <span className="text-xs font-medium uppercase tracking-wide text-[#6B7280]">
+              ou
+            </span>
+            <div className="h-px flex-1 bg-[#1F5C2E]/15" />
+          </div>
+        </div>
 
         <Tabs
           value={authTab}

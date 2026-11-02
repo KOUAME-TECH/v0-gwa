@@ -24,6 +24,14 @@ export function mapAuthErrorMessage(raw: string | null | undefined): string {
     return "Un compte existe déjà avec cet email"
   }
 
+  if (
+    msg.includes("provider is not enabled") ||
+    msg.includes("unsupported provider") ||
+    msg.includes("validation_failed") && msg.includes("provider")
+  ) {
+    return "La connexion Google n'est pas encore activée. Réessayez plus tard ou utilisez email / téléphone."
+  }
+
   if (msg.includes("password should be at least") || msg.includes("password is too short")) {
     return "Le mot de passe doit contenir au moins 8 caractères"
   }
