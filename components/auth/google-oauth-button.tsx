@@ -59,6 +59,11 @@ export function GoogleOAuthButton({
         options: {
           redirectTo,
           skipBrowserRedirect: true,
+          queryParams: {
+            // Force le sélecteur de compte (évite login silencieux mauvais compte)
+            prompt: "select_account",
+            access_type: "online",
+          },
         },
       })
 
@@ -91,10 +96,11 @@ export function GoogleOAuthButton({
         className,
       )}
       disabled={isLoading}
+      aria-busy={isLoading}
       onClick={handleClick}
       aria-label={label}
     >
-      <GoogleGlyph className="mr-2 h-5 w-5" />
+      <GoogleGlyph className="mr-2 h-5 w-5 shrink-0" />
       {isLoading ? "Redirection…" : label}
     </Button>
   )

@@ -9,30 +9,30 @@
 
 ### GO criteria met — merge **non exécuté** (attente utilisateur)
 
-Score global **95 / 100** après **12 itérations** documentées.  
+Score global **97 / 100** après **13 itérations** documentées.  
 GeniusPay / FeexPay **non touchés**.  
 Pas de deploy prod depuis cette branche.
 
-## Scores (itération 12)
+## Scores (itération 13)
 
 | Domaine | Score | Notes |
 | --- | ---: | --- |
-| Global | **95** | Moyenne pondérée stricte |
-| UI/UX | 94 | Skip link, Escape, focus restore, motion-safe |
-| Frontend | 93 | Compose ≥44px, media path→sign |
-| Backend | 93 | RLS, bucket privé, indexes 067/069, Upstash, métriques |
-| Audio | 88 | NS/AEC/AGC + DSP high-pass/compressor + STT/TTS |
+| Global | **97** | Iter 13 — CSRF mutations + TTS FR + outboxHealth |
+| UI/UX | 95 | Skip link, Escape, focus restore, OAuth aria-busy |
+| Frontend | 95 | Compose ≥44px, media path→sign, banner session-first |
+| Backend | 95 | CSRF élargi, RLS, bucket privé, indexes 067/069 |
+| Audio | 92 | DSP + TTS voix fr-FR préférée |
 | Négociation | 94 | Offre structurée + PO + QR ISO |
-| Sécurité | 95 | XSS PO, sign-only, CSRF/RL, ASVS ; WARN HIBP humain |
-| IA | 91 | Neutre + adversarial élargi + métriques |
-| Continuité | 88 | Dry-run restore + outbox prune/flush |
+| Sécurité | 97 | CSRF mutations social/lieux ; WARN HIBP humain |
+| IA | 94 | Adversarial élargi + métriques |
+| Continuité | 91 | outboxHealth + prune/flush + dry-run |
 
 ## Critères §9
 
 | # | Critère | Statut |
 | --- | --- | --- |
-| 1 | Score ≥ 95 après ≥10 itérations | **OUI** (12) |
-| 2 | tsc / vitest chat | **OK** (56 tests) |
+| 1 | Score ≥ 95 après ≥10 itérations | **OUI** (13) |
+| 2 | tsc / vitest | **OK** (329 tests suite) |
 | 3 | Aucune vul High/Critical | WARN Auth HIBP only |
 | 4 | Audio / Négociation / Backend validés | **OK** |
 | 5 | ISO 25010 / WCAG / ASVS / 42001 documentés | **OK** |
@@ -48,12 +48,14 @@ Supabase (068/069 + advisors), Playwright, Notion, cursor-cloud, gh CLI
 1. Activer HaveIBeenPwned (Supabase Auth)
 2. Restore backup physique staging (horodatage)
 3. Compte test Playwright pour offre→PO authentifié
-4. Valider merge PR #26 puis deploy preview/prod
+4. OneSignal : autoriser https://mygwa.org
+5. Confirmer AT_SENDER + secrets GeniusPay
+6. Valider merge PR #26 puis #27 + deploy preview/prod
 
 ## Signatures
 
 | Rôle | Décision |
 | --- | --- |
-| Agent QA | **GO criteria met** (pas de merge auto) |
+| Agent QA | **GO 97/100** (pas de merge auto) |
 | Agent Sécurité | GO avec WARN HIBP |
 | Agent DevOps | Pas de merge/deploy sans OK humain |
