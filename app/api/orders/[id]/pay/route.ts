@@ -143,7 +143,7 @@ export async function POST(request: NextRequest, context: Ctx) {
     if (!allowPaymentSimulation())
       return NextResponse.json(
         {
-          error: "Paiements GeniusPay non configurés",
+          error: "Le paiement n’est pas disponible pour le moment. Réessaie plus tard.",
           code: "PAYMENT_PROVIDER_MISSING",
         },
         { status: 503 },

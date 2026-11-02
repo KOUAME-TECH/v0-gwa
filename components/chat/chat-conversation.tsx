@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { toast } from "sonner"
 import { GwaMark } from "@/components/brand/gwa-mark"
+import { useYellyOptional } from "@/components/yelly/yelly-provider"
 import { CHAT_THEME, CHAT_AFRICA_BG } from "@/lib/chat/theme"
 import {
   buildOfferContent,
@@ -16,9 +17,20 @@ import { buildLocationContent, isLocationMessage } from "@/lib/chat/location"
 import { ChatLocationBubble } from "@/components/chat/chat-location-bubble"
 import { EMOJI_CATEGORIES } from "@/lib/chat/emojis"
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
   ArrowLeft, Send, Mic, Smile, Phone, Video, MoreVertical,
   Check, CheckCheck, ImageIcon, FileText, X, Trash2, Copy, Reply,
-  Pin, BellOff, UserCircle, Flag, Paperclip, Camera, MapPin, HandCoins
+  Pin, BellOff, UserCircle, Flag, Paperclip, Camera, MapPin, HandCoins,
+  LifeBuoy,
 } from "lucide-react"
 
 interface Message {
@@ -88,7 +100,12 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
   const [liveCameraOpen, setLiveCameraOpen] = useState(false)
   const [cameraBusy, setCameraBusy] = useState(false)
   const [peerTyping, setPeerTyping] = useState(false)
+  const [pendingAccept, setPendingAccept] = useState<{
+    msg: Message
+    offer: PriceOfferPayload
+  } | null>(null)
 
+  const yelly = useYellyOptional()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastTypingSent = useRef(0)
@@ -343,6 +360,20 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     e.preventDefault()
     const text = newMessage.trim()
     if (!text || sending) return
+
+    // @IA / @Yelly : ouvre l’aide neutre sur sollicitation (ne part pas comme message)
+    if (/(^|\s)@(IA|Yelly)\b/i.test(text)) {
+      const question = text.replace(/(^|\s)@(IA|Yelly)\b/gi, " ").trim()
+      setNewMessage("")
+      yelly?.openYelly("chat_mention_ia")
+      if (question) {
+        toast.message("Conseil ouvert", {
+          description: "Pose ta question à l’aide — sans conclure à ta place.",
+        })
+      }
+      return
+    }
+
     setSending(true)
     setNewMessage("")
 
@@ -362,7 +393,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       const authUser = refreshed.session?.user
         ?? (await supabase.auth.getUser()).data.user
       if (!authUser) {
-        toast.error("Session expirée, reconnectez-vous")
+        toast.error("Session expirée, reconnecte-toi")
         setSending(false)
         return
       }
@@ -379,7 +410,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       if (error) {
         setMessages(prev => prev.filter(m => m.id !== tempId))
         setNewMessage(text)
-        toast.error(error.message || "Erreur d'envoi")
+        toast.error("Message non envoyé. Réessaie.")
       } else if (data) {
         setMessages(prev => prev.map(m => m.id === tempId ? data : m))
         // Push OneSignal + notif in-app pour le destinataire
@@ -787,6 +818,11 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     setOfferBusy(false)
   }
 
+  function requestAcceptOffer(msg: Message, offer: PriceOfferPayload) {
+    // Double confirmation explicite avant accord formalisé / commande
+    setPendingAccept({ msg, offer })
+  }
+
   async function respondToOffer(
     msg: Message,
     offer: PriceOfferPayload,
@@ -799,7 +835,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       .update({ content, is_edited: true })
       .eq("id", msg.id)
     if (error) {
-      toast.error("Mise à jour impossible")
+      toast.error("Impossible de mettre à jour l’offre. Réessaie.")
       return
     }
     setMessages((prev) =>
@@ -818,7 +854,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     })
 
     if (status === "accepted") {
-      const toastId = toast.loading("Création de la commande au prix négocié…")
+      const toastId = toast.loading("Préparation de la commande au prix convenu…")
       try {
         const res = await fetch("/api/orders/from-offer", {
           method: "POST",
@@ -828,9 +864,13 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
         const data = await res.json().catch(() => ({}))
         toast.dismiss(toastId)
         if (!res.ok) {
-          toast.error(data.error || "Offre acceptée, commande à finaliser")
+          toast.error(
+            typeof data.error === "string" && !/api|migration|sql|json/i.test(data.error)
+              ? data.error
+              : "Offre acceptée. Finalise la commande depuis ton panier ou tes commandes.",
+          )
         } else {
-          toast.success("Commande créée au prix négocié")
+          toast.success("Commande créée au prix convenu")
           if (data.redirect_to) {
             window.setTimeout(() => {
               window.location.href = data.redirect_to
@@ -839,7 +879,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
         }
       } catch {
         toast.dismiss(toastId)
-        toast.error("Erreur réseau commande")
+        toast.error("Connexion interrompue. Réessaie.")
       }
     } else {
       toast.success("Offre refusée")
@@ -894,9 +934,10 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
             <div className="flex gap-1.5 pt-1">
               <button
                 type="button"
+                aria-label={`Accepter l’offre de ${formatOfferAmount(offer.amount)} FCFA`}
                 onClick={(e) => {
                   e.stopPropagation()
-                  void respondToOffer(msg, offer, "accepted")
+                  requestAcceptOffer(msg, offer)
                 }}
                 className="flex-1 h-8 rounded-full bg-[#1F5C2E] text-white text-[12px] font-semibold active:scale-95"
               >
@@ -904,6 +945,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
               </button>
               <button
                 type="button"
+                aria-label={`Refuser l’offre de ${formatOfferAmount(offer.amount)} FCFA`}
                 onClick={(e) => {
                   e.stopPropagation()
                   void respondToOffer(msg, offer, "declined")
@@ -939,7 +981,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
     }
     if (msg.message_type === "image") {
       return msg.media_url ? (
-        <img src={msg.media_url || "/placeholder.svg"} alt="" className="rounded-lg max-w-[240px] max-h-[280px] object-cover" crossOrigin="anonymous" />
+        <img src={msg.media_url || "/placeholder.svg"} alt="Photo envoyée dans la conversation" className="rounded-lg max-w-[240px] max-h-[280px] object-cover" crossOrigin="anonymous" />
       ) : (
         <div className="flex items-center gap-2"><ImageIcon className="h-4 w-4 text-[#1F5C2E]" /><span className="text-sm">{msg.content}</span></div>
       )
@@ -982,6 +1024,17 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
           </div>
         </button>
 
+        {yelly ? (
+          <button
+            type="button"
+            onClick={() => yelly.openYelly("chat_header_conseil")}
+            className="p-2.5 rounded-full active:bg-white/20"
+            aria-label="Demander un conseil neutre"
+            title="Conseil"
+          >
+            <LifeBuoy className="h-5 w-5" />
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={() => void callOther("audio")}
@@ -1039,6 +1092,10 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
       {/* MESSAGES AREA — fond terre / motif wax Afrique */}
       <div
         className="flex-1 overflow-y-auto overscroll-contain px-3 py-3"
+        role="log"
+        aria-live="polite"
+        aria-relevant="additions"
+        aria-label="Messages de la conversation"
         style={{
           backgroundColor: CHAT_AFRICA_BG.color,
           backgroundImage: CHAT_AFRICA_BG.image,
@@ -1263,7 +1320,7 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
               <h3 className="text-lg font-semibold text-[#111]">Proposer un prix</h3>
             </div>
             <p className="text-sm text-[#667781] mb-4">
-              Proposez un prix. S&apos;il accepte, la commande part toute seule.
+              Propose un prix. Si l’autre confirme, une commande est créée au montant convenu.
             </p>
             {offerProducts.length > 0 && (
               <>
@@ -1334,7 +1391,8 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
                   setNewMessage(e.target.value)
                   signalTyping()
                 }}
-                placeholder="Message"
+                placeholder="Message ou @IA pour un conseil"
+                aria-label="Écrire un message. Tape @IA pour un conseil neutre."
                 className="flex-1 bg-transparent border-0 text-[15px] h-[48px] focus:outline-none placeholder:text-[#8696a0] px-1"
                 enterKeyHint="send"
                 autoComplete="off"
@@ -1462,6 +1520,38 @@ export function ChatConversation({ conversation, userId, onBack }: ChatConversat
           </div>
         </div>
       )}
+
+      <AlertDialog
+        open={!!pendingAccept}
+        onOpenChange={(open) => {
+          if (!open) setPendingAccept(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmer l’accord ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingAccept
+                ? `Tu acceptes ${formatOfferAmount(pendingAccept.offer.amount)} FCFA. Une commande sera créée à ce prix. Confirme seulement si tu es d’accord.`
+                : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-[#1F5C2E] text-white hover:bg-[#184a25]"
+              onClick={() => {
+                if (!pendingAccept) return
+                const { msg, offer } = pendingAccept
+                setPendingAccept(null)
+                void respondToOffer(msg, offer, "accepted")
+              }}
+            >
+              Oui, j’accepte
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

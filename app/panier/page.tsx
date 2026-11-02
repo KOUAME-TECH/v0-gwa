@@ -44,7 +44,7 @@ interface CartItem {
 }
 
 const paymentMethods = [
-  { id: "geniuspay", name: "GeniusPay — choisir le moyen de paiement au checkout", icon: Smartphone, color: "text-[#1F5C2E]" },
+  { id: "geniuspay", name: "Payer (Mobile Money ou carte)", icon: Smartphone, color: "text-[#1F5C2E]" },
 ]
 
 export default function CartPage() {
@@ -322,10 +322,13 @@ export default function CartPage() {
       router.push(`/commandes/confirmation?order=${createdOrderIds[0]}`)
     } catch (err) {
       console.log("[v0] Checkout error:", err)
+      const raw =
+        err instanceof Error && err.message ? err.message : ""
+      // Masquer le jargon technique / noms fournisseurs côté UI
       const msg =
-        err instanceof Error && err.message
-          ? err.message
-          : "Une erreur est survenue lors de la commande. Réessayez."
+        /geniuspay|checkout|provider|migration|webhook|api/i.test(raw)
+          ? "Le paiement n’a pas pu démarrer. Réessaie dans un instant ou choisis un autre moment."
+          : raw || "Une erreur est survenue lors de la commande. Réessaie."
       setCheckoutError(msg)
       setIsProcessing(false)
     }
@@ -584,7 +587,7 @@ export default function CartPage() {
         <div className="mx-auto max-w-3xl space-y-3 p-4">
           <EscrowStepper payment_status="pending" escrow_status="pending" status="pending" />
           <p className="text-sm text-[#4B5563]">
-            Le checkout GeniusPay te permet de choisir ton moyen de paiement. Le paiement sera confirmé côté serveur.
+            Tu choisis ton moyen de paiement sur l’écran suivant. Ton argent reste protégé jusqu’à confirmation de réception.
           </p>
           <div className="rounded-2xl border border-[#1F5C2E]/10 bg-white p-4 space-y-2 text-sm">
             <div className="flex justify-between">
@@ -610,7 +613,7 @@ export default function CartPage() {
                 <Label htmlFor={method.id} className="flex-1 cursor-pointer font-medium">
                   {method.name}
                 </Label>
-                <Badge variant="outline" className="text-[10px]">Checkout sécurisé</Badge>
+                <Badge variant="outline" className="text-[10px]">Paiement protégé</Badge>
               </div>
             ))}
           </RadioGroup>

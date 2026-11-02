@@ -242,7 +242,7 @@ function ConfirmationContent() {
                   ? "Le paiement n’a pas abouti. Tu peux réessayer depuis tes commandes."
                   : paymentUnavailable
                     ? "Commande créée, mais le paiement n’a pas pu démarrer. Consulte tes commandes avant de réessayer."
-                    : "Le retour du checkout ne confirme pas le paiement. Le statut est vérifié auprès de GeniusPay côté serveur."}
+                    : "Le paiement est encore en cours de confirmation. Tu peux actualiser le statut ci-dessous."}
             </p>
             {order.payment_method === "geniuspay" &&
               order.payment_status !== "paid" &&
