@@ -6,7 +6,7 @@
  * Fonction pure et testable, réutilisée par le composant de conversation.
  */
 
-export type MessageType = "text" | "image" | "voice" | "file" | "offer"
+export type MessageType = "text" | "image" | "voice" | "file" | "offer" | "location"
 
 export interface BuildMessageInput {
   conversationId: string
@@ -56,7 +56,15 @@ export function buildMessagePayload(input: BuildMessageInput): MessagePayload {
       throw new InvalidMessageError("offre invalide")
     }
   }
-  if (type !== "text" && type !== "offer" && !input.mediaUrl) {
+  if (type === "location" && !content) {
+    throw new InvalidMessageError("position manquante")
+  }
+  if (
+    type !== "text" &&
+    type !== "offer" &&
+    type !== "location" &&
+    !input.mediaUrl
+  ) {
     throw new InvalidMessageError("média manquant")
   }
 
@@ -66,7 +74,9 @@ export function buildMessagePayload(input: BuildMessageInput): MessagePayload {
     content,
     message_type: type,
   }
-  if (type !== "text" && type !== "offer") payload.media_url = input.mediaUrl ?? null
+  if (type !== "text" && type !== "offer" && type !== "location") {
+    payload.media_url = input.mediaUrl ?? null
+  }
   if (input.replyToId) payload.reply_to_id = input.replyToId
   return payload
 }

@@ -6,6 +6,7 @@ import { Plus } from "lucide-react"
 import { GwaMark } from "@/components/brand/gwa-mark"
 import { YellyAideButton } from "@/components/yelly/yelly-aide-button"
 import { useHideOnScroll } from "@/hooks/use-hide-on-scroll"
+import { useNavBadges } from "@/hooks/use-nav-badges"
 import { shouldShowDesktopNav } from "@/lib/navigation/shell-routes"
 import { cn } from "@/lib/utils"
 
@@ -41,6 +42,7 @@ export function Navigation() {
   const pathname = usePathname() || "/"
   const visible = shouldShowDesktopNav(pathname)
   const scrollHidden = useHideOnScroll(visible)
+  const { unreadMessages } = useNavBadges({ enabled: visible })
 
   if (!visible) return null
 
@@ -63,20 +65,31 @@ export function Navigation() {
         <nav className="flex flex-1 items-stretch justify-center gap-1">
           {LINKS.map(({ href, label, match }) => {
             const active = match(pathname)
+            const showMsgBadge = href === "/messages" && unreadMessages > 0
             return (
               <Link
                 key={href}
                 href={href}
                 tabIndex={scrollHidden ? -1 : undefined}
                 className={cn(
-                  "relative flex items-center px-3 text-[0.95rem] transition-colors",
+                  "relative flex items-center gap-1.5 px-3 text-[0.95rem] transition-colors",
                   active
                     ? "font-semibold text-[#1F5C2E]"
                     : "font-medium text-[#4B5563] hover:text-[#111827]",
                 )}
                 aria-current={active ? "page" : undefined}
+                aria-label={
+                  showMsgBadge
+                    ? `Messages, ${unreadMessages} non lus`
+                    : undefined
+                }
               >
                 {label}
+                {showMsgBadge ? (
+                  <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#1DA1F2] text-white text-[10px] font-bold flex items-center justify-center">
+                    {unreadMessages > 99 ? "99+" : unreadMessages}
+                  </span>
+                ) : null}
                 {active ? (
                   <span
                     aria-hidden

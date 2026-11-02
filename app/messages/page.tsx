@@ -153,12 +153,11 @@ function MessagesContent() {
     const channel = supabase
       .channel(`inbox:${user.id}`)
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `recipient_id=eq.${user.id}`,
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
         },
         (payload) => {
           const newMsg = payload.new as {
@@ -167,23 +166,34 @@ function MessagesContent() {
             sender_id: string
             content: string
             created_at: string
-            status: string
+            message_type?: string
           }
 
-          // Mettre à jour le badge non-lu sur la bonne conversation
-          setConversations((prev) =>
-            prev.map((conv) =>
+          // Uniquement messages reçus (pas les siens) dans une conv connue
+          if (newMsg.sender_id === user.id) return
+
+          setConversations((prev) => {
+            const known = prev.some((c) => c.id === newMsg.conversation_id)
+            if (!known) return prev
+            return prev.map((conv) =>
               conv.id === newMsg.conversation_id
-                ? { ...conv, unread_count: (conv.unread_count ?? 0) + 1, last_message: newMsg.content }
-                : conv
+                ? {
+                    ...conv,
+                    unread_count: (conv.unread_count ?? 0) + 1,
+                    last_message: newMsg.content,
+                    last_message_type: newMsg.message_type,
+                    last_message_sender_id: newMsg.sender_id,
+                    last_message_is_read: false,
+                    last_message_at: newMsg.created_at,
+                  }
+                : conv,
             )
-          )
+          })
 
-          // Son de notification si pas dans cette conversation
           if (!selectedConv || selectedConv.id !== newMsg.conversation_id) {
-            new Audio('/sounds/message.mp3').play().catch(() => null)
+            new Audio("/sounds/message.mp3").play().catch(() => null)
           }
-        }
+        },
       )
       .subscribe()
 

@@ -179,6 +179,12 @@ export const RATE_LIMITS = {
   },
   KYC_UPLOAD: { maxRequests: 5, windowMs: 60 * 60 * 1000 },
   MESSAGE_SEND: { maxRequests: 60, windowMs: 60 * 1000 },
+  /** Upload chat (photo / doc / vocal) — anti-abus Storage */
+  CHAT_UPLOAD: {
+    maxRequests: 30,
+    windowMs: 60 * 1000,
+    blockDurationMs: 2 * 60 * 1000,
+  },
   /** Yelly assistant — anti-abus coût LLM */
   YELLY_CHAT: {
     maxRequests: 20,

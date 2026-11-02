@@ -3,7 +3,7 @@
  */
 
 export const YELLY_NAME = "Yelly"
-export const YELLY_TAGLINE = "Aide GWA"
+export const YELLY_TAGLINE = "Conseil de l’IA — Neutre"
 
 export const YELLY_SYSTEM_PROMPT = `Tu es Yelly, assistante GWA sur mobile.
 
