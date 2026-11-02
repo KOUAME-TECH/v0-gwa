@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
+import { assertSameOrigin } from "@/lib/security/csrf"
 import { isAgriculturalProductType } from "@/lib/catalog/scope"
 
 type Ctx = { params: Promise<{ id: string }> }
@@ -38,6 +39,9 @@ export async function GET(_request: NextRequest, context: Ctx) {
 
 export async function PATCH(request: NextRequest, context: Ctx) {
   try {
+    const csrf = assertSameOrigin(request)
+    if (csrf) return csrf
+
     const rate = await checkRateLimit("API_CREATE")
     if (!rate.success) {
       return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })
@@ -123,8 +127,16 @@ export async function PATCH(request: NextRequest, context: Ctx) {
   }
 }
 
-export async function DELETE(_request: NextRequest, context: Ctx) {
+export async function DELETE(request: NextRequest, context: Ctx) {
   try {
+    const csrf = assertSameOrigin(request)
+    if (csrf) return csrf
+
+    const rate = await checkRateLimit("API_CREATE")
+    if (!rate.success) {
+      return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })
+    }
+
     const { id } = await context.params
     const supabase = await createClient()
     const {

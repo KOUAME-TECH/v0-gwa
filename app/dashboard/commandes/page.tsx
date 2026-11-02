@@ -98,6 +98,7 @@ export default function OrdersPage() {
   const [loadingAudit, setLoadingAudit] = useState(false)
   const [user, setUser] = useState<any>(null)
   const [litigeOrderId, setLitigeOrderId] = useState<string | null>(null)
+  const [defaultTab, setDefaultTab] = useState("achats")
   
   const supabase = createClient()
 
@@ -113,6 +114,12 @@ export default function OrdersPage() {
       setLoading(false)
       return
     }
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("user_type")
+      .eq("id", user.id)
+      .maybeSingle()
 
     // Load orders as buyer
     const { data: buyerOrders } = await supabase
@@ -153,6 +160,27 @@ export default function OrdersPage() {
     )
 
     setOrders(uniqueOrders)
+
+    // Producteur / vendeur : onglet ventes par défaut
+    const sellerCount = (sellerOrders || []).length
+    const buyerCount = (buyerOrders || []).length
+    const sellerTypes = new Set([
+      "farmer",
+      "producteur",
+      "cooperative",
+      "processor",
+      "transformateur",
+      "artisan",
+    ])
+    if (
+      sellerTypes.has(String(profile?.user_type || "")) ||
+      sellerCount > buyerCount
+    ) {
+      setDefaultTab("ventes")
+    } else {
+      setDefaultTab("achats")
+    }
+
     setLoading(false)
   }
 
@@ -286,7 +314,7 @@ export default function OrdersPage() {
             Connecte-toi pour suivre ce que tu as acheté ou vendu.
           </p>
           <Button asChild className="mt-6 rounded-xl bg-[#1F5C2E] hover:bg-[#184a25]">
-            <Link href="/auth/login">Se connecter</Link>
+            <Link href="/auth/login?redirect=/dashboard/commandes">Se connecter</Link>
           </Button>
         </main>
       </div>
@@ -375,7 +403,7 @@ export default function OrdersPage() {
           </Button>
         </div>
 
-        <Tabs defaultValue="achats">
+        <Tabs key={defaultTab} defaultValue={defaultTab}>
           <TabsList className="bg-white/80 border border-[#E5E7EB] rounded-xl h-auto flex-wrap p-1">
             <TabsTrigger value="achats" className="rounded-lg">
               Mes achats ({orders.filter((o) => o.seller_id !== user?.id).length})
@@ -436,9 +464,12 @@ export default function OrdersPage() {
                   />
                 ))}
               {filteredOrders.filter((o) => o.seller_id === user?.id).length === 0 ? (
-                <p className="text-center text-sm text-[#6B7280] py-10">
-                  Aucune vente pour l’instant.
-                </p>
+                <div className="rounded-2xl border border-dashed border-[#1F5C2E]/20 bg-white/60 px-6 py-10 text-center">
+                  <p className="text-sm text-[#6B7280]">Aucune vente pour l’instant.</p>
+                  <Button asChild className="mt-4 rounded-xl bg-[#1F5C2E] hover:bg-[#184a25]">
+                    <Link href="/publier">Publier une annonce</Link>
+                  </Button>
+                </div>
               ) : null}
             </div>
           </TabsContent>

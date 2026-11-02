@@ -40,6 +40,11 @@ import { filterBetaCategories } from "@/lib/catalog/categories"
 import { saveOfflineDraft, loadOfflineDraft, clearOfflineDraft } from "@/lib/offline/drafts"
 import { enqueuePublish, listPublishQueue } from "@/lib/offline/publish-queue"
 import { flushPublishQueue } from "@/lib/offline/sync"
+import {
+  createVoiceDspPipeline,
+  voiceCaptureConstraints,
+  type VoiceDspHandles,
+} from "@/lib/chat/audio-dsp"
 
 type PublishType = "product" | "post" | null
 
@@ -81,6 +86,7 @@ export default function PublierPage() {
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const recordedChunksRef = useRef<Blob[]>([])
+  const voiceDspRef = useRef<VoiceDspHandles | null>(null)
 
   const [productForm, setProductForm] = useState({
     name: "",
@@ -229,14 +235,20 @@ export default function PublierPage() {
       return
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      voiceDspRef.current?.stop()
+      voiceDspRef.current = null
+      const rawStream = await navigator.mediaDevices.getUserMedia(
+        voiceCaptureConstraints(),
+      )
+      const dsp = await createVoiceDspPipeline(rawStream)
+      voiceDspRef.current = dsp
       const mimeType = MediaRecorder.isTypeSupported("audio/webm")
         ? "audio/webm"
         : MediaRecorder.isTypeSupported("audio/mp4")
           ? "audio/mp4"
           : ""
       const recorder = new MediaRecorder(
-        stream,
+        dsp.processedStream,
         mimeType ? { mimeType } : undefined,
       )
       recordedChunksRef.current = []
@@ -250,12 +262,15 @@ export default function PublierPage() {
         const file = new File([blob], `note-vocale-${Date.now()}.${ext}`, { type })
         if (audio) URL.revokeObjectURL(audio.url)
         setAudio({ file, url: URL.createObjectURL(file) })
-        stream.getTracks().forEach((t) => t.stop())
+        voiceDspRef.current?.stop()
+        voiceDspRef.current = null
       }
       mediaRecorderRef.current = recorder
       recorder.start()
       setIsRecording(true)
     } catch {
+      voiceDspRef.current?.stop()
+      voiceDspRef.current = null
       toast.error("Micro indisponible. Vous pouvez importer un fichier audio.")
       audioInputRef.current?.click()
     }
@@ -362,7 +377,7 @@ export default function PublierPage() {
         await clearOfflineDraft(user.id, "product")
         setPendingQueue((n) => n + 1)
         toast.success("Produit mis en file — sync automatique à la reconnexion")
-        router.push("/profil")
+        router.push("/dashboard/farmer")
       } catch (err: unknown) {
         toast.error(err instanceof Error ? err.message : "Erreur file offline")
       } finally {
@@ -434,7 +449,7 @@ export default function PublierPage() {
                 if (!res2.ok) throw new Error(p2.error || "Erreur publication")
                 toast.success("Produit publié avec succès !")
                 if (user) await clearOfflineDraft(user.id, "product")
-                router.push("/profil")
+                router.push("/dashboard/farmer")
               } catch (err: unknown) {
                 toast.error(err instanceof Error ? err.message : "Erreur")
               } finally {
@@ -455,7 +470,7 @@ export default function PublierPage() {
 
       toast.success("Produit publié avec succès !")
       if (user) await clearOfflineDraft(user.id, "product")
-      router.push("/profil")
+      router.push("/dashboard/farmer")
     } catch (error: any) {
       console.error("Error:", error)
       // File de secours si réseau tombe en cours d’envoi (texte seul)
@@ -682,17 +697,21 @@ export default function PublierPage() {
       </button>
       {isRecording ? (
         <button
+          type="button"
           onClick={stopRecording}
-          className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-red-600 bg-red-50 animate-pulse"
+          aria-label="Arrêter l'enregistrement vocal"
+          className="flex min-h-11 items-center gap-1.5 px-2.5 py-2 rounded-lg text-red-600 bg-red-50 animate-pulse"
         >
           <Square className="h-5 w-5 fill-current" />
           <span className="text-xs font-medium">Stop</span>
         </button>
       ) : (
         <button
+          type="button"
           onClick={startRecording}
           disabled={!!audio}
-          className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-[#F39A1F] disabled:opacity-40 active:bg-[#F39A1F]/5"
+          aria-label="Enregistrer une note vocale"
+          className="flex min-h-11 items-center gap-1.5 px-2.5 py-2 rounded-lg text-[#F39A1F] disabled:opacity-40 active:bg-[#F39A1F]/5"
         >
           <Mic className="h-5 w-5" />
           <span className="text-xs font-medium">Vocal</span>

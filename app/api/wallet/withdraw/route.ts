@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { requireUser } from "@/lib/auth/require-admin"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
+import { assertSameOrigin } from "@/lib/security/csrf"
 import { mapPaymentMethodToNetwork } from "@/lib/payment/networks"
 
 /**
@@ -38,6 +39,9 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    const csrf = assertSameOrigin(request)
+    if (csrf) return csrf
+
     const rate = await checkRateLimit("PAYMENT")
     if (!rate.success) {
       return NextResponse.json({ error: "Trop de tentatives" }, { status: 429 })

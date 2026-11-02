@@ -26,6 +26,7 @@ import {
   ShieldCheck,
   Crown,
   LayoutDashboard,
+  Wallet,
 } from "lucide-react"
 import { shouldShowVerifiedBadge } from "@/lib/verification/badge"
 import { dashboardPathForUserType, isSellerRole } from "@/lib/dashboard/routing"
@@ -240,6 +241,8 @@ export default function ProfilPage() {
           href: "/dashboard/commandes",
           count: stats.orders,
         },
+        { icon: Wallet, label: "Portefeuille", href: "/wallet" },
+        { icon: BadgeCheck, label: "Vérification d'identité", href: "/profil/verification" },
         { icon: Crown, label: "Abonnement", href: "/abonnement" },
       ]
     }
@@ -259,6 +262,8 @@ export default function ProfilPage() {
           href: "/dashboard/commandes",
           count: stats.orders,
         },
+        { icon: Wallet, label: "Portefeuille", href: "/wallet" },
+        { icon: BadgeCheck, label: "Vérification d'identité", href: "/profil/verification" },
         { icon: Crown, label: "Abonnement", href: "/abonnement" },
         { icon: Star, label: "Mes avis", href: "/dashboard/reviews" },
       ]

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { assertSameOrigin } from "@/lib/security/csrf"
+import { checkRateLimit } from "@/lib/security/rate-limiter"
 
 /**
  * POST /api/auth/verification-request
@@ -8,6 +10,17 @@ import { createAdminClient } from "@/lib/supabase/admin"
  */
 export async function POST(request: Request) {
   try {
+    const csrf = assertSameOrigin(request)
+    if (csrf) return csrf
+
+    const rate = await checkRateLimit("KYC_UPLOAD")
+    if (!rate.success) {
+      return NextResponse.json(
+        { error: "Trop de demandes de vérification. Réessaie plus tard." },
+        { status: 429 },
+      )
+    }
+
     const supabase = await createClient()
     const {
       data: { user },

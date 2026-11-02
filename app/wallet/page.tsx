@@ -21,6 +21,7 @@ import {
 import { formatDistanceToNow } from "date-fns"
 import { fr } from "date-fns/locale"
 import { isSellerRole } from "@/lib/dashboard/routing"
+import { trackFarmerEvent } from "@/lib/farmer/observability"
 import Link from "next/link"
 
 interface Transaction {
@@ -91,16 +92,21 @@ export default function WalletPage() {
     // Calculate wallet balance from completed orders (seller)
     const { data: completedOrders } = await supabase
       .from('orders')
-      .select('total_amount, service_fee, vendeur_recoit_fcfa, commission_fcfa')
+      .select(
+        'id, total_amount, service_fee, vendeur_recoit_fcfa, commission_fcfa, created_at, updated_at, escrow_status',
+      )
       .eq('seller_id', user.id)
-      .eq('status', 'delivered')
       .eq('payment_status', 'paid')
+      .or('status.eq.delivered,escrow_status.eq.released')
 
     type OrderMoney = {
+      id?: string
       total_amount?: number | null
       service_fee?: number | null
       vendeur_recoit_fcfa?: number | null
       commission_fcfa?: number | null
+      created_at?: string | null
+      updated_at?: string | null
     }
 
     const sellerNet = (order: OrderMoney) => {
@@ -116,18 +122,30 @@ export default function WalletPage() {
         return sum + sellerNet(order)
       }, 0) || 0
 
-    // Calculate pending balance (orders not yet delivered)
+    // Calculate pending balance (orders paid but not yet released to seller)
     const { data: pendingOrders } = await supabase
-      .from('orders')
-      .select('total_amount, service_fee, vendeur_recoit_fcfa, commission_fcfa')
-      .eq('seller_id', user.id)
-      .in('status', ['confirmed', 'preparing', 'shipping'])
-      .eq('payment_status', 'paid')
+      .from("orders")
+      .select(
+        "total_amount, service_fee, vendeur_recoit_fcfa, commission_fcfa, status, escrow_status",
+      )
+      .eq("seller_id", user.id)
+      .eq("payment_status", "paid")
+      .in("status", [
+        "confirmed",
+        "processing",
+        "preparing",
+        "shipping",
+        "shipped",
+      ])
 
     const pendingBalance =
-      (pendingOrders as OrderMoney[] | null)?.reduce((sum: number, order: OrderMoney) => {
-        return sum + sellerNet(order)
-      }, 0) || 0
+      (
+        pendingOrders as
+          | (OrderMoney & { escrow_status?: string | null })[]
+          | null
+      )
+        ?.filter((o) => o.escrow_status !== "released")
+        .reduce((sum, order) => sum + sellerNet(order), 0) || 0
 
     let totalWithdrawn = 0
     const withdrawTxns: Transaction[] = []
@@ -172,17 +190,21 @@ export default function WalletPage() {
     })
 
     const creditTxns: Transaction[] =
-      (completedOrders as OrderMoney[] | null)?.map((order: OrderMoney, i: number) => ({
-      id: `credit-${i}`,
-      type: 'credit' as const,
-      amount: sellerNet(order),
-      status: 'completed' as const,
-      description: 'Vente livrée',
-      reference: null,
-      created_at: new Date(Date.now() - i * 86400000).toISOString()
-    })) || []
+      (completedOrders as OrderMoney[] | null)?.map((order: OrderMoney) => ({
+        id: order.id || `credit-${order.created_at}`,
+        type: "credit" as const,
+        amount: sellerNet(order),
+        status: "completed" as const,
+        description: "Vente livrée",
+        reference: null,
+        created_at: order.updated_at || order.created_at || new Date().toISOString(),
+      })) || []
 
-    setTransactions([...withdrawTxns, ...creditTxns])
+    setTransactions(
+      [...withdrawTxns, ...creditTxns].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+      ),
+    )
     setLoading(false)
   }
 
@@ -201,7 +223,7 @@ export default function WalletPage() {
     }
 
     if (amount < 1000) {
-      setError("Le montant minimum de retrait est de 1,000 FCFA")
+      setError("Le montant minimum de retrait est de 1 000 FCFA")
       return
     }
 
@@ -220,7 +242,7 @@ export default function WalletPage() {
         body: JSON.stringify({
           amount_fcfa: amount,
           phone: withdrawPhone,
-          network: "orange",
+          network: withdrawMethod,
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -231,6 +253,10 @@ export default function WalletPage() {
       }
       setShowWithdrawDialog(false)
       setWithdrawAmount("")
+      trackFarmerEvent("farmer.wallet.withdraw_request", {
+        amount_bucket: amount >= 50000 ? "high" : amount >= 10000 ? "mid" : "low",
+        network: withdrawMethod,
+      })
       await loadWalletData()
       if (data.status === "paid") {
         // ok
@@ -312,10 +338,21 @@ export default function WalletPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      
-      <main className="container mx-auto px-4 py-8">
+    <div className="min-h-screen bg-background pb-24">
+      <a
+        href="#wallet-main"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50 focus:rounded-lg focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:ring-2 focus:ring-[#1F5C2E]"
+      >
+        Aller au portefeuille
+      </a>
+      <main id="wallet-main" className="container mx-auto px-4 py-8">
         <div className="mb-8">
+          <Link
+            href="/dashboard/farmer"
+            className="mb-3 inline-flex min-h-11 items-center text-sm font-medium text-[#1F5C2E]"
+          >
+            ← Espace producteur
+          </Link>
           <h1 className="text-3xl font-bold mb-2">Mon Portefeuille</h1>
           <p className="text-muted-foreground">
             Gérez vos revenus et effectuez des retraits vers Mobile Money
