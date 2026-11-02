@@ -10,13 +10,28 @@ import {
 import {
   generateOtpCode,
   storeOtp,
+  clearOtp,
   canSendOtp,
+  releaseSendOtp,
   isOtpStoreReady,
 } from "@/lib/auth/otp-store"
 import {
   hasSmsProvider,
   sendSmsOtp,
 } from "@/lib/auth/sms"
+
+/** Mappe erreurs provider → code ops (jamais de secret / raw AT). */
+function mapSmsFailureCode(error?: string): string {
+  const msg = (error || "").toLowerCase()
+  if (msg.includes("sandbox") || msg.includes("at_username")) return "AT_SANDBOX"
+  if (msg.includes("balance") || msg.includes("credit") || msg.includes("insufficient"))
+    return "SMS_CREDITS"
+  if (msg.includes("sender") || msg.includes("from")) return "AT_SENDER"
+  if (msg.includes("invalid") && msg.includes("number")) return "SMS_INVALID_NUMBER"
+  if (msg.includes("non configuré") || msg.includes("aucun fournisseur"))
+    return "SMS_UNCONFIGURED"
+  return "SMS_PROVIDER_REJECTED"
+}
 
 /**
  * POST /api/auth/send-otp
@@ -183,12 +198,25 @@ export async function POST(request: Request) {
 
     const sms = await sendSmsOtp(formatted, code)
     if (!sms.success) {
-      console.error("[auth/send-otp] SMS provider rejected OTP", sms.provider || "unknown")
+      // Rollback : ne pas laisser un OTP ni un cooldown si le SMS n'est pas parti.
+      try {
+        await clearOtp(formatted)
+        await releaseSendOtp(formatted)
+      } catch (rollbackErr) {
+        console.error("[auth/send-otp] rollback after SMS failure", rollbackErr)
+      }
+      const failureCode = mapSmsFailureCode(sms.error)
+      console.error(
+        "[auth/send-otp] SMS provider rejected OTP",
+        sms.provider || "unknown",
+        failureCode,
+      )
       return NextResponse.json(
         {
           error:
             "Impossible d'envoyer le SMS pour le moment. Réessayez plus tard.",
-          code: "SMS_UNAVAILABLE",
+          code: failureCode,
+          provider: sms.provider || null,
         },
         { status: 502 },
       )

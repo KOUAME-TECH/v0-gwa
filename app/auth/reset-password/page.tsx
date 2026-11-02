@@ -20,13 +20,34 @@ function ResetPasswordForm() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    const supabase = createClient()
+    let cancelled = false
+
     const checkSession = async () => {
-      const supabase = createClient()
+      // Écoute recovery (lien email) + session déjà échangée via /auth/callback
       const { data: { user } } = await supabase.auth.getUser()
-      setHasSession(!!user)
-      setCheckingSession(false)
+      if (!cancelled) {
+        setHasSession(!!user)
+        setCheckingSession(false)
+      }
     }
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (event === "PASSWORD_RECOVERY" || event === "SIGNED_IN") {
+          if (!cancelled) {
+            setHasSession(!!session?.user)
+            setCheckingSession(false)
+          }
+        }
+      },
+    )
+
     checkSession()
+    return () => {
+      cancelled = true
+      subscription.unsubscribe()
+    }
   }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -144,6 +165,7 @@ function ResetPasswordForm() {
                 type="button"
                 className="absolute right-4 top-1/2 -translate-y-1/2 p-1 active:opacity-60"
                 onClick={() => setShowPassword(!showPassword)}
+                aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
               >
                 {showPassword ? (
                   <EyeOff className="h-5 w-5 text-neutral-400" />

@@ -5,7 +5,6 @@ import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { createClient } from "@/lib/supabase/client"
 
 function ForgotPasswordForm() {
   const [email, setEmail] = useState("")
@@ -19,14 +18,18 @@ function ForgotPasswordForm() {
     setError(null)
 
     try {
-      const supabase = createClient()
-      const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent("/auth/reset-password")}`
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo,
+      const res = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
       })
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string
+        success?: boolean
+      }
 
-      if (resetError) {
-        setError(resetError.message)
+      if (!res.ok) {
+        setError(data.error || "Envoi impossible. Réessayez.")
         setIsLoading(false)
         return
       }
