@@ -2,9 +2,9 @@ import { describe, expect, it, beforeEach } from "vitest"
 import {
   addGuestCartItem,
   clearGuestCart,
-  guestCartProductCount,
   loadGuestCart,
-  saveGuestCart,
+  removeGuestCartItem,
+  setGuestCartQuantity,
 } from "@/lib/cart/guest"
 
 const store = new Map<string, string>()
@@ -27,21 +27,17 @@ beforeEach(() => {
 })
 
 describe("guest cart", () => {
-  it("adds and increments lines", () => {
-    addGuestCartItem("p1", 1)
+  it("ajoute et incrémente une ligne", () => {
     addGuestCartItem("p1", 2)
-    addGuestCartItem("p2", 1)
-    expect(loadGuestCart()).toEqual([
-      { productId: "p1", quantity: 3 },
-      { productId: "p2", quantity: 1 },
-    ])
-    expect(guestCartProductCount()).toBe(2)
+    addGuestCartItem("p1", 1)
+    expect(loadGuestCart()).toEqual([{ productId: "p1", quantity: 3 }])
   })
 
-  it("saves and clears", () => {
-    saveGuestCart([{ productId: "a", quantity: 1 }])
-    expect(guestCartProductCount()).toBe(1)
-    clearGuestCart()
-    expect(guestCartProductCount()).toBe(0)
+  it("fixe la quantité et retire une ligne", () => {
+    addGuestCartItem("a", 1)
+    addGuestCartItem("b", 2)
+    setGuestCartQuantity("a", 5)
+    removeGuestCartItem("b")
+    expect(loadGuestCart()).toEqual([{ productId: "a", quantity: 5 }])
   })
 })

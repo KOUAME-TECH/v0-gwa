@@ -32,6 +32,9 @@ function MessagesContent() {
   const searchParams = useSearchParams()
   const recipientId = searchParams.get("to")
   const convType = searchParams.get("type")
+  const offerProductId = searchParams.get("product")
+  const autoOpenOffer =
+    searchParams.get("offer") === "1" || searchParams.get("negociate") === "1"
 
   const [user, setUser] = useState<{ id: string } | null>(null)
   const [userType, setUserType] = useState<string | null>(null)
@@ -295,6 +298,8 @@ function MessagesContent() {
             conversation={selectedConv}
             userId={user.id}
             viewerUserType={userType}
+            autoOpenOffer={autoOpenOffer}
+            initialOfferProductId={offerProductId}
             onBack={async () => {
               setSelectedConv(null)
               if (user) {

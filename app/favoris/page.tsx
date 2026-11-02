@@ -45,7 +45,7 @@ export default function FavorisPage() {
     async function loadFavorites() {
       const { data: { user: currentUser } } = await supabase.auth.getUser()
       if (!currentUser) {
-        router.push("/auth/login")
+        router.push("/auth/login?redirect=/favoris")
         return
       }
       setUser(currentUser)

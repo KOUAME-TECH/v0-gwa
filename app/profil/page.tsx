@@ -27,6 +27,8 @@ import {
   Crown,
   LayoutDashboard,
   Wallet,
+  Store,
+  Search,
 } from "lucide-react"
 import { shouldShowVerifiedBadge } from "@/lib/verification/badge"
 import { dashboardPathForUserType, isSellerRole } from "@/lib/dashboard/routing"
@@ -283,6 +285,8 @@ export default function ProfilPage() {
         href: "/favoris",
         count: stats.favorites,
       },
+      { icon: Store, label: "Marketplace", href: "/marketplace" },
+      { icon: Search, label: "Rechercher", href: "/recherche" },
     ]
   }
 

@@ -121,6 +121,10 @@ interface ChatConversationProps {
   /** Type profil du viewer (acheteur / producteur…) pour bulles rôle */
   viewerUserType?: string | null
   onBack: () => void
+  /** Ouvre la feuille d’offre après chargement (ex. CTA Négocier fiche produit) */
+  autoOpenOffer?: boolean
+  /** Pré-sélectionne ce produit dans l’offre */
+  initialOfferProductId?: string | null
 }
 
 const userTypeLabels: Record<string, string> = {
@@ -134,6 +138,8 @@ export function ChatConversation({
   userId,
   viewerUserType = null,
   onBack,
+  autoOpenOffer = false,
+  initialOfferProductId = null,
 }: ChatConversationProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState("")
@@ -217,6 +223,7 @@ export function ChatConversation({
   const otherName = other?.full_name || "Utilisateur"
   const otherInitial = otherName.charAt(0).toUpperCase()
   const prefsKey = `gwa-chat-prefs:${userId}:${conversation.id}`
+  const autoOfferOpenedRef = useRef(false)
 
   useEffect(() => {
     try {
@@ -229,6 +236,21 @@ export function ChatConversation({
       /* ignore */
     }
   }, [prefsKey])
+
+  // CTA fiche produit « Négocier » → ouvre l’offre une fois par conversation
+  useEffect(() => {
+    autoOfferOpenedRef.current = false
+  }, [conversation.id])
+
+  useEffect(() => {
+    if (!autoOpenOffer || autoOfferOpenedRef.current) return
+    autoOfferOpenedRef.current = true
+    const t = window.setTimeout(() => {
+      void openOfferSheet(initialOfferProductId)
+    }, 350)
+    return () => window.clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot deep link
+  }, [autoOpenOffer, initialOfferProductId, conversation.id])
 
   // Brouillon + masqués + réactions + file offline
   useEffect(() => {
@@ -1058,7 +1080,7 @@ export function ChatConversation({
     )
   }
 
-  async function openOfferSheet() {
+  async function openOfferSheet(preferredProductId?: string | null) {
     setShowAttach(false)
     setShowOfferSheet(true)
     requestAnimationFrame(() => {
@@ -1084,9 +1106,13 @@ export function ChatConversation({
     const rest = list.filter((p) => p.seller_id !== other?.id)
     const ordered = preferred.length > 0 ? [...preferred, ...rest] : list
     setOfferProducts(ordered)
-    if (ordered[0]) {
-      setOfferProductId(ordered[0].id)
-      if (!offerAmount) setOfferAmount(String(Math.round(ordered[0].price)))
+    const fromUrl = preferredProductId
+      ? ordered.find((p) => p.id === preferredProductId)
+      : null
+    const pick = fromUrl || ordered[0]
+    if (pick) {
+      setOfferProductId(pick.id)
+      if (!offerAmount) setOfferAmount(String(Math.round(pick.price)))
     }
   }
 

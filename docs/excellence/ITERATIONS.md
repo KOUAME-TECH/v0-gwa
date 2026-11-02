@@ -431,3 +431,61 @@ Maintenir GO Producteur · **NO-GO** merge multi-parcours
 ### Lien Notion
 https://app.notion.com/p/40ca6d3a76b481619009fe260e999780
 
+---
+
+# PARCOURS ACHETEUR
+
+Branche : `gwa/excellence-parcours-1e99`  
+Doc : `docs/excellence/parcours-acheteur.md`  
+**Prérequis** : Producteur GO 95 ✓  
+**Pas de merge/deploy** · **Pas de Coopérative** tant que Acheteur < 95.
+
+## ITÉRATION 1 — PARCOURS ACHETEUR
+
+**Scores** : Global **82** | UI/UX **86** | Frontend **86** | Backend **84** | Audio **72** | Négociation **88** | Sécurité **90** | IA **80** | Continuité **80**
+
+### Écarts
+
+- [FAIT VÉRIFIÉ] CSRF manquant sur mutations commandes (create, confirm, litige, status, from-offer, pay wrapper, confirm-delivery, release, shipment, verify-payment) → `assertSameOrigin` + RL
+- [FAIT VÉRIFIÉ] Validation POST orders faible → Zod `orderCreateSchema` + sanitize
+- [FAIT VÉRIFIÉ] Fiche produit : seul « Contacter » → ajout **Négocier** (`/messages?to=&product=&offer=1`) + auto-open offre chat
+- [FAIT VÉRIFIÉ] Middleware protégeait `/panier` → panier invité impossible → retiré des `protectedPrefixes`
+- [FAIT VÉRIFIÉ] Panier invité : UI login wall → affichage + qty/remove guest + bandeau + progressbar a11y
+- [FAIT VÉRIFIÉ] Buyer dashboard : redirect auth, labels FR, toast, skip-link, Yelly, sanitize city query, observability
+- [FAIT VÉRIFIÉ] Favoris redirect ; qty ≥44px ; profil + Marketplace/Recherche
+- [FAIT VÉRIFIÉ] Docs ASVS / WCAG / ISO25010 / continuité acheteur
+- [FAIT VÉRIFIÉ] Advisors security = WARN HIBP only
+- [HYPOTHÈSE] E2E checkout GeniusPay non rejouable sans compte test + secrets
+- [ACTION HUMAINE REQUISE] Enable HIBP ; compte test acheteur Playwright ; preview deploy pour valider Négocier/guest panier hors prod
+- [RISQUE RÉSIDUEL] Serena MCP indisponible ; GeniusPay/FeexPay non touchés (volontaire)
+
+### Corrections
+
+- `lib/supabase/middleware.ts`, `lib/cart/guest.ts`, `lib/orders/create-schema.ts`, `lib/buyer/observability.ts`
+- `app/api/orders/**` (CSRF/RL/Zod)
+- `app/produit/[id]/page.tsx`, `app/messages/page.tsx`, `components/chat/chat-conversation.tsx`
+- `app/panier/page.tsx`, `app/dashboard/buyer/page.tsx`, `app/profil/page.tsx`, `app/favoris/page.tsx`
+- Tests guest-cart, negotiate-link, middleware-panier, order-create-schema, buyer-observability
+- Docs `parcours-acheteur.md` + asvs/wcag/iso/continuity
+
+### Preuves
+
+- `docs/excellence-evidence/parcours-acheteur-iter1-marketplace-320.png`
+- `docs/excellence-evidence/parcours-acheteur-iter1-marketplace-1024.png`
+- `docs/excellence-evidence/parcours-acheteur-iter1-buyer-gate-320.png`
+- `docs/excellence-evidence/parcours-acheteur-iter1-commandes-gate-320.png`
+- `docs/excellence-evidence/parcours-acheteur-iter1-panier-gate-1024.png` (prod encore gated middleware — fix branche)
+- vitest 10 verts suite acheteur ; tsc OK
+
+### MCP utilisés
+
+Supabase (advisors), Playwright, Notion, gh, cursor-cloud · Serena **error** discovery
+
+### Décision
+
+**Itération suivante** (82 < 95) — **NO-GO** Coopérative / merge
+
+### Lien Notion
+
+https://app.notion.com/p/40ca6d3a76b481a4b9d7c95e9d99612c
+

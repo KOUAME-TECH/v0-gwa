@@ -21,6 +21,11 @@ import { createClient } from "@/lib/supabase/client"
 import { EmptyState } from "@/components/ui/empty-state"
 import { productDetailPath } from "@/lib/products/paths"
 import { ESCROW_COPY } from "@/lib/copy/escrow-fr"
+import { ORDER_STATUS_LABELS } from "@/lib/orders/escrow-flow"
+import { toast } from "sonner"
+import { YellyAideButton } from "@/components/yelly/yelly-aide-button"
+import { sanitizeForQuery } from "@/lib/security/validation"
+import { trackBuyerEvent } from "@/lib/buyer/observability"
 
 interface Order {
   id: string
@@ -88,7 +93,7 @@ export default function BuyerDashboard() {
       } = await supabase.auth.getUser()
 
       if (!authUser) {
-        router.push("/auth/login")
+        router.push("/auth/login?redirect=/dashboard/buyer")
         return
       }
 
@@ -131,19 +136,26 @@ export default function BuyerDashboard() {
         .limit(8)
 
       if (profileData?.city) {
-        const { data: nearData } = await supabase
-          .from("products")
-          .select("id, name, price, unit, images, ville")
-          .eq("status", "active")
-          .ilike("ville", `%${profileData.city}%`)
-          .limit(1)
-          .maybeSingle()
-        if (nearData) setNearby(nearData as NearbyProduct)
+        const citySafe = sanitizeForQuery(profileData.city)
+        if (citySafe) {
+          const { data: nearData } = await supabase
+            .from("products")
+            .select("id, name, price, unit, images, ville")
+            .eq("status", "active")
+            .ilike("ville", `%${citySafe}%`)
+            .limit(1)
+            .maybeSingle()
+          if (nearData) setNearby(nearData as NearbyProduct)
+        }
       }
 
       const { data: pop } = await productsQuery
       setPopular((pop as NearbyProduct[]) || [])
 
+      trackBuyerEvent("buyer.dashboard.load", {
+        orders: (ordersData as Order[] | null)?.length ?? 0,
+        favorites: (favoritesData as Favorite[] | null)?.length ?? 0,
+      })
       setIsLoading(false)
     }
     void fetchData()
@@ -183,9 +195,11 @@ export default function BuyerDashboard() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        alert(data.error || "Confirmation impossible")
+        toast.error(data.error || "Confirmation impossible")
         return
       }
+      toast.success("Merci ! Réception confirmée.")
+      trackBuyerEvent("buyer.confirm.reception", { ok: true })
       setOrders((prev) =>
         prev.map((o) =>
           o.id === orderId
@@ -198,7 +212,7 @@ export default function BuyerDashboard() {
         ),
       )
     } catch {
-      alert("Erreur réseau")
+      toast.error("Erreur réseau")
     } finally {
       setConfirmBusy(null)
     }
@@ -219,10 +233,19 @@ export default function BuyerDashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#FFF6E5] to-white pb-24">
+      <a
+        href="#buyer-main"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:shadow"
+      >
+        Aller au contenu
+      </a>
       <header className="px-4 pt-6 pb-4">
-        <p className="text-sm font-medium text-[#C27D10]">
-          {isEnterprise ? "Desk achats" : "Espace acheteur"}
-        </p>
+        <div className="mb-2 flex items-start justify-between gap-2">
+          <p className="text-sm font-medium text-[#C27D10]">
+            {isEnterprise ? "Desk achats" : "Espace acheteur"}
+          </p>
+          <YellyAideButton source="buyer_dashboard" />
+        </div>
         <h1 className="text-2xl font-bold tracking-tight text-[#1F5C2E]">
           Bonjour {firstName}
         </h1>
@@ -249,6 +272,7 @@ export default function BuyerDashboard() {
         </div>
       </header>
 
+      <main id="buyer-main">
       {heldOver48.length > 0 ? (
         <div className="mx-4 mb-4 flex items-start gap-3 rounded-2xl bg-amber-50 p-3 ring-1 ring-amber-200">
           <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
@@ -431,7 +455,9 @@ export default function BuyerDashboard() {
                         Confirmer
                       </Badge>
                     ) : (
-                      <Badge variant="secondary">{order.status}</Badge>
+                      <Badge variant="secondary">
+                        {ORDER_STATUS_LABELS[order.status] || order.status}
+                      </Badge>
                     )}
                   </Link>
                 </li>
@@ -521,6 +547,7 @@ export default function BuyerDashboard() {
           </div>
         )}
       </section>
+      </main>
     </div>
   )
 }

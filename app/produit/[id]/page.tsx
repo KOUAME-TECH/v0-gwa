@@ -215,7 +215,7 @@ export default function ProduitPage() {
 
   const handleToggleFavorite = async () => {
     if (!user) {
-      router.push("/auth/login")
+      router.push(`/auth/login?redirect=/produit/${params.id}`)
       return
     }
     if (isFavorite) {
@@ -282,7 +282,7 @@ export default function ProduitPage() {
       <button
         type="button"
         onClick={() => handleQuantityChange(-1)}
-        className="flex h-9 w-9 items-center justify-center rounded-full bg-white shadow-sm active:scale-95"
+        className="flex h-11 w-11 items-center justify-center rounded-full bg-white shadow-sm active:scale-95"
         disabled={quantity <= minQty}
         aria-label="Moins"
       >
@@ -301,7 +301,7 @@ export default function ProduitPage() {
       <button
         type="button"
         onClick={() => handleQuantityChange(1)}
-        className="flex h-9 w-9 items-center justify-center rounded-full bg-white shadow-sm active:scale-95"
+        className="flex h-11 w-11 items-center justify-center rounded-full bg-white shadow-sm active:scale-95"
         disabled={quantity >= product.stock_quantity}
         aria-label="Plus"
       >
@@ -340,12 +340,22 @@ export default function ProduitPage() {
           </div>
         </div>
       </Link>
-      <Link href={`/messages?to=${profile?.id}`} className="mt-4 block">
-        <Button variant="outline" className="h-11 w-full rounded-full bg-white font-medium">
-          <MessageCircle className="mr-2 h-4 w-4" />
-          Contacter
-        </Button>
-      </Link>
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <Link href={`/messages?to=${profile?.id}`} className="block">
+          <Button variant="outline" className="h-11 w-full rounded-full bg-white font-medium">
+            <MessageCircle className="mr-2 h-4 w-4" />
+            Contacter
+          </Button>
+        </Link>
+        <Link
+          href={`/messages?to=${profile?.id}&product=${product.id}&offer=1`}
+          className="block"
+        >
+          <Button className="h-11 w-full rounded-full bg-[#1F5C2E] font-medium hover:bg-[#184a25]">
+            Négocier
+          </Button>
+        </Link>
+      </div>
     </div>
   )
 

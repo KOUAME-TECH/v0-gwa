@@ -2,8 +2,10 @@ import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
+import { assertSameOrigin } from "@/lib/security/csrf"
 import { sendPushToUser } from "@/lib/notifications/push"
 import { isAgriculturalProductType } from "@/lib/catalog/scope"
+import { orderCreateSchema } from "@/lib/orders/create-schema"
 
 type OrderItemInput = {
   product_id: string
@@ -50,6 +52,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const csrf = assertSameOrigin(request)
+    if (csrf) return csrf
+
     const rate = await checkRateLimit("API_CREATE")
     if (!rate.success) {
       return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })
@@ -63,16 +68,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
     }
 
-    const body = await request.json()
-    const sellerId = String(body?.seller_id || "")
-    const items = (body?.items || []) as OrderItemInput[]
-
-    if (!sellerId || !Array.isArray(items) || items.length === 0) {
-      return NextResponse.json(
-        { error: "seller_id et items requis" },
-        { status: 400 },
-      )
+    const rawBody = await request.json()
+    const parsed = orderCreateSchema.safeParse(rawBody)
+    if (!parsed.success) {
+      const msg = parsed.error.issues[0]?.message || "Données commande invalides"
+      return NextResponse.json({ error: msg, code: "VALIDATION" }, { status: 400 })
     }
+
+    const sellerId = parsed.data.seller_id
+    const items = parsed.data.items as OrderItemInput[]
+    const paymentMethod = parsed.data.payment_method
+    const shippingAddress = parsed.data.shipping_address || ""
+    const shippingCity = parsed.data.shipping_city || ""
+    const shippingCountry = parsed.data.shipping_country || "ci"
+    const shippingPhone = parsed.data.shipping_phone || ""
+
     if (sellerId === user.id) {
       return NextResponse.json(
         { error: "Impossible de commander chez soi" },
@@ -175,14 +185,14 @@ export async function POST(request: NextRequest) {
         status: "pending",
         payment_status: "pending",
         escrow_status: "pending",
-        paiement_schema: body?.paiement_schema || "100_livraison",
-        paiement_type: body?.payment_method || "mobile_money",
-        payment_method: body?.payment_method || "mobile_money",
-        shipping_address: body?.shipping_address || null,
-        shipping_city: body?.shipping_city || null,
-        shipping_country: body?.shipping_country || "CI",
-        shipping_phone: body?.shipping_phone || null,
-        notes: body?.notes || null,
+        paiement_schema: "100_livraison",
+        paiement_type: paymentMethod || "mobile_money",
+        payment_method: paymentMethod || "mobile_money",
+        shipping_address: shippingAddress || null,
+        shipping_city: shippingCity || null,
+        shipping_country: shippingCountry || "ci",
+        shipping_phone: shippingPhone || null,
+        notes: null,
         commission_pct: commissionPct,
         commission_fcfa: commissionFcfa,
         vendeur_recoit_fcfa: vendeurRecoit,
