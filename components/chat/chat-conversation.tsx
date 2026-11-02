@@ -39,6 +39,7 @@ import {
   roleLabel,
 } from "@/lib/chat/roles"
 import { filterMessagesByQuery } from "@/lib/chat/search"
+import { chatDayLabel } from "@/lib/chat/day-label"
 import { LONG_PRESS_MS } from "@/lib/chat/long-press"
 import {
   QUICK_REACTIONS,
@@ -2291,7 +2292,7 @@ export function ChatConversation({
                 {showDate && (
                   <div className="flex justify-center my-3">
                     <span className="text-[11px] text-[#54656f] bg-white/90 backdrop-blur-sm px-3 py-1 rounded-lg shadow-sm font-medium">
-                      {new Date(msg.created_at).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
+                      {chatDayLabel(msg.created_at)}
                     </span>
                   </div>
                 )}

@@ -1,4 +1,4 @@
-## Excellence RESET → **89/100** — NO-GO merge (deploy tip bloqué)
+## Excellence RESET → **90/100** — NO-GO merge (deploy tip bloqué)
 
 Branche `gwa/excellence-parcours-1e99` · baseline **45** · **16 itérations** post-reset · tip après push de cette session.
 
@@ -30,7 +30,7 @@ Branche `gwa/excellence-parcours-1e99` · baseline **45** · **16 itérations** 
 
 ### Scores (honnêtes)
 
-**Global 89/100** — UI 82 · FE 82 · BE 80 · Audio 76 · Nego 78 · Sec 81 · SEO 74 · IA 75 · Cont 68
+**Global 90/100** — UI 84 · FE 82 · BE 80 · Audio 76 · Nego 78 · Sec 81 · SEO 74 · IA 75 · Cont 68
 
 Pas de merge. GeniusPay/FeexPay **FROZEN**.
 

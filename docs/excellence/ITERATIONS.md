@@ -1168,3 +1168,25 @@ Supabase execute_sql + advisors, Playwright
 
 ### Notion
 Mettre à jour page RESET avec score 89 + UNIQUE NEXT SSO
+
+
+## ITÉRATION 17 — Séparateurs jour WhatsApp (Aujourd’hui/Hier)
+
+**Scores** : Global **90** | UI/UX **84** | Frontend **82** | Backend **80** | Audio **76** | Négociation **78** | Sécurité **81** | SEO **74** | IA **75** | Continuité **68**
+
+### Corrections
+- `lib/chat/day-label.ts` + tests
+- `chat-conversation.tsx` utilise `chatDayLabel` (Aujourd’hui / Hier / weekday)
+
+### Preuves
+- vitest `chat-day-label` PASS
+- Deploy tip toujours **403** (retry MCP preview+prod)
+
+### MCP
+Vercel (403)
+
+### Décision
+**suivante** (90 < 95) — plafond agent sans SEO live. UNIQUE NEXT inchangé = SSO deploy.
+
+### Notion
+Score 90 documenté

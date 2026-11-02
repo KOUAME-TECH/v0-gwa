@@ -33,3 +33,7 @@
 - [x] Dry-run tabletop documenté : `docs/excellence/restore-drill.md` (2026-11-02).
 - [x] Flush outbox sur `online` + `gwa:online-sync` + prune échecs (`pruneFailedOutbox`).
 - [ ] [ACTION HUMAINE REQUISE] Exercice restore backup Supabase physique (staging) avec horodatage.
+
+## Checklist humaine
+
+Voir `docs/excellence/HUMAN-CHECKLIST.md` (HIBP, PITR, Redis backups, E2E auth, deploy tip).
