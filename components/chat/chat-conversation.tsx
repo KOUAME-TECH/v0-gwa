@@ -5,7 +5,6 @@ import { createClient } from "@/lib/supabase/client"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { toast } from "sonner"
 import { GwaMark } from "@/components/brand/gwa-mark"
-import { useYellyOptional } from "@/components/yelly/yelly-provider"
 import { CHAT_THEME, CHAT_AFRICA_BG } from "@/lib/chat/theme"
 import {
   buildOfferContent,
@@ -47,6 +46,16 @@ import {
   type PendingChatMessage,
 } from "@/lib/chat/local-store"
 import {
+  buildAiAdviceUserPrompt,
+  formatAiAdviceMessage,
+  stripAiAdvicePrefix,
+} from "@/lib/chat/ai-advice"
+import {
+  buildPurchaseOrderContent,
+  parsePurchaseOrderContent,
+  purchaseOrderPrintHtml,
+} from "@/lib/chat/purchase-order"
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -60,7 +69,7 @@ import {
   ArrowLeft, Send, Mic, Smile, Phone, Video, MoreVertical,
   Check, CheckCheck, ImageIcon, FileText, X, Trash2, Copy, Reply,
   Pin, BellOff, UserCircle, Flag, Paperclip, Camera, MapPin, HandCoins,
-  LifeBuoy, Search, SmilePlus, WifiOff,
+  LifeBuoy, Search, SmilePlus, WifiOff, Printer, CreditCard,
 } from "lucide-react"
 
 interface Message {
@@ -151,7 +160,6 @@ export function ChatConversation({
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null)
   const [mediaUrlCache, setMediaUrlCache] = useState<Record<string, string>>({})
 
-  const yelly = useYellyOptional()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const supabaseUrl =
     typeof process !== "undefined"
@@ -545,23 +553,138 @@ export function ChatConversation({
     setPendingOffline(listOutboxForConversation(conversation.id, userId))
   }
 
+  async function requestInThreadAdvice(question: string) {
+    const prompt = buildAiAdviceUserPrompt(question)
+    const userLine = question.trim() || "Conseil demandé"
+    const tempUser = `tmp-q-${Date.now()}`
+    const tempAi = `tmp-ai-${Date.now()}`
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: tempUser,
+        conversation_id: conversation.id,
+        sender_id: userId,
+        content: userLine,
+        message_type: "text",
+        is_read: false,
+        is_edited: false,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: tempAi,
+        conversation_id: conversation.id,
+        sender_id: userId,
+        content: formatAiAdviceMessage("Le conseil arrive…"),
+        message_type: "ai",
+        is_read: true,
+        is_edited: false,
+        created_at: new Date().toISOString(),
+      },
+    ])
+    scroll()
+
+    try {
+      // Persister la question utilisateur
+      const { data: userMsg } = await supabase
+        .from("messages")
+        .insert({
+          conversation_id: conversation.id,
+          sender_id: userId,
+          content: userLine,
+          message_type: "text",
+        })
+        .select()
+        .single()
+      if (userMsg) {
+        setMessages((prev) => prev.map((m) => (m.id === tempUser ? userMsg : m)))
+      }
+
+      const res = await fetch("/api/yelly/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: prompt.slice(0, 800),
+          page: "messages/chat",
+          conversationId: conversation.id,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      const replyText =
+        typeof data.reply === "string" && data.reply.trim()
+          ? data.reply.trim()
+          : typeof data.error === "string"
+            ? data.error
+            : "Je n’ai pas pu répondre. Réessaie dans un instant."
+
+      const aiContent = formatAiAdviceMessage(replyText)
+      const { data: aiMsg, error: aiErr } = await supabase
+        .from("messages")
+        .insert({
+          conversation_id: conversation.id,
+          sender_id: userId,
+          content: aiContent,
+          message_type: "ai",
+        })
+        .select()
+        .single()
+
+      if (aiErr || !aiMsg) {
+        // Fallback text si type ai refusé côté DB
+        const { data: fallback } = await supabase
+          .from("messages")
+          .insert({
+            conversation_id: conversation.id,
+            sender_id: userId,
+            content: aiContent,
+            message_type: "text",
+          })
+          .select()
+          .single()
+        setMessages((prev) =>
+          prev.map((m) => (m.id === tempAi ? fallback || { ...m, content: aiContent } : m)),
+        )
+      } else {
+        setMessages((prev) => prev.map((m) => (m.id === tempAi ? aiMsg : m)))
+      }
+
+      await supabase
+        .from("conversations")
+        .update({ last_message_at: new Date().toISOString() })
+        .eq("id", conversation.id)
+      scroll()
+    } catch {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === tempAi
+            ? {
+                ...m,
+                content: formatAiAdviceMessage(
+                  "Connexion interrompue. Réessaie le conseil.",
+                ),
+              }
+            : m,
+        ),
+      )
+      toast.error("Conseil indisponible. Réessaie.")
+    }
+  }
+
   // Send text
   async function handleSend(e?: React.FormEvent) {
     e?.preventDefault()
     const text = newMessage.trim()
     if (!text || sending) return
 
-    // @IA / @Yelly : ouvre l’aide neutre sur sollicitation (ne part pas comme message)
-    if (/(^|\s)@(IA|Yelly)\b/i.test(text)) {
-      const question = text.replace(/(^|\s)@(IA|Yelly)\b/gi, " ").trim()
+    // @IA / @Yelly / Conseil : participant neutre dans le fil (Mission 2)
+    if (/(^|\s)@(IA|Yelly|Conseil)\b/i.test(text)) {
+      const question = text.replace(/(^|\s)@(IA|Yelly|Conseil)\b/gi, " ").trim()
       setNewMessage("")
       clearChatDraft(userId, conversation.id)
-      yelly?.openYelly("chat_mention_ia")
-      if (question) {
-        toast.message("Conseil ouvert", {
-          description: "Pose ta question à l’aide — sans conclure à ta place.",
-        })
-      }
+      setSending(true)
+      await requestInThreadAdvice(question || "Comment bien avancer dans cette discussion ?")
+      setSending(false)
+      inputRef.current?.focus()
       return
     }
 
@@ -1360,11 +1483,70 @@ export function ChatConversation({
               : "Offre acceptée. Finalise la commande depuis ton panier ou tes commandes.",
           )
         } else {
-          toast.success("Commande créée au prix convenu")
-          if (data.redirect_to) {
-            window.setTimeout(() => {
-              window.location.href = data.redirect_to
-            }, 600)
+          toast.success("Commande créée — bon de commande épinglé")
+          const order = data.order as
+            | {
+                id?: string
+                order_number?: string
+                total_amount?: number
+              }
+            | undefined
+          if (order?.id) {
+            const sheetContent = buildPurchaseOrderContent({
+              orderId: order.id,
+              orderNumber: order.order_number,
+              amount:
+                Number(data.negotiated_unit_price) ||
+                Number(order.total_amount) ||
+                offer.amount,
+              quantity: 1,
+              productName: offer.productName,
+              productId: offer.productId,
+              offerMessageId: msg.id,
+              payPath: data.redirect_to || "/dashboard/commandes",
+              pinned: true,
+            })
+            const { data: sheetMsg } = await supabase
+              .from("messages")
+              .insert({
+                conversation_id: conversation.id,
+                sender_id: userId,
+                content: sheetContent,
+                message_type: "order_sheet",
+              })
+              .select()
+              .single()
+            if (sheetMsg) {
+              setMessages((prev) =>
+                prev.some((m) => m.id === sheetMsg.id)
+                  ? prev
+                  : [...prev, sheetMsg],
+              )
+              scroll()
+            } else {
+              // Fallback si type order_sheet refusé
+              const { data: fb } = await supabase
+                .from("messages")
+                .insert({
+                  conversation_id: conversation.id,
+                  sender_id: userId,
+                  content: sheetContent,
+                  message_type: "text",
+                })
+                .select()
+                .single()
+              if (fb) setMessages((prev) => [...prev, fb])
+            }
+            // Épingler la conversation (double confirmation déjà faite)
+            savePrefs({ pinned: true })
+            const col =
+              conversation.participant_1 === userId
+                ? "is_pinned_1"
+                : "is_pinned_2"
+            await supabase
+              .from("conversations")
+              .update({ [col]: true, last_message_at: new Date().toISOString() })
+              .eq("id", conversation.id)
           }
         }
       } catch {
@@ -1374,6 +1556,25 @@ export function ChatConversation({
     } else {
       toast.success("Offre refusée")
     }
+  }
+
+  function printPurchaseOrder(content: string) {
+    const po = parsePurchaseOrderContent(content)
+    if (!po) {
+      toast.error("Bon de commande illisible")
+      return
+    }
+    const html = purchaseOrderPrintHtml(po, {
+      buyerName: "Partie acheteuse",
+      sellerName: otherName,
+    })
+    const w = window.open("", "_blank", "noopener,noreferrer,width=720,height=900")
+    if (!w) {
+      toast.error("Autorise les pop-ups pour imprimer")
+      return
+    }
+    w.document.write(html)
+    w.document.close()
   }
 
   const fmtTime = (d: string) => new Date(d).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
@@ -1398,6 +1599,67 @@ export function ChatConversation({
   function renderContent(msg: Message) {
     if (msg.message_type === "location" || isLocationMessage(msg.message_type, msg.content)) {
       return <ChatLocationBubble content={msg.content} messageType={msg.message_type} />
+    }
+    const orderSheet =
+      msg.message_type === "order_sheet"
+        ? parsePurchaseOrderContent(msg.content)
+        : parsePurchaseOrderContent(msg.content)
+    if (orderSheet) {
+      const total = orderSheet.amount * (orderSheet.quantity || 1)
+      return (
+        <div
+          className="min-w-[220px] max-w-[280px] space-y-2 py-1"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center gap-1.5 text-[#1F5C2E]">
+            <Pin className="h-4 w-4 shrink-0" aria-hidden />
+            <span className="text-[11px] font-semibold uppercase tracking-wide">
+              Bon de commande
+              {orderSheet.pinned ? " · épinglé" : ""}
+            </span>
+          </div>
+          {orderSheet.productName && (
+            <p className="text-[13px] font-medium text-[#111b21]">{orderSheet.productName}</p>
+          )}
+          <p className="text-lg font-bold text-[#1F5C2E] tabular-nums">
+            {formatOfferAmount(total)}{" "}
+            <span className="text-xs font-medium text-[#54656f]">FCFA</span>
+          </p>
+          <p className="text-[11px] text-[#54656f]">
+            Qté {orderSheet.quantity}
+            {orderSheet.orderNumber ? ` · N° ${orderSheet.orderNumber}` : ""}
+          </p>
+          <div className="flex flex-col gap-1.5 pt-1">
+            <a
+              href={orderSheet.payPath || "/dashboard/commandes"}
+              className="flex items-center justify-center gap-2 min-h-[44px] rounded-full bg-[#1F5C2E] text-white text-[13px] font-semibold active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C27D10]"
+            >
+              <CreditCard className="h-4 w-4" aria-hidden />
+              Payer maintenant
+            </a>
+            <button
+              type="button"
+              onClick={() => printPurchaseOrder(msg.content)}
+              className="flex items-center justify-center gap-2 min-h-[44px] rounded-full border border-[#E5E7EB] text-[13px] font-medium text-[#54656f] active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#1F5C2E]"
+            >
+              <Printer className="h-4 w-4" aria-hidden />
+              Imprimer
+            </button>
+          </div>
+        </div>
+      )
+    }
+    if (
+      msg.message_type === "ai" ||
+      /^\s*\[conseil\s*ia\]/i.test(msg.content)
+    ) {
+      return (
+        <div className="space-y-1 py-0.5">
+          <p className="text-[15px] whitespace-pre-wrap break-words leading-relaxed text-[#111b21]">
+            {stripAiAdvicePrefix(msg.content)}
+          </p>
+        </div>
+      )
     }
     if (msg.message_type === "offer") {
       const offer = parseOfferContent(msg.content)
@@ -1570,20 +1832,22 @@ export function ChatConversation({
           <Search className="h-5 w-5" />
         </button>
 
-        {yelly ? (
-          <button
-            type="button"
-            onClick={() => yelly.openYelly("chat_header_conseil")}
-            className="flex items-center gap-1 rounded-full min-h-[44px] px-2 py-1.5 active:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-            aria-label="Demander conseil"
-            title="Demander conseil"
-          >
-            <LifeBuoy className="h-5 w-5" />
-            <span className="hidden sm:inline text-[11px] font-medium max-w-[72px] leading-tight">
-              Conseil
-            </span>
-          </button>
-        ) : null}
+        <button
+          type="button"
+          onClick={() => {
+            void requestInThreadAdvice(
+              "Donne un conseil neutre pour bien avancer dans cette discussion (prix, confiance, livraison).",
+            )
+          }}
+          className="flex items-center gap-1 rounded-full min-h-[44px] px-2 py-1.5 active:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+          aria-label="Demander conseil"
+          title="Demander conseil"
+        >
+          <LifeBuoy className="h-5 w-5" />
+          <span className="hidden sm:inline text-[11px] font-medium max-w-[72px] leading-tight">
+            Conseil
+          </span>
+        </button>
         <button
           type="button"
           onClick={() => void callOther("audio")}
@@ -2048,19 +2312,17 @@ export function ChatConversation({
                   label: "Position",
                   action: () => void shareLocation(),
                 },
-                ...(yelly
-                  ? [
-                      {
-                        icon: LifeBuoy,
-                        color: "bg-[#1F5C2E]",
-                        label: "Conseil IA",
-                        action: () => {
-                          setShowAttach(false)
-                          yelly.openYelly("chat_attach_conseil")
-                        },
-                      },
-                    ]
-                  : []),
+                {
+                  icon: LifeBuoy,
+                  color: "bg-[#1F5C2E]",
+                  label: "Conseil",
+                  action: () => {
+                    setShowAttach(false)
+                    void requestInThreadAdvice(
+                      "Conseil neutre : comment conclure équitablement cette négociation ?",
+                    )
+                  },
+                },
               ].map((item) => (
                 <button key={item.label} onClick={item.action} className="flex flex-col items-center gap-2">
                   <div className={`w-14 h-14 ${item.color} rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform`}>
@@ -2135,19 +2397,19 @@ export function ChatConversation({
             >
               {offerBusy ? "Envoi…" : "Envoyer l'offre"}
             </button>
-            {yelly ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setShowOfferSheet(false)
-                  yelly.openYelly("chat_offer_conseil")
-                }}
-                className="w-full mt-2 h-11 rounded-xl border border-[#1F5C2E]/25 text-[#1F5C2E] text-sm font-medium active:scale-[0.98] flex items-center justify-center gap-2"
-              >
-                <LifeBuoy className="h-4 w-4" />
-                Demander conseil à l’IA
-              </button>
-            ) : null}
+            <button
+              type="button"
+              onClick={() => {
+                setShowOfferSheet(false)
+                void requestInThreadAdvice(
+                  "Conseil neutre sur cette offre de prix : points de vigilance pour les deux parties.",
+                )
+              }}
+              className="w-full mt-2 min-h-[44px] h-11 rounded-xl border border-[#1F5C2E]/25 text-[#1F5C2E] text-sm font-medium active:scale-[0.98] flex items-center justify-center gap-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#1F5C2E]"
+            >
+              <LifeBuoy className="h-4 w-4" />
+              Demander conseil
+            </button>
           </div>
         </>
       )}

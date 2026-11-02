@@ -104,13 +104,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { message: rawMessage, page, context } = parsed.data
+    const { message: rawMessage, page, context, conversationId: parsedConvId } =
+      parsed.data
     const message = redactPiiForAi(rawMessage, 800)
     const conversationId =
-      typeof body?.conversationId === "string" &&
+      parsedConvId ||
+      (typeof body?.conversationId === "string" &&
       /^[0-9a-f-]{36}$/i.test(body.conversationId)
         ? body.conversationId
-        : null
+        : null)
 
     const contextHint = await loadYellyProductHint(supabase, context?.productId)
     const cityHint = context?.city

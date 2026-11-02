@@ -94,7 +94,8 @@ async function askGemini(opts: {
       contents: toGeminiContents(opts.history, opts.userMsg),
       generationConfig: {
         temperature: 0.7,
-        maxOutputTokens: 512,
+        // Réponses complètes (chat conseil) — évite les coupures mid-phrase
+        maxOutputTokens: 1024,
       },
     }),
     signal: AbortSignal.timeout(20_000),
@@ -117,7 +118,7 @@ async function askGemini(opts: {
   if (!raw || raw.length < 8) return null
 
   return {
-    reply: sanitizePlainText(raw, 1200),
+    reply: sanitizePlainText(raw, 2000),
     source: "llm",
     model: opts.model,
   }
@@ -140,7 +141,7 @@ async function askOpenAICompat(opts: {
       model: opts.model,
       messages: opts.messages,
       temperature: 0.7,
-      max_tokens: 200,
+      max_tokens: 800,
     }),
     signal: AbortSignal.timeout(20_000),
   })
@@ -154,7 +155,7 @@ async function askOpenAICompat(opts: {
   const raw = data.choices?.[0]?.message?.content?.trim()
   if (!raw) return null
   return {
-    reply: sanitizePlainText(raw, 1200),
+    reply: sanitizePlainText(raw, 2000),
     source: "llm",
     model: opts.model,
   }

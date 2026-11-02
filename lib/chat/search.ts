@@ -22,6 +22,8 @@ function preview(msg: SearchableMessage): string {
   if (t === "file") return `document ${msg.content || ""}`
   if (t === "location") return `position ${msg.content || ""}`
   if (t === "offer") return `offre ${msg.content || ""}`
+  if (t === "order_sheet") return `bon de commande ${msg.content || ""}`
+  if (t === "ai") return `conseil ${msg.content || ""}`
   return msg.content || ""
 }
 
