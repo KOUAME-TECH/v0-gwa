@@ -60,3 +60,5 @@ Voir `docs/excellence/ITERATIONS.md` section **PARCOURS PRODUCTEUR**.
 | Continuité | 90 |
 
 **Décision** : GO Producteur seul — **NO-GO merge** global (autres parcours non démarrés). GeniusPay/FeexPay non touchés.
+
+**Notion** : https://app.notion.com/p/40ca6d3a76b481619009fe260e999780

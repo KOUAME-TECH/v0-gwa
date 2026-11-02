@@ -429,5 +429,5 @@ Maintenir GO Producteur · **NO-GO** merge multi-parcours
 **GO Producteur 95/100** — branche draft PR · **aucun merge/deploy** · Acheteur **non démarré** (attend Producteur ≥95 ✓ puis session suivante)
 
 ### Lien Notion
-(à créer / mettre à jour — page parcours)
+https://app.notion.com/p/40ca6d3a76b481619009fe260e999780
 
