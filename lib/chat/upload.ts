@@ -47,7 +47,8 @@ export const chatMediaPrepareSchema = z.object({
   conversationId: z.string().uuid(),
   kind: z.enum(["image", "file", "voice"]),
   mime: z.string().min(3).max(120),
-  size: z.number().int().positive().max(CHAT_MAX_FILE_BYTES),
+  /** Plafond = vocal (12 Mo) ; validateChatMedia resserre par kind. */
+  size: z.number().int().positive().max(CHAT_MAX_VOICE_BYTES),
   fileName: z.string().min(1).max(180),
 })
 

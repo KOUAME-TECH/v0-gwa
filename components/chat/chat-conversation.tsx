@@ -137,6 +137,9 @@ export function ChatConversation({
   const [showOfferSheet, setShowOfferSheet] = useState(false)
   const [offerAmount, setOfferAmount] = useState("")
   const [offerNote, setOfferNote] = useState("")
+  const [offerQuantity, setOfferQuantity] = useState("1")
+  const [offerLocation, setOfferLocation] = useState("")
+  const [offerDeliveryBy, setOfferDeliveryBy] = useState("")
   const [offerBusy, setOfferBusy] = useState(false)
   const [offerProducts, setOfferProducts] = useState<
     { id: string; name: string; price: number }[]
@@ -223,6 +226,47 @@ export function ChatConversation({
       window.removeEventListener("offline", onOffline)
     }
   }, [])
+
+  // WCAG 2.1.2 — Escape ferme overlays sans piège clavier
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return
+      if (pendingAccept) {
+        setPendingAccept(null)
+        return
+      }
+      if (showOfferSheet) {
+        setShowOfferSheet(false)
+        return
+      }
+      if (showAttach) {
+        setShowAttach(false)
+        return
+      }
+      if (showEmojis) {
+        setShowEmojis(false)
+        return
+      }
+      if (selectedMsg) {
+        setSelectedMsg(null)
+        setReactPickerMsg(null)
+        return
+      }
+      if (searchOpen) {
+        setSearchOpen(false)
+        setSearchQuery("")
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [
+    pendingAccept,
+    showOfferSheet,
+    showAttach,
+    showEmojis,
+    selectedMsg,
+    searchOpen,
+  ])
 
   useEffect(() => {
     if (draftTimer.current) clearTimeout(draftTimer.current)
@@ -975,7 +1019,13 @@ export function ChatConversation({
       // Start recording
       try {
         cancelVoiceRef.current = false
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        })
         audioStream.current = stream
         audioChunks.current = []
         const mr = new MediaRecorder(stream, {
@@ -1374,6 +1424,10 @@ export function ChatConversation({
       toast.error("Indiquez un montant valide")
       return
     }
+    const quantity = Math.max(
+      1,
+      Number.parseInt(offerQuantity.replace(/\D/g, ""), 10) || 1,
+    )
     setOfferBusy(true)
     try {
       const selected = offerProducts.find((p) => p.id === offerProductId)
@@ -1382,6 +1436,9 @@ export function ChatConversation({
         note: offerNote.trim() || undefined,
         productId: offerProductId || undefined,
         productName: selected?.name,
+        quantity,
+        location: offerLocation.trim() || undefined,
+        deliveryBy: offerDeliveryBy.trim() || undefined,
       })
       const { data: refreshed } = await supabase.auth.refreshSession()
       const authUser =
@@ -1423,6 +1480,9 @@ export function ChatConversation({
         setShowOfferSheet(false)
         setOfferAmount("")
         setOfferNote("")
+        setOfferQuantity("1")
+        setOfferLocation("")
+        setOfferDeliveryBy("")
         toast.success("Offre envoyée")
       }
     } catch {
@@ -1469,10 +1529,11 @@ export function ChatConversation({
     if (status === "accepted") {
       const toastId = toast.loading("Préparation de la commande au prix convenu…")
       try {
+        const acceptQty = Math.max(1, Math.round(Number(offer.quantity) || 1))
         const res = await fetch("/api/orders/from-offer", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message_id: msg.id, quantity: 1 }),
+          body: JSON.stringify({ message_id: msg.id, quantity: acceptQty }),
         })
         const data = await res.json().catch(() => ({}))
         toast.dismiss(toastId)
@@ -1497,11 +1558,12 @@ export function ChatConversation({
               orderNumber: order.order_number,
               amount:
                 Number(data.negotiated_unit_price) ||
-                Number(order.total_amount) ||
                 offer.amount,
-              quantity: 1,
+              quantity: acceptQty,
               productName: offer.productName,
               productId: offer.productId,
+              location: offer.location,
+              deliveryBy: offer.deliveryBy,
               offerMessageId: msg.id,
               payPath: data.redirect_to || "/dashboard/commandes",
               pinned: true,
@@ -1687,7 +1749,20 @@ export function ChatConversation({
           <p className="text-xl font-bold text-[#1F5C2E] tabular-nums">
             {formatOfferAmount(offer.amount)}{" "}
             <span className="text-xs font-medium text-[#667781]">FCFA</span>
+            {offer.quantity && offer.quantity > 1 ? (
+              <span className="text-xs font-medium text-[#667781]">
+                {" "}
+                · ×{offer.quantity}
+              </span>
+            ) : null}
           </p>
+          {(offer.location || offer.deliveryBy) && (
+            <p className="text-[12px] text-[#54656f] leading-snug">
+              {offer.location ? `Lieu : ${offer.location}` : ""}
+              {offer.location && offer.deliveryBy ? " · " : ""}
+              {offer.deliveryBy ? `Délai : ${offer.deliveryBy}` : ""}
+            </p>
+          )}
           {offer.note && (
             <p className="text-[13px] text-[#111b21] leading-snug">{offer.note}</p>
           )}
@@ -2371,22 +2446,71 @@ export function ChatConversation({
                 </select>
               </>
             )}
-            <label className="text-sm font-medium text-[#111] mb-1.5 block">Montant (FCFA)</label>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <label className="text-sm font-medium text-[#111] mb-1.5 block" htmlFor="offer-amount">
+                  Prix unitaire (FCFA)
+                </label>
+                <input
+                  id="offer-amount"
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  value={offerAmount}
+                  onChange={(e) => setOfferAmount(e.target.value)}
+                  placeholder="15000"
+                  className="w-full h-12 rounded-xl border border-[#E5E7EB] px-4 text-lg font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-[#1F5C2E]/30"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-[#111] mb-1.5 block" htmlFor="offer-qty">
+                  Quantité
+                </label>
+                <input
+                  id="offer-qty"
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  value={offerQuantity}
+                  onChange={(e) => setOfferQuantity(e.target.value)}
+                  placeholder="1"
+                  className="w-full h-12 rounded-xl border border-[#E5E7EB] px-4 text-lg font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-[#1F5C2E]/30"
+                />
+              </div>
+            </div>
+            <label className="text-sm font-medium text-[#111] mb-1.5 block" htmlFor="offer-location">
+              Lieu (retrait / livraison)
+            </label>
             <input
-              type="number"
-              inputMode="numeric"
-              min={1}
-              value={offerAmount}
-              onChange={(e) => setOfferAmount(e.target.value)}
-              placeholder="15000"
-              className="w-full h-12 rounded-xl border border-[#E5E7EB] px-4 text-lg font-semibold tabular-nums mb-3 focus:outline-none focus:ring-2 focus:ring-[#1F5C2E]/30"
+              id="offer-location"
+              type="text"
+              value={offerLocation}
+              onChange={(e) => setOfferLocation(e.target.value)}
+              placeholder="Abidjan, marché de Cocody"
+              maxLength={120}
+              className="w-full h-11 rounded-xl border border-[#E5E7EB] px-4 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-[#1F5C2E]/30"
             />
-            <label className="text-sm font-medium text-[#111] mb-1.5 block">Message</label>
+            <label className="text-sm font-medium text-[#111] mb-1.5 block" htmlFor="offer-delivery">
+              Délai
+            </label>
             <input
+              id="offer-delivery"
+              type="text"
+              value={offerDeliveryBy}
+              onChange={(e) => setOfferDeliveryBy(e.target.value)}
+              placeholder="Demain · 3 jours · avant vendredi"
+              maxLength={80}
+              className="w-full h-11 rounded-xl border border-[#E5E7EB] px-4 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-[#1F5C2E]/30"
+            />
+            <label className="text-sm font-medium text-[#111] mb-1.5 block" htmlFor="offer-note">
+              Message
+            </label>
+            <input
+              id="offer-note"
               type="text"
               value={offerNote}
               onChange={(e) => setOfferNote(e.target.value)}
-              placeholder="2 sacs, livraison demain"
+              placeholder="Précisions (qualité, emballage…)"
               className="w-full h-11 rounded-xl border border-[#E5E7EB] px-4 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-[#1F5C2E]/30"
             />
             <button
