@@ -11,6 +11,7 @@ import { CheckCircle2, Package, Truck, MapPin, Clock, ArrowRight, Loader2, Home 
 import Link from "next/link"
 import { EscrowStepper } from "@/components/orders/escrow-stepper"
 import { LocationMapCard } from "@/components/location/location-map-card"
+import { ORDER_STATUS_LABELS } from "@/lib/orders/escrow-flow"
 
 interface Order {
   id: string
@@ -290,10 +291,7 @@ function ConfirmationContent() {
                   <p className="font-mono font-bold">{order.order_number || `GWA-${order.id.slice(0, 8).toUpperCase()}`}</p>
                 </div>
                 <Badge variant="secondary">
-                  {order.status === 'pending' ? 'En attente' : 
-                   order.status === 'confirmed' ? 'Confirmée' :
-                   order.status === 'shipped' ? 'Expédiée' : 
-                   order.status === 'delivered' ? 'Livrée' : order.status}
+                  {ORDER_STATUS_LABELS[order.status] || order.status}
                 </Badge>
               </div>
 

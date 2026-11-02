@@ -149,12 +149,13 @@ export default function FavorisPage() {
         <Button 
           variant="ghost" 
           size="icon" 
-          className="rounded-full h-9 w-9"
+          className="rounded-full h-11 w-11"
           onClick={() => router.back()}
+          aria-label="Retour"
         >
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <h1 className="text-lg font-semibold text-[#111827]">Mes Favoris</h1>
+        <h1 className="text-lg font-semibold text-[#111827]">Mes favoris</h1>
         <span className="text-sm text-[#6B7280]">({favorites.length})</span>
       </div>
 
@@ -165,11 +166,11 @@ export default function FavorisPage() {
           </div>
           <h2 className="text-lg font-semibold text-[#111827] mb-2">Aucun favori</h2>
           <p className="text-[#6B7280] text-sm mb-6">
-            Explorez le marketplace et ajoutez des produits en favoris
+            Explore le marché et ajoute des produits en favoris.
           </p>
           <Link href="/marketplace">
-            <Button className="rounded-full bg-[#2F7D32] hover:bg-[#256427]">
-              Explorer le marketplace
+            <Button className="min-h-11 rounded-full bg-[#2F7D32] hover:bg-[#256427]">
+              Explorer le marché
             </Button>
           </Link>
         </div>
@@ -223,10 +224,11 @@ export default function FavorisPage() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="w-full text-red-500 hover:text-red-700 hover:bg-red-50 text-xs h-8"
+                  className="h-11 w-full text-xs text-red-500 hover:bg-red-50 hover:text-red-700"
                   onClick={() => removeFavorite(fav.id, fav.products.name)}
+                  aria-label={`Retirer ${fav.products.name} des favoris`}
                 >
-                  <Trash2 className="h-3.5 w-3.5 mr-1" />
+                  <Trash2 className="mr-1 h-3.5 w-3.5" />
                   Retirer
                 </Button>
               </div>
