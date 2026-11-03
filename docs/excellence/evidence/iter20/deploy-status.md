@@ -1,7 +1,7 @@
 # Deploy status — Mission master-audio (2026-11-03)
 
 **Branche** : `gwa/excellence-parcours-1e99`  
-**Tip SHA** : `f7888963ff828a3625bf9da2c56960f10185b7eb`  
+**Tip SHA** : `baed73cffa59451e663caf1e5d79ea4a980b5a9a` (feat audio/logo `f788896`)  
 **PR #27** : OPEN — **not merged** (explicit)  
 **GeniusPay/FeexPay** : **FROZEN**
 
