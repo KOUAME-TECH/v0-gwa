@@ -18,9 +18,11 @@ function clean(value: string | null): string {
  * Montant fixe 200 FCFA, numéro de test fixé.
  */
 export async function POST(request: Request) {
-  const secret = clean(process.env.CRON_SECRET)
+  const secrets = [process.env.CRON_SECRET, process.env.GENIUSPAY_PROBE_TOKEN]
+    .map((value) => clean(value ?? null))
+    .filter(Boolean)
   const auth = request.headers.get("authorization") || ""
-  if (!secret || auth !== `Bearer ${secret}`) {
+  if (!secrets.some((secret) => auth === `Bearer ${secret}`)) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
   }
 
