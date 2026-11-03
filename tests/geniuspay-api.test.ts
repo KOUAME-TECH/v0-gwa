@@ -99,6 +99,33 @@ describe("GeniusPay API client", () => {
     })
   })
 
+  it("accepts the existing Vercel names X_API_Key and X_API_Secret", async () => {
+    vi.stubEnv("X_API_Key", "header-key")
+    vi.stubEnv("X_API_Secret", "header-secret")
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(checkoutResponse), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const result = await createGeniusPayCheckout({
+      amount: 200,
+      orderId: "order-x",
+      userId: "buyer-x",
+      description: "Test",
+      customer: { phone: "+2250788326019", country: "CI" },
+    })
+
+    expect(result.ok).toBe(true)
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(init.headers).toMatchObject({
+      "X-API-Key": "header-key",
+      "X-API-Secret": "header-secret",
+    })
+  })
+
   it("uses sandbox credentials when verifying a sandbox webhook payment", async () => {
     vi.stubEnv("GENIUSPAY_API_KEY_SANDBOX", "pk_sandbox_test")
     vi.stubEnv("GENIUSPAY_API_SECRET_SANDBOX", "sandbox-api-secret")
