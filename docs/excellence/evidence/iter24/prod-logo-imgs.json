@@ -1,0 +1,77 @@
+{
+  "hasIconMaster": false,
+  "hasIconSvg": true,
+  "headerImgs": [
+    "/icon.svg",
+    "/icon.svg",
+    "https://frorfexbcyfbydkiwxqv.supabase.co/storage/v1/object/public/avatars/24a869e6-0a1d-477b-99f7-bcccd4a2c491/24a869e6-0a1d-477b-99f7-bcccd4a2c491-1770311526775.png",
+    "https://frorfexbcyfbydkiwxqv.supabase.co/storage/v1/object/public/avatars/24a869e6-0a1d-477b-99f7-bcccd4a2c491/24a869e6-0a1d-477b-99f7-bcccd4a2c491-1770311526775.png",
+    "https://frorfexbcyfbydkiwxqv.supabase.co/storage/v1/object/public/avatars/24a869e6-0a1d-477b-99f7-bcccd4a2c491/24a869e6-0a1d-477b-99f7-bcccd4a2c491-1770311526775.png"
+  ],
+  "imgs": [
+    {
+      "src": "/icon.svg",
+      "alt": "GWA",
+      "w": 150,
+      "h": 150,
+      "className": "rounded-lg shadow-sm ring-1 ring-black/5 dark:ring-white/15 object-cover shrink-0"
+    },
+    {
+      "src": "/icon.svg",
+      "alt": "GWA",
+      "w": 150,
+      "h": 150,
+      "className": "rounded-lg shadow-sm ring-1 ring-black/5 dark:ring-white/15 object-cover shrink-0"
+    },
+    {
+      "src": "https://frorfexbcyfbydkiwxqv.supabase.co/storage/v1/object/public/avatars/24a869e6-0a1d-477b-99f7-bcccd4a2c491/24a869e6-0a1d-477b-99f7-bcccd4a2c491-1770311526775.png",
+      "alt": null,
+      "w": 1024,
+      "h": 1024,
+      "className": "aspect-square size-full"
+    },
+    {
+      "src": "/_next/image?url=https%3A%2F%2Ffrorfexbcyfbydkiwxqv.supabase.co%2Fstorage%2Fv1%2Fobject%2Fpublic%2Fproducts%2F24a869e6-0a1d-477b-99f7-bcccd4a2c491%2F1772467548846_0.webp&w=1200&q=75",
+      "alt": "piment",
+      "w": 304,
+      "h": 228,
+      "className": "object-cover"
+    },
+    {
+      "src": "/_next/image?url=https%3A%2F%2Ffrorfexbcyfbydkiwxqv.supabase.co%2Fstorage%2Fv1%2Fobject%2Fpublic%2Fposts%2F66c8193e-4f39-4b7a-a51b-b7f7810d7983%2F1784497241725_0.jpg&w=1200&q=75",
+      "alt": "Publication",
+      "w": 480,
+      "h": 477,
+      "className": "object-cover"
+    },
+    {
+      "src": "https://frorfexbcyfbydkiwxqv.supabase.co/storage/v1/object/public/avatars/24a869e6-0a1d-477b-99f7-bcccd4a2c491/24a869e6-0a1d-477b-99f7-bcccd4a2c491-1770311526775.png",
+      "alt": null,
+      "w": 1024,
+      "h": 1024,
+      "className": "aspect-square size-full"
+    },
+    {
+      "src": "/_next/image?url=https%3A%2F%2Ffrorfexbcyfbydkiwxqv.supabase.co%2Fstorage%2Fv1%2Fobject%2Fpublic%2Fproducts%2F24a869e6-0a1d-477b-99f7-bcccd4a2c491%2F1771764168762_0.jpg&w=1200&q=75",
+      "alt": "cacao bio",
+      "w": 480,
+      "h": 292,
+      "className": "object-cover"
+    },
+    {
+      "src": "https://frorfexbcyfbydkiwxqv.supabase.co/storage/v1/object/public/avatars/24a869e6-0a1d-477b-99f7-bcccd4a2c491/24a869e6-0a1d-477b-99f7-bcccd4a2c491-1770311526775.png",
+      "alt": null,
+      "w": 1024,
+      "h": 1024,
+      "className": "aspect-square size-full"
+    },
+    {
+      "src": "/_next/image?url=https%3A%2F%2Ffrorfexbcyfbydkiwxqv.supabase.co%2Fstorage%2Fv1%2Fobject%2Fpublic%2Fproducts%2F24a869e6-0a1d-477b-99f7-bcccd4a2c491%2F1770557854359.jpg&w=1200&q=75",
+      "alt": "Tomate ",
+      "w": 225,
+      "h": 225,
+      "className": "object-cover"
+    }
+  ],
+  "url": "https://mygwa.org/"
+}

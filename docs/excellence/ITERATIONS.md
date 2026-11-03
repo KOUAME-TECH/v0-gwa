@@ -1340,3 +1340,30 @@ Vercel (list OK · deploy 403 · authorize_team_sso) · Playwright · cursor-clo
 ### Décision
 **suivante** (93 < 95) — **NO-GO merge**. UNIQUE NEXT = re-save `VERCEL_TOKEN` on **linked** Cloud Agent env **or** Dashboard Redeploy tip `71d3e6b`+ → Production **or** SSO MCP approve.
 
+
+## ITÉRATION 24 — MCP replay BmKBqbDJr path (tip HEAD → prod)
+
+**Scores** : Global **93** | UI/UX **88** | Frontend **86** | Backend **82** | Audio **90** | Négociation **81** | Sécurité **82** | SEO **76** | IA **75** | Continuité **72**
+
+### Écarts
+- [FAIT VÉRIFIÉ] Tip `70b0d45` · MCP `create_deployment` prod **403** ×4 · preview **403** · redeploy BmKBqbDJr **404**
+- [FAIT VÉRIFIÉ] `list_teams` OK · `list_projects` empty · `list_deployments` **403** · SSO consent URLs émises · Playwright SSO → login wall
+- [FAIT VÉRIFIÉ] `VERCEL_TOKEN` **ABSENT** · CLI logged out · GH dispatch **403** · Hobby private-org status failure
+- [FAIT VÉRIFIÉ] Live health 200 · redis true · SHA `2f9d54b` stale · robots/sitemap **404** · header `/icon.svg` · `hasIconMaster=false`
+- [FAIT VÉRIFIÉ] Cloud run `environment=null` · prior success path not repeatable without SSO grant
+
+### Corrections
+- Docs evidence iter24 + PR27-body-operation-deploy refresh
+- `request-environment-setup-actions` : `VERCEL_TOKEN` (+ optional ORG/PROJECT/BYPASS) + SSO external action
+
+### Preuves
+- `evidence/iter24/deploy-status.md` · `env-hunt.txt` · `live-probes.txt` · `prod-health.json`
+- `prod-home-logo-1024.png` · `prod-logo-imgs.json` · `mcp-create-deployment.json`
+- `github-vercel-status.json` · `vercel-whoami.txt`
+
+### MCP
+Vercel (list_teams OK · create_deployment 403 · authorize_team_sso) · Playwright · cursor-cloud secrets/SSO request
+
+### Décision
+**suivante** (93 < 95) — **NO-GO merge**. UNIQUE NEXT = SSO MCP approve → `create_deployment` tip **or** Dashboard Redeploy **or** linked `VERCEL_TOKEN`.
+

@@ -1,28 +1,29 @@
 # PR #27 body — OPÉRATION multi-method deploy (NO-GO merge)
 
 **Branche** : `gwa/excellence-parcours-1e99`  
-**Tip SHA** : `71d3e6b306be048c09646e9c9fbee6505e591f17` (+ docs tip after this commit)  
+**Tip SHA** : `70b0d455b394dc2739b3185b4b13e9340da92c81` (+ docs tip after this commit)  
 **Merge** : **NON** · GeniusPay/FeexPay **FROZEN**
 
 ## Résumé
 
-Opération excellence : hunt `VERCEL_TOKEN` (user claim) + retry MCP/REST/CLI prod deploy tip → **toujours bloqué**. Score honnête **93/100** (plafond SEO live).
+Tentative de rejouer le deploy MCP qui a produit `dpl_BmKBqbDJr2Sv9XJoHt3vrLNaaxK2` (~18h) sur le tip HEAD → **403 SSO grant expiré**. Score honnête **93/100** (plafond SEO live).
 
 ## DÉPLOIEMENT
 
 | Method | Résultat |
 | --- | --- |
-| A Vercel MCP `create_deployment` prod | **403** (SSO consent émis ; preview aussi 403) |
-| A' MCP `list_projects` | OK (`prj_6rxrwGIg7IhfuprNGnecPl2mncoK`) |
-| B REST `POST /v13/deployments` | **403** (pas de Bearer) |
-| C `x-vercel-protection-bypass` | secret **ABSENT** |
-| D `vercel deploy --prod --token` | **token ABSENT** / login_required |
-| E `gh workflow run` Deploy Production | non re-tenté (éviter conflit autre agent) |
+| A Vercel MCP `create_deployment` prod (tip `70b0d45`, ×4) | **403** (SSO consent émis ; preview aussi 403) |
+| A' MCP redeploy `BmKBqbDJr` + latest commit | **404** |
+| A'' MCP `list_teams` | OK · `list_projects` empty · `list_deployments` 403 |
+| B CLI `vercel deploy --prod --token` | **token ABSENT** / Logged out |
+| C GH `workflow_dispatch` Deploy Production | **403** integration |
+| D Git auto-deploy | Hobby private-org **failure** |
 
-Env hunt iter23 : `VERCEL_TOKEN` / `VERCEL_ACCESS_TOKEN` / `Cursor_Agent` / bypass / ORG / PROJECT **ABSENT**.  
+Env hunt iter24 : `VERCEL_TOKEN` / `VERCEL_ACCESS_TOKEN` / `Cursor_Agent` / bypass / ORG / PROJECT **ABSENT**.  
 Cloud run **sans environment lié** (`environment=null`) → secrets Cloud Agent non injectés.
 
-Prod live : health **200** · redis **true** · SHA **`2f9d54b`** (stale vs tip) · robots/sitemap **404**.
+Prod live : health **200** · redis **true** · SHA **`2f9d54b`** (stale vs tip) · robots/sitemap **404**.  
+**New deployment id** : **none**.
 
 ## LOGO
 
@@ -31,7 +32,7 @@ Playwright prod home : header encore **`/icon.svg`** · `/master.png` **404**.
 
 ## MODULE AUDIO
 
-Tip : `VoiceMessagePlayer` play/pause · waveform seek · 0.5–2× · STT · preview re-record · swipe/X cancel · ≥44px.
+Tip : `VoiceMessagePlayer` play/pause · waveform seek · 0.5–2× · STT · preview re-record · swipe/X cancel · ≥44px — **not live** until tip deploy.
 
 ## SCORE
 
@@ -39,10 +40,10 @@ Tip : `VoiceMessagePlayer` play/pause · waveform seek · 0.5–2× · STT · pr
 
 ## UNIQUE NEXT
 
-1. Re-sauver secret Cloud Agent nommé exactement **`VERCEL_TOKEN`** sur un environment **lié** à l’agent, puis retry CLI/MCP.  
-2. Ou Dashboard Redeploy tip `gwa/excellence-parcours-1e99` → Production · puis `curl -I https://mygwa.org/robots.txt` attendu **200**.  
-3. Ou approve SSO MCP Production Deploy.
+1. Approve SSO MCP Production Deploy (consent URL in `evidence/iter24/deploy-status.md`), then retry `create_deployment`.  
+2. Or re-sauver secret Cloud Agent **`VERCEL_TOKEN`** sur un environment **lié**, puis retry CLI.  
+3. Or Dashboard Redeploy tip `gwa/excellence-parcours-1e99` → Production · puis `curl -I https://mygwa.org/robots.txt` attendu **200**.
 
 ## Preuves
 
-`docs/excellence/evidence/iter23/` · `ITERATIONS.md` §23 · iter21/22 prior
+`docs/excellence/evidence/iter24/` · `ITERATIONS.md` §24 · iter21–23 prior
