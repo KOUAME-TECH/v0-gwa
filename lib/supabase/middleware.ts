@@ -80,7 +80,6 @@ export async function updateSession(request: NextRequest) {
     '/admin',
     '/dashboard',
     '/profil/edit',
-    '/panier',
     '/publier',
     '/messages',
     '/notifications',
