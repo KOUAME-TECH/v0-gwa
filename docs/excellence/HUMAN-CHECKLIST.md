@@ -70,3 +70,10 @@ Sans cette étape, la console logue `[OneSignal] Origine … absente du dashboar
 5. Recharger preview → plus de warn `domain_not_allowed` · `__GWA_ONESIGNAL_STATUS.ok === true`
 
 Détail : `docs/excellence/PR-sw-csp-onesignal.md`
+
+## Mission master-audio (2026-11-03)
+
+- [ ] Dashboard Redeploy tip `gwa/excellence-parcours-1e99` → Production (robots/sitemap 200)
+- [ ] Optional: inject Cloud Agent secret `VERCEL_TOKEN` or `Cursor_Agent` (do not paste in chat)
+- [ ] Enable HIBP leaked-password protection (Supabase Auth)
+- [x] Agent: logo master + audio WhatsApp shipped on branch (PR #27 no merge)

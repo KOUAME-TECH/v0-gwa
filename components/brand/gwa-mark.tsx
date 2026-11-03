@@ -9,7 +9,8 @@ type GwaMarkProps = {
 }
 
 /**
- * Marque Harmattan — G blanc sur vert #1F5C2E + feuille or #C27D10 (icon.svg / icon-192).
+ * Marque Harmattan — source brand `public/icon-master.png` (alias `/master.png`).
+ * G blanc sur vert #1F5C2E + feuille or #C27D10.
  */
 export function GwaMark({
   size = 36,
@@ -20,12 +21,13 @@ export function GwaMark({
   return (
     <span className={cn("inline-flex items-center gap-2", className)}>
       <img
-        src="/icon.svg"
+        src="/icon-master.png"
         alt="GWA"
         width={size}
         height={size}
         className="rounded-lg shadow-sm ring-1 ring-black/5 dark:ring-white/15 object-cover shrink-0"
         style={{ width: size, height: size }}
+        decoding="async"
       />
       {showWordmark && (
         <span

@@ -1245,3 +1245,37 @@ Vercel (403 deploy + SSO), Supabase SQL/advisors, Upstash PING, Playwright, Noti
 
 ### Notion
 https://app.notion.com/p/40ca6d3a76b4819196eeed4411a27aa7 — titre 45→91
+
+
+## ITÉRATION 20 — Master logo + audio WhatsApp (Mission AUDIT→AUDIO)
+
+**Scores** : Global **93** | UI/UX **88** | Frontend **86** | Backend **82** | Audio **90** | Négociation **81** | Sécurité **82** | SEO **76** | IA **75** | Continuité **72**
+
+### Écarts
+- [FAIT VÉRIFIÉ] Audit master/audio → `AUDIT-MASTER-AUDIO.md` (robots/sitemap 404 live · redis true · junk 0)
+- [FAIT VÉRIFIÉ] Source brand `public/icon-master.png` (+ alias `master.png`) → `GwaMark`, metadata, manifest, PO watermark
+- [FAIT VÉRIFIÉ] Player WhatsApp : play/pause · waveform seek · 0.5/1/1.5/2× · STT · preview re-record · swipe/X cancel · ≥44px · no autoplay
+- [FAIT VÉRIFIÉ] MIME/size + signed URLs + bucket private inchangés (GeniusPay FROZEN)
+- [FAIT VÉRIFIÉ] Deploy tip MCP **403** · tokens `VERCEL_TOKEN`/`Cursor_Agent` **MISSING** (flag `CURSOR_AGENT=1` only)
+- [RISQUE RÉSIDUEL] ≥95 bloqué sans SEO live 200 + HIBP ON
+
+### Corrections
+- `components/brand/gwa-mark.tsx` · `app/layout.tsx` · `public/manifest.json` · `public/master.png`
+- `lib/chat/purchase-order.ts` watermark master
+- `components/chat/voice-message-player.tsx` + `chat-conversation.tsx` UX vocal
+- Tests brand PO + voice speeds
+
+### Preuves
+- `evidence/master-audio/logo-header-master-{320,1024}.png`
+- `evidence/master-audio/audio-ux-fixture.html` + screenshots recording/preview/sent
+- vitest focused PASS · `tsc --noEmit` OK
+- `evidence/iter20/deploy-status.md`
+
+### MCP
+Playwright, Supabase SQL/advisors, Upstash list, Vercel create_deployment 403, Notion hub 45→93, GitHub PR#27 open (no merge)
+
+### Décision
+**suivante** (93 < 95) — **NO-GO merge**. UNIQUE NEXT = Dashboard Redeploy tip `gwa/excellence-parcours-1e99` → Production (ou secret `VERCEL_TOKEN` / `Cursor_Agent` dans Cloud Agent).
+
+### Notion
+https://app.notion.com/p/40ca6d3a76b4819196eeed4411a27aa7 — titre 45→93

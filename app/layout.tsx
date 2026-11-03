@@ -23,9 +23,11 @@ export const metadata: Metadata = {
       { url: "/icon-32.png", sizes: "32x32", type: "image/png" },
       { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
       { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+      { url: "/icon-master.png", sizes: "1024x1024", type: "image/png" },
+      { url: "/master.png", sizes: "1024x1024", type: "image/png" },
     ],
     apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
-    shortcut: ["/icon-32.png"],
+    shortcut: ["/icon-32.png", "/icon-master.png"],
   },
   appleWebApp: {
     capable: true,

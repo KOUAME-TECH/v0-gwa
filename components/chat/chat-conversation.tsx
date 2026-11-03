@@ -15,6 +15,7 @@ import {
 } from "@/lib/chat/offer"
 import { buildLocationContent, isLocationMessage } from "@/lib/chat/location"
 import { ChatLocationBubble } from "@/components/chat/chat-location-bubble"
+import { VoiceMessagePlayer } from "@/components/chat/voice-message-player"
 import { EMOJI_CATEGORIES } from "@/lib/chat/emojis"
 import {
   ChatUploadError,
@@ -92,7 +93,7 @@ import {
   Check, CheckCheck, ImageIcon, FileText, X, Trash2, Copy, Reply,
   Pin, BellOff, UserCircle, Flag, Paperclip, Camera, MapPin, HandCoins,
   LifeBuoy, Search, SmilePlus, WifiOff, Printer, CreditCard, Volume2,
-  ChevronDown,
+  ChevronDown, RotateCcw,
 } from "lucide-react"
 import { speakFrench } from "@/lib/chat/tts"
 
@@ -225,6 +226,7 @@ export function ChatConversation({
   const audioChunks = useRef<Blob[]>([])
   const previewAudio = useRef<HTMLAudioElement | null>(null)
   const cancelVoiceRef = useRef(false)
+  const recordSwipeX = useRef<number | null>(null)
   const sttSessionRef = useRef<{ stop: () => Promise<string> } | null>(null)
   const voiceTranscriptRef = useRef("")
   const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -1246,15 +1248,32 @@ export function ChatConversation({
     if (!audioPreview) return
     if (isPlayingPreview && previewAudio.current) {
       previewAudio.current.pause()
-      previewAudio.current.currentTime = 0
       setIsPlayingPreview(false)
+      return
+    }
+    if (previewAudio.current && previewAudio.current.src === audioPreview.url) {
+      setIsPlayingPreview(true)
+      previewAudio.current.play().catch(() => setIsPlayingPreview(false))
       return
     }
     const audio = new Audio(audioPreview.url)
     previewAudio.current = audio
     setIsPlayingPreview(true)
     audio.onended = () => setIsPlayingPreview(false)
-    audio.play()
+    audio.play().catch(() => setIsPlayingPreview(false))
+  }
+
+  function rerecordVoice() {
+    if (audioPreview) {
+      URL.revokeObjectURL(audioPreview.url)
+      setAudioPreview(null)
+    }
+    if (previewAudio.current) {
+      previewAudio.current.pause()
+      previewAudio.current = null
+      setIsPlayingPreview(false)
+    }
+    void toggleVoice()
   }
 
   async function sendVoiceMessage() {
@@ -1837,14 +1856,6 @@ export function ChatConversation({
     return raw
   }
 
-  function playVoiceMsg(msg: Message) {
-    const src = mediaSrc(msg)
-    if (src) {
-      const a = new Audio(src)
-      a.play().catch(() => toast.error("Impossible de lire le vocal"))
-    }
-  }
-
   function renderContent(msg: Message) {
     if (msg.message_type === "location" || isLocationMessage(msg.message_type, msg.content)) {
       return <ChatLocationBubble content={msg.content} messageType={msg.message_type} />
@@ -2006,41 +2017,12 @@ export function ChatConversation({
       const transcript = parseVoiceTranscript(msg.content)
       const duration = parseVoiceDuration(msg.content)
       return (
-        <div className="space-y-1.5 min-w-[180px]">
-          <button
-            type="button"
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation()
-              playVoiceMsg(msg)
-            }}
-            className="flex items-center gap-2 w-full min-h-[44px] rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#1F5C2E]"
-            aria-label={
-              transcript
-                ? `Écouter le message vocal. Transcription : ${transcript}`
-                : "Écouter le message vocal"
-            }
-          >
-            <div className="w-10 h-10 bg-[#1F5C2E] rounded-full flex items-center justify-center shrink-0">
-              {mediaSrc(msg) ? (
-                <svg viewBox="0 0 24 24" className="h-4 w-4 text-white fill-current"><polygon points="6,4 20,12 6,20" /></svg>
-              ) : (
-                <Mic className="h-4 w-4 text-white" />
-              )}
-            </div>
-            <div className="flex-1 flex items-center gap-0.5" aria-hidden>
-              {Array.from({ length: 24 }).map((_, i) => (
-                <div key={i} className="w-[3px] rounded-full bg-[#1F5C2E]/40" style={{ height: `${4 + Math.sin(i * 0.7) * 8}px` }} />
-              ))}
-            </div>
-            <span className="text-[11px] opacity-70 shrink-0">{duration}</span>
-          </button>
-          {transcript ? (
-            <p className="text-[12px] leading-snug text-[#54656f] px-1 whitespace-pre-wrap break-words">
-              {transcript}
-            </p>
-          ) : null}
-        </div>
+        <VoiceMessagePlayer
+          src={mediaSrc(msg)}
+          durationLabel={duration}
+          transcript={transcript}
+          messageId={msg.id}
+        />
       )
     }
     if (msg.message_type === "image") {
@@ -2533,12 +2515,26 @@ export function ChatConversation({
         </div>
       ) : null}
 
-      {/* RECORDING BAR */}
+      {/* RECORDING BAR — timer + waveform live ; cancel X ou swipe gauche */}
       {isRecording && (
         <div
-          className="bg-white border-t border-gray-200 px-3 py-2.5 flex items-center gap-3 shrink-0"
+          className="bg-white border-t border-gray-200 px-3 py-2.5 flex items-center gap-3 shrink-0 touch-pan-y"
           role="status"
-          aria-label="Enregistrement vocal en cours"
+          aria-label="Enregistrement vocal en cours. Glisse vers la gauche ou appuie sur Annuler pour abandonner."
+          data-voice-recording-bar="true"
+          onPointerDown={(e) => {
+            recordSwipeX.current = e.clientX
+          }}
+          onPointerUp={(e) => {
+            const start = recordSwipeX.current
+            recordSwipeX.current = null
+            if (start != null && start - e.clientX > 72) {
+              cancelRecording()
+            }
+          }}
+          onPointerCancel={() => {
+            recordSwipeX.current = null
+          }}
         >
           <button
             type="button"
@@ -2546,11 +2542,11 @@ export function ChatConversation({
             className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full active:bg-red-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-500"
             aria-label="Annuler l’enregistrement"
           >
-            <Trash2 className="h-5 w-5 text-red-500" />
+            <X className="h-5 w-5 text-red-500" />
           </button>
           <div className="w-3 h-3 bg-red-500 rounded-full motion-safe:animate-pulse shrink-0" aria-hidden />
           <span className="text-red-700 font-mono text-sm font-medium w-10 tabular-nums" aria-live="polite">
-            {Math.floor(recordSec / 60)}:{(recordSec % 60).toString().padStart(2, '0')}
+            {Math.floor(recordSec / 60)}:{(recordSec % 60).toString().padStart(2, "0")}
           </span>
           <span className="sr-only">
             {voiceStudioStatusLabel({
@@ -2572,6 +2568,9 @@ export function ChatConversation({
               />
             ))}
           </div>
+          <span className="text-[10px] text-[#8696a0] shrink-0 hidden sm:inline" aria-hidden>
+            ← glisser
+          </span>
           <button
             type="button"
             onClick={() => void toggleVoice()}
@@ -2583,34 +2582,72 @@ export function ChatConversation({
         </div>
       )}
 
-      {/* AUDIO PREVIEW BAR */}
+      {/* AUDIO PREVIEW BAR — play / delete / re-record / send + STT */}
       {audioPreview && !isRecording && (
-        <div className="bg-white border-t border-gray-200 px-3 py-2.5 shrink-0 space-y-1.5">
-          <div className="flex items-center gap-3">
-            <button onClick={cancelRecording} className="p-2 rounded-full active:bg-red-50 min-h-[44px] min-w-[44px]" aria-label="Annuler">
+        <div
+          className="bg-white border-t border-gray-200 px-3 py-2.5 shrink-0 space-y-1.5"
+          data-voice-preview-bar="true"
+        >
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={cancelRecording}
+              className="p-2 rounded-full active:bg-red-50 min-h-[44px] min-w-[44px] flex items-center justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-500"
+              aria-label="Supprimer le vocal"
+            >
               <Trash2 className="h-5 w-5 text-red-500" />
             </button>
-            <div className="flex-1 bg-[#f0f2f5] rounded-full px-4 py-2.5 flex items-center gap-3">
-              <button type="button" onClick={playPreview} className="w-8 h-8 rounded-full bg-[#1F5C2E] flex items-center justify-center shrink-0 active:scale-90 transition-transform" aria-label={isPlayingPreview ? "Pause" : "Ecouter"}>
+            <button
+              type="button"
+              onClick={() => void rerecordVoice()}
+              className="p-2 rounded-full active:bg-[#1F5C2E]/10 min-h-[44px] min-w-[44px] flex items-center justify-center text-[#1F5C2E] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#1F5C2E]"
+              aria-label="Réenregistrer"
+            >
+              <RotateCcw className="h-5 w-5" />
+            </button>
+            <div className="flex-1 bg-[#f0f2f5] rounded-full px-3 py-1.5 flex items-center gap-2 min-h-[48px]">
+              <button
+                type="button"
+                onClick={playPreview}
+                className="w-11 h-11 min-h-[44px] min-w-[44px] rounded-full bg-[#1F5C2E] flex items-center justify-center shrink-0 active:scale-90 transition-transform focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C27D10]"
+                aria-label={isPlayingPreview ? "Pause" : "Écouter l’aperçu"}
+                aria-pressed={isPlayingPreview}
+              >
                 {isPlayingPreview ? (
-                  <svg viewBox="0 0 24 24" className="h-4 w-4 text-white fill-current"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
+                  <svg viewBox="0 0 24 24" className="h-4 w-4 text-white fill-current" aria-hidden>
+                    <rect x="6" y="4" width="4" height="16" />
+                    <rect x="14" y="4" width="4" height="16" />
+                  </svg>
                 ) : (
-                  <svg viewBox="0 0 24 24" className="h-4 w-4 text-white fill-current"><polygon points="6,4 20,12 6,20" /></svg>
+                  <svg viewBox="0 0 24 24" className="h-4 w-4 text-white fill-current" aria-hidden>
+                    <polygon points="6,4 20,12 6,20" />
+                  </svg>
                 )}
               </button>
               <div className="flex-1 flex items-center gap-[2px]" aria-hidden>
-                {Array.from({ length: 30 }).map((_, i) => (
-                  <div key={i} className="w-[3px] bg-[#1F5C2E]/40 rounded-full shrink-0" style={{ height: `${4 + Math.sin(i * 0.4) * 8}px` }} />
+                {Array.from({ length: 28 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="w-[3px] bg-[#1F5C2E]/40 rounded-full shrink-0"
+                    style={{ height: `${4 + Math.sin(i * 0.4) * 8}px` }}
+                  />
                 ))}
               </div>
-              <span className="text-sm font-mono text-[#667781] shrink-0">{audioPreview.duration}</span>
+              <span className="text-sm font-mono text-[#667781] shrink-0 tabular-nums">
+                {audioPreview.duration}
+              </span>
             </div>
-            <button onClick={sendVoiceMessage} className="w-11 h-11 min-h-[44px] min-w-[44px] rounded-full bg-[#1F5C2E] text-white flex items-center justify-center active:scale-90 transition-transform" aria-label="Envoyer vocal">
+            <button
+              type="button"
+              onClick={sendVoiceMessage}
+              className="w-12 h-12 min-h-[48px] min-w-[48px] rounded-full bg-[#1F5C2E] text-white flex items-center justify-center active:scale-90 transition-transform focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C27D10]"
+              aria-label="Envoyer vocal"
+            >
               <Send className="h-5 w-5" />
             </button>
           </div>
           {audioPreview.transcript ? (
-            <p className="text-[12px] text-[#54656f] px-12 leading-snug" aria-live="polite">
+            <p className="text-[12px] text-[#54656f] px-2 leading-snug" aria-live="polite">
               Transcription : {audioPreview.transcript}
             </p>
           ) : null}
