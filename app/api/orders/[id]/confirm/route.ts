@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { sendPushToUser } from "@/lib/notifications/push"
 import { mapPaymentMethodToNetwork } from "@/lib/payment/networks"
+import { evaluatePlanSwitch } from "@/lib/pricing/switch"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -200,6 +201,10 @@ export async function POST(request: NextRequest, context: Ctx) {
       link: `/wallet`,
       is_read: false,
       read: false,
+    })
+
+    void evaluatePlanSwitch(order.seller_id).catch((err) => {
+      console.error("[api/orders/confirm] plan switch", err)
     })
 
     void sendPushToUser(supabase as never, order.seller_id, {

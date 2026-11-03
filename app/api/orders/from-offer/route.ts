@@ -5,6 +5,7 @@ import { parseOfferContent } from "@/lib/chat/offer"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { sendPushToUser } from "@/lib/notifications/push"
 import { isAgriculturalProductType } from "@/lib/catalog/scope"
+import { quoteSellerPricing } from "@/lib/pricing/server-quote"
 
 /**
  * POST /api/orders/from-offer
@@ -173,21 +174,19 @@ export async function POST(request: Request) {
 
     const subtotal = unitPrice * quantity
     const shipping = 0
-    const { data: sellerProfile } = await supabase
-      .from("profiles")
-      .select("subscription_tier")
-      .eq("id", sellerId)
-      .maybeSingle()
-    const { computeSellerCommission } = await import("@/lib/pricing/service-fee")
-    const commission = computeSellerCommission(
-      subtotal,
-      (sellerProfile as { subscription_tier?: string } | null)?.subscription_tier,
-    )
-    const serviceFee = 0
-    const totalAmount = subtotal + shipping
-    const commissionPct = commission.pct
-    const commissionFcfa = commission.commissionFcfa
-    const vendeurRecoit = commission.vendeurRecoitFcfa
+    const priced = await quoteSellerPricing(sellerId, subtotal)
+    if ("error" in priced) {
+      return NextResponse.json(
+        { error: "Grille tarifaire indisponible", code: "PRICING_UNAVAILABLE" },
+        { status: 503 },
+      )
+    }
+    const quote = priced.quote
+    const serviceFee = quote.buyer_service_fee
+    const totalAmount = quote.total_amount + shipping
+    const commissionPct = Math.round(quote.commission_rate_applied * 10000) / 100
+    const commissionFcfa = quote.seller_commission
+    const vendeurRecoit = quote.seller_net_amount
     const orderNumber = `GWA-N-${Date.now().toString(36).toUpperCase()}`
 
     const admin = createAdminClient()
@@ -212,6 +211,12 @@ export async function POST(request: Request) {
         commission_pct: commissionPct,
         commission_fcfa: commissionFcfa,
         vendeur_recoit_fcfa: vendeurRecoit,
+        product_price: quote.product_price,
+        buyer_service_fee: quote.buyer_service_fee,
+        seller_commission: quote.seller_commission,
+        seller_net_amount: quote.seller_net_amount,
+        pricing_plan_id: quote.pricing_plan_id,
+        commission_rate_applied: quote.commission_rate_applied,
       })
       .select()
       .single()

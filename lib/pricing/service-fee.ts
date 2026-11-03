@@ -1,17 +1,18 @@
 /**
- * Commission vendeur GWA — décision DG 28/07/2026.
- * Acheteur retail : 0 frais GWA. Commission prélevée côté vendeur selon son palier.
- * GeniusPay (tuyau) reste hors de ce module.
+ * Affichage des paliers historiques (entitlements).
+ * Le montant réellement prélevé sur une commande vient de `pricing_plans`
+ * via le trigger `orders_apply_pricing`, pas de ces constantes.
  */
+import { quotePricing, seedPlan } from "@/lib/pricing/quote"
 
 export type SubscriptionTier = "free" | "starter" | "pro" | "enterprise"
 
 /** Commission GWA (fraction) par palier vendeur. */
 export const SELLER_COMMISSION_RATES: Record<SubscriptionTier, number> = {
-  free: 0.08,
-  starter: 0.065,
-  pro: 0.05,
-  enterprise: 0.05,
+  free: seedPlan("FREE").commission_rate,
+  starter: seedPlan("STARTER").commission_rate,
+  pro: seedPlan("PRO").commission_rate,
+  enterprise: seedPlan("COOP_ENTERPRISE").commission_rate,
 }
 
 /** Prix abo mensuel (FCFA). enterprise = null → devis. */
@@ -19,9 +20,9 @@ export const SUBSCRIPTION_PRICES_FCFA: Record<
   SubscriptionTier,
   number | null
 > = {
-  free: 0,
-  starter: 7_500,
-  pro: 18_000,
+  free: seedPlan("FREE").monthly_fee,
+  starter: seedPlan("STARTER").monthly_fee,
+  pro: seedPlan("PRO").monthly_fee,
   enterprise: null,
 }
 
@@ -83,19 +84,25 @@ export function computeSellerCommission(
   sellerTier: string | null | undefined,
 ): SellerCommissionResult {
   const tier = normalizeSubscriptionTier(sellerTier)
-  const rate = SELLER_COMMISSION_RATES[tier]
-  const base = Math.max(0, Number(subtotal) || 0)
-  const commissionFcfa = Math.round(base * rate)
-  const pct = rate * 100
+  const planName =
+    tier === "starter"
+      ? "STARTER"
+      : tier === "pro"
+        ? "PRO"
+        : tier === "enterprise"
+          ? "COOP_ENTERPRISE"
+          : "FREE"
+  const quote = quotePricing(seedPlan(planName), subtotal)
+  const pct = quote.commission_rate_applied * 100
   const pctLabel = `${pct % 1 === 0 ? pct.toFixed(0) : pct.toFixed(1)} %`
   return {
     tier,
-    rate,
+    rate: quote.commission_rate_applied,
     pct,
     pctLabel,
-    commissionFcfa,
-    vendeurRecoitFcfa: Math.max(0, base - commissionFcfa),
-    buyerServiceFee: 0,
+    commissionFcfa: quote.seller_commission,
+    vendeurRecoitFcfa: quote.seller_net_amount,
+    buyerServiceFee: quote.buyer_service_fee,
   }
 }
 
