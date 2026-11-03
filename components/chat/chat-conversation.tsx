@@ -10,17 +10,31 @@ import {
   buildOfferContent,
   parseOfferContent,
   formatOfferAmount,
+  offerDeltaLabel,
   type PriceOfferPayload,
 } from "@/lib/chat/offer"
 import { buildLocationContent, isLocationMessage } from "@/lib/chat/location"
 import { ChatLocationBubble } from "@/components/chat/chat-location-bubble"
+import { VoiceMessagePlayer } from "@/components/chat/voice-message-player"
 import { EMOJI_CATEGORIES } from "@/lib/chat/emojis"
 import {
   ChatUploadError,
   uploadChatMedia,
   resolveChatMediaUrl,
+  isChatStoragePath,
   type UploadProgress,
 } from "@/lib/chat/upload"
+import {
+  createVoiceDspPipeline,
+  voiceCaptureConstraints,
+  type VoiceDspHandles,
+} from "@/lib/chat/audio-dsp"
+import {
+  voiceMeterBarHeights,
+  voiceStudioStatusLabel,
+  voiceSttUnavailableToast,
+} from "@/lib/chat/voice-studio-copy"
+import { trackChatMetric } from "@/lib/chat/observability"
 import {
   bubbleSurfaceClass,
   resolveBubbleRole,
@@ -28,6 +42,7 @@ import {
   roleLabel,
 } from "@/lib/chat/roles"
 import { filterMessagesByQuery } from "@/lib/chat/search"
+import { chatDayLabel } from "@/lib/chat/day-label"
 import { LONG_PRESS_MS } from "@/lib/chat/long-press"
 import {
   QUICK_REACTIONS,
@@ -46,8 +61,16 @@ import {
   type PendingChatMessage,
 } from "@/lib/chat/local-store"
 import {
+  formatVoiceMessageContent,
+  parseVoiceDuration,
+  parseVoiceTranscript,
+  startParallelStt,
+} from "@/lib/chat/voice-stt"
+import {
+  adversarialAdviceRefusal,
   buildAiAdviceUserPrompt,
   formatAiAdviceMessage,
+  isAdversarialAiQuestion,
   stripAiAdvicePrefix,
 } from "@/lib/chat/ai-advice"
 import {
@@ -69,8 +92,10 @@ import {
   ArrowLeft, Send, Mic, Smile, Phone, Video, MoreVertical,
   Check, CheckCheck, ImageIcon, FileText, X, Trash2, Copy, Reply,
   Pin, BellOff, UserCircle, Flag, Paperclip, Camera, MapPin, HandCoins,
-  LifeBuoy, Search, SmilePlus, WifiOff, Printer, CreditCard,
+  LifeBuoy, Search, SmilePlus, WifiOff, Printer, CreditCard, Volume2,
+  ChevronDown, RotateCcw,
 } from "lucide-react"
+import { speakFrench } from "@/lib/chat/tts"
 
 interface Message {
   id: string
@@ -105,6 +130,10 @@ interface ChatConversationProps {
   /** Type profil du viewer (acheteur / producteur…) pour bulles rôle */
   viewerUserType?: string | null
   onBack: () => void
+  /** Ouvre la feuille d’offre après chargement (ex. CTA Négocier fiche produit) */
+  autoOpenOffer?: boolean
+  /** Pré-sélectionne ce produit dans l’offre */
+  initialOfferProductId?: string | null
 }
 
 const userTypeLabels: Record<string, string> = {
@@ -118,6 +147,8 @@ export function ChatConversation({
   userId,
   viewerUserType = null,
   onBack,
+  autoOpenOffer = false,
+  initialOfferProductId = null,
 }: ChatConversationProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState("")
@@ -129,14 +160,23 @@ export function ChatConversation({
   const [reactPickerMsg, setReactPickerMsg] = useState<string | null>(null)
   const [isRecording, setIsRecording] = useState(false)
   const [recordSec, setRecordSec] = useState(0)
+  const [voiceLevel, setVoiceLevel] = useState(0)
   const [showEmojis, setShowEmojis] = useState(false)
   const [emojiCat, setEmojiCat] = useState(EMOJI_CATEGORIES[0]?.id ?? "smileys")
-  const [audioPreview, setAudioPreview] = useState<{ blob: Blob; url: string; duration: string } | null>(null)
+  const [audioPreview, setAudioPreview] = useState<{
+    blob: Blob
+    url: string
+    duration: string
+    transcript?: string
+  } | null>(null)
   const [isPlayingPreview, setIsPlayingPreview] = useState(false)
   const [loadingMsgs, setLoadingMsgs] = useState(true)
   const [showOfferSheet, setShowOfferSheet] = useState(false)
   const [offerAmount, setOfferAmount] = useState("")
   const [offerNote, setOfferNote] = useState("")
+  const [offerQuantity, setOfferQuantity] = useState("1")
+  const [offerLocation, setOfferLocation] = useState("")
+  const [offerDeliveryBy, setOfferDeliveryBy] = useState("")
   const [offerBusy, setOfferBusy] = useState(false)
   const [offerProducts, setOfferProducts] = useState<
     { id: string; name: string; price: number }[]
@@ -161,6 +201,8 @@ export function ChatConversation({
   const [mediaUrlCache, setMediaUrlCache] = useState<Record<string, string>>({})
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const [showJumpLatest, setShowJumpLatest] = useState(false)
   const supabaseUrl =
     typeof process !== "undefined"
       ? process.env.NEXT_PUBLIC_SUPABASE_URL || ""
@@ -180,9 +222,13 @@ export function ChatConversation({
   const recInterval = useRef<ReturnType<typeof setInterval> | null>(null)
   const mediaRecorder = useRef<MediaRecorder | null>(null)
   const audioStream = useRef<MediaStream | null>(null)
+  const voiceDspRef = useRef<VoiceDspHandles | null>(null)
   const audioChunks = useRef<Blob[]>([])
   const previewAudio = useRef<HTMLAudioElement | null>(null)
   const cancelVoiceRef = useRef(false)
+  const recordSwipeX = useRef<number | null>(null)
+  const sttSessionRef = useRef<{ stop: () => Promise<string> } | null>(null)
+  const voiceTranscriptRef = useRef("")
   const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const supabase = createClient()
 
@@ -190,6 +236,7 @@ export function ChatConversation({
   const otherName = other?.full_name || "Utilisateur"
   const otherInitial = otherName.charAt(0).toUpperCase()
   const prefsKey = `gwa-chat-prefs:${userId}:${conversation.id}`
+  const autoOfferOpenedRef = useRef(false)
 
   useEffect(() => {
     try {
@@ -203,6 +250,21 @@ export function ChatConversation({
     }
   }, [prefsKey])
 
+  // CTA fiche produit « Négocier » → ouvre l’offre une fois par conversation
+  useEffect(() => {
+    autoOfferOpenedRef.current = false
+  }, [conversation.id])
+
+  useEffect(() => {
+    if (!autoOpenOffer || autoOfferOpenedRef.current) return
+    autoOfferOpenedRef.current = true
+    const t = window.setTimeout(() => {
+      void openOfferSheet(initialOfferProductId)
+    }, 350)
+    return () => window.clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot deep link
+  }, [autoOpenOffer, initialOfferProductId, conversation.id])
+
   // Brouillon + masqués + réactions + file offline
   useEffect(() => {
     setHiddenIds(loadHiddenMessageIds(userId, conversation.id))
@@ -214,15 +276,63 @@ export function ChatConversation({
   }, [userId, conversation.id])
 
   useEffect(() => {
-    const onOnline = () => setBrowserOffline(false)
+    const onOnline = () => {
+      setBrowserOffline(false)
+      trackChatMetric("chat.message.outbox_flush", { offline: false })
+      // flush via effet [browserOffline] pour éviter double-envoi stale
+    }
     const onOffline = () => setBrowserOffline(true)
     window.addEventListener("online", onOnline)
     window.addEventListener("offline", onOffline)
+    window.addEventListener("gwa:online-sync", onOnline as EventListener)
     return () => {
       window.removeEventListener("online", onOnline)
       window.removeEventListener("offline", onOffline)
+      window.removeEventListener("gwa:online-sync", onOnline as EventListener)
     }
   }, [])
+
+  // WCAG 2.1.2 — Escape ferme overlays sans piège clavier
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return
+      if (pendingAccept) {
+        setPendingAccept(null)
+        return
+      }
+      if (showOfferSheet) {
+        setShowOfferSheet(false)
+        setTimeout(() => inputRef.current?.focus(), 50)
+        return
+      }
+      if (showAttach) {
+        setShowAttach(false)
+        return
+      }
+      if (showEmojis) {
+        setShowEmojis(false)
+        return
+      }
+      if (selectedMsg) {
+        setSelectedMsg(null)
+        setReactPickerMsg(null)
+        return
+      }
+      if (searchOpen) {
+        setSearchOpen(false)
+        setSearchQuery("")
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [
+    pendingAccept,
+    showOfferSheet,
+    showAttach,
+    showEmojis,
+    selectedMsg,
+    searchOpen,
+  ])
 
   useEffect(() => {
     if (draftTimer.current) clearTimeout(draftTimer.current)
@@ -364,7 +474,22 @@ export function ChatConversation({
   }, [liveCameraOpen])
 
   const scroll = useCallback(() => {
-    requestAnimationFrame(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }))
+    requestAnimationFrame(() => {
+      const reduceMotion =
+        typeof window !== "undefined" &&
+        window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches
+      messagesEndRef.current?.scrollIntoView({
+        behavior: reduceMotion ? "auto" : "smooth",
+      })
+      setShowJumpLatest(false)
+    })
+  }, [])
+
+  const onMessagesScroll = useCallback(() => {
+    const el = messagesContainerRef.current
+    if (!el) return
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    setShowJumpLatest(distanceFromBottom > 140)
   }, [])
 
   // Load messages + realtime
@@ -519,6 +644,11 @@ export function ChatConversation({
   async function flushOutbox() {
     const queue = listOutboxForConversation(conversation.id, userId)
     if (queue.length === 0) return
+    const { markOutboxAttempt, pruneFailedOutbox } = await import(
+      "@/lib/chat/local-store"
+    )
+    pruneFailedOutbox(8)
+    let flushed = 0
     for (const item of queue) {
       const tempId = item.id
       if (!messages.some((m) => m.id === tempId)) {
@@ -545,17 +675,55 @@ export function ChatConversation({
         })
         if (ok) {
           removeOutboxMessage(item.id)
+          flushed += 1
+        } else {
+          markOutboxAttempt(item.id, "deliver_false")
         }
-      } catch {
-        /* reste en file */
+      } catch (err) {
+        markOutboxAttempt(
+          item.id,
+          err instanceof Error ? err.message.slice(0, 80) : "flush_error",
+        )
       }
     }
     setPendingOffline(listOutboxForConversation(conversation.id, userId))
+    trackChatMetric("chat.message.outbox_flush", {
+      ok: flushed > 0,
+      ms: flushed,
+    })
   }
 
   async function requestInThreadAdvice(question: string) {
-    const prompt = buildAiAdviceUserPrompt(question)
     const userLine = question.trim() || "Conseil demandé"
+    if (isAdversarialAiQuestion(userLine)) {
+      trackChatMetric("chat.ai.blocked", { ok: true, kind: "adversarial" })
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `tmp-q-${Date.now()}`,
+          conversation_id: conversation.id,
+          sender_id: userId,
+          content: userLine,
+          message_type: "text",
+          is_read: false,
+          is_edited: false,
+          created_at: new Date().toISOString(),
+        },
+        {
+          id: `tmp-ai-${Date.now()}`,
+          conversation_id: conversation.id,
+          sender_id: userId,
+          content: adversarialAdviceRefusal(),
+          message_type: "ai",
+          is_read: true,
+          is_edited: false,
+          created_at: new Date().toISOString(),
+        },
+      ])
+      scroll()
+      return
+    }
+    const prompt = buildAiAdviceUserPrompt(question)
     const tempUser = `tmp-q-${Date.now()}`
     const tempAi = `tmp-ai-${Date.now()}`
 
@@ -652,8 +820,10 @@ export function ChatConversation({
         .from("conversations")
         .update({ last_message_at: new Date().toISOString() })
         .eq("id", conversation.id)
+      trackChatMetric("chat.ai.advice", { ok: true })
       scroll()
     } catch {
+      trackChatMetric("chat.ai.advice", { ok: false, code: "network" })
       setMessages((prev) =>
         prev.map((m) =>
           m.id === tempAi
@@ -824,7 +994,8 @@ export function ChatConversation({
           sender_id: authUser.id,
           content,
           message_type: type,
-          media_url: uploaded.displayUrl,
+          // Persiste le path Storage (bucket privé) — affichage via resolve/sign
+          media_url: uploaded.path,
         })
         .select()
         .single()
@@ -838,6 +1009,7 @@ export function ChatConversation({
       setUploadProgress(null)
       if (msgErr) {
         toast.error("Fichier envoyé mais message non enregistré. Réessaie.")
+        trackChatMetric("chat.media.upload", { ok: false, kind: type })
         return
       }
       if (data) {
@@ -850,6 +1022,7 @@ export function ChatConversation({
         }))
         scroll()
       }
+      trackChatMetric("chat.media.upload", { ok: true, kind: type })
       void fetch("/api/messages/notify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -935,9 +1108,12 @@ export function ChatConversation({
     )
   }
 
-  async function openOfferSheet() {
+  async function openOfferSheet(preferredProductId?: string | null) {
     setShowAttach(false)
     setShowOfferSheet(true)
+    requestAnimationFrame(() => {
+      document.getElementById("offer-amount")?.focus()
+    })
     // Produits actifs des deux participants (acheteur négocie sur produit vendeur)
     const sellerIds = [other?.id, userId].filter(Boolean) as string[]
     const { data } = await supabase
@@ -958,27 +1134,42 @@ export function ChatConversation({
     const rest = list.filter((p) => p.seller_id !== other?.id)
     const ordered = preferred.length > 0 ? [...preferred, ...rest] : list
     setOfferProducts(ordered)
-    if (ordered[0]) {
-      setOfferProductId(ordered[0].id)
-      if (!offerAmount) setOfferAmount(String(Math.round(ordered[0].price)))
+    const fromUrl = preferredProductId
+      ? ordered.find((p) => p.id === preferredProductId)
+      : null
+    const pick = fromUrl || ordered[0]
+    if (pick) {
+      setOfferProductId(pick.id)
+      if (!offerAmount) setOfferAmount(String(Math.round(pick.price)))
     }
   }
 
-  // Voice -- real MediaRecorder
+  // Voice -- DSP studio + MediaRecorder + STT parallèle (Web Speech)
   async function toggleVoice() {
     if (isRecording) {
-      // Stop -> preview
+      const stt = sttSessionRef.current
+      sttSessionRef.current = null
+      if (stt) {
+        voiceTranscriptRef.current = (await stt.stop().catch(() => "")) || ""
+      }
       mediaRecorder.current?.stop()
       setIsRecording(false)
+      setVoiceLevel(0)
       if (recInterval.current) clearInterval(recInterval.current)
+      trackChatMetric("chat.voice.record", { ok: true, kind: "stop" })
     } else {
-      // Start recording
       try {
         cancelVoiceRef.current = false
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-        audioStream.current = stream
+        voiceTranscriptRef.current = ""
+        const rawStream = await navigator.mediaDevices.getUserMedia(
+          voiceCaptureConstraints(),
+        )
+        const dsp = await createVoiceDspPipeline(rawStream)
+        voiceDspRef.current = dsp
+        audioStream.current = dsp.processedStream
         audioChunks.current = []
-        const mr = new MediaRecorder(stream, {
+        const recordStream = dsp.processedStream
+        const mr = new MediaRecorder(recordStream, {
           mimeType: MediaRecorder.isTypeSupported("audio/webm")
             ? "audio/webm"
             : "audio/mp4",
@@ -988,12 +1179,15 @@ export function ChatConversation({
           if (e.data.size > 0) audioChunks.current.push(e.data)
         }
         mr.onstop = () => {
-          stream.getTracks().forEach((t) => t.stop())
+          voiceDspRef.current?.stop()
+          voiceDspRef.current = null
           audioStream.current = null
           if (cancelVoiceRef.current) {
             audioChunks.current = []
             cancelVoiceRef.current = false
             setRecordSec(0)
+            sttSessionRef.current = null
+            voiceTranscriptRef.current = ""
             return
           }
           const blob = new Blob(audioChunks.current, { type: mr.mimeType })
@@ -1002,16 +1196,47 @@ export function ChatConversation({
           const dur = `${Math.floor(sec / 60)}:${(sec % 60).toString().padStart(2, "0")}`
           setRecordSec(0)
           if (sec > 0) {
-            setAudioPreview({ blob, url, duration: dur })
+            setAudioPreview({
+              blob,
+              url,
+              duration: dur,
+              transcript: voiceTranscriptRef.current || undefined,
+            })
           }
         }
 
         mediaRecorder.current = mr
+        const stt = startParallelStt({
+          lang: "fr-FR",
+          onPartial: (t) => {
+            voiceTranscriptRef.current = t
+          },
+        })
+        sttSessionRef.current = stt.available ? stt : null
+        if (!stt.available) {
+          toast.message("Transcription indisponible", {
+            description: voiceSttUnavailableToast(),
+          })
+        }
         mr.start()
         setIsRecording(true)
         setRecordSec(0)
+        setVoiceLevel(0)
         setAudioPreview(null)
-        recInterval.current = setInterval(() => setRecordSec((p) => p + 1), 1000)
+        trackChatMetric("chat.voice.record", {
+          ok: true,
+          kind: "start",
+          stt: stt.available,
+          dsp: true,
+        })
+        let tick = 0
+        recInterval.current = setInterval(() => {
+          tick += 1
+          // Niveau RMS ~4×/s ; secondes une fois par tick/4
+          const level = voiceDspRef.current?.getLevel() ?? 0
+          setVoiceLevel(level)
+          if (tick % 4 === 0) setRecordSec((p) => p + 1)
+        }, 250)
       } catch (err) {
         console.warn("[chat] mic", err)
         toast.error("Micro inaccessible — autorise le micro dans le navigateur")
@@ -1023,15 +1248,32 @@ export function ChatConversation({
     if (!audioPreview) return
     if (isPlayingPreview && previewAudio.current) {
       previewAudio.current.pause()
-      previewAudio.current.currentTime = 0
       setIsPlayingPreview(false)
+      return
+    }
+    if (previewAudio.current && previewAudio.current.src === audioPreview.url) {
+      setIsPlayingPreview(true)
+      previewAudio.current.play().catch(() => setIsPlayingPreview(false))
       return
     }
     const audio = new Audio(audioPreview.url)
     previewAudio.current = audio
     setIsPlayingPreview(true)
     audio.onended = () => setIsPlayingPreview(false)
-    audio.play()
+    audio.play().catch(() => setIsPlayingPreview(false))
+  }
+
+  function rerecordVoice() {
+    if (audioPreview) {
+      URL.revokeObjectURL(audioPreview.url)
+      setAudioPreview(null)
+    }
+    if (previewAudio.current) {
+      previewAudio.current.pause()
+      previewAudio.current = null
+      setIsPlayingPreview(false)
+    }
+    void toggleVoice()
   }
 
   async function sendVoiceMessage() {
@@ -1102,9 +1344,12 @@ export function ChatConversation({
         .insert({
           conversation_id: conversation.id,
           sender_id: authUser.id,
-          content: `Message vocal (${audioPreview.duration})`,
+          content: formatVoiceMessageContent(
+            audioPreview.duration,
+            audioPreview.transcript,
+          ),
           message_type: "voice",
-          media_url: uploaded.displayUrl,
+          media_url: uploaded.path,
         })
         .select()
         .single()
@@ -1121,6 +1366,7 @@ export function ChatConversation({
 
       if (msgErr) {
         toast.error("Vocal envoyé mais message non enregistré.")
+        trackChatMetric("chat.media.upload", { ok: false, kind: "voice" })
         return
       }
       if (data) {
@@ -1133,6 +1379,7 @@ export function ChatConversation({
         }))
         scroll()
       }
+      trackChatMetric("chat.media.upload", { ok: true, kind: "voice" })
       void fetch("/api/messages/notify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1154,6 +1401,7 @@ export function ChatConversation({
   }
 
   function cancelRecording() {
+    setVoiceLevel(0)
     cancelVoiceRef.current = true
     audioChunks.current = []
     if (mediaRecorder.current?.state === "recording") {
@@ -1163,7 +1411,8 @@ export function ChatConversation({
         /* ignore */
       }
     }
-    audioStream.current?.getTracks().forEach((t) => t.stop())
+    voiceDspRef.current?.stop()
+    voiceDspRef.current = null
     audioStream.current = null
     setIsRecording(false)
     if (audioPreview) {
@@ -1374,6 +1623,10 @@ export function ChatConversation({
       toast.error("Indiquez un montant valide")
       return
     }
+    const quantity = Math.max(
+      1,
+      Number.parseInt(offerQuantity.replace(/\D/g, ""), 10) || 1,
+    )
     setOfferBusy(true)
     try {
       const selected = offerProducts.find((p) => p.id === offerProductId)
@@ -1382,6 +1635,9 @@ export function ChatConversation({
         note: offerNote.trim() || undefined,
         productId: offerProductId || undefined,
         productName: selected?.name,
+        quantity,
+        location: offerLocation.trim() || undefined,
+        deliveryBy: offerDeliveryBy.trim() || undefined,
       })
       const { data: refreshed } = await supabase.auth.refreshSession()
       const authUser =
@@ -1423,6 +1679,9 @@ export function ChatConversation({
         setShowOfferSheet(false)
         setOfferAmount("")
         setOfferNote("")
+        setOfferQuantity("1")
+        setOfferLocation("")
+        setOfferDeliveryBy("")
         toast.success("Offre envoyée")
       }
     } catch {
@@ -1469,10 +1728,11 @@ export function ChatConversation({
     if (status === "accepted") {
       const toastId = toast.loading("Préparation de la commande au prix convenu…")
       try {
+        const acceptQty = Math.max(1, Math.round(Number(offer.quantity) || 1))
         const res = await fetch("/api/orders/from-offer", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message_id: msg.id, quantity: 1 }),
+          body: JSON.stringify({ message_id: msg.id, quantity: acceptQty }),
         })
         const data = await res.json().catch(() => ({}))
         toast.dismiss(toastId)
@@ -1497,11 +1757,12 @@ export function ChatConversation({
               orderNumber: order.order_number,
               amount:
                 Number(data.negotiated_unit_price) ||
-                Number(order.total_amount) ||
                 offer.amount,
-              quantity: 1,
+              quantity: acceptQty,
               productName: offer.productName,
               productId: offer.productId,
+              location: offer.location,
+              deliveryBy: offer.deliveryBy,
               offerMessageId: msg.id,
               payPath: data.redirect_to || "/dashboard/commandes",
               pinned: true,
@@ -1571,10 +1832,12 @@ export function ChatConversation({
     const w = window.open("", "_blank", "noopener,noreferrer,width=720,height=900")
     if (!w) {
       toast.error("Autorise les pop-ups pour imprimer")
+      trackChatMetric("chat.po.print", { ok: false, code: "popup_blocked" })
       return
     }
     w.document.write(html)
     w.document.close()
+    trackChatMetric("chat.po.print", { ok: true })
   }
 
   const fmtTime = (d: string) => new Date(d).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
@@ -1585,15 +1848,12 @@ export function ChatConversation({
   )
 
   function mediaSrc(msg: Message): string | undefined {
-    return mediaUrlCache[msg.id] || msg.media_url
-  }
-
-  function playVoiceMsg(msg: Message) {
-    const src = mediaSrc(msg)
-    if (src) {
-      const a = new Audio(src)
-      a.play().catch(() => toast.error("Impossible de lire le vocal"))
-    }
+    if (mediaUrlCache[msg.id]) return mediaUrlCache[msg.id]
+    const raw = msg.media_url
+    if (!raw) return undefined
+    // Path Storage brut (bucket privé) — attendre resolve signé
+    if (isChatStoragePath(raw)) return undefined
+    return raw
   }
 
   function renderContent(msg: Message) {
@@ -1653,11 +1913,26 @@ export function ChatConversation({
       msg.message_type === "ai" ||
       /^\s*\[conseil\s*ia\]/i.test(msg.content)
     ) {
+      const adviceBody = stripAiAdvicePrefix(msg.content)
       return (
-        <div className="space-y-1 py-0.5">
+        <div className="space-y-1.5 py-0.5">
           <p className="text-[15px] whitespace-pre-wrap break-words leading-relaxed text-[#111b21]">
-            {stripAiAdvicePrefix(msg.content)}
+            {adviceBody}
           </p>
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation()
+              const r = speakFrench(adviceBody)
+              if (!r.ok) toast.message("Lecture vocale indisponible sur cet appareil")
+            }}
+            className="inline-flex items-center gap-1.5 min-h-[36px] px-2 rounded-full text-[12px] font-medium text-[#1F5C2E] active:bg-[#1F5C2E]/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#1F5C2E]"
+            aria-label="Écouter le conseil"
+          >
+            <Volume2 className="h-3.5 w-3.5" aria-hidden />
+            Écouter
+          </button>
         </div>
       )
     }
@@ -1687,7 +1962,20 @@ export function ChatConversation({
           <p className="text-xl font-bold text-[#1F5C2E] tabular-nums">
             {formatOfferAmount(offer.amount)}{" "}
             <span className="text-xs font-medium text-[#667781]">FCFA</span>
+            {offer.quantity && offer.quantity > 1 ? (
+              <span className="text-xs font-medium text-[#667781]">
+                {" "}
+                · ×{offer.quantity}
+              </span>
+            ) : null}
           </p>
+          {(offer.location || offer.deliveryBy) && (
+            <p className="text-[12px] text-[#54656f] leading-snug">
+              {offer.location ? `Lieu : ${offer.location}` : ""}
+              {offer.location && offer.deliveryBy ? " · " : ""}
+              {offer.deliveryBy ? `Délai : ${offer.deliveryBy}` : ""}
+            </p>
+          )}
           {offer.note && (
             <p className="text-[13px] text-[#111b21] leading-snug">{offer.note}</p>
           )}
@@ -1726,31 +2014,15 @@ export function ChatConversation({
       )
     }
     if (msg.message_type === "voice") {
+      const transcript = parseVoiceTranscript(msg.content)
+      const duration = parseVoiceDuration(msg.content)
       return (
-        <button
-          type="button"
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation()
-            playVoiceMsg(msg)
-          }}
-          className="flex items-center gap-2 min-w-[180px] min-h-[44px] rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#1F5C2E]"
-          aria-label="Écouter le message vocal"
-        >
-          <div className="w-10 h-10 bg-[#1F5C2E] rounded-full flex items-center justify-center shrink-0">
-            {mediaSrc(msg) ? (
-              <svg viewBox="0 0 24 24" className="h-4 w-4 text-white fill-current"><polygon points="6,4 20,12 6,20" /></svg>
-            ) : (
-              <Mic className="h-4 w-4 text-white" />
-            )}
-          </div>
-          <div className="flex-1 flex items-center gap-0.5" aria-hidden>
-            {Array.from({ length: 24 }).map((_, i) => (
-              <div key={i} className="w-[3px] rounded-full bg-[#1F5C2E]/40" style={{ height: `${4 + Math.sin(i * 0.7) * 8}px` }} />
-            ))}
-          </div>
-          <span className="text-[11px] opacity-70 shrink-0">{msg.content.match(/\((.*?)\)/)?.[1] || "0:00"}</span>
-        </button>
+        <VoiceMessagePlayer
+          src={mediaSrc(msg)}
+          durationLabel={duration}
+          transcript={transcript}
+          messageId={msg.id}
+        />
       )
     }
     if (msg.message_type === "image") {
@@ -1811,9 +2083,13 @@ export function ChatConversation({
           </Avatar>
           <div className="min-w-0 text-left">
             <h2 className="font-semibold text-[15px] truncate leading-tight">{otherName}</h2>
-            <p className="text-[11px] text-white/80 leading-tight">
+            <p
+              className="text-[11px] text-white/80 leading-tight"
+              aria-live="polite"
+              aria-atomic="true"
+            >
               {peerTyping
-                ? "écrit…"
+                ? `${other?.full_name?.split(" ")[0] || "Contact"} écrit…`
                 : userTypeLabels[other?.user_type || ""] || "Discussion"}
             </p>
           </div>
@@ -1945,13 +2221,25 @@ export function ChatConversation({
         </div>
       )}
 
+      {/* WCAG 2.4.1 — lien d’évitement vers la zone messages */}
+      <a
+        href="#gwa-chat-messages"
+        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-2 focus:left-2 focus:bg-white focus:text-[#1F5C2E] focus:px-3 focus:py-2 focus:rounded-md focus:shadow"
+      >
+        Aller aux messages
+      </a>
+
       {/* MESSAGES AREA — fond terre / motif wax Afrique */}
       <div
-        className="flex-1 overflow-y-auto overscroll-contain px-3 py-3"
+        id="gwa-chat-messages"
+        ref={messagesContainerRef}
+        onScroll={onMessagesScroll}
+        className="flex-1 overflow-y-auto overscroll-contain px-3 py-3 relative"
         role="log"
         aria-live="polite"
         aria-relevant="additions"
         aria-label="Messages de la conversation"
+        tabIndex={-1}
         style={{
           backgroundColor: CHAT_AFRICA_BG.color,
           backgroundImage: CHAT_AFRICA_BG.image,
@@ -1999,7 +2287,7 @@ export function ChatConversation({
                 {showDate && (
                   <div className="flex justify-center my-3">
                     <span className="text-[11px] text-[#54656f] bg-white/90 backdrop-blur-sm px-3 py-1 rounded-lg shadow-sm font-medium">
-                      {new Date(msg.created_at).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
+                      {chatDayLabel(msg.created_at)}
                     </span>
                   </div>
                 )}
@@ -2153,9 +2441,9 @@ export function ChatConversation({
                 {other?.full_name?.split(" ")[0] || "Contact"} écrit…
               </p>
               <div className="flex gap-1 mt-1" aria-hidden>
-                <span className="w-1.5 h-1.5 rounded-full bg-[#8696a0] animate-bounce [animation-delay:0ms]" />
-                <span className="w-1.5 h-1.5 rounded-full bg-[#8696a0] animate-bounce [animation-delay:120ms]" />
-                <span className="w-1.5 h-1.5 rounded-full bg-[#8696a0] animate-bounce [animation-delay:240ms]" />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#8696a0] motion-safe:animate-bounce [animation-delay:0ms]" />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#8696a0] motion-safe:animate-bounce [animation-delay:120ms]" />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#8696a0] motion-safe:animate-bounce [animation-delay:240ms]" />
               </div>
             </div>
           </div>
@@ -2202,32 +2490,87 @@ export function ChatConversation({
             </p>
             <p className="text-[12px] text-[#667781] truncate">{replyTo.content}</p>
           </div>
-          <button onClick={() => setReplyTo(null)} className="p-1.5 rounded-full active:bg-gray-100">
-            <X className="h-4 w-4 text-[#667781]" />
+          <button
+            type="button"
+            onClick={() => setReplyTo(null)}
+            className="min-h-[44px] min-w-[44px] p-1.5 rounded-full active:bg-gray-100"
+            aria-label="Annuler la réponse"
+          >
+            <X className="h-4 w-4 text-[#667781]" aria-hidden />
           </button>
         </div>
       )}
 
-      {/* RECORDING BAR */}
+      {showJumpLatest ? (
+        <div className="relative z-10 flex justify-center -mt-3 mb-1 pointer-events-none">
+          <button
+            type="button"
+            onClick={scroll}
+            className="pointer-events-auto inline-flex items-center gap-1.5 min-h-[40px] rounded-full bg-white text-[#1F5C2E] text-xs font-semibold px-3 shadow-md border border-[#E5E7EB] active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#1F5C2E]"
+            aria-label="Aller aux messages récents"
+          >
+            <ChevronDown className="h-4 w-4" aria-hidden />
+            Récents
+          </button>
+        </div>
+      ) : null}
+
+      {/* RECORDING BAR — timer + waveform live ; cancel X ou swipe gauche */}
       {isRecording && (
-        <div className="bg-white border-t border-gray-200 px-3 py-2.5 flex items-center gap-3 shrink-0">
+        <div
+          className="bg-white border-t border-gray-200 px-3 py-2.5 flex items-center gap-3 shrink-0 touch-pan-y"
+          role="status"
+          aria-label="Enregistrement vocal en cours. Glisse vers la gauche ou appuie sur Annuler pour abandonner."
+          data-voice-recording-bar="true"
+          onPointerDown={(e) => {
+            recordSwipeX.current = e.clientX
+          }}
+          onPointerUp={(e) => {
+            const start = recordSwipeX.current
+            recordSwipeX.current = null
+            if (start != null && start - e.clientX > 72) {
+              cancelRecording()
+            }
+          }}
+          onPointerCancel={() => {
+            recordSwipeX.current = null
+          }}
+        >
           <button
             type="button"
             onClick={cancelRecording}
             className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full active:bg-red-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-500"
             aria-label="Annuler l’enregistrement"
           >
-            <Trash2 className="h-5 w-5 text-red-500" />
+            <X className="h-5 w-5 text-red-500" />
           </button>
-          <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse shrink-0" aria-hidden />
+          <div className="w-3 h-3 bg-red-500 rounded-full motion-safe:animate-pulse shrink-0" aria-hidden />
           <span className="text-red-700 font-mono text-sm font-medium w-10 tabular-nums" aria-live="polite">
-            {Math.floor(recordSec / 60)}:{(recordSec % 60).toString().padStart(2, '0')}
+            {Math.floor(recordSec / 60)}:{(recordSec % 60).toString().padStart(2, "0")}
           </span>
-          <div className="flex-1 flex items-center gap-[2px] overflow-hidden" aria-hidden>
-            {Array.from({ length: 40 }).map((_, i) => (
-              <div key={i} className="w-[2px] bg-red-400/60 rounded-full shrink-0" style={{ height: `${3 + Math.sin((recordSec + i) * 0.5) * 10 + 4}px` }} />
+          <span className="sr-only">
+            {voiceStudioStatusLabel({
+              recording: true,
+              sttActive: Boolean(sttSessionRef.current),
+            })}
+            {` Niveau micro ${Math.round(voiceLevel * 100)} pour cent.`}
+          </span>
+          <div
+            className="flex-1 flex items-center gap-[2px] overflow-hidden"
+            aria-hidden
+            data-voice-meter="dsp"
+          >
+            {voiceMeterBarHeights(voiceLevel, 40).map((h, i) => (
+              <div
+                key={i}
+                className="w-[2px] bg-red-400/80 rounded-full shrink-0 transition-[height] duration-75"
+                style={{ height: `${h}px` }}
+              />
             ))}
           </div>
+          <span className="text-[10px] text-[#8696a0] shrink-0 hidden sm:inline" aria-hidden>
+            ← glisser
+          </span>
           <button
             type="button"
             onClick={() => void toggleVoice()}
@@ -2239,30 +2582,75 @@ export function ChatConversation({
         </div>
       )}
 
-      {/* AUDIO PREVIEW BAR */}
+      {/* AUDIO PREVIEW BAR — play / delete / re-record / send + STT */}
       {audioPreview && !isRecording && (
-        <div className="bg-white border-t border-gray-200 px-3 py-2.5 flex items-center gap-3 shrink-0">
-          <button onClick={cancelRecording} className="p-2 rounded-full active:bg-red-50" aria-label="Annuler">
-            <Trash2 className="h-5 w-5 text-red-500" />
-          </button>
-          <div className="flex-1 bg-[#f0f2f5] rounded-full px-4 py-2.5 flex items-center gap-3">
-            <button type="button" onClick={playPreview} className="w-8 h-8 rounded-full bg-[#1F5C2E] flex items-center justify-center shrink-0 active:scale-90 transition-transform" aria-label={isPlayingPreview ? "Pause" : "Ecouter"}>
-              {isPlayingPreview ? (
-                <svg viewBox="0 0 24 24" className="h-4 w-4 text-white fill-current"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
-              ) : (
-                <svg viewBox="0 0 24 24" className="h-4 w-4 text-white fill-current"><polygon points="6,4 20,12 6,20" /></svg>
-              )}
+        <div
+          className="bg-white border-t border-gray-200 px-3 py-2.5 shrink-0 space-y-1.5"
+          data-voice-preview-bar="true"
+        >
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={cancelRecording}
+              className="p-2 rounded-full active:bg-red-50 min-h-[44px] min-w-[44px] flex items-center justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-500"
+              aria-label="Supprimer le vocal"
+            >
+              <Trash2 className="h-5 w-5 text-red-500" />
             </button>
-            <div className="flex-1 flex items-center gap-[2px]">
-              {Array.from({ length: 30 }).map((_, i) => (
-                <div key={i} className="w-[3px] bg-[#1F5C2E]/40 rounded-full shrink-0" style={{ height: `${4 + Math.sin(i * 0.4) * 8}px` }} />
-              ))}
+            <button
+              type="button"
+              onClick={() => void rerecordVoice()}
+              className="p-2 rounded-full active:bg-[#1F5C2E]/10 min-h-[44px] min-w-[44px] flex items-center justify-center text-[#1F5C2E] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#1F5C2E]"
+              aria-label="Réenregistrer"
+            >
+              <RotateCcw className="h-5 w-5" />
+            </button>
+            <div className="flex-1 bg-[#f0f2f5] rounded-full px-3 py-1.5 flex items-center gap-2 min-h-[48px]">
+              <button
+                type="button"
+                onClick={playPreview}
+                className="w-11 h-11 min-h-[44px] min-w-[44px] rounded-full bg-[#1F5C2E] flex items-center justify-center shrink-0 active:scale-90 transition-transform focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C27D10]"
+                aria-label={isPlayingPreview ? "Pause" : "Écouter l’aperçu"}
+                aria-pressed={isPlayingPreview}
+              >
+                {isPlayingPreview ? (
+                  <svg viewBox="0 0 24 24" className="h-4 w-4 text-white fill-current" aria-hidden>
+                    <rect x="6" y="4" width="4" height="16" />
+                    <rect x="14" y="4" width="4" height="16" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" className="h-4 w-4 text-white fill-current" aria-hidden>
+                    <polygon points="6,4 20,12 6,20" />
+                  </svg>
+                )}
+              </button>
+              <div className="flex-1 flex items-center gap-[2px]" aria-hidden>
+                {Array.from({ length: 28 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="w-[3px] bg-[#1F5C2E]/40 rounded-full shrink-0"
+                    style={{ height: `${4 + Math.sin(i * 0.4) * 8}px` }}
+                  />
+                ))}
+              </div>
+              <span className="text-sm font-mono text-[#667781] shrink-0 tabular-nums">
+                {audioPreview.duration}
+              </span>
             </div>
-            <span className="text-sm font-mono text-[#667781] shrink-0">{audioPreview.duration}</span>
+            <button
+              type="button"
+              onClick={sendVoiceMessage}
+              className="w-12 h-12 min-h-[48px] min-w-[48px] rounded-full bg-[#1F5C2E] text-white flex items-center justify-center active:scale-90 transition-transform focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C27D10]"
+              aria-label="Envoyer vocal"
+            >
+              <Send className="h-5 w-5" />
+            </button>
           </div>
-          <button onClick={sendVoiceMessage} className="w-11 h-11 rounded-full bg-[#1F5C2E] text-white flex items-center justify-center active:scale-90 transition-transform" aria-label="Envoyer vocal">
-            <Send className="h-5 w-5" />
-          </button>
+          {audioPreview.transcript ? (
+            <p className="text-[12px] text-[#54656f] px-2 leading-snug" aria-live="polite">
+              Transcription : {audioPreview.transcript}
+            </p>
+          ) : null}
         </div>
       )}
 
@@ -2324,9 +2712,15 @@ export function ChatConversation({
                   },
                 },
               ].map((item) => (
-                <button key={item.label} onClick={item.action} className="flex flex-col items-center gap-2">
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={item.action}
+                  aria-label={item.label}
+                  className="flex flex-col items-center gap-2 min-h-[44px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1F5C2E] rounded-lg"
+                >
                   <div className={`w-14 h-14 ${item.color} rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform`}>
-                    <item.icon className="h-6 w-6 text-white" />
+                    <item.icon className="h-6 w-6 text-white" aria-hidden />
                   </div>
                   <span className="text-xs text-[#667781] font-medium">{item.label}</span>
                 </button>
@@ -2339,22 +2733,38 @@ export function ChatConversation({
       {/* OFFRE DE PRIX — négociation commande */}
       {showOfferSheet && (
         <>
-          <div className="fixed inset-0 bg-black/40 z-[108]" onClick={() => setShowOfferSheet(false)} />
-          <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl z-[109] p-5 pb-8 safe-bottom animate-slideUp">
-            <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-4" />
+          <div
+            className="fixed inset-0 bg-black/40 z-[108]"
+            onClick={() => {
+              setShowOfferSheet(false)
+              setTimeout(() => inputRef.current?.focus(), 50)
+            }}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="offer-sheet-title"
+            aria-describedby="offer-sheet-desc"
+            className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl z-[109] p-5 pb-8 safe-bottom motion-safe:animate-slideUp"
+          >
+            <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-4" aria-hidden />
             <div className="flex items-center gap-2 mb-1">
-              <HandCoins className="h-5 w-5 text-[#C27D10]" />
-              <h3 className="text-lg font-semibold text-[#111]">Proposer un prix</h3>
+              <HandCoins className="h-5 w-5 text-[#C27D10]" aria-hidden />
+              <h3 id="offer-sheet-title" className="text-lg font-semibold text-[#111]">Proposer un prix</h3>
             </div>
-            <p className="text-sm text-[#667781] mb-4">
-              Propose un prix. Si l’autre confirme, une commande est créée au montant convenu.
+            <p id="offer-sheet-desc" className="text-sm text-[#667781] mb-4">
+              Propose un prix structuré (montant, quantité, lieu, délai). Si l’autre confirme, un bon de commande QR/PDF peut être généré.
             </p>
             {offerProducts.length > 0 && (
               <>
-                <label className="text-sm font-medium text-[#111] mb-1.5 block">
+                <label
+                  className="text-sm font-medium text-[#111] mb-1.5 block"
+                  htmlFor="offer-product"
+                >
                   Produit
                 </label>
                 <select
+                  id="offer-product"
                   value={offerProductId}
                   onChange={(e) => {
                     setOfferProductId(e.target.value)
@@ -2371,22 +2781,83 @@ export function ChatConversation({
                 </select>
               </>
             )}
-            <label className="text-sm font-medium text-[#111] mb-1.5 block">Montant (FCFA)</label>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <label className="text-sm font-medium text-[#111] mb-1.5 block" htmlFor="offer-amount">
+                  Prix unitaire (FCFA)
+                </label>
+                <input
+                  id="offer-amount"
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  value={offerAmount}
+                  onChange={(e) => setOfferAmount(e.target.value)}
+                  placeholder="15000"
+                  className="w-full h-12 rounded-xl border border-[#E5E7EB] px-4 text-lg font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-[#1F5C2E]/30"
+                />
+                {(() => {
+                  const list = offerProducts.find((p) => p.id === offerProductId)?.price
+                  const label = offerDeltaLabel(
+                    list,
+                    Number.parseInt(offerAmount.replace(/\D/g, ""), 10) || 0,
+                  )
+                  return label ? (
+                    <p className="mt-1 text-[11px] font-medium text-[#C27D10]" aria-live="polite">
+                      {label}
+                    </p>
+                  ) : null
+                })()}
+              </div>
+              <div>
+                <label className="text-sm font-medium text-[#111] mb-1.5 block" htmlFor="offer-qty">
+                  Quantité
+                </label>
+                <input
+                  id="offer-qty"
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  value={offerQuantity}
+                  onChange={(e) => setOfferQuantity(e.target.value)}
+                  placeholder="1"
+                  className="w-full h-12 rounded-xl border border-[#E5E7EB] px-4 text-lg font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-[#1F5C2E]/30"
+                />
+              </div>
+            </div>
+            <label className="text-sm font-medium text-[#111] mb-1.5 block" htmlFor="offer-location">
+              Lieu (retrait / livraison)
+            </label>
             <input
-              type="number"
-              inputMode="numeric"
-              min={1}
-              value={offerAmount}
-              onChange={(e) => setOfferAmount(e.target.value)}
-              placeholder="15000"
-              className="w-full h-12 rounded-xl border border-[#E5E7EB] px-4 text-lg font-semibold tabular-nums mb-3 focus:outline-none focus:ring-2 focus:ring-[#1F5C2E]/30"
+              id="offer-location"
+              type="text"
+              value={offerLocation}
+              onChange={(e) => setOfferLocation(e.target.value)}
+              placeholder="Abidjan, marché de Cocody"
+              maxLength={120}
+              className="w-full h-11 rounded-xl border border-[#E5E7EB] px-4 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-[#1F5C2E]/30"
             />
-            <label className="text-sm font-medium text-[#111] mb-1.5 block">Message</label>
+            <label className="text-sm font-medium text-[#111] mb-1.5 block" htmlFor="offer-delivery">
+              Délai
+            </label>
             <input
+              id="offer-delivery"
+              type="text"
+              value={offerDeliveryBy}
+              onChange={(e) => setOfferDeliveryBy(e.target.value)}
+              placeholder="Demain · 3 jours · avant vendredi"
+              maxLength={80}
+              className="w-full h-11 rounded-xl border border-[#E5E7EB] px-4 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-[#1F5C2E]/30"
+            />
+            <label className="text-sm font-medium text-[#111] mb-1.5 block" htmlFor="offer-note">
+              Message
+            </label>
+            <input
+              id="offer-note"
               type="text"
               value={offerNote}
               onChange={(e) => setOfferNote(e.target.value)}
-              placeholder="2 sacs, livraison demain"
+              placeholder="Précisions (qualité, emballage…)"
               className="w-full h-11 rounded-xl border border-[#E5E7EB] px-4 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-[#1F5C2E]/30"
             />
             <button
@@ -2490,8 +2961,9 @@ export function ChatConversation({
                 onClick={() => void toggleVoice()}
                 className="min-w-[48px] min-h-[48px] w-12 h-12 rounded-full bg-[#1F5C2E] text-white flex items-center justify-center shrink-0 active:scale-90 transition-transform shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C27D10]"
                 aria-label="Message vocal"
+                aria-pressed={isRecording}
               >
-                <Mic className="h-5 w-5" />
+                <Mic className="h-5 w-5" aria-hidden />
               </button>
             )}
           </form>

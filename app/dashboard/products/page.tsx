@@ -32,9 +32,11 @@ import {
   Package,
   ArrowLeft,
   Loader2,
+  Share2,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
+import { copyTextToClipboard, productShareUrl } from "@/lib/farmer/share"
 
 interface Product {
   id: string
@@ -103,7 +105,7 @@ export default function ProductsPage() {
       const payload = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(payload.error || "Suppression impossible")
       setProducts((prev) => prev.filter((p) => p.id !== pendingDelete.id))
-      toast.success("Produit supprimé")
+      toast.success("Annonce archivée (retirée de la vente)")
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erreur")
     } finally {
@@ -256,7 +258,7 @@ export default function ProductsPage() {
                     </Link>
                     <DropdownMenu>
                       <DropdownMenuTrigger
-                        className="p-1.5 -mr-1 -mt-1 rounded-full active:bg-neutral-100"
+                        className="min-h-11 min-w-11 p-1.5 -mr-1 -mt-1 rounded-full inline-flex items-center justify-center active:bg-neutral-100"
                         aria-label="Options"
                       >
                         <MoreVertical className="h-4 w-4 text-neutral-500" />
@@ -267,6 +269,17 @@ export default function ProductsPage() {
                             <Edit className="h-4 w-4 mr-2" />
                             Modifier
                           </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={async () => {
+                            const url = productShareUrl(product.id)
+                            const ok = await copyTextToClipboard(url)
+                            if (ok) toast.success("Lien de l’annonce copié")
+                            else toast.error("Copie impossible — copie manuelle")
+                          }}
+                        >
+                          <Share2 className="h-4 w-4 mr-2" />
+                          Partager le lien
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => toggleActive(product)}>
                           {product.status === "active" ? (
@@ -313,10 +326,10 @@ export default function ProductsPage() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Supprimer ce produit ?</AlertDialogTitle>
+            <AlertDialogTitle>Archiver cette annonce ?</AlertDialogTitle>
             <AlertDialogDescription>
-              « {pendingDelete?.name} » sera retiré de la vente et n'apparaîtra plus
-              sur le marketplace. Cette action est définitive.
+              « {pendingDelete?.name} » sera retirée de la vente (soft-delete). Tu
+              pourras la retrouver côté admin / support si besoin.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -332,7 +345,7 @@ export default function ProductsPage() {
               {deleting ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                "Supprimer"
+                "Archiver"
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

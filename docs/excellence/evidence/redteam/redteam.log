@@ -1,0 +1,21 @@
+=== RED TEAM ===
+SQLi_search_prod => HTTP 404 | <!DOCTYPE html><html lang="fr"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cov
+SQLi_recherche_prod => HTTP 200 | <!DOCTYPE html><html lang="fr"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cov
+SQLi_marketplace_local => HTTP 200 | <!DOCTYPE html><html lang="fr"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cov
+XSS_chat_messages => HTTP 404 | <!DOCTYPE html><html lang="fr"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cov
+XSS_chat_local => HTTP 404 | <!DOCTYPE html><html lang="fr"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cov
+BOLA_orders_GET_anon => HTTP 404 | <!DOCTYPE html><html lang="fr"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cov
+BOLA_orders_PATCH_anon => HTTP 404 | <!DOCTYPE html><html lang="fr"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cov
+BOLA_rest_orders => HTTP 200 | []
+UPLOAD_exe_as_jpg => HTTP 404 | <!DOCTYPE html><html lang="fr"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cov
+UPLOAD_exe_bytes_jpg => HTTP 404 | <!DOCTYPE html><html lang="fr"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cov
+UPLOAD_local => HTTP 409 | Server Action unavailable.
+CSRF_admin_cross => HTTP 403 | {"error":"CSRF: origine refusée"}
+CSRF_favorite_cross => HTTP 403 | {"error":"CSRF: origine refusée"}
+content-security-policy: default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; object-src 'none'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; font-src 'self' data:; style-src 'self' 'unsafe-inline' https://onesignal.com https://cdn.onesignal.com; script-src 'self' 'unsafe-inline' https://cdn.onesignal.com https://onesignal.com https://api.onesignal.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://onesignal.com https://*.onesignal.com https://api.onesignal.com https://api.open-meteo.com https://*.upstash.io https://nominatim.openstreetmap.org https://api.openai.com https://api.groq.com https://*.vercel.app; frame-src 'self' https://www.openstreetmap.org; worker-src 'self' blob:; manifest-src 'self'; upgrade-insecure-requests
+permissions-policy: camera=(self), microphone=(self), geolocation=(self), payment=(self)
+referrer-policy: strict-origin-when-cross-origin
+strict-transport-security: max-age=63072000; includeSubDomains; preload
+x-content-type-options: nosniff
+x-frame-options: SAMEORIGIN
+x-xss-protection: 1; mode=block

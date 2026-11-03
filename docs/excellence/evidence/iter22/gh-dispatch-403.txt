@@ -1,0 +1,6 @@
+method=gh api POST .../actions/workflows/341933505/dispatches
+ref=gwa/excellence-parcours-1e99
+http=403
+body=Resource not accessible by integration
+required_permission=actions=write
+note=X-Accepted-Github-Permissions: actions=write

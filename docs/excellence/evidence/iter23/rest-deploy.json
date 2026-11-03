@@ -1,0 +1,4 @@
+{
+  "status": 403,
+  "body": "{\"error\":{\"code\":\"forbidden\",\"message\":\"The request is missing an authentication token\",\"missingToken\":true}}"
+}

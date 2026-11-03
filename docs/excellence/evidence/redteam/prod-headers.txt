@@ -1,0 +1,26 @@
+HTTP/2 200 
+accept-ranges: bytes
+access-control-allow-origin: *
+age: 8833
+cache-control: public, max-age=0, must-revalidate
+content-disposition: inline
+content-security-policy: default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; object-src 'none'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; font-src 'self' data:; style-src 'self' 'unsafe-inline' https://onesignal.com https://cdn.onesignal.com; script-src 'self' 'unsafe-inline' https://cdn.onesignal.com https://onesignal.com https://api.onesignal.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://onesignal.com https://*.onesignal.com https://api.onesignal.com https://api.open-meteo.com https://*.upstash.io https://nominatim.openstreetmap.org https://api.openai.com https://api.groq.com https://*.vercel.app; frame-src 'self' https://www.openstreetmap.org; worker-src 'self' blob:; manifest-src 'self'; upgrade-insecure-requests
+content-type: text/html; charset=utf-8
+date: Mon, 02 Nov 2026 19:52:14 GMT
+etag: "94ba201bf3cafa069e915ce591263e09"
+permissions-policy: camera=(self), microphone=(self), geolocation=(self), payment=(self)
+referrer-policy: strict-origin-when-cross-origin
+server: Vercel
+strict-transport-security: max-age=63072000; includeSubDomains; preload
+vary: rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch
+x-content-type-options: nosniff
+x-dns-prefetch-control: on
+x-frame-options: SAMEORIGIN
+x-matched-path: /
+x-nextjs-prerender: 1
+x-nextjs-stale-time: 300
+x-vercel-cache: HIT
+x-vercel-id: iad1::zrqhf-1793649134709-be6bc03d3133
+x-xss-protection: 1; mode=block
+content-length: 36268
+

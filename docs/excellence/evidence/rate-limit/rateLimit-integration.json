@@ -1,0 +1,93 @@
+FAIL_CLOSED_NO_REDIS { success: false, remaining: 0, resetAt: 1793648925119, blocked: true }
+{
+  "ok": 10,
+  "denied": 15,
+  "first429": 11,
+  "outcomes": [
+    {
+      "i": 1,
+      "success": true,
+      "blocked": false,
+      "http": 200
+    },
+    {
+      "i": 2,
+      "success": true,
+      "blocked": false,
+      "http": 200
+    },
+    {
+      "i": 3,
+      "success": true,
+      "blocked": false,
+      "http": 200
+    },
+    {
+      "i": 4,
+      "success": true,
+      "blocked": false,
+      "http": 200
+    },
+    {
+      "i": 5,
+      "success": true,
+      "blocked": false,
+      "http": 200
+    },
+    {
+      "i": 6,
+      "success": true,
+      "blocked": false,
+      "http": 200
+    },
+    {
+      "i": 7,
+      "success": true,
+      "blocked": false,
+      "http": 200
+    },
+    {
+      "i": 8,
+      "success": true,
+      "blocked": false,
+      "http": 200
+    },
+    {
+      "i": 9,
+      "success": true,
+      "blocked": false,
+      "http": 200
+    },
+    {
+      "i": 10,
+      "success": true,
+      "blocked": false,
+      "http": 200
+    },
+    {
+      "i": 11,
+      "success": false,
+      "blocked": true,
+      "http": 429
+    },
+    {
+      "i": 12,
+      "success": false,
+      "blocked": true,
+      "http": 429
+    },
+    {
+      "i": 13,
+      "success": false,
+      "blocked": true,
+      "http": 429
+    },
+    {
+      "i": 14,
+      "success": false,
+      "blocked": true,
+      "http": 429
+    }
+  ]
+}
+PASS_INTEGRATION_RATE_LIMIT_YELLY

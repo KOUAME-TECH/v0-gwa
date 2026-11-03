@@ -2,10 +2,9 @@ import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { sendPushToUser } from "@/lib/notifications/push"
-import {
-  mapLitigeDescriptionToReason,
-  normalizeDisputeReason,
-} from "@/lib/orders/escrow-flow"
+import { assertSameOrigin } from "@/lib/security/csrf"
+import { checkRateLimit } from "@/lib/security/rate-limiter"
+import { parseLitigeBody } from "@/lib/orders/litige-schema"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -15,6 +14,14 @@ type Ctx = { params: Promise<{ id: string }> }
  */
 export async function POST(request: NextRequest, context: Ctx) {
   try {
+    const csrf = assertSameOrigin(request)
+    if (csrf) return csrf
+
+    const rate = await checkRateLimit("API_CREATE")
+    if (!rate.success) {
+      return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })
+    }
+
     const { id } = await context.params
     const supabase = await createClient()
     const {
@@ -25,10 +32,11 @@ export async function POST(request: NextRequest, context: Ctx) {
     }
 
     const body = await request.json()
-    const description = String(body?.description || "").trim()
-    if (!description) {
-      return NextResponse.json({ error: "Description du litige requise" }, { status: 400 })
+    const litige = parseLitigeBody(body)
+    if (!litige.ok) {
+      return NextResponse.json({ error: litige.error, code: "VALIDATION" }, { status: 400 })
     }
+    const { description, reason, photos } = litige.data
 
     const { data: order } = await supabase
       .from("orders")
@@ -54,10 +62,6 @@ export async function POST(request: NextRequest, context: Ctx) {
 
     const admin = createAdminClient()
     const now = new Date().toISOString()
-    const photos = Array.isArray(body?.photos) ? body.photos : null
-    const reason = body?.reason
-      ? normalizeDisputeReason(String(body.reason))
-      : mapLitigeDescriptionToReason(description)
 
     await admin
       .from("orders")

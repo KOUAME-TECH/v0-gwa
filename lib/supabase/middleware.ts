@@ -75,12 +75,13 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
+  // /panier volontairement public : panier invité (localStorage) visible hors auth ;
+  // le checkout force login côté page.
   const protectedPrefixes = [
     '/protected',
     '/admin',
     '/dashboard',
     '/profil/edit',
-    '/panier',
     '/publier',
     '/messages',
     '/notifications',

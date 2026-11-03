@@ -16,13 +16,15 @@ const securityHeaders = [
       "form-action 'self'",
       "frame-ancestors 'self'",
       "object-src 'none'",
-      "img-src 'self' data: blob: https:",
+      // img-src https: large mais nécessaire (Supabase storage, OSM static maps, avatars)
+      "img-src 'self' data: blob: https: https://staticmap.openstreetmap.de",
       "media-src 'self' blob: https:",
       "font-src 'self' data:",
       "style-src 'self' 'unsafe-inline' https://onesignal.com https://cdn.onesignal.com",
       // unsafe-inline: Next inline + OneSignal SDK. Éviter unsafe-eval (retiré).
       "script-src 'self' 'unsafe-inline' https://cdn.onesignal.com https://onesignal.com https://api.onesignal.com",
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://onesignal.com https://*.onesignal.com https://api.onesignal.com https://api.open-meteo.com https://*.upstash.io https://nominatim.openstreetmap.org https://api.openai.com https://api.groq.com https://*.vercel.app",
+      // staticmap : SW / fetch peuvent charger l'aperçu carte via connect-src (pas seulement img-src)
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://onesignal.com https://*.onesignal.com https://api.onesignal.com https://api.open-meteo.com https://*.upstash.io https://nominatim.openstreetmap.org https://staticmap.openstreetmap.de https://api.openai.com https://api.groq.com https://*.vercel.app",
       "frame-src 'self' https://www.openstreetmap.org",
       "worker-src 'self' blob:",
       "manifest-src 'self'",

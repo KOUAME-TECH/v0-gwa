@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { formatPhoneE164, validateWestAfricaPhone } from "@/lib/auth/phone"
 import { getLinkCooldown, linkCooldownMessage } from "@/lib/auth/link-cooldown"
+import { assertSameOrigin } from "@/lib/security/csrf"
+import { checkRateLimit } from "@/lib/security/rate-limiter"
 
 /**
  * POST /api/auth/link-email
@@ -10,6 +12,14 @@ import { getLinkCooldown, linkCooldownMessage } from "@/lib/auth/link-cooldown"
  */
 export async function POST(request: Request) {
   try {
+    const csrf = assertSameOrigin(request)
+    if (csrf) return csrf
+
+    const rate = await checkRateLimit("API_CREATE")
+    if (!rate.success) {
+      return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })
+    }
+
     const supabase = await createClient()
     const {
       data: { user },

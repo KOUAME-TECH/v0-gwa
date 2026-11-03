@@ -6,8 +6,9 @@ export async function GET() {
   try {
     const gate = await requireAdmin()
 
+    // Invité / non authentifié : 200 + isAdmin false (évite bruit console 401 sur pages publiques)
     if (!gate.user) {
-      return NextResponse.json({ isAdmin: false, role: null }, { status: 401 })
+      return NextResponse.json({ isAdmin: false, role: null })
     }
 
     if (!gate.isAdmin) {

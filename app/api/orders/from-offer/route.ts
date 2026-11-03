@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { parseOfferContent } from "@/lib/chat/offer"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
+import { assertSameOrigin } from "@/lib/security/csrf"
 import { sendPushToUser } from "@/lib/notifications/push"
 import { isAgriculturalProductType } from "@/lib/catalog/scope"
 
@@ -13,6 +14,9 @@ import { isAgriculturalProductType } from "@/lib/catalog/scope"
  */
 export async function POST(request: Request) {
   try {
+    const csrf = assertSameOrigin(request)
+    if (csrf) return csrf
+
     const rate = await checkRateLimit("API_CREATE")
     if (!rate.success) {
       return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })

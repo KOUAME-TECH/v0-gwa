@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Search, SlidersHorizontal, MapPin, Heart, X, ChevronLeft, Plus, ShoppingBag } from "lucide-react"
+import { Search, SlidersHorizontal, MapPin, Heart, X, Plus, ShoppingBag } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
@@ -30,6 +30,7 @@ import {
   saveCatalogCache,
 } from "@/lib/offline/catalog-cache"
 import { CartIconButton } from "@/components/cart/cart-icon-button"
+import { GwaMark } from "@/components/brand/gwa-mark"
 import { addOrIncrementCart } from "@/lib/cart/add"
 import { prefetchProduct } from "@/lib/products/prefetch"
 import { cn } from "@/lib/utils"
@@ -132,9 +133,11 @@ function MarketplaceGridCard({
         <button
           type="button"
           onClick={(e) => onToggleFavorite(p.id, e)}
-          className="absolute top-2 right-2 w-8 h-8 bg-white/80 backdrop-blur-sm rounded-full flex items-center justify-center"
+          aria-label={favorited ? `Retirer ${p.name} des favoris` : `Ajouter ${p.name} aux favoris`}
+          aria-pressed={favorited}
+          className="absolute top-2 right-2 w-8 h-8 min-w-11 min-h-11 bg-white/80 backdrop-blur-sm rounded-full flex items-center justify-center"
         >
-          <Heart className={`h-4 w-4 ${favorited ? "fill-red-500 text-red-500" : "text-gray-500"}`} />
+          <Heart className={`h-4 w-4 ${favorited ? "fill-red-500 text-red-500" : "text-gray-500"}`} aria-hidden />
         </button>
         {p.is_organic && (
           <Badge className="absolute top-2 left-2 bg-[#2F7D32] text-white text-[10px] px-1.5 py-0.5">Bio</Badge>
@@ -583,20 +586,28 @@ function MarketplaceContent() {
   return (
     <div className="min-h-screen bg-[#FFF6E5]">
       {/* Header */}
+      {/* H1 toujours exposé aux AT — ne pas le mettre sous aria-hidden du chrome sticky */}
+      <h1 className="sr-only">Boutique GWA — produits frais près de toi</h1>
       <header
         className={cn(
           "sticky top-0 z-40 bg-white/95 border-b border-[#E5E7EB] backdrop-blur-sm lg:bg-[#FFF6E5]/90 lg:border-[#1F5C2E]/10",
           "transition-transform duration-300 ease-out will-change-transform",
-          headerHidden && "-translate-y-full",
+          headerHidden && "-translate-y-full pointer-events-none",
         )}
-        aria-hidden={headerHidden}
       >
         <div className="gwa-shell-wide flex items-center gap-3 p-3 md:px-5 lg:py-4">
-          <Link href="/" className="lg:hidden"><ChevronLeft className="h-6 w-6" /></Link>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-lg font-semibold text-[#111827] lg:font-display lg:text-2xl lg:text-[#1F5C2E]">
+          <Link
+            href="/"
+            className="shrink-0 lg:hidden"
+            aria-label="GWA accueil"
+            tabIndex={headerHidden ? -1 : undefined}
+          >
+            <GwaMark size={28} />
+          </Link>
+          <div className="flex-1 min-w-0" aria-hidden="true">
+            <p className="text-lg font-semibold text-[#111827] lg:font-display lg:text-2xl lg:text-[#1F5C2E]">
               Boutique
-            </h1>
+            </p>
             <p className="hidden lg:block text-sm text-[#4B5563] mt-0.5">
               Produits frais près de toi — écoute ou parcours
             </p>
@@ -689,7 +700,7 @@ function MarketplaceContent() {
       </header>
 
       {/* Content */}
-      <main className="gwa-shell-wide p-4 sm:p-5 md:px-6 lg:pb-10">
+      <div className="gwa-shell-wide p-4 sm:p-5 md:px-6 lg:pb-10" role="region" aria-label="Catalogue boutique">
         {/* Digest visible dans la boutique (et via ?digest=1) */}
         {digestProducts.length > 0 && (
           <DigestBanner
@@ -783,7 +794,7 @@ function MarketplaceContent() {
             </div>
           </>
         )}
-      </main>
+      </div>
     </div>
   )
 }

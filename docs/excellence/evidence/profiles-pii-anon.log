@@ -1,0 +1,7 @@
+=== ANON SELECT email,phone ===
+HTTP 401
+{"code":"42501","details":null,"hint":null,"message":"permission denied for table profiles"}=== ANON SELECT marketplace cols ===
+HTTP 200
+[{"id":"19d43f44-8d6e-4226-bf46-8c7b1fadcfd4","full_name":"Dabiré Alimatou ","avatar_url":null,"user_type":"producteur","city":"","country":"","rating":0.00}]=== ANON SELECT * ===
+HTTP 401
+ERROR {'code': '42501', 'details': None, 'hint': None, 'message': 'permission denied for table profiles'}

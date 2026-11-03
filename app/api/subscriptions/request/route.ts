@@ -3,13 +3,13 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { assertSameOrigin } from "@/lib/security/csrf"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
-import { sanitizePlainText } from "@/lib/security/validation"
 import {
   normalizeSubscriptionTier,
   SUBSCRIPTION_PRICES_FCFA,
   type SubscriptionTier,
 } from "@/lib/pricing/service-fee"
 import { isSellerRole } from "@/lib/dashboard/routing"
+import { subscriptionRequestSchema } from "@/lib/subscriptions/request-schema"
 
 const REQUESTABLE: SubscriptionTier[] = ["starter", "pro", "enterprise"]
 
@@ -35,14 +35,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
     }
 
-    const body = await request.json().catch(() => null)
-    const tier = normalizeSubscriptionTier(body?.tier)
+    const raw = await request.json().catch(() => null)
+    const parsed = subscriptionRequestSchema.safeParse(raw)
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          error: parsed.error.issues[0]?.message || "Choisis Starter, Pro ou Entreprise",
+          code: "VALIDATION",
+        },
+        { status: 400 },
+      )
+    }
+    const tier = normalizeSubscriptionTier(parsed.data.tier)
     if (!REQUESTABLE.includes(tier)) {
       return NextResponse.json(
         { error: "Choisis Starter, Pro ou Entreprise" },
         { status: 400 },
       )
     }
+    const note = parsed.data.note || ""
 
     const { data: profile } = await supabase
       .from("profiles")
@@ -85,7 +96,7 @@ export async function POST(request: NextRequest) {
         current_tier: current,
         amount_fcfa: amount,
         status: "pending",
-        note: sanitizePlainText(String(body?.note || ""), 500) || null,
+        note: note || null,
       })
       .select("id, requested_tier, amount_fcfa, status, created_at")
       .single()

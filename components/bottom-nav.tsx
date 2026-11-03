@@ -148,7 +148,8 @@ export function BottomNav() {
         )}
         role="navigation"
         aria-label="Navigation principale"
-        aria-hidden={scrollHidden}
+        aria-hidden={scrollHidden || undefined}
+        inert={scrollHidden || undefined}
       >
         <div className="h-[2px] bg-[#E5E7EB] relative">
           {activeWorld && (

@@ -1,0 +1,13 @@
+SQLi_products_q => HTTP 200 | {"products":[],"count":0,"limit":24,"offset":0}
+SQLi_products_local => HTTP 200 | {"products":[],"count":0,"limit":24,"offset":0}
+XSS_notify => HTTP 401 | {"error":"Non authentifié"}
+XSS_notify_local => HTTP 401 | {"error":"Non authentifié"}
+BOLA_orders_list => HTTP 401 | {"error":"Non authentifié"}
+BOLA_orders_status => HTTP 401 | {"error":"Non authentifié"}
+BOLA_orders_confirm => HTTP 401 | {"error":"Non authentifié"}
+UPLOAD_prepare => HTTP 401 | {"error":"Reconnecte-toi"}
+UPLOAD_prepare_local => HTTP 401 | {"error":"Reconnecte-toi"}
+UPLOAD_sign => HTTP 401 | {"error":"Reconnecte-toi"}
+IA_burst_prod_sample => HTTP 200 | {"reply":"Dis-moi : vendre, acheter, une commande, ou parler à quelqu’un ?","source":"fallback","conversationId":null,"assistant":"Yelly","guestRemaining":2,
+CSRF_admin_settings => HTTP 403 | {"error":"CSRF: origine refusée"}
+PII_profiles_api => HTTP 200 | {"profile":{"id":"19d43f44-8d6e-4226-bf46-8c7b1fadcfd4","full_name":"Dabiré Alimatou ","avatar_url":null,"bio":null,"user_type":"producteur","sub_type":null,"c

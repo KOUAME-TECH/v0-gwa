@@ -1,0 +1,63 @@
+{
+  "attempts": [
+    {
+      "target": "production",
+      "payload": "slug=gwa + org KOUAME-TECH + sha tip",
+      "result": 403,
+      "message": "no permission to create Production Deployment"
+    },
+    {
+      "target": "production",
+      "payload": "teamId + prj_ + kouame-tech + sha tip",
+      "result": 403,
+      "message": "no permission to create Production Deployment"
+    },
+    {
+      "target": "production",
+      "payload": "teamId + project name + ref only (no sha)",
+      "result": 403,
+      "message": "no permission to create Production Deployment"
+    },
+    {
+      "authorize_team_sso": "requires_user_action",
+      "urls": [
+        "https://vercel.com/sso/session-requests/Ccl9l6HNYYspUkVZRGkeu3nZyj2MhzO9",
+        "https://vercel.com/sso/session-requests/alnIU65r5mVjGWFY_TJ7pSucGCHcLM2h"
+      ]
+    },
+    {
+      "authorize_team_access": "requires_user_action",
+      "url": "https://vercel.com/sso/session-requests/N3LaIpjhSGRHBQ4xqGDpbgWdU4qxh2OZ"
+    },
+    {
+      "list_teams": "OK",
+      "team": "team_KUeqdoY34PvZoLu9pZYo284N",
+      "slug": "gwa"
+    },
+    {
+      "cli": "login_required",
+      "rest": "403 missingToken",
+      "gh_dispatch": 403
+    }
+  ],
+  "payload_attempted": {
+    "teamId": "team_KUeqdoY34PvZoLu9pZYo284N",
+    "forceNew": "1",
+    "requestBody": {
+      "name": "v0-gwa",
+      "project": "prj_6rxrwGIg7IhfuprNGnecPl2mncoK",
+      "target": "production",
+      "gitSource": {
+        "type": "github",
+        "org": "kouame-tech",
+        "repo": "v0-gwa",
+        "ref": "gwa/excellence-parcours-1e99",
+        "sha": "234e1177e5f543a82709c888f89195fb4727eb2b"
+      }
+    }
+  },
+  "tip": "234e1177e5f543a82709c888f89195fb4727eb2b",
+  "prior_success": "dpl_BmKBqbDJr2Sv9XJoHt3vrLNaaxK2 @ 2f9d54b (stale)",
+  "new_deployment_id": null,
+  "user_said": "GO déployer"
+}

@@ -1,0 +1,84 @@
+PING PONG
+{
+  "allowed": 10,
+  "denied": 40,
+  "firstDeniedAt": 11,
+  "first15": [
+    {
+      "i": 1,
+      "count": 1,
+      "success": true
+    },
+    {
+      "i": 2,
+      "count": 2,
+      "success": true
+    },
+    {
+      "i": 3,
+      "count": 3,
+      "success": true
+    },
+    {
+      "i": 4,
+      "count": 4,
+      "success": true
+    },
+    {
+      "i": 5,
+      "count": 5,
+      "success": true
+    },
+    {
+      "i": 6,
+      "count": 6,
+      "success": true
+    },
+    {
+      "i": 7,
+      "count": 7,
+      "success": true
+    },
+    {
+      "i": 8,
+      "count": 8,
+      "success": true
+    },
+    {
+      "i": 9,
+      "count": 9,
+      "success": true
+    },
+    {
+      "i": 10,
+      "count": 10,
+      "success": true
+    },
+    {
+      "i": 11,
+      "count": 11,
+      "success": false
+    },
+    {
+      "i": 12,
+      "count": 12,
+      "success": false
+    },
+    {
+      "i": 13,
+      "count": 13,
+      "success": false
+    },
+    {
+      "i": 14,
+      "count": 14,
+      "success": false
+    },
+    {
+      "i": 15,
+      "count": 15,
+      "success": false
+    }
+  ]
+}
+PASS_LOCAL_REDIS_BURST_10_OF_50

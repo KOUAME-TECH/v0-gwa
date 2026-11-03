@@ -1,0 +1,9 @@
+utc=2026-11-03T14:36:08Z
+tip=234e1177e5f543a82709c888f89195fb4727eb2b
+VERCEL_TOKEN=ABSENT
+VERCEL_ACCESS_TOKEN=ABSENT
+VERCEL_ORG_ID=ABSENT
+VERCEL_PROJECT_ID=ABSENT
+CURSOR_AGENT_VERCEL_TOKEN=ABSENT
+DEPLOY_HOOK=ABSENT
+vercel_whoami=Vercel CLI 65.10.0 > Logged out. > Run `vercel deploy --temporary` to create a temporary deployment you can claim later, or `vercel login` to log in. 

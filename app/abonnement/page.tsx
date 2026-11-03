@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, Check, Crown, Loader2, MessageCircle } from "lucide-react"
+import { ArrowLeft, Check, Crown, Loader2, MessageCircle, Volume2 } from "lucide-react"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -16,6 +16,8 @@ import {
 import { WHATSAPP_LINK } from "@/lib/contact"
 import { isSellerRole } from "@/lib/dashboard/routing"
 import { cn } from "@/lib/utils"
+import { speakFrench } from "@/lib/chat/tts"
+import { GwaMark } from "@/components/brand/gwa-mark"
 
 export default function AbonnementPage() {
   const router = useRouter()
@@ -106,15 +108,21 @@ export default function AbonnementPage() {
   return (
     <div className="min-h-dvh bg-[#FFF6E5] pb-24">
       <header className="sticky top-0 z-40 bg-white border-b border-[#E5E7EB]">
-        <div className="flex items-center h-14 px-4 max-w-lg mx-auto">
-          <button onClick={() => router.back()} className="p-2 -ml-2" aria-label="Retour">
+        <div className="flex items-center h-14 px-4 max-w-lg mx-auto gap-2">
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="-ml-2 inline-flex h-11 w-11 items-center justify-center"
+            aria-label="Retour"
+          >
             <ArrowLeft className="h-5 w-5" />
           </button>
-          <h1 className="text-lg font-semibold ml-2">Abonnement vendeur</h1>
+          <GwaMark size={28} className="shrink-0" />
+          <h1 className="ml-1 text-lg font-semibold text-[#1F5C2E]">Abonnement vendeur</h1>
         </div>
       </header>
 
-      <main className="max-w-lg mx-auto px-4 pt-4 space-y-4">
+      <main id="abo-main" className="mx-auto max-w-lg space-y-4 px-4 pt-4">
         {!seller && (
           <div className="rounded-2xl bg-white border border-[#E5E7EB] p-4 text-sm text-[#4B5563]">
             Les abonnements sont pour les vendeurs (producteurs / coopératives).{" "}
@@ -142,9 +150,24 @@ export default function AbonnementPage() {
           )}
         </div>
 
-        <p className="text-sm text-[#4B5563]">
-          Acheteurs : gratuit. Toi vendeur : moins de commission = plus tu montes de palier.
-        </p>
+        <div className="flex items-start gap-2">
+          <p className="flex-1 text-sm text-[#4B5563]">
+            Acheteurs : gratuit. Toi vendeur : moins de commission = plus tu montes de palier.
+          </p>
+          <button
+            type="button"
+            className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full text-[#2F7D32] hover:bg-[#E8F5E9] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2F7D32]"
+            aria-label="Écouter l’explication des paliers"
+            onClick={() => {
+              const r = speakFrench(
+                "Acheteurs : gratuit. Toi vendeur : moins de commission, plus tu montes de palier. Demande ton palier puis finalise sur WhatsApp.",
+              )
+              if (!r.ok) toast.info("Lecture vocale indisponible sur cet appareil")
+            }}
+          >
+            <Volume2 className="h-5 w-5" aria-hidden />
+          </button>
+        </div>
 
         <div className="space-y-3">
           {SELLER_PLANS.map((plan) => {
@@ -196,7 +219,7 @@ export default function AbonnementPage() {
 
                 {seller && plan.tier !== "free" && (
                   <Button
-                    className="w-full mt-4 bg-[#2F7D32] hover:bg-[#256025]"
+                    className="mt-4 min-h-11 w-full bg-[#2F7D32] hover:bg-[#256025]"
                     disabled={isCurrent || busy === plan.tier}
                     onClick={() => void requestPlan(plan)}
                   >

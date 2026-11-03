@@ -5,6 +5,7 @@ import { authorizeCronRequest, getCronSecret } from "@/lib/security/cron-auth"
 import {
   getOneSignalAppId,
   GWA_ONESIGNAL_APP_ID,
+  isOneSignalOriginAllowed,
 } from "@/lib/notifications/onesignal-config"
 
 describe("shouldShowBottomNav", () => {
@@ -56,6 +57,22 @@ describe("OneSignal App ID", () => {
   it("fallback GWA toujours valide", () => {
     expect(GWA_ONESIGNAL_APP_ID).toBe("5f01e343-a7a2-4ae8-8baa-655388e239bc")
     expect(getOneSignalAppId()).toBeTruthy()
+  })
+})
+
+describe("OneSignal origin allowlist", () => {
+  it("autorise mygwa + alias Vercel connus", () => {
+    expect(isOneSignalOriginAllowed("https://mygwa.org")).toBe(true)
+    expect(isOneSignalOriginAllowed("https://www.mygwa.org")).toBe(true)
+    expect(isOneSignalOriginAllowed("https://v0-gwa-gwa.vercel.app")).toBe(true)
+    expect(isOneSignalOriginAllowed("https://v0-gwa-mu.vercel.app")).toBe(true)
+    expect(isOneSignalOriginAllowed("http://localhost:3000")).toBe(true)
+  })
+
+  it("refuse origines inconnues", () => {
+    expect(isOneSignalOriginAllowed("https://evil.example")).toBe(false)
+    expect(isOneSignalOriginAllowed("https://random.vercel.app")).toBe(false)
+    expect(isOneSignalOriginAllowed("")).toBe(false)
   })
 })
 

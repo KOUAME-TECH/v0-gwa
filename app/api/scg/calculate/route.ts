@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { aggregateProducerData } from "@/lib/scg/aggregate"
 import { calculateSCG } from "@/lib/scg/engine"
+import { assertSameOrigin } from "@/lib/security/csrf"
+import { checkRateLimit } from "@/lib/security/rate-limiter"
 
 /**
  * POST /api/scg/calculate
@@ -10,6 +12,14 @@ import { calculateSCG } from "@/lib/scg/engine"
  */
 export async function POST(request: NextRequest) {
   try {
+    const csrf = assertSameOrigin(request)
+    if (csrf) return csrf
+
+    const rate = await checkRateLimit("API_CREATE")
+    if (!rate.success) {
+      return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })
+    }
+
     const supabase = await createClient()
     const {
       data: { user },

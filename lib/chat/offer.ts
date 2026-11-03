@@ -14,6 +14,12 @@ export type PriceOfferPayload = {
   productId?: string
   status: OfferStatus
   note?: string
+  /** Quantité proposée (unités du produit) */
+  quantity?: number
+  /** Lieu de livraison / retrait */
+  location?: string
+  /** Délai souhaité (texte libre, ex. « demain », « 3 jours ») */
+  deliveryBy?: string
 }
 
 export function buildOfferContent(input: {
@@ -22,6 +28,9 @@ export function buildOfferContent(input: {
   productId?: string
   note?: string
   status?: OfferStatus
+  quantity?: number
+  location?: string
+  deliveryBy?: string
 }): string {
   const amount = Math.round(Number(input.amount))
   if (!Number.isFinite(amount) || amount < 1) {
@@ -37,6 +46,12 @@ export function buildOfferContent(input: {
   if (input.productName) payload.productName = input.productName
   if (input.productId) payload.productId = input.productId
   if (input.note) payload.note = input.note
+  const qty = Math.round(Number(input.quantity))
+  if (Number.isFinite(qty) && qty >= 1) payload.quantity = qty
+  if (input.location?.trim()) payload.location = input.location.trim().slice(0, 120)
+  if (input.deliveryBy?.trim()) {
+    payload.deliveryBy = input.deliveryBy.trim().slice(0, 80)
+  }
   return JSON.stringify(payload)
 }
 
@@ -59,4 +74,23 @@ export function parseOfferContent(content: string): PriceOfferPayload | null {
 
 export function formatOfferAmount(amount: number): string {
   return new Intl.NumberFormat("fr-FR").format(Math.round(amount))
+}
+
+/**
+ * Libellé contre-offre vs prix catalogue (négociation).
+ * Retourne null si pas de catalogue ou écart < 1 %.
+ */
+export function offerDeltaLabel(
+  listPrice: number | null | undefined,
+  offerAmount: number,
+): string | null {
+  const list = Number(listPrice)
+  const offer = Math.round(Number(offerAmount))
+  if (!Number.isFinite(list) || list < 1 || !Number.isFinite(offer) || offer < 1) {
+    return null
+  }
+  const pct = Math.round(((offer - list) / list) * 100)
+  if (Math.abs(pct) < 1) return null
+  if (pct < 0) return `Contre-offre · ${pct} % vs catalogue`
+  return `Surcote · +${pct} % vs catalogue`
 }

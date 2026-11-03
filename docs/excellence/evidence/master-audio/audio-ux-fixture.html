@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>GWA audio UX fixture</title>
+  <style>
+    :root { --g:#1F5C2E; --gold:#C27D10; }
+    body { margin:0; font-family: system-ui, sans-serif; background:#ECE5DD; color:#111; }
+    .stack { display:flex; flex-direction:column; gap:16px; padding:16px; max-width:480px; margin:0 auto; }
+    .bar { background:#fff; border-radius:12px; padding:10px 12px; display:flex; align-items:center; gap:10px; box-shadow:0 1px 2px rgba(0,0,0,.06); }
+    .btn { min-width:44px; min-height:44px; border:0; border-radius:999px; display:inline-flex; align-items:center; justify-content:center; background:#eee; }
+    .btn.primary { background:var(--g); color:#fff; }
+    .btn.danger { color:#ef4444; background:#fee2e2; }
+    .wave { flex:1; display:flex; align-items:center; gap:2px; min-height:44px; }
+    .wave i { width:3px; border-radius:2px; background:rgba(31,92,46,.35); display:block; }
+    .wave i.on { background:var(--g); }
+    .dot { width:10px; height:10px; border-radius:50%; background:#ef4444; }
+    .timer { font-family: ui-monospace, monospace; color:#b91c1c; font-weight:600; width:42px; }
+    .clock { font-size:11px; opacity:.7; width:36px; text-align:right; }
+    .speed { min-width:44px; min-height:44px; border:0; background:transparent; color:var(--g); font-weight:700; font-size:11px; }
+    .bubble { align-self:flex-start; background:#fff; border-radius:12px; padding:10px 12px; max-width:92%; }
+    .transcript { font-size:12px; color:#54656f; margin-top:6px; line-height:1.35; }
+    h2 { font-size:13px; margin:0 0 6px; color:#54656f; font-weight:600; }
+  </style>
+</head>
+<body>
+  <div class="stack">
+    <section>
+      <h2>1 — Barre d’enregistrement</h2>
+      <div class="bar" data-voice-recording-bar="true" role="status" aria-label="Enregistrement vocal en cours">
+        <button class="btn danger" aria-label="Annuler l’enregistrement">✕</button>
+        <span class="dot" aria-hidden="true"></span>
+        <span class="timer" aria-live="polite">0:07</span>
+        <div class="wave" data-voice-meter="dsp" aria-hidden="true">
+          <i style="height:6px"></i><i style="height:14px"></i><i style="height:10px"></i><i style="height:18px"></i>
+          <i style="height:8px"></i><i style="height:16px"></i><i style="height:12px"></i><i style="height:20px"></i>
+          <i style="height:9px"></i><i style="height:15px"></i><i style="height:7px"></i><i style="height:13px"></i>
+          <i style="height:17px"></i><i style="height:11px"></i><i style="height:19px"></i><i style="height:8px"></i>
+        </div>
+        <button class="btn primary" aria-label="Terminer l’enregistrement">✓</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>2 — Preview avant envoi</h2>
+      <div class="bar" data-voice-preview-bar="true" style="flex-wrap:wrap">
+        <button class="btn danger" aria-label="Supprimer le vocal">🗑</button>
+        <button class="btn" aria-label="Réenregistrer">↺</button>
+        <div style="flex:1;display:flex;align-items:center;gap:8px;background:#f0f2f5;border-radius:999px;padding:4px 10px;min-height:48px">
+          <button class="btn primary" aria-label="Écouter l’aperçu">▶</button>
+          <div class="wave" aria-hidden="true">
+            <i style="height:5px"></i><i style="height:12px"></i><i style="height:9px"></i><i style="height:16px"></i>
+            <i style="height:7px"></i><i style="height:14px"></i><i style="height:10px"></i><i style="height:18px"></i>
+            <i style="height:8px"></i><i style="height:13px"></i><i style="height:6px"></i><i style="height:15px"></i>
+          </div>
+          <span class="clock">0:07</span>
+        </div>
+        <button class="btn primary" aria-label="Envoyer vocal">➤</button>
+        <p class="transcript" style="width:100%" aria-live="polite">Transcription : Bonjour, le prix du cacao est négociable.</p>
+      </div>
+    </section>
+
+    <section>
+      <h2>3 — Envoyé + lecture + transcription</h2>
+      <div class="bubble" data-voice-sent-bubble="true">
+        <div style="display:flex;align-items:center;gap:6px;min-width:200px">
+          <button class="btn primary" aria-label="Écouter le message vocal. Transcription : Bonjour, le prix du cacao est négociable." aria-pressed="false">▶</button>
+          <div class="wave" role="slider" aria-label="Position dans le message vocal" aria-valuemin="0" aria-valuemax="100" aria-valuenow="35" tabindex="0">
+            <i class="on" style="height:6px"></i><i class="on" style="height:14px"></i><i class="on" style="height:10px"></i>
+            <i class="on" style="height:18px"></i><i class="on" style="height:8px"></i><i class="on" style="height:16px"></i>
+            <i class="on" style="height:12px"></i><i class="on" style="height:9px"></i><i style="height:15px"></i>
+            <i style="height:7px"></i><i style="height:13px"></i><i style="height:17px"></i>
+            <i style="height:11px"></i><i style="height:19px"></i><i style="height:8px"></i><i style="height:14px"></i>
+          </div>
+          <span class="clock">0:02</span>
+          <button class="speed" aria-label="Vitesse de lecture 1.5 fois. Changer la vitesse.">1.5×</button>
+        </div>
+        <p class="transcript">Bonjour, le prix du cacao est négociable.</p>
+      </div>
+    </section>
+  </div>
+</body>
+</html>

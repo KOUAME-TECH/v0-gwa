@@ -1,0 +1,16 @@
+{
+  "url": "https://mygwa.org/marketplace",
+  "prod_sha": "2f9d54b276f0",
+  "title": "GWA - La Super App Africaine",
+  "note": "Prod still on pre-reset SEO SHA; branch has sr-only H1 + role=region + JSON-LD undeployed",
+  "h1s": [
+    {
+      "text": "Boutique",
+      "srOnly": false
+    }
+  ],
+  "mains": 2,
+  "jsonLd": 0,
+  "robots_txt": 404,
+  "sitemap_xml": 404
+}

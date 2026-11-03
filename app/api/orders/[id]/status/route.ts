@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { sendPushToUser } from "@/lib/notifications/push"
 import { normalizeOrderStatus } from "@/lib/orders/escrow-flow"
+import { assertSameOrigin } from "@/lib/security/csrf"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -22,6 +23,9 @@ const SELLER_TRANSITIONS: Record<string, string[]> = {
  */
 export async function PATCH(request: NextRequest, context: Ctx) {
   try {
+    const csrf = assertSameOrigin(request)
+    if (csrf) return csrf
+
     const { id } = await context.params
     const supabase = await createClient()
     const {

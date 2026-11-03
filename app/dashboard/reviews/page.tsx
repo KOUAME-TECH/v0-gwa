@@ -58,9 +58,13 @@ export default function ReviewsPage() {
     <div className="min-h-screen bg-neutral-50">
       <header className="sticky top-0 z-30 bg-white border-b border-neutral-100">
         <div className="flex items-center gap-3 p-4">
-          <button onClick={() => router.back()} className="active:scale-90 transition-transform">
+          <Link
+            href="/dashboard/farmer"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center active:scale-90 transition-transform"
+            aria-label="Retour espace producteur"
+          >
             <ChevronLeft className="h-6 w-6 text-neutral-900" />
-          </button>
+          </Link>
           <h1 className="text-lg font-semibold flex-1">Mes avis</h1>
         </div>
       </header>

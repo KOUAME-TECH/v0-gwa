@@ -1,0 +1,304 @@
+{
+  "ok": 34,
+  "fail": 0,
+  "results": [
+    {
+      "ok": true,
+      "parcours": "acheteur",
+      "viewport": "320",
+      "url": "/marketplace"
+    },
+    {
+      "ok": true,
+      "parcours": "acheteur",
+      "viewport": "320",
+      "url": "/panier"
+    },
+    {
+      "ok": true,
+      "parcours": "acheteur",
+      "viewport": "320",
+      "url": "/dashboard/buyer"
+    },
+    {
+      "ok": true,
+      "parcours": "producteur",
+      "viewport": "320",
+      "url": "/dashboard/farmer"
+    },
+    {
+      "ok": true,
+      "parcours": "producteur",
+      "viewport": "320",
+      "url": "/dashboard/farmer/publish"
+    },
+    {
+      "ok": true,
+      "parcours": "cooperative",
+      "viewport": "320",
+      "url": "/dashboard/cooperative"
+    },
+    {
+      "ok": true,
+      "parcours": "abonnement",
+      "viewport": "320",
+      "url": "/abonnement"
+    },
+    {
+      "ok": true,
+      "parcours": "backoffice",
+      "viewport": "320",
+      "url": "/admin"
+    },
+    {
+      "ok": true,
+      "parcours": "branding",
+      "viewport": "320",
+      "url": "/"
+    },
+    {
+      "ok": true,
+      "parcours": "branding",
+      "viewport": "320",
+      "url": "/auth/login"
+    },
+    {
+      "ok": true,
+      "parcours": "acheteur",
+      "viewport": "768",
+      "url": "/marketplace"
+    },
+    {
+      "ok": true,
+      "parcours": "acheteur",
+      "viewport": "768",
+      "url": "/panier"
+    },
+    {
+      "ok": true,
+      "parcours": "acheteur",
+      "viewport": "768",
+      "url": "/dashboard/buyer"
+    },
+    {
+      "ok": true,
+      "parcours": "producteur",
+      "viewport": "768",
+      "url": "/dashboard/farmer"
+    },
+    {
+      "ok": true,
+      "parcours": "producteur",
+      "viewport": "768",
+      "url": "/dashboard/farmer/publish"
+    },
+    {
+      "ok": true,
+      "parcours": "cooperative",
+      "viewport": "768",
+      "url": "/dashboard/cooperative"
+    },
+    {
+      "ok": true,
+      "parcours": "abonnement",
+      "viewport": "768",
+      "url": "/abonnement"
+    },
+    {
+      "ok": true,
+      "parcours": "backoffice",
+      "viewport": "768",
+      "url": "/admin"
+    },
+    {
+      "ok": true,
+      "parcours": "branding",
+      "viewport": "768",
+      "url": "/"
+    },
+    {
+      "ok": true,
+      "parcours": "branding",
+      "viewport": "768",
+      "url": "/auth/login"
+    },
+    {
+      "ok": true,
+      "parcours": "acheteur",
+      "viewport": "1024",
+      "url": "/marketplace"
+    },
+    {
+      "ok": true,
+      "parcours": "acheteur",
+      "viewport": "1024",
+      "url": "/panier"
+    },
+    {
+      "ok": true,
+      "parcours": "acheteur",
+      "viewport": "1024",
+      "url": "/dashboard/buyer"
+    },
+    {
+      "ok": true,
+      "parcours": "producteur",
+      "viewport": "1024",
+      "url": "/dashboard/farmer"
+    },
+    {
+      "ok": true,
+      "parcours": "producteur",
+      "viewport": "1024",
+      "url": "/dashboard/farmer/publish"
+    },
+    {
+      "ok": true,
+      "parcours": "cooperative",
+      "viewport": "1024",
+      "url": "/dashboard/cooperative"
+    },
+    {
+      "ok": true,
+      "parcours": "abonnement",
+      "viewport": "1024",
+      "url": "/abonnement"
+    },
+    {
+      "ok": true,
+      "parcours": "backoffice",
+      "viewport": "1024",
+      "url": "/admin"
+    },
+    {
+      "ok": true,
+      "parcours": "branding",
+      "viewport": "1024",
+      "url": "/"
+    },
+    {
+      "ok": true,
+      "parcours": "branding",
+      "viewport": "1024",
+      "url": "/auth/login"
+    },
+    {
+      "ok": true,
+      "dark": true
+    },
+    {
+      "ok": true,
+      "dark": true
+    },
+    {
+      "ok": true,
+      "dark": true
+    },
+    {
+      "ok": true,
+      "po": true
+    }
+  ],
+  "meta": {
+    "contrast": {
+      "greenOnWhite": 7.99,
+      "goldOnWhite": 3.37,
+      "greenOnCream": 7.44,
+      "goldOnCream": 3.14,
+      "whiteOnGreen": 7.99,
+      "aa45": {
+        "greenOnWhite": true,
+        "goldOnWhite": false,
+        "whiteOnGreen": true
+      }
+    },
+    "cwv": {
+      "ttfb": 44,
+      "dcl": 56,
+      "fcp": null,
+      "lcp": null
+    },
+    "a11y": {
+      "skipText": "Aller au contenu",
+      "skipHref": "#main-content",
+      "bodyFontSize": "16px"
+    },
+    "headerMarks": [
+      {
+        "tag": "IMG",
+        "alt": "GWA",
+        "w": 36,
+        "h": 36
+      },
+      {
+        "tag": "svg",
+        "alt": null,
+        "w": 16,
+        "h": 16
+      },
+      {
+        "tag": "IMG",
+        "alt": "GWA",
+        "w": 0,
+        "h": 0
+      },
+      {
+        "tag": "svg",
+        "alt": null,
+        "w": 20,
+        "h": 20
+      },
+      {
+        "tag": "svg",
+        "alt": null,
+        "w": 16,
+        "h": 16
+      },
+      {
+        "tag": "svg",
+        "alt": null,
+        "w": 16,
+        "h": 16
+      }
+    ],
+    "icons": [
+      {
+        "rel": "shortcut icon",
+        "href": "/icon-32.png",
+        "sizes": ""
+      },
+      {
+        "rel": "icon",
+        "href": "/icon.svg",
+        "sizes": ""
+      },
+      {
+        "rel": "icon",
+        "href": "/icon-32.png",
+        "sizes": "32x32"
+      },
+      {
+        "rel": "icon",
+        "href": "/icon-192.png",
+        "sizes": "192x192"
+      },
+      {
+        "rel": "icon",
+        "href": "/icon-512.png",
+        "sizes": "512x512"
+      },
+      {
+        "rel": "apple-touch-icon",
+        "href": "/apple-icon.png",
+        "sizes": "180x180"
+      }
+    ]
+  },
+  "cwvProd": {
+    "ttfb": 82,
+    "fcp": 219.79999999701977,
+    "lcp": null,
+    "cls": 0,
+    "dcl": 237
+  }
+}

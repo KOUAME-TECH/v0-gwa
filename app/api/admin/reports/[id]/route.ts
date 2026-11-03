@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { requireAdminSection } from "@/lib/auth/require-admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
+import { assertSameOrigin } from "@/lib/security/csrf"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -10,6 +11,9 @@ type Ctx = { params: Promise<{ id: string }> }
  */
 export async function PATCH(request: NextRequest, context: Ctx) {
   try {
+    const csrf = assertSameOrigin(request)
+    if (csrf) return csrf
+
     const rate = await checkRateLimit("API_CREATE")
     if (!rate.success) {
       return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })

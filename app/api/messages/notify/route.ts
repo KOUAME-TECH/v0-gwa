@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { sendPushToUser } from "@/lib/notifications/push"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
+import { assertSameOrigin } from "@/lib/security/csrf"
 
 /**
  * POST /api/messages/notify
@@ -9,6 +10,9 @@ import { checkRateLimit } from "@/lib/security/rate-limiter"
  */
 export async function POST(request: Request) {
   try {
+    const csrf = assertSameOrigin(request)
+    if (csrf) return csrf
+
     const rate = await checkRateLimit("MESSAGE_SEND")
     if (!rate.success) {
       return NextResponse.json({ error: "Trop de messages" }, { status: 429 })

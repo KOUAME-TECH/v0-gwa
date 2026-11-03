@@ -1,0 +1,52 @@
+{
+  "attempts": [
+    {
+      "target": "production",
+      "result": 403,
+      "message": "no permission to create Production Deployment"
+    },
+    {
+      "target": "preview",
+      "result": 403,
+      "message": "no permission to create Preview Deployment"
+    },
+    {
+      "redeploy": "dpl_BmKBqbDJr2Sv9XJoHt3vrLNaaxK2",
+      "result": 404,
+      "message": "Deployment not found"
+    },
+    {
+      "list_deployments": 403
+    },
+    {
+      "get_deployment_BmKBqbDJr": 404
+    },
+    {
+      "get_project": 404,
+      "note": "list_projects empty under team but create sees project for 403"
+    },
+    {
+      "list_teams": "OK",
+      "team": "team_KUeqdoY34PvZoLu9pZYo284N",
+      "slug": "gwa"
+    }
+  ],
+  "payload_attempted": {
+    "teamId": "team_KUeqdoY34PvZoLu9pZYo284N",
+    "forceNew": "1",
+    "requestBody": {
+      "name": "v0-gwa",
+      "project": "prj_6rxrwGIg7IhfuprNGnecPl2mncoK",
+      "target": "production",
+      "gitSource": {
+        "type": "github",
+        "org": "kouame-tech",
+        "repo": "v0-gwa",
+        "ref": "gwa/excellence-parcours-1e99",
+        "sha": "70b0d455b394dc2739b3185b4b13e9340da92c81"
+      }
+    }
+  },
+  "tip": "70b0d455b394dc2739b3185b4b13e9340da92c81",
+  "prior_success": "dpl_BmKBqbDJr2Sv9XJoHt3vrLNaaxK2 @ 2f9d54b (stale)"
+}

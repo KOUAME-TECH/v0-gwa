@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server"
 import { requireAdminSection } from "@/lib/auth/require-admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { sendPushToUser } from "@/lib/notifications/push"
+import { assertSameOrigin } from "@/lib/security/csrf"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -15,6 +16,9 @@ const ESCROW_OUTCOMES = new Set(["release_seller", "refund_buyer", "keep_frozen"
  */
 export async function PATCH(request: NextRequest, context: Ctx) {
   try {
+    const csrf = assertSameOrigin(request)
+    if (csrf) return csrf
+
     const rate = await checkRateLimit("API_CREATE")
     if (!rate.success) {
       return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })

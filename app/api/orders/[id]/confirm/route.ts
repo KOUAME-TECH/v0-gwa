@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { sendPushToUser } from "@/lib/notifications/push"
 import { mapPaymentMethodToNetwork } from "@/lib/payment/networks"
+import { assertSameOrigin } from "@/lib/security/csrf"
+import { checkRateLimit } from "@/lib/security/rate-limiter"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -13,6 +15,14 @@ type Ctx = { params: Promise<{ id: string }> }
  */
 export async function POST(request: NextRequest, context: Ctx) {
   try {
+    const csrf = assertSameOrigin(request)
+    if (csrf) return csrf
+
+    const rate = await checkRateLimit("API_CREATE")
+    if (!rate.success) {
+      return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })
+    }
+
     const { id } = await context.params
     const supabase = await createClient()
     const {

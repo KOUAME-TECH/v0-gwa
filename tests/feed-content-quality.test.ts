@@ -10,7 +10,19 @@ describe("isLowQualityPostContent", () => {
     ).toBe(true)
   })
 
+  it("détecte junk « comment vendre mieux » et premier sur GWA", () => {
+    expect(isLowQualityPostContent("comment vendre mieux ?")).toBe(true)
+    expect(isLowQualityPostContent("nous sommes les premier sur GWA")).toBe(true)
+  })
+
+  it("masque les posts vides", () => {
+    expect(isLowQualityPostContent("")).toBe(true)
+    expect(isLowQualityPostContent("   ")).toBe(true)
+    expect(isLowQualityPostContent(null)).toBe(true)
+  })
+
   it("laisse passer un post normal", () => {
     expect(isLowQualityPostContent("Récolte de tomates fraîches à Abidjan")).toBe(false)
+    expect(isLowQualityPostContent("Alloco")).toBe(false)
   })
 })
