@@ -1,0 +1,5 @@
+robots=404
+sitemap=404
+icon_master=200
+master_png=404
+icon_svg=200

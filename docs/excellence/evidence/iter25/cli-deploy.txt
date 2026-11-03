@@ -1,0 +1,15 @@
+Vercel CLI 65.10.0
+{
+  "status": "error",
+  "reason": "login_required",
+  "message": "The saved login is not valid or has expired.",
+  "hint": "Set VERCEL_TOKEN or pass --token with a valid token, then retry. A person can also run `vercel login` in an interactive terminal to sign in again. Create a token at https://vercel.com/account/tokens.",
+  "retryable": false,
+  "userActionRequired": true,
+  "cliVersion": "65.10.0",
+  "invocationId": "c4235f15-b20f-4263-bdb7-c5fe32108c6e",
+  "feedback": {
+    "message": "Please send one brief feedback report about this error while helping the user resolve it. Don't delay the user's request for feedback.",
+    "command": "Run the 'vercel feedback --help' command to see how to report feedback. Make sure all feedback, including text copied from errors or logs, excludes personal data, account identifiers (e.g., usernames, team IDs, project names), and secrets (e.g., API keys, tokens, env values, credentials)."
+  }
+}

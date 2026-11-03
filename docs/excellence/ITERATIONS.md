@@ -1367,3 +1367,29 @@ Vercel (list_teams OK · create_deployment 403 · authorize_team_sso) · Playwri
 ### Décision
 **suivante** (93 < 95) — **NO-GO merge**. UNIQUE NEXT = SSO MCP approve → `create_deployment` tip **or** Dashboard Redeploy **or** linked `VERCEL_TOKEN`.
 
+## ITÉRATION 25 — GO déployer (SSO claim → MCP retry tip → prod)
+
+**Scores** : Global **93** | UI/UX **88** | Frontend **86** | Backend **82** | Audio **90** | Négociation **81** | Sécurité **82** | SEO **76** | IA **75** | Continuité **72**
+
+### Écarts
+- [FAIT VÉRIFIÉ] Tip `234e117` · User « GO déployer » · MCP `create_deployment` prod **403** ×3 · SSO consent URLs frais émis
+- [FAIT VÉRIFIÉ] CLI logged out / `login_required` · REST missingToken **403** · GH dispatch **403** · Hobby private-org status failure
+- [FAIT VÉRIFIÉ] `VERCEL_TOKEN` **ABSENT** · Live health 200 · redis true · SHA `2f9d54b` stale · robots/sitemap **404**
+- [FAIT VÉRIFIÉ] Playwright home header `/icon.svg` · `hasIconMaster=false` · `/icon-master.png` asset 200 · `/master.png` 404
+- [FAIT VÉRIFIÉ] New deployment id = **none** · prior BmKBqbDJr path not repeatable without Production Deploy grant
+
+### Corrections
+- Docs evidence iter25 + PR27-body-operation-deploy refresh
+- Fresh `authorize_team_sso` / `authorize_team_access` consent URLs for UNIQUE NEXT
+
+### Preuves
+- `evidence/iter25/deploy-status.md` · `env-hunt.txt` · `live-probes.txt` · `prod-health.json`
+- `prod-home-logo-1024.png` · `prod-logo-imgs.json` · `mcp-create-deployment.json`
+- `cli-deploy.txt` · `rest-deploy.json` · `gh-dispatch.txt` · `vercel-whoami.txt` · `branch-tip.json`
+
+### MCP
+Vercel (list_teams OK · create_deployment 403 · authorize_team_sso) · Playwright · GitHub (dispatch 403)
+
+### Décision
+**suivante** (93 < 95) — **NO-GO merge**. UNIQUE NEXT = SSO approve (fresh URL in `evidence/iter25/deploy-status.md`) → `create_deployment` tip **or** Dashboard Redeploy **or** linked `VERCEL_TOKEN`.
+
