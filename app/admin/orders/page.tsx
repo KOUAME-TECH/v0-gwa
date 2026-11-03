@@ -43,6 +43,11 @@ import {
 } from "lucide-react"
 import { EscrowStepper } from "@/components/orders/escrow-stepper"
 import {
+  ORDER_LIFECYCLE,
+  ORDER_LIFECYCLE_LABELS,
+  deriveLifecycle,
+} from "@/lib/orders/lifecycle"
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -64,6 +69,8 @@ interface Order {
   shipping_city?: string
   shipping_country?: string
   created_at: string
+  lifecycle_status?: string | null
+  confirmed_by_buyer_at?: string | null
   buyer: {
     id: string
     full_name: string
@@ -86,11 +93,23 @@ export default function AdminOrdersPage() {
   const [totalCount, setTotalCount] = useState(0)
   const [page, setPage] = useState(0)
   const [detailOrder, setDetailOrder] = useState<Order | null>(null)
+  const [history, setHistory] = useState<{ id: string; from_status: string | null; to_status: string; reason: string | null; created_at: string }[]>([])
   const pageSize = 20
 
   useEffect(() => {
     fetchOrders()
   }, [filterStatus, filterPayment, page])
+
+  useEffect(() => {
+    if (!detailOrder) {
+      setHistory([])
+      return
+    }
+    fetch(`/api/admin/orders/${detailOrder.id}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setHistory(data?.history || []))
+      .catch(() => setHistory([]))
+  }, [detailOrder])
 
   const fetchOrders = async () => {
     setLoading(true)
@@ -181,19 +200,15 @@ export default function AdminOrdersPage() {
     })
   }
 
-  const getStatusBadge = (status: string) => {
-    const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-      draft: { label: "Brouillon", variant: "outline" },
-      pending: { label: "En attente", variant: "secondary" },
-      confirmed: { label: "Confirmée", variant: "default" },
-      processing: { label: "En préparation", variant: "default" },
-      shipped: { label: "Expédiée", variant: "default" },
-      delivered: { label: "Livrée", variant: "outline" },
-      cancelled: { label: "Annulée", variant: "destructive" },
-      disputed: { label: "Litige", variant: "destructive" },
-    }
-    const config = statusConfig[status] || { label: status, variant: "secondary" as const }
-    return <Badge variant={config.variant}>{config.label}</Badge>
+  const getStatusBadge = (order: Order) => {
+    const lifecycle = deriveLifecycle(order)
+    const variant =
+      lifecycle === "cancelled" || lifecycle === "disputed"
+        ? "destructive"
+        : lifecycle === "pending"
+          ? "secondary"
+          : "default"
+    return <Badge variant={variant}>{ORDER_LIFECYCLE_LABELS[lifecycle]}</Badge>
   }
 
   const getPaymentBadge = (status: string) => {
@@ -243,13 +258,11 @@ export default function AdminOrdersPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Tous</SelectItem>
-                  <SelectItem value="pending">En attente</SelectItem>
-                  <SelectItem value="confirmed">Confirmées</SelectItem>
-                  <SelectItem value="processing">En préparation</SelectItem>
-                  <SelectItem value="shipped">Expédiées</SelectItem>
-                  <SelectItem value="delivered">Livrées</SelectItem>
-                  <SelectItem value="disputed">Litiges</SelectItem>
-                  <SelectItem value="cancelled">Annulées</SelectItem>
+                  {ORDER_LIFECYCLE.map((status) => (
+                    <SelectItem key={status} value={status}>
+                      {ORDER_LIFECYCLE_LABELS[status]}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <Select value={filterPayment} onValueChange={setFilterPayment}>
@@ -325,7 +338,7 @@ export default function AdminOrdersPage() {
                         <TableCell className="font-medium">
                           {formatCurrency(order.total_amount)}
                         </TableCell>
-                        <TableCell>{getStatusBadge(order.status)}</TableCell>
+                        <TableCell>{getStatusBadge(order)}</TableCell>
                         <TableCell>{getPaymentBadge(order.payment_status)}</TableCell>
                         <TableCell>
                           <Badge
@@ -359,9 +372,9 @@ export default function AdminOrdersPage() {
                               <DropdownMenuLabel className="text-xs text-muted-foreground">
                                 Changer le statut
                               </DropdownMenuLabel>
-                              <DropdownMenuItem onClick={() => updateOrderStatus(order.id, "confirmed")}>
+                              <DropdownMenuItem onClick={() => updateOrderStatus(order.id, "paid")}>
                                 <CheckCircle className="h-4 w-4 mr-2" />
-                                Confirmer
+                                Payée
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => updateOrderStatus(order.id, "processing")}>
                                 <Package className="h-4 w-4 mr-2" />
@@ -374,6 +387,10 @@ export default function AdminOrdersPage() {
                               <DropdownMenuItem onClick={() => updateOrderStatus(order.id, "delivered")}>
                                 <CheckCircle className="h-4 w-4 mr-2" />
                                 Livrée
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => updateOrderStatus(order.id, "completed")}>
+                                <CheckCircle className="h-4 w-4 mr-2" />
+                                Réception confirmée
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => updateOrderStatus(order.id, "disputed")}>
                                 <AlertTriangle className="h-4 w-4 mr-2" />
@@ -449,6 +466,39 @@ export default function AdminOrdersPage() {
                   {detailOrder.seller?.full_name}
                 </p>
               </div>
+              <ol className="space-y-2 text-sm">
+                {history.map((event) => (
+                  <li key={event.id} className="rounded-lg border px-3 py-2">
+                    <p className="font-medium">
+                      {event.from_status || "—"} → {event.to_status}
+                    </p>
+                    <p className="text-muted-foreground">
+                      {formatDate(event.created_at)}
+                      {event.reason ? ` · ${event.reason}` : ""}
+                    </p>
+                  </li>
+                ))}
+                {history.length === 0 ? (
+                  <li className="text-muted-foreground">Aucun historique pour l'instant.</li>
+                ) : null}
+              </ol>
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  await fetch(`/api/admin/orders/${detailOrder.id}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      refund: true,
+                      reason: "Remboursement depuis le suivi",
+                    }),
+                  })
+                  setDetailOrder(null)
+                  fetchOrders()
+                }}
+              >
+                Annuler et marquer remboursé
+              </Button>
               <EscrowStepper
                 payment_status={detailOrder.payment_status}
                 escrow_status={
