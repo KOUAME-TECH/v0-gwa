@@ -1,0 +1,11 @@
+tip=71d3e6b306be048c09646e9c9fbee6505e591f17
+date_utc=2026-11-03T14:12:53Z
+robots=404
+sitemap=404
+health=200
+deploy.git_sha=2f9d54b276f0
+rate_limit_redis=true
+icon_master=200
+master_png=404
+icon_svg=200
+header_logo=/icon.svg

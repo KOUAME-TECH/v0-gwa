@@ -1313,3 +1313,30 @@ Vercel (list_projects OK · create_deployment 403 · authorize_team_sso) · Play
 
 ### Notion
 https://app.notion.com/p/40ca6d3a76b4819196eeed4411a27aa7 — titre 45→93 · iter21 prepend
+
+
+## ITÉRATION 23 — VERCEL_TOKEN hunt (user claim) + MCP retry
+
+**Scores** : Global **93** | UI/UX **88** | Frontend **86** | Backend **82** | Audio **90** | Négociation **81** | Sécurité **82** | SEO **76** | IA **75** | Continuité **72**
+
+### Écarts
+- [FAIT VÉRIFIÉ] Tip `71d3e6b` · env : `VERCEL_TOKEN` / `VERCEL_ACCESS_TOKEN` / `Cursor_Agent` / bypass / ORG / PROJECT **ABSENT** · `CURSOR_AGENT=1` only
+- [FAIT VÉRIFIÉ] Cloud run `environment=null` — secrets Cloud Agent non injectés même si sauvés ailleurs
+- [FAIT VÉRIFIÉ] MCP `list_projects` OK · `create_deployment` prod **403** · preview **403** · `list_deployments` **403** · SSO consent émis
+- [FAIT VÉRIFIÉ] REST sans Bearer **403** · CLI logged out · GH dispatch non re-tenté (éviter conflit)
+- [FAIT VÉRIFIÉ] Live health 200 · redis true · SHA `2f9d54b` stale · robots/sitemap **404** · header `/icon.svg`
+
+### Corrections
+- Docs evidence iter23 + PR27-body-operation-deploy refresh
+- `request-environment-setup-actions` : `VERCEL_TOKEN` (+ optional ORG/PROJECT/BYPASS) + SSO external action
+
+### Preuves
+- `evidence/iter23/deploy-status.md` · `env-hunt.txt` · `live-probes.txt` · `prod-health.json`
+- `prod-home-logo-1024.png` · `prod-logo-imgs.json` · `rest-deploy.json` · `vercel-whoami.txt`
+
+### MCP
+Vercel (list OK · deploy 403 · authorize_team_sso) · Playwright · cursor-cloud secrets request
+
+### Décision
+**suivante** (93 < 95) — **NO-GO merge**. UNIQUE NEXT = re-save `VERCEL_TOKEN` on **linked** Cloud Agent env **or** Dashboard Redeploy tip `71d3e6b`+ → Production **or** SSO MCP approve.
+
