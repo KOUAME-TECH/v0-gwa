@@ -87,6 +87,60 @@ async function request(path: string, init: RequestInit, mode: GeniusPayEnvironme
   return body
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null
+  return value as Record<string, unknown>
+}
+
+function stringField(record: Record<string, unknown>, key: string): string {
+  const value = record[key]
+  return typeof value === "string" ? value.trim() : ""
+}
+
+/** Accepte data.reference, un objet racine, ou l'URL /checkout/<référence>. */
+export function extractGeniusPayPayment(body: unknown): {
+  reference: string
+  payment_url?: string
+  checkout_url?: string
+} | null {
+  const records: Record<string, unknown>[] = []
+  const root = asRecord(body)
+  if (root) {
+    records.push(root)
+    const data = asRecord(root.data)
+    if (data) {
+      records.push(data)
+      const nested = asRecord(data.payment) || asRecord(data.transaction)
+      if (nested) records.push(nested)
+    }
+    const payment = asRecord(root.payment)
+    if (payment) records.push(payment)
+  }
+  for (const record of records) {
+    const paymentUrl = stringField(record, "payment_url")
+    const checkoutUrl = stringField(record, "checkout_url") || stringField(record, "checkoutUrl")
+    const fromUrl = (paymentUrl || checkoutUrl).match(/\/checkout\/([A-Za-z0-9_-]+)/)?.[1] || ""
+    const reference = stringField(record, "reference") || fromUrl
+    if (!reference) continue
+    return {
+      reference,
+      payment_url: paymentUrl || undefined,
+      checkout_url: checkoutUrl || undefined,
+    }
+  }
+  return null
+}
+
+function paymentShape(body: unknown) {
+  const root = asRecord(body)
+  const data = root ? root.data : undefined
+  return {
+    top: root ? Object.keys(root) : [],
+    dataType: data == null ? "empty" : Array.isArray(data) ? "array" : typeof data,
+    dataKeys: asRecord(data) ? Object.keys(asRecord(data) as Record<string, unknown>) : [],
+  }
+}
+
 export async function createGeniusPayCheckout(input: {
   amount: number
   orderId: string
@@ -118,8 +172,11 @@ export async function createGeniusPayCheckout(input: {
       },
       getGeniusPayMode(),
     )
-    const data = result.data
-    if (!data?.reference) return { ok: false as const, error: "GENIUSPAY_REFERENCE_MISSING" }
+    const data = extractGeniusPayPayment(result)
+    if (!data?.reference) {
+      console.error("[geniuspay] payment shape", paymentShape(result))
+      return { ok: false as const, error: "GENIUSPAY_REFERENCE_MISSING" }
+    }
     return {
       ok: true as const,
       data: {

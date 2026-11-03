@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkRateLimit } from "@/lib/security/rate-limiter";
 import { sendPushToUser } from "@/lib/notifications/push";
+import { formatPhoneE164 } from "@/lib/auth/phone";
 import { toGeniusPayAmountXof } from "@/lib/payment/amount";
 import {
   createGeniusPayPayment,
@@ -66,9 +67,10 @@ export async function POST(request: NextRequest, context: Ctx) {
       .select("phone, full_name, email")
       .eq("id", user.id)
       .maybeSingle();
-    const phone = String(
-      body?.phone || order.shipping_phone || buyerProfile?.phone || "",
-    ).trim();
+    const phone = formatPhoneE164(
+      String(body?.phone || order.shipping_phone || buyerProfile?.phone || ""),
+      "ci",
+    );
     const amount = toGeniusPayAmountXof(Number(order.total_amount) || 0);
     if (amount < 200)
       return NextResponse.json(
