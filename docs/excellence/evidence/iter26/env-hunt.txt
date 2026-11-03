@@ -1,0 +1,11 @@
+VERCEL_TOKEN_set=yes
+VERCEL_TOKEN_len=0
+CURSOR_AGENT=1
+VERCEL_TOKEN present=y len=0
+VERCEL_ACCESS_TOKEN present=y len=0
+Cursor_Agent present=y len=0
+VERCEL_AUTOMATION_BYPASS_SECRET present=y len=0
+DEPLOY_HOOK present=y len=0
+VERCEL_ORG_ID present=y len=0
+VERCEL_PROJECT_ID present=y len=0
+environment_linked=null (cursor-cloud environment-info)

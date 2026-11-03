@@ -1393,3 +1393,30 @@ Vercel (list_teams OK · create_deployment 403 · authorize_team_sso) · Playwri
 ### Décision
 **suivante** (93 < 95) — **NO-GO merge**. UNIQUE NEXT = SSO approve (fresh URL in `evidence/iter25/deploy-status.md`) → `create_deployment` tip **or** Dashboard Redeploy **or** linked `VERCEL_TOKEN`.
 
+## ITÉRATION 26 — VERCEL_TOKEN UI present · shell len=0 · no linked env
+
+**Scores** : Global **93** | UI/UX **88** | Frontend **86** | Backend **82** | Audio **90** | Négociation **81** | Sécurité **82** | SEO **76** | IA **75** | Continuité **72**
+
+### Écarts
+- [FAIT VÉRIFIÉ] Tip `44d6f9d` · User: `VERCEL_TOKEN` configured in Secrets UI · shell `[ -n "$VERCEL_TOKEN" ]` yes but **len=0**
+- [FAIT VÉRIFIÉ] `cursor-cloud environment-info` → **environment: null** (no linked env → secrets not injected)
+- [FAIT VÉRIFIÉ] CLI `--token` missing value · REST `/v13/deployments` **403** missingToken · MCP `create_deployment` prod **403**
+- [FAIT VÉRIFIÉ] Live health **200** · redis **true** · SHA `2f9d54b` stale · robots/sitemap **404** · logo header `/icon.svg` (`hasIconMaster=false`)
+- [FAIT VÉRIFIÉ] New deployment id = **none** · GeniusPay frozen · **NO merge**
+
+### Corrections
+- Docs evidence iter26 + PR27-body-operation-deploy refresh
+- `request-environment-setup-actions` : `add_secrets` VERCEL_TOKEN (+ optional ORG/PROJECT) + SSO external action
+- Fresh `authorize_team_sso` / `authorize_team_access` consent URLs
+
+### Preuves
+- `evidence/iter26/deploy-status.md` · `env-hunt.txt` · `live-probes.txt` · `prod-health.json`
+- `prod-home-logo-1024.png` · `prod-logo-imgs.json` · `mcp-create-deployment.json`
+- `cli-deploy.txt` · `rest-deploy.json` · `vercel-whoami.txt` · `branch-tip.json`
+
+### MCP
+Vercel (list_projects OK · create_deployment 403 · authorize_team_sso) · Playwright · cursor-cloud (environment-info null · secrets request)
+
+### Décision
+**suivante** (93 < 95) — **NO-GO merge**. UNIQUE NEXT = **linked** env + non-empty `VERCEL_TOKEN` in **new** agent chat **or** SSO approve (fresh URL in `evidence/iter26/deploy-status.md`) **or** Dashboard Redeploy tip `44d6f9d`.
+

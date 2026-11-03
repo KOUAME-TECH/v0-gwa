@@ -1,0 +1,15 @@
+tip_sha=44d6f9d5d397348262a8bb3ab72def63de6741cd
+tip_short=44d6f9d
+ts=2026-11-03T14:39:27Z
+URL https://mygwa.org/robots.txt -> HTTP 404 bytes=17471
+<!DOCTYPE html><html lang="fr"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cover"/><link rel="styl
+URL https://mygwa.org/sitemap.xml -> HTTP 404 bytes=17471
+<!DOCTYPE html><html lang="fr"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cover"/><link rel="styl
+URL https://mygwa.org/api/health -> HTTP 200 bytes=1050
+{"status":"healthy","app":"GWA Platform","tagline":"Marche - langue Anoh, Cote d'Ivoire","version":"2.0.0","ts":"2026-11-03T14:39:28.933Z","env":"production","db":"connected","secrets":{"OTP_PEPPER":true,"CRON_SECRET":true,"SMS_PROVIDER":true,"OTP_STORAGE":true,"SMS_AT":true,"SMS_AT_USERNAME_LIVE":true,"SMS_AT_SENDER_ID":true,"SMS_TWILIO":false,"SMS_TERMII":false,"ONESIGNAL_APP_ID":true,"ONESIGNAL_REST_API_KEY":true,"GEMINI_API_KEY":true,"GENIUSPAY_API_KEY":false,"GENIUSPAY_API_SECRET":false,"GENIUSPAY_WEBHOOK_SECRET":false},"geniuspay":{"configured":false,"webhook_ready":false,"payin_ready":false,"payout_ready":false},"sms_delivery_ready":true,"sms_last_failure":null,"deploy":{"git_sha":"2f9d54b276f0","vercel_env":"production"},"resilience":{"onesignal_app_id_fallback":true,"cron_auth":["
+URL https://mygwa.org/ -> HTTP 200 bytes=37528
+URL https://mygwa.org/icon.svg -> HTTP 200 bytes=683
+--- headers ---
+cache-control: public, max-age=0, must-revalidate
+x-vercel-cache: MISS
+x-vercel-id: iad1::cdg1::6szn9-1793716769209-3ea786e0b6d6

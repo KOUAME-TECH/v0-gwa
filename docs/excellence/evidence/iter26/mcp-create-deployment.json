@@ -1,0 +1,37 @@
+{
+  "iteration": 26,
+  "tip": "44d6f9d5d397348262a8bb3ab72def63de6741cd",
+  "attempts": [
+    {
+      "method": "MCP create_deployment production",
+      "payload": "teamId + prj_ + kouame-tech + sha tip forceNew=1",
+      "result": "403",
+      "message": "You don't have permission to create a Production Deployment for this project.",
+      "requestId": "iad1:iad1:iad1:sfo1::r56bz-1793716747520-2ca0a120893c"
+    }
+  ],
+  "sso": {
+    "authorize_team_sso": {
+      "status": "requires_user_action",
+      "url": "https://vercel.com/sso/session-requests/PT8b5AtE101CMdbfA7Cj8N5KCuSZkR6_",
+      "expiresAt": 1793717367190
+    },
+    "authorize_team_access": {
+      "status": "requires_user_action",
+      "url": "https://vercel.com/sso/session-requests/6A_rs3C9gooloZK4JG0QIrPUfYhPfzL0",
+      "expiresAt": 1793717377653
+    }
+  },
+  "token_state": {
+    "VERCEL_TOKEN_present": true,
+    "VERCEL_TOKEN_len": 0,
+    "environment_linked": null,
+    "note": "Secret may exist in Cursor Secrets UI but value not injected into this run (environment:null)."
+  },
+  "cli": "Error: --token missing a value (len=0)",
+  "rest": {
+    "http": 403,
+    "missingToken": true
+  },
+  "new_deployment_id": null
+}
