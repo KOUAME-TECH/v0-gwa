@@ -24,6 +24,7 @@ import {
 } from "@/lib/offline/cart-snapshot"
 import { toast } from "sonner"
 import { BuyerPriceBreakdown } from "@/components/orders/buyer-price-breakdown"
+import { selfPurchaseMessage } from "@/lib/orders/purchase-guards"
 
 interface CartItem {
   id: string
@@ -353,7 +354,9 @@ export default function CartPage() {
     }
   }
 
+  const ownsCart = Boolean(user && cart.some((item) => item.product.seller_id === user.id))
   const canProceed = () => {
+    if (ownsCart) return false
     if (step === 1) return cart.length > 0
     if (step === 2) return deliveryAddress.name && deliveryAddress.phone && deliveryAddress.city
     if (step === 3) return paymentMethod
@@ -429,7 +432,7 @@ export default function CartPage() {
           <h1 className="flex-1 font-display text-lg text-[#1F5C2E]">
             {step === 1 && `Ton panier (${cart.length})`}
             {step === 2 && "Tes coordonnées"}
-            {step === 3 && "Payer en sécurité"}
+            {step === 3 && "Récapitulatif avant paiement"}
           </h1>
         </div>
         
@@ -442,6 +445,12 @@ export default function CartPage() {
       </header>
 
       {/* Step 1: Cart Items */}
+      {ownsCart && (
+        <p role="alert" className="mx-auto max-w-3xl px-4 pt-3 text-sm text-[#92400E]">
+          {selfPurchaseMessage("producteur")}
+        </p>
+      )}
+
       {step === 1 && (
         <div className="mx-auto max-w-3xl space-y-3 p-4">
           {cart.map(item => (
@@ -515,8 +524,9 @@ export default function CartPage() {
         <div className="mx-auto max-w-3xl space-y-4 p-4">
           <div className="space-y-4">
             <div>
-              <Label className="text-sm">Nom complet</Label>
+              <Label htmlFor="checkout-name" className="text-sm">Nom complet</Label>
               <Input
+                id="checkout-name"
                 value={deliveryAddress.name}
                 onChange={(e) => setDeliveryAddress({...deliveryAddress, name: e.target.value})}
                 className="mt-1.5 h-12 rounded-xl"
@@ -524,8 +534,9 @@ export default function CartPage() {
               />
             </div>
             <div>
-              <Label className="text-sm">Telephone</Label>
+              <Label htmlFor="checkout-phone" className="text-sm">Téléphone</Label>
               <Input
+                id="checkout-phone"
                 type="tel"
                 value={deliveryAddress.phone}
                 onChange={(e) => setDeliveryAddress({...deliveryAddress, phone: e.target.value})}
@@ -534,8 +545,9 @@ export default function CartPage() {
               />
             </div>
             <div>
-              <Label className="text-sm">Adresse</Label>
+              <Label htmlFor="checkout-address" className="text-sm">Adresse</Label>
               <Input
+                id="checkout-address"
                 value={deliveryAddress.address}
                 onChange={(e) => setDeliveryAddress({...deliveryAddress, address: e.target.value})}
                 className="mt-1.5 h-12 rounded-xl"
@@ -544,8 +556,9 @@ export default function CartPage() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-sm">Ville</Label>
+                <Label htmlFor="checkout-city" className="text-sm">Ville</Label>
                 <Input
+                  id="checkout-city"
                   value={deliveryAddress.city}
                   onChange={(e) => setDeliveryAddress({...deliveryAddress, city: e.target.value})}
                   className="mt-1.5 h-12 rounded-xl"
@@ -553,8 +566,9 @@ export default function CartPage() {
                 />
               </div>
               <div>
-                <Label className="text-sm">Pays</Label>
-                <select 
+                <Label htmlFor="checkout-country" className="text-sm">Pays</Label>
+                <select
+                  id="checkout-country"
                   value={deliveryAddress.country}
                   onChange={(e) => setDeliveryAddress({...deliveryAddress, country: e.target.value})}
                   className="mt-1.5 w-full h-12 px-3 rounded-xl border bg-background text-sm"
@@ -616,7 +630,7 @@ export default function CartPage() {
       <div className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] left-0 right-0 z-40 border-t border-[#1F5C2E]/10 bg-white/95 px-4 py-3 backdrop-blur-sm lg:bottom-0">
         <div className="mx-auto flex max-w-3xl items-center gap-3">
           {checkoutError ? (
-            <p className="flex-1 text-sm text-red-600">{checkoutError}</p>
+            <p role="alert" className="flex-1 text-sm text-red-600">{checkoutError}</p>
           ) : (
             <div className="min-w-0 flex-1">
               <p className="text-[11px] text-[#6B7280]">À payer</p>
