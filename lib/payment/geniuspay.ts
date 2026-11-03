@@ -108,6 +108,10 @@ async function request(path: string, init: RequestInit, mode: GeniusPayEnvironme
       return body
     }
     const title = raw.match(/<title>([^<]{0,80})/i)?.[1]?.trim() || null
+    const snippet = raw
+      .replace(/\+?\d{8,15}/g, "[phone]")
+      .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[email]")
+      .slice(0, 240)
     console.error("[geniuspay] http", {
       host,
       status: response.status,
@@ -116,6 +120,7 @@ async function request(path: string, init: RequestInit, mode: GeniusPayEnvironme
       parsed,
       title,
       code: body?.error?.code || null,
+      snippet,
     })
     lastError = body?.error?.code || `GENIUSPAY_HTTP_${response.status}`
     if (parsed) break
@@ -187,27 +192,44 @@ export async function createGeniusPayCheckout(input: {
   successUrl?: string
   errorUrl?: string
 }) {
+  const payload = (customer: typeof input.customer, withMetadata: boolean) =>
+    JSON.stringify({
+      amount: input.amount,
+      currency: "XOF",
+      description: input.description,
+      customer,
+      success_url: input.successUrl,
+      error_url: input.errorUrl,
+      ...(withMetadata
+        ? {
+            metadata: {
+              order_id: input.orderId,
+              user_id: input.userId,
+              ...(input.metadata ?? {}),
+            },
+          }
+        : {}),
+    })
   try {
-    const result = await request(
-      "/payments",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          amount: input.amount,
-          currency: "XOF",
-          description: input.description,
-          customer: input.customer,
-          success_url: input.successUrl,
-          error_url: input.errorUrl,
-          metadata: {
-            order_id: input.orderId,
-            user_id: input.userId,
-            ...(input.metadata ?? {}),
-          },
-        }),
-      },
-      getGeniusPayMode(),
-    )
+    let result: GeniusPayResponse
+    try {
+      result = await request(
+        "/payments",
+        { method: "POST", body: payload(input.customer, true) },
+        getGeniusPayMode(),
+      )
+    } catch (error) {
+      const message = error instanceof Error ? error.message : ""
+      if (!message.includes("422")) throw error
+      const customer = input.customer
+        ? { name: input.customer.name, phone: input.customer.phone, country: input.customer.country }
+        : undefined
+      result = await request(
+        "/payments",
+        { method: "POST", body: payload(customer, false) },
+        getGeniusPayMode(),
+      )
+    }
     const data = extractGeniusPayPayment(result)
     if (!data?.reference) {
       console.error("[geniuspay] payment shape", {
