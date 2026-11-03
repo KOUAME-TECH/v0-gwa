@@ -97,7 +97,7 @@ export async function POST(request: NextRequest, context: Ctx) {
     if (await isGeniusPayConfigured()) {
       // Idempotence : si un checkout GeniusPay est déjà en cours, ne pas en recréer.
       if (
-        order.payment_status === "processing" &&
+        order.payment_status === "pending" &&
         order.payment_method === "geniuspay" &&
         order.payment_reference
       ) {
@@ -149,7 +149,6 @@ export async function POST(request: NextRequest, context: Ctx) {
       const { data: updatedRows, error: orderUpdateError } = await admin
         .from("orders")
         .update({
-          payment_status: "processing",
           payment_reference: payment.reference,
           payment_method: "geniuspay",
           updated_at: new Date().toISOString(),
