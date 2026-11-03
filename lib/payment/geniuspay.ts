@@ -82,9 +82,26 @@ async function request(path: string, init: RequestInit, mode: GeniusPayEnvironme
     },
     cache: "no-store",
   })
-  const body = (await response.json().catch(() => ({}))) as GeniusPayResponse
-  if (!response.ok || body.success === false) throw new Error(body.error?.code || `GENIUSPAY_HTTP_${response.status}`)
-  return body
+  const raw = await response.text()
+  let parsed = false
+  let body: GeniusPayResponse = {}
+  try {
+    body = raw ? (JSON.parse(raw) as GeniusPayResponse) : {}
+    parsed = true
+  } catch {
+    parsed = false
+  }
+  const meta = {
+    status: response.status,
+    type: response.headers.get("content-type"),
+    bytes: raw.length,
+    parsed,
+  }
+  if (!response.ok || body?.success === false || !parsed) {
+    console.error("[geniuspay] http", { ...meta, code: body?.error?.code || null })
+    throw new Error(body?.error?.code || `GENIUSPAY_HTTP_${response.status}`)
+  }
+  return Object.assign(body, { _meta: meta })
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -174,7 +191,10 @@ export async function createGeniusPayCheckout(input: {
     )
     const data = extractGeniusPayPayment(result)
     if (!data?.reference) {
-      console.error("[geniuspay] payment shape", paymentShape(result))
+      console.error("[geniuspay] payment shape", {
+        ...paymentShape(result),
+        meta: (result as { _meta?: unknown })._meta ?? null,
+      })
       return { ok: false as const, error: "GENIUSPAY_REFERENCE_MISSING" }
     }
     return {
