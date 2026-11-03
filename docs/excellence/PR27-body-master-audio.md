@@ -1,6 +1,7 @@
 # PR #27 body update — Master logo + audio WhatsApp (NO-GO merge)
 
 **Branche** : `gwa/excellence-parcours-1e99`  
+**Tip SHA** : `f7888963ff828a3625bf9da2c56960f10185b7eb`  
 **Merge** : **NON** (consigne explicite) · GeniusPay/FeexPay **FROZEN**
 
 ## Résumé

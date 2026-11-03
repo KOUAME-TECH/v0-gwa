@@ -1,6 +1,7 @@
 # Deploy status — Mission master-audio (2026-11-03)
 
 **Branche** : `gwa/excellence-parcours-1e99`  
+**Tip SHA** : `f7888963ff828a3625bf9da2c56960f10185b7eb`  
 **PR #27** : OPEN — **not merged** (explicit)  
 **GeniusPay/FeexPay** : **FROZEN**
 
@@ -33,5 +34,5 @@
 
 ## UNIQUE NEXT
 
-Dashboard → https://vercel.com/gwa/v0-gwa → Redeploy branch `gwa/excellence-parcours-1e99` tip → Production.  
+Dashboard → https://vercel.com/gwa/v0-gwa → Redeploy branch `gwa/excellence-parcours-1e99` @ `f788896` → Production.  
 Then verify `curl -I https://mygwa.org/robots.txt` → 200.
