@@ -43,9 +43,24 @@ export async function GET() {
   const atKey = hasAfricasTalkingProvider()
   const atLive = isAfricasTalkingLiveUsername()
   const atSender = hasAfricasTalkingSenderId() || !!(await resolveAfricasTalkingSenderId())
-  const geniuspayKey = envSet('GENIUSPAY_API_KEY') || (await hasPlatformSecret('GENIUSPAY_API_KEY'))
-  const geniuspaySecret = envSet('GENIUSPAY_API_SECRET') || (await hasPlatformSecret('GENIUSPAY_API_SECRET'))
-  const geniuspayWebhook = envSet('GENIUSPAY_WEBHOOK_SECRET') || (await hasPlatformSecret('GENIUSPAY_WEBHOOK_SECRET'))
+  const geniuspayKey =
+    envSet('GENIUSPAY_API_KEY') ||
+    envSet('X_API_Key') ||
+    envSet('X_API_KEY') ||
+    (await hasPlatformSecret('GENIUSPAY_API_KEY', ['X_API_Key', 'X_API_KEY']))
+  const geniuspaySecret =
+    envSet('GENIUSPAY_API_SECRET') ||
+    envSet('X_API_Secret') ||
+    envSet('X_API_SECRET') ||
+    (await hasPlatformSecret('GENIUSPAY_API_SECRET', ['X_API_Secret', 'X_API_SECRET']))
+  const geniuspayWebhook =
+    envSet('GENIUSPAY_WEBHOOK_SECRET') ||
+    envSet('X_Webhook_Secret') ||
+    envSet('X_WEBHOOK_SECRET') ||
+    (await hasPlatformSecret('GENIUSPAY_WEBHOOK_SECRET', [
+      'X_Webhook_Secret',
+      'X_WEBHOOK_SECRET',
+    ]))
   let geminiReady =
     envSet('GEMINI_API_KEY') ||
     envSet('GOOGLE_GENERATIVE_AI_API_KEY') ||

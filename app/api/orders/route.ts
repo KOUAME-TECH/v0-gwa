@@ -5,6 +5,10 @@ import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { sendPushToUser } from "@/lib/notifications/push"
 import { isAgriculturalProductType } from "@/lib/catalog/scope"
 import { quoteSellerPricing } from "@/lib/pricing/server-quote"
+import {
+  insufficientStockMessage,
+  selfPurchaseMessage,
+} from "@/lib/orders/purchase-guards"
 
 type OrderItemInput = {
   product_id: string
@@ -65,18 +69,11 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const sellerId = String(body?.seller_id || "")
     const items = (body?.items || []) as OrderItemInput[]
 
-    if (!sellerId || !Array.isArray(items) || items.length === 0) {
+    if (!Array.isArray(items) || items.length === 0) {
       return NextResponse.json(
-        { error: "seller_id et items requis" },
-        { status: 400 },
-      )
-    }
-    if (sellerId === user.id) {
-      return NextResponse.json(
-        { error: "Impossible de commander chez soi" },
+        { error: "Ajoutez au moins un produit avant de commander." },
         { status: 400 },
       )
     }
@@ -99,13 +96,27 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    for (const p of products) {
-      if (p.seller_id !== sellerId) {
-        return NextResponse.json(
-          { error: "Tous les produits doivent appartenir au même vendeur" },
-          { status: 400 },
-        )
-      }
+    const catalogSellers = [...new Set(products.map((product) => product.seller_id))]
+    if (catalogSellers.length !== 1 || !catalogSellers[0]) {
+      return NextResponse.json(
+        { error: "Une commande ne peut contenir que les produits d'un seul vendeur." },
+        { status: 400 },
+      )
+    }
+    const resolvedSellerId = String(catalogSellers[0])
+    if (resolvedSellerId === user.id) {
+      const { data: buyerProfile } = await supabase
+        .from("profiles")
+        .select("user_type")
+        .eq("id", user.id)
+        .maybeSingle()
+      return NextResponse.json(
+        {
+          error: selfPurchaseMessage(buyerProfile?.user_type),
+          code: "SELF_PURCHASE",
+        },
+        { status: 409 },
+      )
     }
 
     const priceMap = new Map(products.map((p) => [p.id, p]))
@@ -126,6 +137,17 @@ export async function POST(request: NextRequest) {
         )
       }
       const qty = Math.max(1, Math.min(999_999, Number(item.quantity) || 1))
+      const available =
+        product.stock_quantity == null ? null : Number(product.stock_quantity)
+      if (available != null && Number.isFinite(available) && qty > available) {
+        return NextResponse.json(
+          {
+            error: insufficientStockMessage(String(product.name || "Ce produit"), available),
+            code: "OUT_OF_STOCK",
+          },
+          { status: 409 },
+        )
+      }
       const unitPrice = Number(product.price)
       if (!Number.isFinite(unitPrice) || unitPrice < 0) {
         return NextResponse.json(
@@ -144,7 +166,7 @@ export async function POST(request: NextRequest) {
     }
 
     const shipping = 0
-    const priced = await quoteSellerPricing(sellerId, subtotal)
+    const priced = await quoteSellerPricing(resolvedSellerId, subtotal)
     if ("error" in priced) {
       return NextResponse.json(
         { error: "Grille tarifaire indisponible", code: "PRICING_UNAVAILABLE" },
@@ -164,7 +186,7 @@ export async function POST(request: NextRequest) {
       .from("orders")
       .insert({
         buyer_id: user.id,
-        seller_id: sellerId,
+        seller_id: resolvedSellerId,
         order_number: orderNumber,
         subtotal,
         shipping_cost: shipping,
@@ -230,7 +252,7 @@ export async function POST(request: NextRequest) {
     })
 
     await supabase.from("notifications").insert({
-      user_id: sellerId,
+      user_id: resolvedSellerId,
       type: "order",
       title: "Nouvelle commande",
       message: `Commande ${orderNumber} reçue (${Math.round(totalAmount)} FCFA)`,
@@ -240,7 +262,7 @@ export async function POST(request: NextRequest) {
       read: false,
     })
 
-    void sendPushToUser(supabase as never, sellerId, {
+    void sendPushToUser(supabase as never, resolvedSellerId, {
       title: "Nouvelle commande GWA",
       body: `${orderNumber} — ${Math.round(totalAmount)} FCFA`,
       url: "/dashboard/commandes",

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkRateLimit } from "@/lib/security/rate-limiter";
 import { sendPushToUser } from "@/lib/notifications/push";
+import { toGeniusPayAmountXof } from "@/lib/payment/amount";
 import {
   createGeniusPayPayment,
   getGeniusPayPayment,
@@ -68,7 +69,7 @@ export async function POST(request: NextRequest, context: Ctx) {
     const phone = String(
       body?.phone || order.shipping_phone || buyerProfile?.phone || "",
     ).trim();
-    const amount = Math.round(Number(order.total_amount) || 0);
+    const amount = toGeniusPayAmountXof(Number(order.total_amount) || 0);
     if (amount < 200)
       return NextResponse.json(
         { error: "Montant de commande invalide" },

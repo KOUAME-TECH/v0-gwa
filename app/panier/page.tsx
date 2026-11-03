@@ -24,6 +24,7 @@ import {
 } from "@/lib/offline/cart-snapshot"
 import { toast } from "sonner"
 import { BuyerPriceBreakdown } from "@/components/orders/buyer-price-breakdown"
+import { selfPurchaseMessage } from "@/lib/orders/purchase-guards"
 
 interface CartItem {
   id: string
@@ -53,7 +54,7 @@ export default function CartPage() {
   const [cart, setCart] = useState<CartItem[]>([])
   const [loading, setLoading] = useState(true)
   const [step, setStep] = useState(1)
-  const [paymentMethod, setPaymentMethod] = useState("")
+  const [paymentMethod, setPaymentMethod] = useState("geniuspay")
   const [isProcessing, setIsProcessing] = useState(false)
   const [checkoutError, setCheckoutError] = useState("")
   const [user, setUser] = useState<any>(null)
@@ -181,13 +182,22 @@ export default function CartPage() {
     setLoading(false)
   }
 
+  function guestProductId(itemId: string) {
+    return itemId.startsWith("guest-") ? itemId.slice("guest-".length) : null
+  }
+
   const updateQuantity = async (itemId: string, delta: number) => {
     const item = cart.find(c => c.id === itemId)
     if (!item) return
 
     const newQuantity = Math.max(1, item.quantity + delta)
-    
-    await supabase.from("cart_items").update({ quantity: newQuantity }).eq("id", itemId)
+    const guestId = guestProductId(itemId)
+    if (guestId) {
+      const { setGuestCartQuantity } = await import("@/lib/cart/guest")
+      setGuestCartQuantity(guestId, newQuantity)
+    } else {
+      await supabase.from("cart_items").update({ quantity: newQuantity }).eq("id", itemId)
+    }
     setCart(cart.map(c => c.id === itemId ? { ...c, quantity: newQuantity } : c))
     const { notifyCartChanged } = await import("@/lib/cart/events")
     notifyCartChanged()
@@ -199,14 +209,26 @@ export default function CartPage() {
     const parsed = Number.parseInt(raw.replace(/\D/g, ""), 10)
     if (!Number.isFinite(parsed)) return
     const newQuantity = Math.min(999_999, Math.max(1, parsed))
-    await supabase.from("cart_items").update({ quantity: newQuantity }).eq("id", itemId)
+    const guestId = guestProductId(itemId)
+    if (guestId) {
+      const { setGuestCartQuantity } = await import("@/lib/cart/guest")
+      setGuestCartQuantity(guestId, newQuantity)
+    } else {
+      await supabase.from("cart_items").update({ quantity: newQuantity }).eq("id", itemId)
+    }
     setCart(cart.map((c) => (c.id === itemId ? { ...c, quantity: newQuantity } : c)))
     const { notifyCartChanged } = await import("@/lib/cart/events")
     notifyCartChanged()
   }
 
   const removeItem = async (itemId: string) => {
-    await supabase.from("cart_items").delete().eq("id", itemId)
+    const guestId = guestProductId(itemId)
+    if (guestId) {
+      const { removeGuestCartItem } = await import("@/lib/cart/guest")
+      removeGuestCartItem(guestId)
+    } else {
+      await supabase.from("cart_items").delete().eq("id", itemId)
+    }
     setCart(cart.filter(c => c.id !== itemId))
     const { notifyCartChanged } = await import("@/lib/cart/events")
     notifyCartChanged()
@@ -300,17 +322,19 @@ export default function CartPage() {
           }),
         })
         const payPayload = await payRes.json().catch(() => ({}))
-        if (payRes.ok && typeof payPayload?.payment_url === "string" && payPayload.payment_url) {
+        const { interpretPayResponse } = await import("@/lib/payment/checkout-navigation")
+        const decision = interpretPayResponse(payRes.status, payPayload)
+        if (decision.action === "redirect") {
           await supabase.from("cart_items").delete().eq("user_id", user.id)
           const { notifyCartChanged } = await import("@/lib/cart/events")
           notifyCartChanged()
-          window.location.href = payPayload.payment_url
+          window.location.assign(decision.url)
           return
         }
-        if (payRes.ok && payPayload?.status === "paid_simulated") {
+        if (decision.action === "simulated") {
           continue
         }
-        if (payRes.ok && payPayload?.status === "ussd_pending") {
+        if (decision.action === "ussd") {
           await supabase.from("cart_items").delete().eq("user_id", user.id)
           const { notifyCartChanged } = await import("@/lib/cart/events")
           notifyCartChanged()
@@ -318,17 +342,7 @@ export default function CartPage() {
           return
         }
 
-        await supabase
-          .from("cart_items")
-          .delete()
-          .eq("user_id", user.id)
-          .in("product_id", items.map((item) => item.product.id))
-        const { notifyCartChanged } = await import("@/lib/cart/events")
-        notifyCartChanged()
-        const { notifyOrdersChanged } = await import("@/hooks/use-active-orders-count")
-        notifyOrdersChanged()
-        router.push(`/commandes/confirmation?order=${encodeURIComponent(orderId)}&payment=unavailable`)
-        return
+        throw new Error(decision.message)
       }
 
       // Vider le panier une fois toutes les commandes creees
@@ -353,7 +367,9 @@ export default function CartPage() {
     }
   }
 
+  const ownsCart = Boolean(user && cart.some((item) => item.product.seller_id === user.id))
   const canProceed = () => {
+    if (ownsCart) return false
     if (step === 1) return cart.length > 0
     if (step === 2) return deliveryAddress.name && deliveryAddress.phone && deliveryAddress.city
     if (step === 3) return paymentMethod
@@ -368,15 +384,15 @@ export default function CartPage() {
     )
   }
 
-  if (!user) {
+  if (!user && cart.length === 0) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
         <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mb-4">
           <ShoppingCart className="h-10 w-10 text-primary" />
         </div>
-        <h2 className="text-xl font-bold mb-2">Connectez-vous</h2>
+        <h2 className="text-xl font-bold mb-2">Panier vide</h2>
         <p className="text-muted-foreground text-sm text-center mb-6 max-w-xs">
-          Pour voir votre panier, vous devez être connecté
+          Ajoute un produit, ou connecte-toi pour retrouver un panier déjà enregistré.
         </p>
         <div className="flex flex-col gap-3 w-full max-w-xs">
           <Link href="/auth/login?redirect=/panier">
@@ -429,7 +445,7 @@ export default function CartPage() {
           <h1 className="flex-1 font-display text-lg text-[#1F5C2E]">
             {step === 1 && `Ton panier (${cart.length})`}
             {step === 2 && "Tes coordonnées"}
-            {step === 3 && "Payer en sécurité"}
+            {step === 3 && "Récapitulatif avant paiement"}
           </h1>
         </div>
         
@@ -442,6 +458,12 @@ export default function CartPage() {
       </header>
 
       {/* Step 1: Cart Items */}
+      {ownsCart && (
+        <p role="alert" className="mx-auto max-w-3xl px-4 pt-3 text-sm text-[#92400E]">
+          {selfPurchaseMessage("producteur")}
+        </p>
+      )}
+
       {step === 1 && (
         <div className="mx-auto max-w-3xl space-y-3 p-4">
           {cart.map(item => (
@@ -463,7 +485,7 @@ export default function CartPage() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2">
                   <h3 className="font-medium text-sm line-clamp-2">{item.product.name}</h3>
-                  <button onClick={() => removeItem(item.id)} className="text-muted-foreground p-1">
+                  <button type="button" onClick={() => removeItem(item.id)} className="flex h-11 w-11 items-center justify-center text-muted-foreground" aria-label="Retirer">
                     <X className="h-4 w-4" />
                   </button>
                 </div>
@@ -474,8 +496,9 @@ export default function CartPage() {
                 <div className="flex items-center justify-between mt-2">
                   <div className="flex items-center gap-2">
                     <button 
+                      type="button"
                       onClick={() => updateQuantity(item.id, -1)}
-                      className="w-7 h-7 rounded-full bg-muted flex items-center justify-center"
+                      className="flex h-11 w-11 items-center justify-center rounded-full bg-muted"
                       aria-label="Diminuer"
                     >
                       <Minus className="h-3 w-3" />
@@ -491,8 +514,9 @@ export default function CartPage() {
                       aria-label="Quantité"
                     />
                     <button 
+                      type="button"
                       onClick={() => updateQuantity(item.id, 1)}
-                      className="w-7 h-7 rounded-full bg-muted flex items-center justify-center"
+                      className="flex h-11 w-11 items-center justify-center rounded-full bg-muted"
                       aria-label="Augmenter"
                     >
                       <Plus className="h-3 w-3" />
@@ -515,8 +539,9 @@ export default function CartPage() {
         <div className="mx-auto max-w-3xl space-y-4 p-4">
           <div className="space-y-4">
             <div>
-              <Label className="text-sm">Nom complet</Label>
+              <Label htmlFor="checkout-name" className="text-sm">Nom complet</Label>
               <Input
+                id="checkout-name"
                 value={deliveryAddress.name}
                 onChange={(e) => setDeliveryAddress({...deliveryAddress, name: e.target.value})}
                 className="mt-1.5 h-12 rounded-xl"
@@ -524,8 +549,9 @@ export default function CartPage() {
               />
             </div>
             <div>
-              <Label className="text-sm">Telephone</Label>
+              <Label htmlFor="checkout-phone" className="text-sm">Téléphone</Label>
               <Input
+                id="checkout-phone"
                 type="tel"
                 value={deliveryAddress.phone}
                 onChange={(e) => setDeliveryAddress({...deliveryAddress, phone: e.target.value})}
@@ -534,8 +560,9 @@ export default function CartPage() {
               />
             </div>
             <div>
-              <Label className="text-sm">Adresse</Label>
+              <Label htmlFor="checkout-address" className="text-sm">Adresse</Label>
               <Input
+                id="checkout-address"
                 value={deliveryAddress.address}
                 onChange={(e) => setDeliveryAddress({...deliveryAddress, address: e.target.value})}
                 className="mt-1.5 h-12 rounded-xl"
@@ -544,8 +571,9 @@ export default function CartPage() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-sm">Ville</Label>
+                <Label htmlFor="checkout-city" className="text-sm">Ville</Label>
                 <Input
+                  id="checkout-city"
                   value={deliveryAddress.city}
                   onChange={(e) => setDeliveryAddress({...deliveryAddress, city: e.target.value})}
                   className="mt-1.5 h-12 rounded-xl"
@@ -553,8 +581,9 @@ export default function CartPage() {
                 />
               </div>
               <div>
-                <Label className="text-sm">Pays</Label>
-                <select 
+                <Label htmlFor="checkout-country" className="text-sm">Pays</Label>
+                <select
+                  id="checkout-country"
                   value={deliveryAddress.country}
                   onChange={(e) => setDeliveryAddress({...deliveryAddress, country: e.target.value})}
                   className="mt-1.5 w-full h-12 px-3 rounded-xl border bg-background text-sm"
@@ -616,7 +645,7 @@ export default function CartPage() {
       <div className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] left-0 right-0 z-40 border-t border-[#1F5C2E]/10 bg-white/95 px-4 py-3 backdrop-blur-sm lg:bottom-0">
         <div className="mx-auto flex max-w-3xl items-center gap-3">
           {checkoutError ? (
-            <p className="flex-1 text-sm text-red-600">{checkoutError}</p>
+            <p role="alert" className="flex-1 text-sm text-red-600">{checkoutError}</p>
           ) : (
             <div className="min-w-0 flex-1">
               <p className="text-[11px] text-[#6B7280]">À payer</p>
@@ -628,13 +657,13 @@ export default function CartPage() {
           <Button
             onClick={handleCheckout}
             disabled={!canProceed() || isProcessing}
-            className="h-12 shrink-0 rounded-xl bg-[#1F5C2E] px-5 text-[15px] font-semibold hover:bg-[#184a25]"
+            className="h-12 min-h-11 shrink-0 rounded-xl bg-[#1F5C2E] px-5 text-[15px] font-semibold hover:bg-[#184a25]"
           >
             {isProcessing ? (
               <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
             ) : (
               <>
-                {step < 3 ? "Continuer" : "Payer"}
+                {step < 3 ? "Continuer" : user ? "Payer" : "Se connecter pour payer"}
                 <ArrowRight className="ml-1.5 h-4 w-4" />
               </>
             )}

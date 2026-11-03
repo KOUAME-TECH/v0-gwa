@@ -70,6 +70,19 @@ export function addGuestCartItem(productId: string, qty = 1): void {
   saveGuestCart(lines)
 }
 
+export function setGuestCartQuantity(productId: string, quantity: number): void {
+  const qty = Math.max(1, Math.floor(quantity))
+  const lines = loadGuestCart()
+  const idx = lines.findIndex((l) => l.productId === productId)
+  if (idx < 0) return
+  lines[idx] = { ...lines[idx], quantity: qty }
+  saveGuestCart(lines)
+}
+
+export function removeGuestCartItem(productId: string): void {
+  saveGuestCart(loadGuestCart().filter((l) => l.productId !== productId))
+}
+
 /** Fusionne le panier invité dans le panier Supabase après login. */
 export async function mergeGuestCartToUser(
   supabase: SupabaseClient,

@@ -20,24 +20,43 @@ type GeniusPayResponse = {
 export type GeniusPayEnvironment = "live" | "sandbox"
 export type GeniusPayPayment = NonNullable<GeniusPayResponse["data"]>
 
+function envValue(name: string): string {
+  return (process.env[name] || "").replace(/^"|"$/g, "").trim()
+}
+
+/** Noms acceptés en production. X_* est le nom déjà posé sur Vercel, sans renommage. */
+const LIVE_KEY_NAMES = ["GENIUSPAY_API_KEY", "X_API_Key", "X_API_KEY"] as const
+const LIVE_SECRET_NAMES = ["GENIUSPAY_API_SECRET", "X_API_Secret", "X_API_SECRET"] as const
+const WEBHOOK_SECRET_NAMES = [
+  "GENIUSPAY_WEBHOOK_SECRET",
+  "X_Webhook_Secret",
+  "X_WEBHOOK_SECRET",
+] as const
+
+async function firstSecret(names: readonly string[]): Promise<string> {
+  for (const name of names) {
+    const fromEnv = envValue(name)
+    if (fromEnv) return fromEnv
+  }
+  const { resolvePlatformSecret } = await import("@/lib/ops/platform-secrets")
+  for (const name of names) {
+    const value = (await resolvePlatformSecret(name)).trim()
+    if (value) return value
+  }
+  return ""
+}
+
 export async function resolveGeniusPayCredentials(mode: GeniusPayEnvironment = "live") {
   const suffix = mode === "sandbox" ? "_SANDBOX" : ""
-  const key = process.env[`GENIUSPAY_API_KEY${suffix}`]
-  const secret = process.env[`GENIUSPAY_API_SECRET${suffix}`]
-  if (key && secret) return { key, secret }
-  const { resolvePlatformSecret } = await import("@/lib/ops/platform-secrets")
-  const [platformKey, platformSecret] = await Promise.all([
-    resolvePlatformSecret(`GENIUSPAY_API_KEY${suffix}`),
-    resolvePlatformSecret(`GENIUSPAY_API_SECRET${suffix}`),
-  ])
-  return platformKey && platformSecret ? { key: platformKey, secret: platformSecret } : null
+  const keyNames = mode === "sandbox" ? [`GENIUSPAY_API_KEY${suffix}`] : LIVE_KEY_NAMES
+  const secretNames = mode === "sandbox" ? [`GENIUSPAY_API_SECRET${suffix}`] : LIVE_SECRET_NAMES
+  const key = await firstSecret(keyNames)
+  const secret = await firstSecret(secretNames)
+  return key && secret ? { key, secret } : null
 }
 
 export async function resolveGeniusPayWebhookSecret() {
-  const value = process.env.GENIUSPAY_WEBHOOK_SECRET
-  if (value) return value
-  const { resolvePlatformSecret } = await import("@/lib/ops/platform-secrets")
-  return resolvePlatformSecret("GENIUSPAY_WEBHOOK_SECRET")
+  return firstSecret(WEBHOOK_SECRET_NAMES)
 }
 
 export function getGeniusPayMode(): GeniusPayEnvironment {

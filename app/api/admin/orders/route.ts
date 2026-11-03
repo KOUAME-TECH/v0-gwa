@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { requireAdminSection } from "@/lib/auth/require-admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
+import { isOrderLifecycle } from "@/lib/orders/lifecycle"
 
 /**
  * GET /api/admin/orders — liste complète (service role ; RLS bloque le client admin)
@@ -41,7 +42,11 @@ export async function GET(request: NextRequest) {
       .order("created_at", { ascending: false })
       .range(page * pageSize, (page + 1) * pageSize - 1)
 
-    if (status !== "all") query = query.eq("status", status)
+    if (status !== "all") {
+      query = isOrderLifecycle(status)
+        ? query.eq("lifecycle_status", status)
+        : query.eq("status", status)
+    }
     if (payment !== "all") query = query.eq("payment_status", payment)
     if (q) query = query.ilike("order_number", `%${q}%`)
 

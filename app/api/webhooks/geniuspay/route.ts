@@ -1,10 +1,10 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { resolveGeniusPayWebhookSecret } from "@/lib/payment/geniuspay";
 
 export async function POST(request: Request) {
-  const { resolvePlatformSecret } = await import("@/lib/ops/platform-secrets");
-  const secret = await resolvePlatformSecret("GENIUSPAY_WEBHOOK_SECRET");
+  const secret = await resolveGeniusPayWebhookSecret();
   if (!secret)
     return NextResponse.json(
       { error: "Webhook non configuré" },

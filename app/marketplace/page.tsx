@@ -398,7 +398,7 @@ function MarketplaceContent() {
     if (!userId) {
       const { addGuestCartItem } = await import("@/lib/cart/guest")
       addGuestCartItem(id, 1)
-      toast.success("Ajouté à la charette — connecte-toi pour commander")
+      toast.success("Ajouté au panier — connecte-toi pour payer")
       return
     }
     const res = await addOrIncrementCart(supabase, userId, id, 1)

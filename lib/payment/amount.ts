@@ -1,3 +1,9 @@
+/** GeniusPay attend le montant en francs XOF entiers. Pas de conversion en centimes. */
+export function toGeniusPayAmountXof(totalFcfa: number): number {
+  if (!Number.isFinite(totalFcfa) || totalFcfa <= 0) return 0
+  return Math.round(totalFcfa)
+}
+
 export function isExactPaymentAmount(
   paidValue: unknown,
   expectedValue: unknown,
