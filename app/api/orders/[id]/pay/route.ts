@@ -21,13 +21,27 @@ function allowPaymentSimulation() {
 }
 
 function appOrigin(request: NextRequest) {
-  const env = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
-  if (env) return env;
-  const host =
-    request.headers.get("x-forwarded-host") || request.headers.get("host");
-  return host
-    ? `${request.headers.get("x-forwarded-proto") || "https"}://${host}`
-    : "https://mygwa.org";
+  const env = (process.env.NEXT_PUBLIC_APP_URL || "")
+    .trim()
+    .replace(/^"|"$/g, "")
+    .replace(/\/$/, "");
+  try {
+    const url = new URL(env);
+    if (url.protocol === "https:" || url.protocol === "http:") return url.origin;
+  } catch {
+    /* origin de secours */
+  }
+  const host = (
+    request.headers.get("x-forwarded-host") ||
+    request.headers.get("host") ||
+    ""
+  )
+    .split(",")[0]
+    .trim();
+  if (host && !host.startsWith("localhost") && !host.startsWith("127.")) {
+    return `https://${host}`;
+  }
+  return "https://mygwa.org";
 }
 
 export async function POST(request: NextRequest, context: Ctx) {
@@ -115,8 +129,8 @@ export async function POST(request: NextRequest, context: Ctx) {
           country: "CI",
         },
         metadata: { order_id: id, order_number: order.order_number },
-        successUrl: `${appOrigin(request)}/commandes/confirmation?order=${id}`,
-        errorUrl: `${appOrigin(request)}/commandes/${id}?payment=failed`,
+        successUrl: `${appOrigin(request)}/commandes/confirmation/${id}`,
+        errorUrl: `${appOrigin(request)}/panier`,
       });
       const paymentUrl = payment.checkout_url || payment.payment_url;
       if (!paymentUrl) {

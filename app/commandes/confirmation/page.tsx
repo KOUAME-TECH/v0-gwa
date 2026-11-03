@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense } from "react"
 import { createClient } from "@/lib/supabase/client"
-import { useSearchParams } from "next/navigation"
+import { useParams, useSearchParams } from "next/navigation"
 import { Navigation } from "@/components/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -41,7 +41,8 @@ interface Order {
 
 function ConfirmationContent() {
   const searchParams = useSearchParams()
-  const orderId = searchParams.get('order')
+  const params = useParams<{ orderId?: string }>()
+  const orderId = searchParams.get('order') || params?.orderId || null
   const paymentUnavailable = searchParams.get('payment') === "unavailable"
   
   const [order, setOrder] = useState<Order | null>(null)
