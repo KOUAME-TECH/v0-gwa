@@ -1,6 +1,9 @@
 import "server-only"
 
-const BASE_URL = "https://geniuspay.ci/api/v1/merchant"
+const BASE_URLS = [
+  "https://geniuspay.ci/api/v1/merchant",
+  "https://pay.genius.ci/api/v1/merchant",
+]
 
 type GeniusPayResponse = {
   success?: boolean
@@ -72,36 +75,52 @@ export async function isGeniusPayConfigured(
 async function request(path: string, init: RequestInit, mode: GeniusPayEnvironment = "live") {
   const auth = await resolveGeniusPayCredentials(mode)
   if (!auth) throw new Error("GENIUSPAY_NOT_CONFIGURED")
-  const response = await fetch(`${BASE_URL}${path}`, {
-    ...init,
-    headers: {
-      "X-API-Key": auth.key,
-      "X-API-Secret": auth.secret,
-      "Content-Type": "application/json",
-      ...(init.headers || {}),
-    },
-    cache: "no-store",
-  })
-  const raw = await response.text()
-  let parsed = false
-  let body: GeniusPayResponse = {}
-  try {
-    body = raw ? (JSON.parse(raw) as GeniusPayResponse) : {}
-    parsed = true
-  } catch {
-    parsed = false
+  let lastError = "GENIUSPAY_REQUEST_FAILED"
+  for (const base of BASE_URLS) {
+    const response = await fetch(`${base}${path}`, {
+      ...init,
+      headers: {
+        "X-API-Key": auth.key,
+        "X-API-Secret": auth.secret,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        ...(init.headers || {}),
+      },
+      cache: "no-store",
+    })
+    const raw = await response.text()
+    let parsed = false
+    let body: GeniusPayResponse = {}
+    try {
+      body = raw ? (JSON.parse(raw) as GeniusPayResponse) : {}
+      parsed = true
+    } catch {
+      parsed = false
+    }
+    const host = (() => {
+      try {
+        return new URL(response.url).host
+      } catch {
+        return base
+      }
+    })()
+    if (parsed && response.ok && body?.success !== false) {
+      return body
+    }
+    const title = raw.match(/<title>([^<]{0,80})/i)?.[1]?.trim() || null
+    console.error("[geniuspay] http", {
+      host,
+      status: response.status,
+      type: response.headers.get("content-type"),
+      bytes: raw.length,
+      parsed,
+      title,
+      code: body?.error?.code || null,
+    })
+    lastError = body?.error?.code || `GENIUSPAY_HTTP_${response.status}`
+    if (parsed) break
   }
-  const meta = {
-    status: response.status,
-    type: response.headers.get("content-type"),
-    bytes: raw.length,
-    parsed,
-  }
-  if (!response.ok || body?.success === false || !parsed) {
-    console.error("[geniuspay] http", { ...meta, code: body?.error?.code || null })
-    throw new Error(body?.error?.code || `GENIUSPAY_HTTP_${response.status}`)
-  }
-  return Object.assign(body, { _meta: meta })
+  throw new Error(lastError)
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
