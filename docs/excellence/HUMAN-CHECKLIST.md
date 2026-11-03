@@ -54,3 +54,19 @@ Playwright non-auth couvre gates publiques. Pour ≥95 audio/nego :
 ## 6. GeniusPay / FeexPay
 
 **FROZEN** — ne pas configurer / activer dans cette campagne excellence.
+
+## 7. OneSignal — origines Web (preview + prod)
+
+Sans cette étape, la console logue `[OneSignal] Origine … absente du dashboard` et le push web reste inactif (le code soft-fail sans casser Supabase auth).
+
+1. OneSignal Dashboard → app **GWA** (`5f01e343-…`)
+2. **Settings → Platforms → Web** (Typical Site)
+3. Ajouter / confirmer les Site URL :
+   - `https://mygwa.org`
+   - `https://www.mygwa.org` (si utilisé)
+   - `https://v0-gwa-gwa.vercel.app`
+   - `https://v0-gwa-mu.vercel.app`
+4. Workers : `OneSignalSDKWorker.js` / `OneSignalSDKUpdaterWorker.js` · path `/` · scope `/`
+5. Recharger preview → plus de warn `domain_not_allowed` · `__GWA_ONESIGNAL_STATUS.ok === true`
+
+Détail : `docs/excellence/PR-sw-csp-onesignal.md`

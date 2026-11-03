@@ -2,7 +2,10 @@
 
 import { useEffect, useRef } from "react"
 import { createClient } from "@/lib/supabase/client"
-import { getOneSignalAppId } from "@/lib/notifications/onesignal-config"
+import {
+  getOneSignalAppId,
+  isOneSignalOriginAllowed,
+} from "@/lib/notifications/onesignal-config"
 
 declare global {
   interface Window {
@@ -14,6 +17,7 @@ declare global {
       origin?: string
       playerId?: string | null
     }
+    __GWA_ONESIGNAL_ORIGIN_WARNED?: boolean
   }
 }
 
@@ -55,13 +59,51 @@ async function registerPlayerId(playerId: string) {
   }
 }
 
+function warnOriginOnce(origin: string) {
+  if (typeof window === "undefined") return
+  if (window.__GWA_ONESIGNAL_ORIGIN_WARNED) return
+  window.__GWA_ONESIGNAL_ORIGIN_WARNED = true
+  console.warn(
+    `[OneSignal] Origine ${origin} absente du dashboard — ajoutez-la dans Settings → Platforms → Web (Typical Site). Sites requis : https://mygwa.org et https://v0-gwa-gwa.vercel.app`,
+  )
+}
+
+/**
+ * Si OneSignal a laissé un SW cassé / partiel après init échouée (domaine dashboard),
+ * unregister les workers OS puis ré-enregistrer `/sw.js` offline (pass-through auth).
+ */
+async function softRecoverOfflineWorker() {
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return
+  try {
+    const regs = await navigator.serviceWorker.getRegistrations()
+    await Promise.all(
+      regs.map(async (reg) => {
+        const script =
+          reg.active?.scriptURL ||
+          reg.waiting?.scriptURL ||
+          reg.installing?.scriptURL ||
+          ""
+        if (
+          script.includes("OneSignalSDKWorker") ||
+          script.includes("OneSignalSDKUpdaterWorker")
+        ) {
+          await reg.unregister()
+        }
+      }),
+    )
+    await navigator.serviceWorker.register("/sw.js", { scope: "/" })
+  } catch {
+    // non bloquant
+  }
+}
+
 /**
  * OneSignal Web SDK v16 — PWA
  * Aligné dashboard Typical Site :
  *   Main Filename → OneSignalSDKWorker.js
  *   Updater Filename → OneSignalSDKUpdaterWorker.js
  *   Path / Registration Scope → /
- * Workers officiels : importScripts CDN v16 uniquement.
+ * Workers : offline GWA + OneSignal CDN v16 (pass-through supabase/maps).
  */
 export function OneSignalProvider({ children }: { children: React.ReactNode }) {
   const initialized = useRef(false)
@@ -70,12 +112,24 @@ export function OneSignalProvider({ children }: { children: React.ReactNode }) {
     if (initialized.current || typeof window === "undefined") return
     initialized.current = true
 
+    const origin = window.location.origin
     const appId = getOneSignalAppId()
     if (!appId) {
       window.__GWA_ONESIGNAL_STATUS = {
         ok: false,
         error: "NEXT_PUBLIC_ONESIGNAL_APP_ID manquant",
-        origin: window.location.origin,
+        origin,
+      }
+      return
+    }
+
+    // Skip init hors allowlist — évite throw uncaught ; offline via /sw.js
+    if (!isOneSignalOriginAllowed(origin)) {
+      warnOriginOnce(origin)
+      window.__GWA_ONESIGNAL_STATUS = {
+        ok: false,
+        error: "domain_not_allowed",
+        origin,
       }
       return
     }
@@ -93,27 +147,25 @@ export function OneSignalProvider({ children }: { children: React.ReactNode }) {
         })
         window.__GWA_ONESIGNAL_STATUS = {
           ok: true,
-          origin: window.location.origin,
+          origin,
           playerId: OneSignal.User.PushSubscription.id || null,
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
-        // Domaine non autorisé (ex. mygwa.org alors que seul v0-gwa-mu.vercel.app est listé)
-        // → warn actionnable, pas d'erreur rouge bloquante
-        const domainBlocked = /can only be used on|not configured for web push/i.test(
+        // Domaine non autorisé côté dashboard malgré allowlist code
+        const domainBlocked = /can only be used on|not configured for web push|domain/i.test(
           msg,
         )
         if (domainBlocked) {
-          console.warn(
-            `[OneSignal] Origine ${window.location.origin} absente du dashboard — ajoutez-la dans Settings → Platforms → Web (Typical Site).`,
-          )
+          warnOriginOnce(origin)
+          void softRecoverOfflineWorker()
         } else {
           console.warn("[OneSignal] init échouée (App ID / SW / domaine) :", err)
         }
         window.__GWA_ONESIGNAL_STATUS = {
           ok: false,
           error: domainBlocked ? "domain_not_allowed" : msg,
-          origin: window.location.origin,
+          origin,
         }
         return
       }
@@ -122,7 +174,7 @@ export function OneSignalProvider({ children }: { children: React.ReactNode }) {
         const playerId = OneSignal.User.PushSubscription.id
         window.__GWA_ONESIGNAL_STATUS = {
           ok: true,
-          origin: window.location.origin,
+          origin,
           playerId: playerId || null,
         }
         if (playerId) await registerPlayerId(playerId)
