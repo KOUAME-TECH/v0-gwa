@@ -1211,3 +1211,37 @@ Score 90 documenté
 
 ### Notion
 Titre hub 45→90
+
+
+## ITÉRATION 19 — DSP live meter + contre-offre + deploy token hunt
+
+**Scores** : Global **91** | UI/UX **85** | Frontend **83** | Backend **81** | Audio **80** | Négociation **81** | Sécurité **81** | SEO **76** | IA **75** | Continuité **72**
+
+### Écarts
+- [FAIT VÉRIFIÉ] `VERCEL_TOKEN` / `VERCEL_ACCESS_TOKEN` / OIDC shell **[missing]** ; GH secrets list **403** ; project env MCP **404** sans SSO
+- [FAIT VÉRIFIÉ] MCP `create_deployment` tip `f88d186` → **403** ; SSO consent URLs émises
+- [FAIT VÉRIFIÉ] Prod SHA **`2f9d54b`** · robots/sitemap **404** · `rate_limit_redis:true` · Upstash PING **PONG**
+- [FAIT VÉRIFIÉ] Test-data : junk profiles 0 · public 1 · private 4 · junk_public 0 · products 3
+- [FAIT VÉRIFIÉ] Security advisor : seul WARN = HIBP
+- [RISQUE RÉSIDUEL] ≥95 bloqué sans SEO live 200 + HIBP ON
+
+### Corrections
+- Vu-mètre vocal branché sur RMS DSP (`voiceMeterBarHeights` + `getLevel` @4 Hz)
+- Offre : libellé `Contre-offre / Surcote % vs catalogue` (`offerDeltaLabel`)
+- Metadata layouts `/download` `/conditions` `/confidentialite`
+- Preuves `evidence/iter19/` + HUMAN-CHECKLIST token path
+
+### Preuves
+- vitest voice-studio + offer + audio + seo focused PASS
+- `tsc --noEmit` OK
+- Playwright home `evidence/iter19/home-feed-1024.png`
+- `evidence/iter19/deploy-status.md` · `prod-health.json` · `redis-ping.txt` · `test-data.md`
+
+### MCP
+Vercel (403 deploy + SSO), Supabase SQL/advisors, Upstash PING, Playwright, Notion
+
+### Décision
+**suivante** (91 < 95) — **NO-GO merge**. UNIQUE NEXT = secret `VERCEL_TOKEN` (Cloud Agent **ou** GH Actions) **pas chat** · ou SSO approve · ou Dashboard Redeploy tip.
+
+### Notion
+https://app.notion.com/p/40ca6d3a76b4819196eeed4411a27aa7 — titre 45→91

@@ -75,3 +75,22 @@ export function parseOfferContent(content: string): PriceOfferPayload | null {
 export function formatOfferAmount(amount: number): string {
   return new Intl.NumberFormat("fr-FR").format(Math.round(amount))
 }
+
+/**
+ * Libellé contre-offre vs prix catalogue (négociation).
+ * Retourne null si pas de catalogue ou écart < 1 %.
+ */
+export function offerDeltaLabel(
+  listPrice: number | null | undefined,
+  offerAmount: number,
+): string | null {
+  const list = Number(listPrice)
+  const offer = Math.round(Number(offerAmount))
+  if (!Number.isFinite(list) || list < 1 || !Number.isFinite(offer) || offer < 1) {
+    return null
+  }
+  const pct = Math.round(((offer - list) / list) * 100)
+  if (Math.abs(pct) < 1) return null
+  if (pct < 0) return `Contre-offre · ${pct} % vs catalogue`
+  return `Surcote · +${pct} % vs catalogue`
+}

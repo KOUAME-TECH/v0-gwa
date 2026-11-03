@@ -10,6 +10,7 @@ import {
   buildOfferContent,
   parseOfferContent,
   formatOfferAmount,
+  offerDeltaLabel,
   type PriceOfferPayload,
 } from "@/lib/chat/offer"
 import { buildLocationContent, isLocationMessage } from "@/lib/chat/location"
@@ -28,6 +29,7 @@ import {
   type VoiceDspHandles,
 } from "@/lib/chat/audio-dsp"
 import {
+  voiceMeterBarHeights,
   voiceStudioStatusLabel,
   voiceSttUnavailableToast,
 } from "@/lib/chat/voice-studio-copy"
@@ -157,6 +159,7 @@ export function ChatConversation({
   const [reactPickerMsg, setReactPickerMsg] = useState<string | null>(null)
   const [isRecording, setIsRecording] = useState(false)
   const [recordSec, setRecordSec] = useState(0)
+  const [voiceLevel, setVoiceLevel] = useState(0)
   const [showEmojis, setShowEmojis] = useState(false)
   const [emojiCat, setEmojiCat] = useState(EMOJI_CATEGORIES[0]?.id ?? "smileys")
   const [audioPreview, setAudioPreview] = useState<{
@@ -1149,6 +1152,7 @@ export function ChatConversation({
       }
       mediaRecorder.current?.stop()
       setIsRecording(false)
+      setVoiceLevel(0)
       if (recInterval.current) clearInterval(recInterval.current)
       trackChatMetric("chat.voice.record", { ok: true, kind: "stop" })
     } else {
@@ -1215,6 +1219,7 @@ export function ChatConversation({
         mr.start()
         setIsRecording(true)
         setRecordSec(0)
+        setVoiceLevel(0)
         setAudioPreview(null)
         trackChatMetric("chat.voice.record", {
           ok: true,
@@ -1222,7 +1227,14 @@ export function ChatConversation({
           stt: stt.available,
           dsp: true,
         })
-        recInterval.current = setInterval(() => setRecordSec((p) => p + 1), 1000)
+        let tick = 0
+        recInterval.current = setInterval(() => {
+          tick += 1
+          // Niveau RMS ~4×/s ; secondes une fois par tick/4
+          const level = voiceDspRef.current?.getLevel() ?? 0
+          setVoiceLevel(level)
+          if (tick % 4 === 0) setRecordSec((p) => p + 1)
+        }, 250)
       } catch (err) {
         console.warn("[chat] mic", err)
         toast.error("Micro inaccessible — autorise le micro dans le navigateur")
@@ -1370,6 +1382,7 @@ export function ChatConversation({
   }
 
   function cancelRecording() {
+    setVoiceLevel(0)
     cancelVoiceRef.current = true
     audioChunks.current = []
     if (mediaRecorder.current?.state === "recording") {
@@ -2544,10 +2557,19 @@ export function ChatConversation({
               recording: true,
               sttActive: Boolean(sttSessionRef.current),
             })}
+            {` Niveau micro ${Math.round(voiceLevel * 100)} pour cent.`}
           </span>
-          <div className="flex-1 flex items-center gap-[2px] overflow-hidden" aria-hidden>
-            {Array.from({ length: 40 }).map((_, i) => (
-              <div key={i} className="w-[2px] bg-red-400/60 rounded-full shrink-0" style={{ height: `${3 + Math.sin((recordSec + i) * 0.5) * 10 + 4}px` }} />
+          <div
+            className="flex-1 flex items-center gap-[2px] overflow-hidden"
+            aria-hidden
+            data-voice-meter="dsp"
+          >
+            {voiceMeterBarHeights(voiceLevel, 40).map((h, i) => (
+              <div
+                key={i}
+                className="w-[2px] bg-red-400/80 rounded-full shrink-0 transition-[height] duration-75"
+                style={{ height: `${h}px` }}
+              />
             ))}
           </div>
           <button
@@ -2737,6 +2759,18 @@ export function ChatConversation({
                   placeholder="15000"
                   className="w-full h-12 rounded-xl border border-[#E5E7EB] px-4 text-lg font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-[#1F5C2E]/30"
                 />
+                {(() => {
+                  const list = offerProducts.find((p) => p.id === offerProductId)?.price
+                  const label = offerDeltaLabel(
+                    list,
+                    Number.parseInt(offerAmount.replace(/\D/g, ""), 10) || 0,
+                  )
+                  return label ? (
+                    <p className="mt-1 text-[11px] font-medium text-[#C27D10]" aria-live="polite">
+                      {label}
+                    </p>
+                  ) : null
+                })()}
               </div>
               <div>
                 <label className="text-sm font-medium text-[#111] mb-1.5 block" htmlFor="offer-qty">

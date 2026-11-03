@@ -1,52 +1,55 @@
-## Excellence RESET → **90/100** — NO-GO merge (deploy tip bloqué)
+## Excellence RESET → **91/100** — NO-GO merge (deploy tip bloqué)
 
-Branche `gwa/excellence-parcours-1e99` · baseline **45** · **16 itérations** post-reset · tip après push de cette session.
+Branche `gwa/excellence-parcours-1e99` · baseline **45** · **19 itérations** post-reset · tip après push de cette session.
 
-### Mission 1 — Deploy unblock
+### Mission 1 — Deploy tip
 
 | Canal | Résultat |
 | --- | --- |
-| Vercel MCP `create_deployment` prod/preview | **403** |
-| Vercel CLI | logged out · pas de `VERCEL_TOKEN` |
-| GH Actions Deploy Production | **403** |
-| SSO consent | liens frais dans `docs/excellence/evidence/iter14/deploy-status.md` |
+| Shell `VERCEL_TOKEN` / `VERCEL_ACCESS_TOKEN` / OIDC | **[missing]** |
+| Vercel MCP `create_deployment` prod | **403** |
+| Vercel MCP SSO / team access | consent links (voir `evidence/iter19/deploy-status.md`) |
+| Vercel CLI | logged out |
+| GH Actions Deploy Production dispatch | **403** |
+| `gh secret list` | **403** |
 
-**Prod live** : https://mygwa.org · SHA **`2f9d54b276f0`** (stale) · `/robots.txt`+`/sitemap.xml` **404** · `rate_limit_redis:true` ✓ Redis `KV_REST_*` intact.
+**Prod live** : https://mygwa.org · SHA **`2f9d54b276f0`** (stale) · `/robots.txt`+`/sitemap.xml` **404** · `rate_limit_redis:true` ✓ · Upstash `gwa-prod` PING **PONG**.
 
-### Mission 2 — Axes (cette session iters 14–16)
+### Mission 2 — Axes (iter 19)
 
 | Axe | Statut |
 | --- | --- |
-| A Test-data | Re-proof SQL : 0 junk profiles · 1 public · 4 private · 3 products · Playwright feed propre |
-| B SEO | Code : OG/Twitter images, layouts agriculture/contact/artisans/coop · **live bloqué** |
-| C Chat | Typing `aria-live`, motion-safe dots, inert nav chrome |
-| D Audio | `voice-studio-copy` + toast STT + sr-only studio |
-| E Négociation | label `offer-product` |
-| F Backend Redis/RLS | Redis PING path intact · advisors INFO indexes only |
-| G Security | Headers prod OK · HIBP banner campagne → 2026-11-16 · toggle HIBP **humain** |
-| H Branding | G vert `#1F5C2E` + or `#C27D10` (icon.svg / nav) vérifié screenshot |
-| I Human checklist | `docs/excellence/HUMAN-CHECKLIST.md` |
-| J Notion | hub RESET à rafraîchir |
+| A Test-data | SQL : 0 junk · 1 public · 4 private · 3 products |
+| B SEO | Layouts download/conditions/confidentialité · **live 404** |
+| C Chat | Day labels + DSP meter live |
+| D Audio | Vu-mètre RMS DSP (plus de sinusoïdes fake) |
+| E Négociation | Contre-offre % vs catalogue |
+| F Backend Redis/RLS | Redis PONG · health redis true · HIBP WARN only |
+| G Security | Headers OK · HIBP humain |
+| H Branding | Home Playwright iter19 |
+| I Human checklist | Token path Cloud Agent / GH Actions |
+| J Notion | hub 45→91 |
 
 ### Scores (honnêtes)
 
-**Global 90/100** — UI 84 · FE 82 · BE 80 · Audio 76 · Nego 78 · Sec 81 · SEO 74 · IA 75 · Cont 68
+**Global 91/100** — UI 85 · FE 83 · BE 81 · Audio 80 · Nego 81 · Sec 81 · SEO 76 · IA 75 · Cont 72
 
 Pas de merge. GeniusPay/FeexPay **FROZEN**.
 
-### Blocker Git Hobby
+### Blocker
 
-Vercel status on tip: *Cannot deploy from a private GitHub organization repository on the Hobby plan*. Auto-deploy on push is dead until Pro **or** MCP SSO `create_deployment` (worked once for Redis) **or** CLI token.
+1. Hobby refuse private-org Git auto-deploy  
+2. Agent sans `VERCEL_TOKEN` injecté (project env ≠ agent shell)  
+3. MCP deploy 403 sans SSO grant
 
 ### UNIQUE NEXT (humain — 1 action)
 
-1. **Approve Vercel SSO** (lien dans `evidence/iter14/deploy-status.md`) **ou** Dashboard Redeploy tip branche → Production **ou** secret `VERCEL_TOKEN`  
+1. Coller Vercel Access Token dans **Cloud Agent secret** ou **GitHub Actions secret** `VERCEL_TOKEN` (**pas** dans le chat) **ou** approve SSO (`evidence/iter19/deploy-status.md`) **ou** Dashboard Redeploy tip → Production  
 2. Preuve : `curl -I https://mygwa.org/robots.txt` → **200** · sitemap **200** · health `rate_limit_redis:true` · SHA tip  
-3. Puis : activer HaveIBeenPwned (Supabase Auth) · E2E auth audio/nego si besoin pour ≥95
+3. Puis : activer HaveIBeenPwned (Supabase Auth)
 
 ### Preuves
 
-- `docs/excellence/ITERATIONS.md` (iters 14–16)
-- `docs/excellence/evidence/iter14/`
+- `docs/excellence/ITERATIONS.md` (iter 19)
+- `docs/excellence/evidence/iter19/`
 - `docs/excellence/HUMAN-CHECKLIST.md`
-- `docs/excellence/REDIS-PROD-STATUS.md` (Redis toujours PASS)

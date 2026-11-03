@@ -10,10 +10,11 @@
 
 | Étape | Action |
 | --- | --- |
-| A | Ouvrir le lien SSO Vercel (consent ~10 min) documenté dans `docs/excellence/evidence/iter14/deploy-status.md` |
-| B | Ou Dashboard Vercel → projet `v0-gwa` → Deployments → Redeploy branche `gwa/excellence-parcours-1e99` → **Production** |
-| C | Ou ajouter secret env agent `VERCEL_TOKEN` (scope team `gwa`, deploy) puis `npx vercel deploy --prod --scope gwa --yes` |
-| D | Preuve : `curl -I https://mygwa.org/robots.txt` → **200** · idem `/sitemap.xml` · health `rate_limit_redis:true` |
+| A | **Préféré** : coller Vercel Access Token dans **Cloud Agent secret** ou **GitHub Actions secret** nommé `VERCEL_TOKEN` (team `gwa`, scope deploy) — **jamais** dans le chat. L’env projet Vercel seule **n’injecte pas** le token dans le shell agent. |
+| B | Ou ouvrir le lien SSO Vercel (consent ~10 min) dans `docs/excellence/evidence/iter19/deploy-status.md` |
+| C | Ou Dashboard Vercel → projet `v0-gwa` → Deployments → Redeploy branche `gwa/excellence-parcours-1e99` → **Production** |
+| D | Ou après secret : `npx vercel deploy --prod --scope gwa --yes --token "$VERCEL_TOKEN"` |
+| E | Preuve : `curl -I https://mygwa.org/robots.txt` → **200** · idem `/sitemap.xml` · health `rate_limit_redis:true` · SHA tip |
 
 ## 2. HaveIBeenPwned (Supabase Auth)
 

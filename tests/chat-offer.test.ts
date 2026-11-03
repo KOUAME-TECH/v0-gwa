@@ -3,6 +3,7 @@ import {
   buildOfferContent,
   parseOfferContent,
   formatOfferAmount,
+  offerDeltaLabel,
 } from "@/lib/chat/offer"
 import { buildMessagePayload, InvalidMessageError } from "@/lib/chat/message"
 
@@ -46,5 +47,12 @@ describe("price offer chat", () => {
         type: "offer",
       }),
     ).toThrow(InvalidMessageError)
+  })
+
+  it("libellé contre-offre vs catalogue", () => {
+    expect(offerDeltaLabel(10000, 8500)).toMatch(/Contre-offre/i)
+    expect(offerDeltaLabel(10000, 11000)).toMatch(/Surcote/i)
+    expect(offerDeltaLabel(10000, 10000)).toBeNull()
+    expect(offerDeltaLabel(null, 5000)).toBeNull()
   })
 })
