@@ -10,6 +10,12 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { formatFcfa, SELLER_PLANS, type SellerPlan } from "@/lib/pricing/plans"
 import {
+  legacyTierPlanName,
+  PRICING_SEED,
+  seedPlan,
+  subscriptionTierForPlan,
+} from "@/lib/pricing/quote"
+import {
   normalizeSubscriptionTier,
   type SubscriptionTier,
 } from "@/lib/pricing/service-fee"
@@ -102,6 +108,10 @@ export default function AbonnementPage() {
   }
 
   const seller = isSellerRole(userType)
+  const currentPlan = seedPlan(legacyTierPlanName(userType, tier))
+  const visiblePlans = PRICING_SEED.filter(
+    (plan) => plan.target === (userType === "cooperative" ? "cooperative" : "producer"),
+  )
 
   return (
     <div className="min-h-dvh bg-[#FFF6E5] pb-24">
@@ -128,12 +138,10 @@ export default function AbonnementPage() {
           <p className="text-sm text-white/80">Ton palier actuel</p>
           <p className="text-2xl font-bold mt-1 flex items-center gap-2">
             <Crown className="h-6 w-6" />
-            {SELLER_PLANS.find((p) => p.tier === tier)?.label || "Gratuit"}
+            {currentPlan.name}
           </p>
           <p className="text-sm text-white/90 mt-1">
-            Commission{" "}
-            {SELLER_PLANS.find((p) => p.tier === tier)?.commissionLabel || "8 %"}{" "}
-            sur tes ventes
+            Commission {Math.round(currentPlan.commission_rate * 100)} % sur tes ventes
           </p>
           {pendingTier && (
             <p className="text-xs mt-2 bg-white/15 rounded-lg px-2 py-1.5">
@@ -147,12 +155,20 @@ export default function AbonnementPage() {
         </p>
 
         <div className="space-y-3">
-          {SELLER_PLANS.map((plan) => {
-            const isCurrent = plan.tier === tier
-            const isPending = pendingTier === plan.tier
+          {visiblePlans.map((seed) => {
+            const tierKey = subscriptionTierForPlan(seed.name)
+            const plan = SELLER_PLANS.find((item) => item.tier === tierKey) as SellerPlan
+            const isCurrent = seed.name === currentPlan.name
+            const isPending = pendingTier === tierKey
+            const priceLabel =
+              seed.name === "COOP_ENTERPRISE"
+                ? "Sur devis"
+                : seed.monthly_fee === 0
+                  ? "0"
+                  : formatFcfa(seed.monthly_fee)
             return (
               <div
-                key={plan.tier}
+                key={seed.name}
                 className={cn(
                   "rounded-2xl border bg-white p-4",
                   isCurrent ? "border-[#2F7D32] ring-1 ring-[#2F7D32]/30" : "border-[#E5E7EB]",
@@ -161,7 +177,7 @@ export default function AbonnementPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
-                      <h2 className="font-semibold text-[#111827]">{plan.label}</h2>
+                      <h2 className="font-semibold text-[#111827]">{seed.name}</h2>
                       {isCurrent && (
                         <Badge className="bg-[#2F7D32]/10 text-[#2F7D32]">Actuel</Badge>
                       )}
@@ -172,21 +188,18 @@ export default function AbonnementPage() {
                     <p className="text-xs text-[#6B7280] mt-0.5">{plan.headline}</p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="font-bold text-[#111827]">
-                      {plan.priceFcfa == null
-                        ? "Sur devis"
-                        : plan.priceFcfa === 0
-                          ? "0"
-                          : `${formatFcfa(plan.priceFcfa)}`}
-                    </p>
-                    {plan.priceFcfa != null && plan.priceFcfa > 0 && (
+                    <p className="font-bold text-[#111827]">{priceLabel}</p>
+                    {seed.monthly_fee > 0 && seed.name !== "COOP_ENTERPRISE" && (
                       <p className="text-[11px] text-[#9CA3AF]">FCFA / mois</p>
                     )}
                   </div>
                 </div>
 
                 <ul className="mt-3 space-y-1.5">
-                  {plan.benefits.map((b) => (
+                  {[
+                    `Commission ${Math.round(seed.commission_rate * 100)} %`,
+                    ...plan.benefits.filter((benefit) => !benefit.startsWith("Commission")),
+                  ].map((b) => (
                     <li key={b} className="flex items-start gap-2 text-sm text-[#4B5563]">
                       <Check className="h-4 w-4 text-[#2F7D32] shrink-0 mt-0.5" />
                       <span>{b}</span>
@@ -194,13 +207,20 @@ export default function AbonnementPage() {
                   ))}
                 </ul>
 
-                {seller && plan.tier !== "free" && (
+                {seller && seed.name !== "FREE" && (
                   <Button
                     className="w-full mt-4 bg-[#2F7D32] hover:bg-[#256025]"
-                    disabled={isCurrent || busy === plan.tier}
-                    onClick={() => void requestPlan(plan)}
+                    disabled={isCurrent || busy === tierKey}
+                    onClick={() =>
+                      void requestPlan({
+                        ...plan,
+                        tier: tierKey,
+                        label: seed.name,
+                        priceFcfa: seed.name === "COOP_ENTERPRISE" ? null : seed.monthly_fee,
+                      })
+                    }
                   >
-                    {busy === plan.tier ? (
+                    {busy === tierKey ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
                       <>

@@ -6,6 +6,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { sendPushNotification } from "@/lib/notifications/push"
 import { sendSMSFallback } from "@/lib/notifications/sms"
+import { evaluatePlanSwitch } from "@/lib/pricing/switch"
 
 export async function POST(
   request: NextRequest,
@@ -101,6 +102,12 @@ export async function POST(
       body: `Merci ! Votre commande ${order.order_number} est clôturée.`,
       data: { type: "order_status", order_id: orderId },
     }).catch(() => null)
+
+    if (order.seller_id) {
+      void evaluatePlanSwitch(order.seller_id).catch((err) => {
+        console.error("[api/orders/confirm-delivery] plan switch", err)
+      })
+    }
 
     return NextResponse.json({ success: true, order_id: orderId })
   } catch (err) {

@@ -16,6 +16,7 @@ import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { isFactoringEligible } from "@/lib/factoring/eligibility"
 import { Banknote } from "lucide-react"
+import { PlanSwitchBanner } from "@/components/pricing/plan-switch-banner"
 import {
   canAssignCoopRoles,
   canInviteMembers,
@@ -375,6 +376,7 @@ export default function CooperativeDashboard() {
           </div>
         ) : null}
       </header>
+      <PlanSwitchBanner />
 
       <main className="px-4 -mt-2 pt-4 space-y-4">
         {qualificationBanner && (

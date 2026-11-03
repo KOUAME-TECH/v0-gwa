@@ -20,6 +20,7 @@ export type AdminSection =
   | "analytics"
   | "settings"
   | "support"
+  | "pricing"
 
 export const ADMIN_ROLE_LABELS: Record<AdminRole, string> = {
   super_admin: "Super administrateur",
@@ -43,6 +44,7 @@ export const ADMIN_NAV: { name: string; href: string; section: AdminSection }[] 
   { name: "Finances", href: "/admin/finances", section: "finances" },
   { name: "Affacturage", href: "/admin/factoring", section: "factoring" },
   { name: "Abonnements", href: "/admin/subscriptions", section: "subscriptions" },
+  { name: "Tarifs", href: "/admin/pricing", section: "pricing" },
   { name: "Yelly Ops", href: "/admin/ai", section: "ai" },
   { name: "Statistiques", href: "/admin/analytics", section: "analytics" },
   { name: "Parametres", href: "/admin/settings", section: "settings" },

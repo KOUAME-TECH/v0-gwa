@@ -39,6 +39,7 @@ import {
   MessageSquare,
   Crown,
   Sparkles,
+  Percent,
   UserRound,
 } from "lucide-react"
 import {
@@ -70,6 +71,7 @@ const NAV_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   Finances: TrendingUp,
   Affacturage: Banknote,
   Abonnements: Crown,
+  Tarifs: Percent,
   "Yelly Ops": Sparkles,
   Statistiques: TrendingUp,
   Parametres: Settings,

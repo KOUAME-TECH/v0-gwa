@@ -24,6 +24,7 @@ import type { SCGDimensions } from "@/lib/scg/engine"
 import { EmptyState } from "@/components/ui/empty-state"
 import { entitlementsForTier } from "@/lib/pricing/entitlements"
 import { productDetailPath } from "@/lib/products/paths"
+import { PlanSwitchBanner } from "@/components/pricing/plan-switch-banner"
 
 interface Product {
   id: string
@@ -282,6 +283,8 @@ export default function FarmerDashboard() {
           </span>
         </div>
       </header>
+
+      <PlanSwitchBanner />
 
       <div className="px-4 mb-4">
         {showCoach && coachDims ? (

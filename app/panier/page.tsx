@@ -23,6 +23,7 @@ import {
   type CartSnapshotLine,
 } from "@/lib/offline/cart-snapshot"
 import { toast } from "sonner"
+import { BuyerPriceBreakdown } from "@/components/orders/buyer-price-breakdown"
 
 interface CartItem {
   id: string
@@ -59,6 +60,7 @@ export default function CartPage() {
   const [deliveryAddress, setDeliveryAddress] = useState({
     name: "", phone: "", address: "", city: "", country: "ci"
   })
+  const [serviceFee, setServiceFee] = useState(0)
   const supabase = createClient()
 
   useEffect(() => {
@@ -211,7 +213,24 @@ export default function CartPage() {
   }
 
   const subtotal = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0)
-  const total = subtotal
+  const sellerIds = [...new Set(cart.map((item) => item.product.seller_id).filter(Boolean))]
+  const singleSeller = sellerIds.length === 1 ? sellerIds[0] : null
+  const total = subtotal + serviceFee
+
+  useEffect(() => {
+    if (!singleSeller || subtotal <= 0) {
+      setServiceFee(0)
+      return
+    }
+    const ctrl = new AbortController()
+    fetch(`/api/pricing/quote?seller_id=${singleSeller}&amount=${subtotal}`, {
+      signal: ctrl.signal,
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setServiceFee(Number(data?.buyer_service_fee) || 0))
+      .catch(() => {})
+    return () => ctrl.abort()
+  }, [singleSeller, subtotal])
   const formatPrice = (price: number) => new Intl.NumberFormat("fr-FR").format(price)
 
   const handleCheckout = async () => {
@@ -487,16 +506,7 @@ export default function CartPage() {
             </div>
           ))}
 
-          <div className="rounded-2xl border border-[#1F5C2E]/10 bg-white p-4 space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-[#6B7280]">Articles</span>
-              <span>{formatPrice(subtotal)} FCFA</span>
-            </div>
-            <div className="flex justify-between border-t border-[#E5E7EB] pt-2 text-base font-bold">
-              <span>Total</span>
-              <span className="text-[#1F5C2E]">{formatPrice(total)} FCFA</span>
-            </div>
-          </div>
+          <BuyerPriceBreakdown productPrice={subtotal} serviceFee={serviceFee} />
         </div>
       )}
 
@@ -569,16 +579,7 @@ export default function CartPage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-[#1F5C2E]/10 bg-white p-4 space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-[#6B7280]">Articles</span>
-              <span>{formatPrice(subtotal)} FCFA</span>
-            </div>
-            <div className="flex justify-between border-t border-[#E5E7EB] pt-2 font-bold">
-              <span>Total</span>
-              <span className="text-[#1F5C2E]">{formatPrice(total)} FCFA</span>
-            </div>
-          </div>
+          <BuyerPriceBreakdown productPrice={subtotal} serviceFee={serviceFee} />
         </div>
       )}
 
@@ -589,16 +590,7 @@ export default function CartPage() {
           <p className="text-sm text-[#4B5563]">
             Tu choisis ton moyen de paiement sur l’écran suivant. Ton argent reste protégé jusqu’à confirmation de réception.
           </p>
-          <div className="rounded-2xl border border-[#1F5C2E]/10 bg-white p-4 space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-[#6B7280]">Articles</span>
-              <span>{formatPrice(subtotal)} FCFA</span>
-            </div>
-            <div className="flex justify-between border-t border-[#E5E7EB] pt-2 font-bold">
-              <span>Total</span>
-              <span className="text-[#1F5C2E]">{formatPrice(total)} FCFA</span>
-            </div>
-          </div>
+          <BuyerPriceBreakdown productPrice={subtotal} serviceFee={serviceFee} />
           <RadioGroup value={paymentMethod} onValueChange={setPaymentMethod}>
             {paymentMethods.map(method => (
               <div 

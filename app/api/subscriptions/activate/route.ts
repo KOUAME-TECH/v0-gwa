@@ -4,6 +4,7 @@ import { assertSameOrigin } from "@/lib/security/csrf"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { sanitizeForQuery } from "@/lib/security/validation"
 import { normalizeSubscriptionTier } from "@/lib/pricing/service-fee"
+import { legacyTierPlanName } from "@/lib/pricing/quote"
 import { isSellerRole } from "@/lib/dashboard/routing"
 
 /**
@@ -107,9 +108,20 @@ export async function POST(request: NextRequest) {
     }
 
     const now = new Date().toISOString()
+    const planName = legacyTierPlanName(targetProfile.user_type, tier)
+    const { data: planRow } = await admin
+      .from("pricing_plans")
+      .select("id")
+      .eq("name", planName)
+      .maybeSingle()
+    const profilePatch: Record<string, unknown> = {
+      subscription_tier: tier,
+      updated_at: now,
+    }
+    if (planRow?.id) profilePatch.pricing_plan_id = planRow.id
     const { error: updErr } = await admin
       .from("profiles")
-      .update({ subscription_tier: tier, updated_at: now })
+      .update(profilePatch)
       .eq("id", targetUserId)
 
     if (updErr) {
