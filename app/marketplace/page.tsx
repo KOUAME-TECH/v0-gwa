@@ -697,6 +697,7 @@ function MarketplaceContent() {
       <main className="gwa-shell-wide p-4 sm:p-5 md:px-6 lg:pb-10">
         {/* Digest visible dans la boutique (et via ?digest=1) */}
         {digestProducts.length > 0 && (
+          <>
           <DigestBanner
             count={digestProducts.length}
             city={userCity || geoCity || geoLabel}
@@ -725,6 +726,7 @@ function MarketplaceContent() {
               </button>
             ))}
           </div>
+          </>
         )}
         {digestProducts.length === 0 && !isLoading && (
           <button
