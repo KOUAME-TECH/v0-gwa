@@ -79,7 +79,7 @@ export async function POST(request: NextRequest, context: Ctx) {
     let payoutNetwork: string | null = null
     let payoutError: string | null = null
 
-    const { data: sellerProfile } = await supabase
+    const { data: sellerProfile } = await admin
       .from("profiles")
       .select("phone")
       .eq("id", order.seller_id)

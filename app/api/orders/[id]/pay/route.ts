@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { checkRateLimit } from "@/lib/security/rate-limiter";
 import { sendPushToUser } from "@/lib/notifications/push";
 import { formatPhoneE164 } from "@/lib/auth/phone";
+import { assertSameOrigin } from "@/lib/security/csrf";
 import { toGeniusPayAmountXof } from "@/lib/payment/amount";
 import {
   createGeniusPayPayment,
@@ -44,8 +45,13 @@ function appOrigin(request: NextRequest) {
   return "https://mygwa.org";
 }
 
+const PAYMENT_NOT_STARTED =
+  "Le paiement n’a pas démarré. Aucun argent n’a été débité. Réessaie.";
+
 export async function POST(request: NextRequest, context: Ctx) {
   try {
+    const csrf = assertSameOrigin(request);
+    if (csrf) return csrf;
     const rate = await checkRateLimit("PAYMENT");
     if (!rate.success)
       return NextResponse.json(
@@ -76,7 +82,8 @@ export async function POST(request: NextRequest, context: Ctx) {
       return NextResponse.json({ error: "Déjà payée" }, { status: 400 });
 
     const body = await request.json().catch(() => ({}));
-    const { data: buyerProfile } = await supabase
+    const admin = createAdminClient();
+    const { data: buyerProfile } = await admin
       .from("profiles")
       .select("phone, full_name, email")
       .eq("id", user.id)
@@ -91,7 +98,6 @@ export async function POST(request: NextRequest, context: Ctx) {
         { error: "Montant de commande invalide" },
         { status: 400 },
       );
-    const admin = createAdminClient();
     const reference = `GWA-${id}-${Date.now().toString(36)}`;
 
     if (await isGeniusPayConfigured()) {
@@ -139,7 +145,7 @@ export async function POST(request: NextRequest, context: Ctx) {
         });
         return NextResponse.json(
           {
-            error: "Lien de paiement indisponible",
+            error: PAYMENT_NOT_STARTED,
             code: "PAYMENT_URL_MISSING",
           },
           { status: 502 },
@@ -160,7 +166,7 @@ export async function POST(request: NextRequest, context: Ctx) {
         console.error("[api/orders/pay] order update", orderUpdateError);
         return NextResponse.json(
           {
-            error: "Impossible d'enregistrer le paiement",
+            error: PAYMENT_NOT_STARTED,
             code: "PAYMENT_STATE_FAILED",
           },
           { status: 500 },
@@ -249,6 +255,6 @@ export async function POST(request: NextRequest, context: Ctx) {
     });
   } catch (err) {
     console.error("[api/orders/pay]", err);
-    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
+    return NextResponse.json({ error: PAYMENT_NOT_STARTED }, { status: 500 });
   }
 }

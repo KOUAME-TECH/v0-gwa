@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { computeProfileCompletion } from "@/lib/auth/post-auth"
 import { assertSameOrigin } from "@/lib/security/csrf"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
@@ -42,7 +43,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const isOwner = user?.id === id
     const selectFields = isOwner ? PUBLIC_FIELDS + OWNER_EXTRA_FIELDS : PUBLIC_FIELDS
 
-    const { data: profile, error } = await supabase
+    const admin = createAdminClient()
+    const { data: profile, error } = await admin
       .from("profiles")
       .select(selectFields)
       .eq("id", id)
@@ -114,7 +116,8 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Aucun champ à mettre à jour" }, { status: 400 })
     }
 
-    const { data: existing } = await supabase
+    const admin = createAdminClient()
+    const { data: existing } = await admin
       .from("profiles")
       .select("full_name, user_type, country, city, phone, email")
       .eq("id", id)
@@ -126,7 +129,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     })
     updates.updated_at = new Date().toISOString()
 
-    const { data: profile, error } = await supabase
+    const { data: profile, error } = await admin
       .from("profiles")
       .update(updates)
       .eq("id", id)

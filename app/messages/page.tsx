@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ChatList } from "@/components/chat/chat-list"
 import { ChatConversation } from "@/components/chat/chat-conversation"
+import { toast } from "sonner"
 
 interface Conversation {
   id: string
@@ -236,12 +237,17 @@ function MessagesContent() {
       }
 
       // Create new conversation
-      const { data: nc } = await supabase.from("conversations").insert({
+      const { data: nc, error: createError } = await supabase.from("conversations").insert({
         participant_1: user!.id,
         participant_2: recipientId,
         conversation_type: convType || "private",
         last_message_at: new Date().toISOString(),
       }).select().single()
+
+      if (createError || !nc) {
+        toast.error("Ce contact n’accepte pas un nouveau message. Passe par une commande ou une offre publiée.")
+        return
+      }
 
       if (nc) {
         const { data: p } = await supabase.from("profiles")

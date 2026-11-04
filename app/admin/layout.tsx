@@ -6,6 +6,7 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { loadOwnProfile } from "@/lib/auth/own-profile"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { GwaMark } from "@/components/brand/gwa-mark"
@@ -124,11 +125,12 @@ export default function AdminLayout({
           return
         }
 
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("full_name, avatar_url, email, user_type")
-          .eq("id", user.id)
-          .single()
+        const profile = await loadOwnProfile<{
+          full_name?: string
+          avatar_url?: string
+          email?: string
+          user_type?: string | null
+        }>(supabase)
 
         if (!isMounted) return
 

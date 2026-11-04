@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
+import { loadOwnProfile } from "@/lib/auth/own-profile"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -84,11 +85,7 @@ export default function ProfilPage() {
         return
       }
 
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .single()
+      const profileData = await loadOwnProfile<Record<string, string>>(supabase)
 
       if (!mounted) return
 
