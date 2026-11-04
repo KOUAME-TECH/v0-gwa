@@ -36,5 +36,5 @@ export function mapAuthErrorMessage(raw: string | null | undefined): string {
     return "Le mot de passe doit contenir au moins 8 caractères"
   }
 
-  return raw || "Une erreur est survenue. Réessayez."
+  return "Connexion impossible. Réessayez, ou utilisez un autre moyen."
 }

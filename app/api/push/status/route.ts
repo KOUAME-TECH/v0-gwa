@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { sendPushToUser } from "@/lib/notifications/push"
 import { getOneSignalAppId, getOneSignalRestApiKey } from "@/lib/notifications/onesignal-config"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
@@ -17,7 +18,7 @@ export async function GET() {
     return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
   }
 
-  const { data: profile } = await supabase
+  const { data: profile } = await createAdminClient()
     .from("profiles")
     .select("onesignal_player_id")
     .eq("id", user.id)

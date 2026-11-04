@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 export async function GET() {
   try {
@@ -13,7 +14,7 @@ export async function GET() {
       return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
     }
 
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile, error: profileError } = await createAdminClient()
       .from("profiles")
       .select(
         "id, email, linked_email, full_name, phone, phone_verified, user_type, sub_type, country, city, address, avatar_url, bio, is_verified, rating, total_reviews, auth_method, preferred_language, profile_completion_pct, onboarding_completed_at, scg_score, scg_badge, scg_bancable, scg_calculated_at, created_at, updated_at",

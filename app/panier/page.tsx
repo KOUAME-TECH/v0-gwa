@@ -17,6 +17,7 @@ import { EscrowStepper } from "@/components/orders/escrow-stepper"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { loadOwnProfile } from "@/lib/auth/own-profile"
 import {
   loadCartSnapshot,
   saveCartSnapshot,
@@ -135,11 +136,12 @@ export default function CartPage() {
 
     setUser(user)
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("full_name, phone, city, country, subscription_tier")
-      .eq("id", user.id)
-      .single()
+    const profile = await loadOwnProfile<{
+      full_name?: string
+      phone?: string
+      city?: string
+      country?: string
+    }>(supabase)
 
     if (profile) {
       setDeliveryAddress({
@@ -359,9 +361,10 @@ export default function CartPage() {
         err instanceof Error && err.message ? err.message : ""
       // Masquer le jargon technique / noms fournisseurs côté UI
       const msg =
-        /geniuspay|checkout|provider|migration|webhook|api/i.test(raw)
-          ? "Le paiement n’a pas pu démarrer. Réessaie dans un instant ou choisis un autre moment."
-          : raw || "Une erreur est survenue lors de la commande. Réessaie."
+        !raw ||
+        /geniuspay|checkout|provider|migration|webhook|\bapi\b|erreur serveur|enregistrer le paiement/i.test(raw)
+          ? "Le paiement n’a pas démarré. Aucun argent n’a été débité. Réessaie."
+          : raw
       setCheckoutError(msg)
       setIsProcessing(false)
     }

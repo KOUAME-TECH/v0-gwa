@@ -34,10 +34,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Résumé trop court" }, { status: 400 })
     }
 
+    const admin = createAdminClient()
     let email = "invite@gwa.local"
     let name = "Invité Yelly"
     if (user) {
-      const { data: profile } = await supabase
+      const { data: profile } = await admin
         .from("profiles")
         .select("full_name, email")
         .eq("id", user.id)
@@ -46,7 +47,6 @@ export async function POST(request: NextRequest) {
       email = profile?.email || user.email || email
     }
 
-    const admin = createAdminClient()
     const { error } = await admin.from("contact_messages").insert({
       name: sanitizePlainText(name, 100),
       email: email.slice(0, 255),

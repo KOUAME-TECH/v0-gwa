@@ -13,6 +13,8 @@ describe("safeOAuthNextPath", () => {
   it("rejette open-redirect", () => {
     expect(safeOAuthNextPath("https://evil.example")).toBeNull()
     expect(safeOAuthNextPath("//evil.example")).toBeNull()
+    expect(safeOAuthNextPath("/%2F%2Fevil.example")).toBeNull()
+    expect(safeOAuthNextPath("/\\evil.example")).toBeNull()
     expect(safeOAuthNextPath(null)).toBeNull()
     expect(safeOAuthNextPath("")).toBeNull()
   })

@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation"
 import Image from "next/image"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
+import { loadOwnProfile } from "@/lib/auth/own-profile"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -130,7 +131,7 @@ export default function EditProfilPage() {
       }
 
       const [{ data: profileData }, { data: kyc }] = await Promise.all([
-        supabase.from("profiles").select("*").eq("id", user.id).single(),
+        Promise.resolve({ data: await loadOwnProfile(supabase) }),
         supabase
           .from("verification_requests")
           .select("status")

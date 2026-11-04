@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, Mail, Phone, Link2, CheckCircle2 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+import { loadOwnProfile } from "@/lib/auth/own-profile"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { PhoneInput } from "@/components/auth/phone-input"
@@ -43,11 +44,13 @@ export default function LierComptePage() {
         router.replace("/auth/login?redirect=/profil/lier")
         return
       }
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("email, linked_email, phone, phone_verified, is_verified")
-        .eq("id", user.id)
-        .maybeSingle()
+      const profile = await loadOwnProfile<{
+        email?: string
+        linked_email?: string
+        phone?: string
+        phone_verified?: boolean
+        is_verified?: boolean
+      }>(supabase)
       const { data: kyc } = await supabase
         .from("verification_requests")
         .select("status")
