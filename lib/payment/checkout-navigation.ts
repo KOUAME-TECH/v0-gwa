@@ -33,6 +33,7 @@ export function isGeniusPayCheckoutUrl(raw: string): boolean {
       host === "geniuspay.ci" ||
       host === "pay.genius.ci" ||
       host === "www.geniuspay.ci" ||
+      host === "checkout.geniuspay.ci" ||
       host.endsWith(".geniuspay.ci")
     )
   } catch {

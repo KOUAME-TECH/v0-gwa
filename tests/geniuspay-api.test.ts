@@ -7,6 +7,7 @@ vi.mock("@/lib/ops/platform-secrets", () => ({
 
 import {
   createGeniusPayCheckout,
+  extractGeniusPayPayment,
   getGeniusPayPayment,
 } from "@/lib/payment/geniuspay"
 
@@ -20,6 +21,27 @@ const checkoutResponse = {
     metadata: { order_id: "order-123", user_id: "buyer-123" },
   },
 }
+
+describe("extractGeniusPayPayment", () => {
+  it("lit une référence à la racine ou dans l'URL de checkout", () => {
+    expect(
+      extractGeniusPayPayment({
+        success: true,
+        reference: "MTX-ROOT",
+        checkout_url: "https://geniuspay.ci/checkout/MTX-ROOT",
+      })?.reference,
+    ).toBe("MTX-ROOT")
+    expect(
+      extractGeniusPayPayment({
+        data: {
+          payment: {
+            checkout_url: "https://checkout.geniuspay.ci/checkout/MTX-NEST",
+          },
+        },
+      })?.reference,
+    ).toBe("MTX-NEST")
+  })
+})
 
 describe("GeniusPay API client", () => {
   afterEach(() => {
