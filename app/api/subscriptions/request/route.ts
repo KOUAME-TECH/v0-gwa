@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("subscription_tier, user_type, full_name, phone")
+      .select("subscription_tier, user_type, full_name")
       .eq("id", user.id)
       .maybeSingle()
 
@@ -113,7 +113,6 @@ export async function POST(request: NextRequest) {
       request: row,
       profile: {
         full_name: profile?.full_name,
-        phone: profile?.phone,
         user_type: profile?.user_type,
       },
     })

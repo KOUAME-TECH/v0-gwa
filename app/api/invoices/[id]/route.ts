@@ -39,7 +39,7 @@ export async function GET(_request: Request, context: Ctx) {
 
     const { data: parties } = await supabase
       .from("profiles")
-      .select("id, full_name, city, country, phone")
+      .select("id, full_name, city, country")
       .in("id", [invoice.buyer_id, invoice.seller_id].filter(Boolean) as string[])
 
     const buyer = parties?.find((p) => p.id === invoice.buyer_id) ?? null

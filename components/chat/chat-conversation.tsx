@@ -1268,20 +1268,6 @@ export function ChatConversation({
   }
 
   async function callOther(kind: "audio" | "video") {
-    // WhatsApp-like : tenter tel: si numéro accessible, sinon message d'appel
-    try {
-      const { data: p } = await supabase
-        .from("profiles")
-        .select("phone")
-        .eq("id", other?.id || "")
-        .maybeSingle()
-      if (kind === "audio" && p?.phone) {
-        window.location.href = `tel:${p.phone}`
-        return
-      }
-    } catch {
-      /* PII peut être restreint */
-    }
     const label = kind === "audio" ? "Appel audio" : "Appel vidéo"
     await supabase.from("messages").insert({
       conversation_id: conversation.id,

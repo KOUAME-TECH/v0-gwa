@@ -4,8 +4,18 @@
  */
 
 export function safeOAuthNextPath(next: string | null | undefined): string | null {
-  if (!next || !next.startsWith("/") || next.startsWith("//")) return null
-  return next
+  if (!next) return null
+  let value = next.trim()
+  if (!value) return null
+  try {
+    value = decodeURIComponent(value)
+  } catch {
+    return null
+  }
+  if (!value.startsWith("/") || value.startsWith("//") || value.startsWith("/\\")) return null
+  if (value.includes("\\") || value.includes("://") || value.includes("\0")) return null
+  if (value.includes("//")) return null
+  return value
 }
 
 /**
