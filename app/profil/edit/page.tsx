@@ -75,6 +75,8 @@ export default function EditProfilPage() {
     country: "",
     address: "",
     digest_enabled: true,
+    notify_push: true,
+    notify_sms: true,
   })
   const [emailLinkMsg, setEmailLinkMsg] = useState<string | null>(null)
   const [kycStatus, setKycStatus] = useState<KycStatus>(null)
@@ -154,6 +156,8 @@ export default function EditProfilPage() {
           country: profileData.country || "",
           address: profileData.address || "",
           digest_enabled: profileData.digest_enabled !== false,
+          notify_push: profileData.notify_push !== false,
+          notify_sms: profileData.notify_sms !== false,
         })
       }
       setKycStatus((kyc?.status as KycStatus) || null)
@@ -315,7 +319,11 @@ export default function EditProfilPage() {
       await fetch(`/api/profiles/${profile.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ digest_enabled: formData.digest_enabled }),
+        body: JSON.stringify({
+          digest_enabled: formData.digest_enabled,
+          notify_push: formData.notify_push,
+          notify_sms: formData.notify_sms,
+        }),
       }).catch(() => null)
 
       toast.success("Profil mis à jour")
@@ -548,6 +556,26 @@ export default function EditProfilPage() {
               checked={formData.digest_enabled}
               onCheckedChange={(checked) => setFormData({ ...formData, digest_enabled: checked })}
               aria-label="Activer Harmattan Digest"
+            />
+          </div>
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-[#E5E7EB] px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="text-sm text-[#374151]">Notifications push</p>
+            </div>
+            <Switch
+              checked={formData.notify_push}
+              onCheckedChange={(checked) => setFormData({ ...formData, notify_push: checked })}
+              aria-label="Notifications push"
+            />
+          </div>
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-[#E5E7EB] px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="text-sm text-[#374151]">SMS</p>
+            </div>
+            <Switch
+              checked={formData.notify_sms}
+              onCheckedChange={(checked) => setFormData({ ...formData, notify_sms: checked })}
+              aria-label="SMS"
             />
           </div>
           <div className="flex items-center justify-between gap-3 rounded-xl border border-[#E5E7EB] px-3 py-2.5">
