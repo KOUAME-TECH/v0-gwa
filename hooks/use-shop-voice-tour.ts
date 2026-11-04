@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { buildProductListenText, type ProductListenInput } from "@/lib/media/product-listen"
 import { resolveUtterLang } from "@/lib/media/audio-langs"
 import { setShopTourActive } from "@/lib/media/shop-tour-lock"
+import { voiceRate } from "@/lib/media/voice-rate"
 
 export type ShopTourProduct = ProductListenInput & {
   id: string
@@ -233,7 +234,7 @@ export function useShopVoiceTour(products: ShopTourProduct[]) {
 
         const utter = new SpeechSynthesisUtterance(text)
         utter.lang = voice?.lang || lang
-        utter.rate = TTS_RATE
+        utter.rate = voiceRate()
         utter.pitch = TTS_PITCH
         utter.volume = 1
         if (voice) utter.voice = voice

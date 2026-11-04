@@ -18,6 +18,7 @@ import { ShopVoiceTourButton } from "@/components/media/shop-voice-tour-button"
 import { DigestBanner } from "@/components/media/digest-banner"
 import { YellyAideButton } from "@/components/yelly/yelly-aide-button"
 import { useShopVoiceTour } from "@/hooks/use-shop-voice-tour"
+import { readVoicePace, writeVoicePace, type VoicePace } from "@/lib/media/voice-rate"
 import { useRealtimeLocation } from "@/hooks/use-realtime-location"
 import { useDataSaver } from "@/hooks/use-data-saver"
 import {
@@ -509,6 +510,10 @@ function MarketplaceContent() {
 
   const parcours = useShopVoiceTour(parcoursProducts)
   const digest = useShopVoiceTour(digestTourProducts)
+  const [voicePace, setVoicePace] = useState<VoicePace>("normal")
+  useEffect(() => {
+    setVoicePace(readVoicePace())
+  }, [])
 
   const handleParcoursClick = () => {
     if (parcours.active) {
@@ -701,6 +706,25 @@ function MarketplaceContent() {
             tourTotal={digest.total}
             onStartTour={handleDigestClick}
           />
+          <div className="mb-3 flex gap-2" role="group" aria-label="Vitesse du Digest">
+            {(["lent", "normal", "rapide"] as const).map((pace) => (
+              <button
+                key={pace}
+                type="button"
+                onClick={() => {
+                  writeVoicePace(pace)
+                  setVoicePace(pace)
+                }}
+                className={`h-11 min-w-11 rounded-full px-3 text-sm capitalize ${
+                  voicePace === pace
+                    ? "bg-[#1F5C2E] text-white"
+                    : "bg-white text-[#1F5C2E] ring-1 ring-[#1F5C2E]/20"
+                }`}
+              >
+                {pace}
+              </button>
+            ))}
+          </div>
         )}
         {digestProducts.length === 0 && !isLoading && (
           <button

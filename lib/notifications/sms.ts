@@ -43,10 +43,11 @@ export async function sendSMSFallback(userId: string, supabase: any, message: st
     const { createAdminClient } = await import("@/lib/supabase/admin")
     const { data: profile } = await createAdminClient()
       .from('profiles')
-      .select('phone')
+      .select('phone, notify_sms')
       .eq('id', userId)
       .single()
 
+    if (profile?.notify_sms === false) return
     const phone = profile?.phone
     if (!phone) return
 

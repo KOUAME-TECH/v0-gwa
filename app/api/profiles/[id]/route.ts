@@ -22,6 +22,8 @@ const PATCHABLE_FIELDS = [
   // user_type / sub_type : interdits en self-service (voir 049 + admin)
   "preferred_language",
   "digest_enabled",
+  "notify_push",
+  "notify_sms",
   "production_type",
   "surface_area",
   "craft_type",
