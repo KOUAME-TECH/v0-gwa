@@ -2,6 +2,7 @@ import { quotePricing, type PricingPlanInput } from "@/lib/pricing/quote"
 
 export type SellerPlanRates = Pick<
   PricingPlanInput,
+  | "target"
   | "commission_rate"
   | "franchise_threshold"
   | "franchise_cap"
@@ -11,6 +12,7 @@ export type SellerPlanRates = Pick<
 
 export type PlatformFeeSettings = {
   buyer_service_fee_fixed?: number | null
+  franchise_surplus_rate?: number | null
 }
 
 export type OrderTotals = {
@@ -38,7 +40,7 @@ export function calculateOrderTotals(
   const quote = quotePricing(
     {
       name: "runtime",
-      target: "producer",
+      target: sellerPlan.target ?? "producer",
       monthly_fee: 0,
       commission_rate: sellerPlan.commission_rate,
       buyer_service_fee_fixed: buyerFixed,
@@ -48,6 +50,7 @@ export function calculateOrderTotals(
       switch_threshold: null,
     },
     unit * qty,
+    { franchiseSurplusRate: platformSettings.franchise_surplus_rate },
   )
   return {
     baseAmount: quote.product_price,

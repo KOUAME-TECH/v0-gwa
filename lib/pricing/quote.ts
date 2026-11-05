@@ -137,14 +137,20 @@ export function roundFcfa(value: number): number {
   return Math.round(value)
 }
 
-export function quotePricing(plan: PricingPlanInput, productPrice: number): PricingQuote {
+export function quotePricing(
+  plan: PricingPlanInput,
+  productPrice: number,
+  options?: { franchiseSurplusRate?: number | null },
+): PricingQuote {
   const price = roundFcfa(Math.max(0, productPrice))
   const rate = Number(plan.commission_rate) || 0
   const threshold = Number(plan.franchise_threshold) || 0
   const cap = Number(plan.franchise_cap) || 0
   const franchiseApplied = threshold > 0 && cap > 0 && price > threshold
+  const surplusRate =
+    plan.target === "cooperative" ? Math.max(0, Number(options?.franchiseSurplusRate) || 0) : 0
   const sellerCommission = franchiseApplied
-    ? roundFcfa(cap)
+    ? roundFcfa(cap) + roundFcfa((price - threshold) * surplusRate)
     : roundFcfa(price * rate)
   const buyerFee = roundFcfa(
     (Number(plan.buyer_service_fee_fixed) || 0) +

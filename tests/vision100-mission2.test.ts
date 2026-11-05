@@ -33,6 +33,20 @@ describe("six plans du 5 novembre", () => {
     expect(federation.commission).toBe(100_000)
     expect(federation.buyerFee).toBe(250)
   })
+
+  it("ajoute 2 % du surplus au plafond des plans coopératifs", () => {
+    const union = calculateOrderTotals(1_500_000, 1, seedPlan("COOP_PRO"), {
+      franchise_surplus_rate: 0.02,
+    })
+    expect(union.franchiseApplied).toBe(true)
+    expect(union.commission).toBe(70_000)
+    expect(union.sellerNet).toBe(1_430_000)
+
+    const recolte = calculateOrderTotals(642_001, 1, seedPlan("PRO"), {
+      franchise_surplus_rate: 0.02,
+    })
+    expect(recolte.commission).toBe(45_000)
+  })
 })
 
 describe("frais de versement", () => {
