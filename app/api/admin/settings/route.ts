@@ -2,8 +2,8 @@ import { NextResponse, type NextRequest } from "next/server"
 import { requireAdminSection } from "@/lib/auth/require-admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 
-/** Aligné RLS settings_update_admin : admin | super_admin */
-const SETTINGS_WRITE_ROLES = new Set(["admin", "super_admin"])
+/** Écriture réservée au super administrateur et au responsable financier. */
+const SETTINGS_WRITE_ROLES = new Set(["super_admin", "finance_admin"])
 
 const EDITABLE_KEYS = [
   "commission_rate",
@@ -97,7 +97,7 @@ export async function PATCH(request: NextRequest) {
 
     if (!SETTINGS_WRITE_ROLES.has(gate.role.role)) {
       return NextResponse.json(
-        { error: "Administrateur requis pour modifier les paramètres" },
+        { error: "Seul un responsable financier peut modifier ces montants." },
         { status: 403 },
       )
     }
@@ -158,6 +158,13 @@ export async function PATCH(request: NextRequest) {
       entity_type: "platform_settings",
       old_data: oldSnapshot,
       new_data: newSnapshot,
+    })
+    await gate.admin.from("audit_logs").insert({
+      action: "platform_settings_update",
+      user_id: gate.user.id,
+      target_type: "platform_settings",
+      metadata: { before: oldSnapshot, after: newSnapshot },
+      severity: "warning",
     })
 
     const { data: refreshed } = await gate.admin

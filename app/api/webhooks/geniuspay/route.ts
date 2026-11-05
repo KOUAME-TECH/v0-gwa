@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveGeniusPayWebhookSecret } from "@/lib/payment/geniuspay";
+import { payInLedgerLines, recordLedgerLines } from "@/lib/features/payments/ledger";
 
 export async function POST(request: Request) {
   const secret = await resolveGeniusPayWebhookSecret();
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
   const admin = createAdminClient();
   const { data: order } = await admin
     .from("orders")
-    .select("id,total_amount,payment_status,escrow_status")
+    .select("id,total_amount,payment_status,escrow_status,fulfillment_mode,currency")
     .eq("payment_reference", reference)
     .maybeSingle();
   if (!order) return NextResponse.json({ received: true, matched: false });
@@ -58,7 +59,7 @@ export async function POST(request: Request) {
       .update({
         payment_status: "paid",
         escrow_status: "held",
-        status: "confirmed",
+        status: order.fulfillment_mode === "preorder" ? "paid_preorder" : "confirmed",
         updated_at: new Date().toISOString(),
       })
       .eq("id", order.id)
@@ -66,7 +67,7 @@ export async function POST(request: Request) {
       .select("id");
     if (payErr) {
       console.error("[webhooks/geniuspay] order update", payErr.message.slice(0, 120));
-      return NextResponse.json({ error: "Update failed" }, { status: 500 });
+      return NextResponse.json({ error: "Le paiement n’a pas pu être enregistré." }, { status: 500 });
     }
     if (!paidRows?.length) {
       return NextResponse.json({
@@ -88,6 +89,15 @@ export async function POST(request: Request) {
         new_value: "held",
         notes: `reference=${reference}`,
       });
+    const ledger = await recordLedgerLines(
+      admin as never,
+      payInLedgerLines({
+        transactionId: order.id,
+        totalPaid: Number(order.total_amount) || 0,
+        currency: order.currency || "XOF",
+      }),
+    );
+    if (!ledger.ok) console.error("[webhooks/geniuspay] ledger", ledger.error);
   }
   return NextResponse.json({ received: true, matched: true });
 }

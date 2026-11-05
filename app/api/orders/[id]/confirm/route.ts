@@ -4,6 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { sendPushToUser } from "@/lib/notifications/push"
 import { mapPaymentMethodToNetwork } from "@/lib/payment/networks"
 import { evaluatePlanSwitch } from "@/lib/pricing/switch"
+import { payoutLedgerLines, recordLedgerLines } from "@/lib/features/payments/ledger"
+import { sellerReceivesAfterPayoutFee } from "@/lib/features/payments/payout-fee"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -50,6 +52,9 @@ export async function POST(request: NextRequest, context: Ctx) {
     if (order.escrow_status === "released") {
       return NextResponse.json({ error: "Déjà libérée" }, { status: 400 })
     }
+    if (order.confirmed_by_buyer_at) {
+      return NextResponse.json({ error: "Réception déjà confirmée" }, { status: 400 })
+    }
     if (order.payment_status !== "paid" || order.escrow_status !== "held") {
       return NextResponse.json(
         {
@@ -64,7 +69,7 @@ export async function POST(request: NextRequest, context: Ctx) {
     const admin = createAdminClient()
     const now = new Date().toISOString()
 
-    const payoutAmount =
+    const sellerNet =
       order.vendeur_recoit_fcfa != null
         ? Math.round(Number(order.vendeur_recoit_fcfa))
         : Math.max(
@@ -73,6 +78,9 @@ export async function POST(request: NextRequest, context: Ctx) {
               Math.round(Number(order.commission_fcfa) || 0) -
               Math.round(Number(order.service_fee) || 0),
           )
+    const { data: payoutFeeRaw } = await admin.rpc("gwa_payout_fee", { p_seller_id: order.seller_id })
+    const payoutFee = Math.min(sellerNet, Math.max(0, Math.round(Number(payoutFeeRaw) || 0)))
+    const payoutAmount = sellerReceivesAfterPayoutFee(sellerNet, payoutFee)
 
     let payoutStatus = "skipped_no_provider"
     let payoutRef: string | null = null
@@ -117,6 +125,7 @@ export async function POST(request: NextRequest, context: Ctx) {
       payout_status: payoutStatus,
       payout_ref: payoutRef,
       payout_at: payoutNotRequired ? now : null,
+      payout_fee_fcfa: payoutFee,
     }
     if (receptionPhotoUrl) {
       orderPatch.notes = [order.notes, `Photo réception: ${receptionPhotoUrl}`]
@@ -160,6 +169,7 @@ export async function POST(request: NextRequest, context: Ctx) {
         `payout=${payoutStatus}`,
         payoutRef ? `ref=${payoutRef}` : null,
         `amount=${payoutAmount}`,
+        payoutFee > 0 ? `frais_versement=${payoutFee}` : null,
       ]
         .filter(Boolean)
         .join(" | "),
@@ -180,8 +190,23 @@ export async function POST(request: NextRequest, context: Ctx) {
       )
     }
 
+    const ledger = await recordLedgerLines(
+      admin as never,
+      payoutLedgerLines({
+        transactionId: id,
+        sellerNet: payoutAmount,
+        commission: Math.round(Number(order.commission_fcfa ?? order.seller_commission) || 0),
+        buyerFee: Math.round(Number(order.buyer_service_fee) || 0),
+        payoutFee,
+        currency: order.currency || "XOF",
+      }),
+    )
+    if (!ledger.ok) console.error("[api/orders/confirm] ledger", ledger.error)
+
     const sellerMsg =
-      payoutStatus === "pending"
+      payoutFee > 0
+        ? `${order.order_number} confirmée. ${payoutAmount} F seront versés. ${payoutFee} F de frais de versement ont été retenus, le quota du mois est atteint.`
+        : payoutStatus === "pending"
         ? `Livraison confirmée — vous pouvez demander un versement manuel (${order.order_number})`
         : payoutStatus === "skipped_sim"
           ? `Livraison confirmée — paiement de simulation ignoré (${order.order_number})`
