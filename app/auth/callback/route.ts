@@ -1,6 +1,7 @@
-import { createClient } from "@/lib/supabase/server"
 import { resolvePostAuthRedirect } from "@/lib/auth/post-auth"
 import { safeOAuthNextPath } from "@/lib/auth/oauth"
+import { createServerClient } from "@supabase/ssr"
+import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
 
 export async function GET(request: Request) {
@@ -18,8 +19,34 @@ export async function GET(request: Request) {
   }
 
   if (code) {
-    const supabase = await createClient()
+    const cookieStore = await cookies()
+    const pendingCookies: { name: string; value: string; options?: Record<string, unknown> }[] = []
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return cookieStore.getAll()
+          },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              cookieStore.set(name, value, options)
+              pendingCookies.push({ name, value, options })
+            })
+          },
+        },
+      },
+    )
     const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+
+    const redirectWithSession = (url: string) => {
+      const response = NextResponse.redirect(url)
+      for (const cookie of pendingCookies) {
+        response.cookies.set(cookie.name, cookie.value, cookie.options)
+      }
+      return response
+    }
 
     if (exchangeError) {
       return NextResponse.redirect(
@@ -71,11 +98,11 @@ export async function GET(request: Request) {
       }
 
       if (next) {
-        return NextResponse.redirect(`${origin}${next}`)
+        return redirectWithSession(`${origin}${next}`)
       }
 
       const { path: redirectPath } = await resolvePostAuthRedirect(supabase, user.id)
-      return NextResponse.redirect(`${origin}${redirectPath}`)
+      return redirectWithSession(`${origin}${redirectPath}`)
     }
   }
 

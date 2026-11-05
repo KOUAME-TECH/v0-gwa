@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { assertSameOrigin } from "@/lib/security/csrf"
 import { joinBuyerRequest } from "@/lib/features/agritech/rfq-engine"
+import { joinRfqSchema, zodErrorMessage } from "@/lib/validation/public-api"
 
 export async function POST(request: NextRequest) {
   const csrf = assertSameOrigin(request)
@@ -17,12 +18,11 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json().catch(() => ({}))
-  const buyerRequestId = String(body?.buyerRequestId || "")
-  const volumeCommitted = Math.floor(Number(body?.volumeCommitted) || 0)
-  const priceOffered = body?.priceOffered == null ? null : Math.round(Number(body.priceOffered))
-  if (!buyerRequestId || volumeCommitted <= 0) {
-    return NextResponse.json({ error: "Indique un volume pour rejoindre l’offre." }, { status: 400 })
+  const parsed = joinRfqSchema.safeParse(body)
+  if (!parsed.success) {
+    return NextResponse.json({ error: zodErrorMessage() }, { status: 400 })
   }
+  const { buyerRequestId, volumeCommitted, priceOffered } = parsed.data
 
   const admin = createAdminClient()
   const { data: profile } = await admin

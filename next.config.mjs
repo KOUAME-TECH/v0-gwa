@@ -52,6 +52,7 @@ const nextConfig = {
   compress: true,
   experimental: {
     optimizePackageImports: ["lucide-react", "date-fns"],
+    optimizeCss: true,
   },
   headers: async () => [
     { source: "/(.*)", headers: securityHeaders },

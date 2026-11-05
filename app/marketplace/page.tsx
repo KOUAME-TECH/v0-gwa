@@ -118,7 +118,11 @@ function MarketplaceGridCard({
             alt={p.name}
             fill
             className="object-cover"
-            sizes="(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 25vw"
+            sizes={
+              priority
+                ? "(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                : "(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 25vw"
+            }
             {...(priority
               ? { priority: true, fetchPriority: "high" as const }
               : { loading: "lazy" as const })}
@@ -774,7 +778,7 @@ function MarketplaceContent() {
                   onAddToCart={addToCart}
                   formatPrice={fmt}
                   imageQuality={imageQuality}
-                  priority={idx < 4}
+                  priority={idx === 0}
                   onPrefetch={(prod) =>
                     prefetchProduct(router, prod as Product & Record<string, unknown>)
                   }

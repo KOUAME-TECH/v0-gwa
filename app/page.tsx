@@ -1149,7 +1149,7 @@ export default function HomePage() {
             <FeedCard
               key={`${item.type}-${item.data.id}`}
               item={item}
-              priority={index < 2}
+              priority={index === 0}
               onPrefetch={() => {
                 if (item.type === "product") {
                   prefetchProduct(router, item.data as Product & Record<string, unknown>)

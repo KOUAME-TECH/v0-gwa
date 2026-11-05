@@ -135,11 +135,8 @@ export default function CartPage() {
 
     setUser(user)
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("full_name, phone, city, country, subscription_tier")
-      .eq("id", user.id)
-      .single()
+    const { data: self } = await supabase.rpc("profile_self")
+    const profile = Array.isArray(self) ? self[0] : self
 
     if (profile) {
       setDeliveryAddress({
@@ -390,7 +387,7 @@ export default function CartPage() {
         <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mb-4">
           <ShoppingCart className="h-10 w-10 text-primary" />
         </div>
-        <h2 className="text-xl font-bold mb-2">Panier vide</h2>
+        <h2 className="text-xl font-bold mb-2">Votre panier est vide</h2>
         <p className="text-muted-foreground text-sm text-center mb-6 max-w-xs">
           Ajoute un produit, ou connecte-toi pour retrouver un panier déjà enregistré.
         </p>
@@ -412,7 +409,7 @@ export default function CartPage() {
         <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center mb-4">
           <ShoppingCart className="h-10 w-10 text-muted-foreground" />
         </div>
-        <h2 className="text-xl font-bold mb-2">Panier vide</h2>
+        <h2 className="text-xl font-bold mb-2">Votre panier est vide</h2>
         <p className="text-muted-foreground text-sm text-center mb-6 max-w-xs">
           Explorez nos produits agricoles
         </p>

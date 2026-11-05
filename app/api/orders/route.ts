@@ -7,6 +7,7 @@ import { isAgriculturalProductType } from "@/lib/catalog/scope"
 import { quoteSellerPricing } from "@/lib/pricing/server-quote"
 import { selfPurchaseMessage } from "@/lib/orders/purchase-guards"
 import { releaseProduct, reserveProduct, type Reservation } from "@/lib/features/agritech/handle-stock"
+import { createOrderSchema, zodErrorMessage } from "@/lib/validation/public-api"
 
 type OrderItemInput = {
   product_id: string
@@ -67,14 +68,11 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const items = (body?.items || []) as OrderItemInput[]
-
-    if (!Array.isArray(items) || items.length === 0) {
-      return NextResponse.json(
-        { error: "Ajoutez au moins un produit avant de commander." },
-        { status: 400 },
-      )
+    const parsed = createOrderSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json({ error: zodErrorMessage() }, { status: 400 })
     }
+    const items = parsed.data.items
 
     // Résoudre prix depuis produits
     const productIds = items.map((i) => i.product_id)
