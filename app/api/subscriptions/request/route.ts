@@ -9,7 +9,7 @@ import {
   SUBSCRIPTION_PRICES_FCFA,
   type SubscriptionTier,
 } from "@/lib/pricing/service-fee"
-import { legacyTierPlanName } from "@/lib/pricing/quote"
+import { legacyTierPlanName, pricingPlanMatchFilter } from "@/lib/pricing/quote"
 import { isSellerRole } from "@/lib/dashboard/routing"
 
 const REQUESTABLE: SubscriptionTier[] = ["starter", "pro", "enterprise"]
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
     const { data: planFee } = await admin
       .from("pricing_plans")
       .select("monthly_fee")
-      .eq("name", planName)
+      .or(pricingPlanMatchFilter(planName))
       .maybeSingle()
     const amount =
       planFee && typeof planFee.monthly_fee === "number"

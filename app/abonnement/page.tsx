@@ -138,7 +138,7 @@ export default function AbonnementPage() {
           <p className="text-sm text-white/80">Ton palier actuel</p>
           <p className="text-2xl font-bold mt-1 flex items-center gap-2">
             <Crown className="h-6 w-6" />
-            {currentPlan.name}
+            {currentPlan.displayName || currentPlan.name}
           </p>
           <p className="text-sm text-white/90 mt-1">
             Commission {Math.round(currentPlan.commission_rate * 100)} % sur tes ventes
@@ -177,7 +177,7 @@ export default function AbonnementPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
-                      <h2 className="font-semibold text-[#111827]">{seed.name}</h2>
+                      <h2 className="font-semibold text-[#111827]">{seed.displayName || seed.name}</h2>
                       {isCurrent && (
                         <Badge className="bg-[#2F7D32]/10 text-[#2F7D32]">Actuel</Badge>
                       )}
@@ -215,7 +215,7 @@ export default function AbonnementPage() {
                       void requestPlan({
                         ...plan,
                         tier: tierKey,
-                        label: seed.name,
+                        label: seed.displayName || seed.name,
                         priceFcfa: seed.name === "COOP_ENTERPRISE" ? null : seed.monthly_fee,
                       })
                     }
@@ -225,7 +225,7 @@ export default function AbonnementPage() {
                     ) : (
                       <>
                         <MessageCircle className="h-4 w-4 mr-2" />
-                        {isCurrent ? "Plan actuel" : isPending ? "Rouvrir WhatsApp" : plan.cta}
+                        {isCurrent ? "Plan actuel" : isPending ? "Rouvrir WhatsApp" : `Passer à ${seed.displayName || seed.name}`}
                       </>
                     )}
                   </Button>

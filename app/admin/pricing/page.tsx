@@ -204,7 +204,7 @@ export default function AdminPricingPage() {
         <h1 className="text-2xl font-semibold text-[#1F5C2E]">Grilles tarifaires</h1>
         <p className="mt-1 text-sm text-[#4B5563]">
           Producteurs et coopératives. Chaque commande lit ces valeurs. Une offre désactivée
-          renvoie vers FREE ou COOP START.
+          renvoie vers Graine ou Coopérative.
         </p>
       </div>
       {error ? <p className="text-sm text-red-700">{error}</p> : null}

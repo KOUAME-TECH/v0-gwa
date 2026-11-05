@@ -30,10 +30,10 @@ export const SUBSCRIPTION_PRICES_FCFA: Record<
 export const FREE_MAX_ACTIVE_LISTINGS = 5
 
 export const TIER_LABELS_FR: Record<SubscriptionTier, string> = {
-  free: "Gratuit",
-  starter: "Starter",
-  pro: "Pro",
-  enterprise: "Entreprise",
+  free: "Graine",
+  starter: "Pousse",
+  pro: "Récolte",
+  enterprise: "Fédération",
 }
 
 export function normalizeSubscriptionTier(

@@ -4,7 +4,7 @@ import { assertSameOrigin } from "@/lib/security/csrf"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { sanitizeForQuery } from "@/lib/security/validation"
 import { normalizeSubscriptionTier } from "@/lib/pricing/service-fee"
-import { legacyTierPlanName } from "@/lib/pricing/quote"
+import { legacyTierPlanName, pricingPlanMatchFilter } from "@/lib/pricing/quote"
 import { isSellerRole } from "@/lib/dashboard/routing"
 
 /**
@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
     const { data: planRow } = await admin
       .from("pricing_plans")
       .select("id")
-      .eq("name", planName)
+      .or(pricingPlanMatchFilter(planName))
       .maybeSingle()
     const profilePatch: Record<string, unknown> = {
       subscription_tier: tier,
