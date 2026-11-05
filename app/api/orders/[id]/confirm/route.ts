@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { sendPushToUser } from "@/lib/notifications/push"
 import { mapPaymentMethodToNetwork } from "@/lib/payment/networks"
 import { evaluatePlanSwitch } from "@/lib/pricing/switch"
+import { payoutLedgerLines, recordLedgerLines } from "@/lib/features/payments/ledger"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -146,6 +147,20 @@ export async function POST(request: NextRequest, context: Ctx) {
         .update({ status: "released", released_at: now })
         .eq("order_id", id)
         .eq("status", "held")
+    }
+
+    const ledger = await recordLedgerLines(
+      admin as never,
+      payoutLedgerLines({
+        transactionId: id,
+        sellerNet: Math.round(Number(order.vendeur_recoit_fcfa ?? order.seller_net_amount) || 0),
+        commission: Math.round(Number(order.commission_fcfa ?? order.seller_commission) || 0),
+        buyerFee: Math.round(Number(order.buyer_service_fee) || 0),
+        currency: order.currency || "XOF",
+      }),
+    )
+    if (!ledger.ok) {
+      console.error("[api/orders/confirm] ledger", ledger.error)
     }
 
     await admin.from("order_audit_log").insert({
