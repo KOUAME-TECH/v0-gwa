@@ -11,10 +11,11 @@ import { Badge } from "@/components/ui/badge"
 import { formatFcfa, SELLER_PLANS, type SellerPlan } from "@/lib/pricing/plans"
 import {
   legacyTierPlanName,
-  PRICING_SEED,
+  type PricingPlanInput,
   seedPlan,
   subscriptionTierForPlan,
 } from "@/lib/pricing/quote"
+import { loadPricingPlans } from "@/lib/pricing/load-plans"
 import {
   normalizeSubscriptionTier,
   type SubscriptionTier,
@@ -30,6 +31,7 @@ export default function AbonnementPage() {
   const [tier, setTier] = useState<SubscriptionTier>("free")
   const [userType, setUserType] = useState<string | null>(null)
   const [pendingTier, setPendingTier] = useState<string | null>(null)
+  const [plans, setPlans] = useState<PricingPlanInput[] | null>(null)
 
   const refresh = useCallback(async () => {
     const supabase = createClient()
@@ -65,6 +67,7 @@ export default function AbonnementPage() {
 
   useEffect(() => {
     void refresh()
+    void loadPricingPlans().then(setPlans)
   }, [refresh])
 
   const requestPlan = async (plan: SellerPlan) => {
@@ -99,7 +102,7 @@ export default function AbonnementPage() {
     }
   }
 
-  if (loading) {
+  if (loading || !plans) {
     return (
       <div className="min-h-dvh bg-[#FFF6E5] flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-[#2F7D32]" />
@@ -108,8 +111,12 @@ export default function AbonnementPage() {
   }
 
   const seller = isSellerRole(userType)
-  const currentPlan = seedPlan(legacyTierPlanName(userType, tier))
-  const visiblePlans = PRICING_SEED.filter(
+  const catalog = plans
+  const currentCode = legacyTierPlanName(userType, tier)
+  const currentPlan =
+    catalog.find((plan) => plan.name === currentCode || plan.displayName === currentCode) ||
+    seedPlan(currentCode)
+  const visiblePlans = catalog.filter(
     (plan) => plan.target === (userType === "cooperative" ? "cooperative" : "producer"),
   )
 

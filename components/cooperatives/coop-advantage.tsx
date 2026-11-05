@@ -1,8 +1,9 @@
 "use client"
 
 import Link from "next/link"
-import { memberShareFcfa, pousseVersusCoop } from "@/lib/pricing/coop-advantage"
-import { seedPlan } from "@/lib/pricing/quote"
+import { compareSoloToCoop, memberShareFcfa } from "@/lib/pricing/coop-advantage"
+import { loadPricingPlans } from "@/lib/pricing/load-plans"
+import { seedPlan } from "@/lib/pricing/published-grid"
 import { createClient } from "@/lib/supabase/client"
 import { useEffect, useMemo, useState } from "react"
 
@@ -41,9 +42,22 @@ export function CoopFeeShare({
 
 export function CoopJoinSimulator({ ctaHref = "/cooperatives" }: { ctaHref?: string }) {
   const [revenue, setRevenue] = useState(1_000_000)
-  const solo = seedPlan("STARTER")
-  const coop = seedPlan("COOP_START")
-  const result = useMemo(() => pousseVersusCoop(revenue, 10), [revenue])
+  const [solo, setSolo] = useState(() => seedPlan("STARTER"))
+  const [coop, setCoop] = useState(() => seedPlan("COOP_START"))
+
+  useEffect(() => {
+    void loadPricingPlans().then((plans) => {
+      const nextSolo = plans.find((plan) => plan.name === "STARTER" || plan.displayName === "Pousse")
+      const nextCoop = plans.find((plan) => plan.name === "COOP_START" || plan.displayName === "Coopérative")
+      if (nextSolo) setSolo(nextSolo)
+      if (nextCoop) setCoop(nextCoop)
+    })
+  }, [])
+
+  const result = useMemo(
+    () => compareSoloToCoop({ monthlyRevenue: revenue, solo, coop, activeMembers: 10 }),
+    [revenue, solo, coop],
+  )
   return (
     <section className="rounded-2xl bg-white p-4 ring-1 ring-black/5">
       <h2 className="text-base font-semibold text-[#111827]">Pourquoi rejoindre une coopérative ?</h2>

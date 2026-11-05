@@ -351,7 +351,7 @@ export default function CartPage() {
 
       router.push(`/commandes/confirmation?order=${createdOrderIds[0]}`)
     } catch (err) {
-      console.log("[v0] Checkout error:", err)
+      console.error("[panier] commande", err)
       const raw =
         err instanceof Error && err.message ? err.message : ""
       // Masquer le jargon technique / noms fournisseurs côté UI
