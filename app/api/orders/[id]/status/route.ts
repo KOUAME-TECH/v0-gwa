@@ -3,12 +3,14 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { sendPushToUser } from "@/lib/notifications/push"
 import { normalizeOrderStatus } from "@/lib/orders/escrow-flow"
+import { releaseProduct, type Reservation } from "@/lib/features/agritech/handle-stock"
 
 type Ctx = { params: Promise<{ id: string }> }
 
 const SELLER_TRANSITIONS: Record<string, string[]> = {
   pending: ["confirmed", "cancelled"],
   confirmed: ["processing", "cancelled"],
+  paid_preorder: ["processing", "cancelled"],
   processing: ["shipped", "cancelled"],
   shipped: [],
   delivered: [],
@@ -70,7 +72,7 @@ export async function PATCH(request: NextRequest, context: Ctx) {
     const allowed = SELLER_TRANSITIONS[current] || []
     if (!allowed.includes(nextStatus)) {
       return NextResponse.json(
-        { error: `Transition interdite : ${current} → ${nextStatus}`, code: "INVALID_TRANSITION" },
+        { error: "Cette étape n’est pas possible pour le moment.", code: "INVALID_TRANSITION" },
         { status: 400 },
       )
     }
@@ -84,6 +86,28 @@ export async function PATCH(request: NextRequest, context: Ctx) {
     if (nextStatus === "shipped") patch.shipped_at = now
 
     await admin.from("orders").update(patch).eq("id", id)
+    if (nextStatus === "cancelled") {
+      const { data: lines } = await admin
+        .from("order_items")
+        .select("product_id, stock_taken, preorder_taken")
+        .eq("order_id", id)
+      for (const line of lines || []) {
+        const reservation: Reservation = {
+          productId: String(line.product_id),
+          mode: Number(line.preorder_taken) > 0 ? "preorder" : "stock",
+          stockTaken: Number(line.stock_taken) || 0,
+          preorderTaken: Number(line.preorder_taken) || 0,
+          harvestDate: null,
+        }
+        if (reservation.stockTaken || reservation.preorderTaken) {
+          await releaseProduct(admin as never, reservation)
+        }
+      }
+      await admin
+        .from("order_items")
+        .update({ stock_taken: 0, preorder_taken: 0 })
+        .eq("order_id", id)
+    }
     await admin.from("order_audit_log").insert({
       order_id: id,
       performed_by: user.id,
