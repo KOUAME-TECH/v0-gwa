@@ -30,6 +30,7 @@ export const viewport: Viewport = {
 const outfit = Outfit({
   subsets: ["latin"],
   display: "swap",
+  preload: false,
   variable: "--font-outfit",
 })
 
