@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { dashboardPathForUserType } from "@/lib/dashboard/routing"
+import { loginHref } from "@/lib/auth/oauth"
 import { Loader2, Sprout, ShoppingCart, Users, Building2 } from "lucide-react"
 
 /**
@@ -23,7 +24,7 @@ export default function DashboardPage() {
       } = await supabase.auth.getUser()
 
       if (!user) {
-        router.push("/auth/login")
+        router.push(loginHref("/dashboard"))
         return
       }
 

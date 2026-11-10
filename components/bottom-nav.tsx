@@ -6,6 +6,7 @@ import { Home, ShoppingBag, MessageCircle, User, Plus, Bell, Search, Store } fro
 import { cn } from "@/lib/utils"
 import { shouldShowBottomNav } from "@/lib/navigation/shell-routes"
 import { isSellerRole } from "@/lib/dashboard/routing"
+import { loginHref } from "@/lib/auth/oauth"
 import { useHideOnScroll } from "@/hooks/use-hide-on-scroll"
 import { useNavBadges } from "@/hooks/use-nav-badges"
 
@@ -99,7 +100,7 @@ export function BottomNav() {
       badge: unreadMessages > 0 ? unreadMessages : undefined,
     },
     {
-      href: user ? "/profil" : "/auth/login",
+      href: user ? "/profil" : loginHref(pathname || "/profil"),
       icon: User,
       label: user ? "Profil" : "Connexion",
       world: "profile",
@@ -189,7 +190,7 @@ export function BottomNav() {
                         ? item.href
                         : user
                           ? item.href
-                          : "/auth/login?redirect=/publier"
+                          : loginHref("/publier")
                     }
                     className="relative -mt-4"
                     aria-label={item.label}

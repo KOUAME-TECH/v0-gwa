@@ -1,7 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import {
   USER_TYPE_MAP,
-  hasProductAccount,
   canonicalProductUserType,
 } from "@/lib/auth/dual-identity"
 
@@ -11,6 +10,35 @@ const DASHBOARD_ROUTES: Record<string, string> = {
   producteur: "/dashboard/farmer",
   acheteur: "/dashboard/buyer",
   cooperative: "/dashboard/cooperative",
+}
+
+export type AuthDestination = { path: string; isNewUser: boolean }
+
+/**
+ * Un compte qui a déjà un rôle et un nom rentre dans son espace.
+ * L'absence de `sub_type` ou un profil incomplet ne le renvoie pas
+ * à l'onboarding : la plupart des comptes live n'ont pas ce champ.
+ */
+export function destinationForProfile(input: {
+  userType?: string | null
+  fullName?: string | null
+  isAdmin?: boolean
+  fallback?: string
+}): AuthDestination {
+  const productType = canonicalProductUserType(input.userType)
+
+  if (input.isAdmin && !productType) {
+    return { path: "/admin", isNewUser: false }
+  }
+
+  if (productType && DASHBOARD_ROUTES[productType]) {
+    if (!input.fullName?.trim()) {
+      return { path: "/auth/signup?resume=onboarding", isNewUser: true }
+    }
+    return { path: DASHBOARD_ROUTES[productType], isNewUser: false }
+  }
+
+  return { path: "/auth/onboarding", isNewUser: true }
 }
 
 /**
@@ -40,43 +68,12 @@ export async function resolvePostAuthRedirect(
       .maybeSingle(),
   ])
 
-  const productType = canonicalProductUserType(profile?.user_type)
-  const productAccount = hasProductAccount(profile?.user_type)
-
-  // Staff-only : pas de compte métier → backoffice
-  if (adminRole && !productAccount) {
-    return { path: "/admin", isNewUser: false }
-  }
-
-  if (!profile?.sub_type) {
-    return { path: "/auth/onboarding", isNewUser: true }
-  }
-
-  const completion = profile?.profile_completion_pct ?? 0
-  const isNewUser =
-    !profile?.full_name ||
-    completion < 50 ||
-    !profile?.country
-
-  if (isNewUser) {
-    return { path: "/auth/signup?resume=onboarding", isNewUser: true }
-  }
-
-  if (productType && DASHBOARD_ROUTES[productType]) {
-    return {
-      path: DASHBOARD_ROUTES[productType],
-      isNewUser: false,
-    }
-  }
-
-  if (adminRole) {
-    return { path: "/admin", isNewUser: false }
-  }
-
-  return {
-    path: fallback,
-    isNewUser: false,
-  }
+  return destinationForProfile({
+    userType: profile?.user_type,
+    fullName: profile?.full_name,
+    isAdmin: Boolean(adminRole),
+    fallback,
+  })
 }
 
 export function computeProfileCompletion(profile: {

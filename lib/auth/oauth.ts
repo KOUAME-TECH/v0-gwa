@@ -4,8 +4,32 @@
  */
 
 export function safeOAuthNextPath(next: string | null | undefined): string | null {
-  if (!next || !next.startsWith("/") || next.startsWith("//")) return null
-  return next
+  if (!next) return null
+  const value = next.trim()
+  if (!value.startsWith("/") || value.startsWith("//")) return null
+  if (value.includes("\\") || value.includes("://")) return null
+  return value
+}
+
+/** Chemin interne après connexion. Refuse les boucles vers l'écran de login. */
+export function safeInternalPath(next: string | null | undefined): string | null {
+  const value = safeOAuthNextPath(next)
+  if (!value) return null
+  const pathOnly = value.split("?")[0] || value
+  if (
+    pathOnly === "/auth/login" ||
+    pathOnly.startsWith("/auth/login/") ||
+    pathOnly === "/auth/error" ||
+    pathOnly.startsWith("/auth/callback")
+  ) {
+    return null
+  }
+  return value
+}
+
+export function loginHref(next: string): string {
+  const safe = safeInternalPath(next) || "/profil"
+  return `/auth/login?redirect=${encodeURIComponent(safe)}`
 }
 
 /**

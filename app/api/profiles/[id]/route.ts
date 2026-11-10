@@ -1,15 +1,13 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { computeProfileCompletion } from "@/lib/auth/post-auth"
+import { loadOwnProfile } from "@/lib/profile/self"
 import { assertSameOrigin } from "@/lib/security/csrf"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { sanitizeHtml, sanitizePlainText } from "@/lib/security/validation"
 
 const PUBLIC_FIELDS =
   "id, full_name, avatar_url, bio, user_type, sub_type, country, city, is_verified, rating, total_reviews, scg_score, scg_badge, scg_bancable, created_at"
-
-const OWNER_EXTRA_FIELDS =
-  ", email, phone, address, auth_method, preferred_language, digest_enabled, profile_completion_pct, onboarding_completed_at, scg_calculated_at, updated_at"
 
 const PATCHABLE_FIELDS = [
   "full_name",
@@ -40,15 +38,18 @@ export async function GET(_request: Request, { params }: RouteParams) {
     } = await supabase.auth.getUser()
 
     const isOwner = user?.id === id
-    const selectFields = isOwner ? PUBLIC_FIELDS + OWNER_EXTRA_FIELDS : PUBLIC_FIELDS
 
-    const { data: profile, error } = await supabase
-      .from("profiles")
-      .select(selectFields)
-      .eq("id", id)
-      .maybeSingle()
+    const profile = isOwner
+      ? await loadOwnProfile(supabase)
+      : (
+          await supabase
+            .from("profiles")
+            .select(PUBLIC_FIELDS)
+            .eq("id", id)
+            .maybeSingle()
+        ).data
 
-    if (error || !profile) {
+    if (!profile) {
       return NextResponse.json({ error: "Profil introuvable" }, { status: 404 })
     }
 
@@ -114,11 +115,14 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Aucun champ à mettre à jour" }, { status: 400 })
     }
 
-    const { data: existing } = await supabase
-      .from("profiles")
-      .select("full_name, user_type, country, city, phone, email")
-      .eq("id", id)
-      .maybeSingle()
+    const existing = await loadOwnProfile<{
+      full_name?: string | null
+      user_type?: string | null
+      country?: string | null
+      city?: string | null
+      phone?: string | null
+      email?: string | null
+    }>(supabase)
 
     updates.profile_completion_pct = computeProfileCompletion({
       ...existing,
@@ -126,17 +130,14 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     })
     updates.updated_at = new Date().toISOString()
 
-    const { data: profile, error } = await supabase
-      .from("profiles")
-      .update(updates)
-      .eq("id", id)
-      .select(PUBLIC_FIELDS + OWNER_EXTRA_FIELDS)
-      .maybeSingle()
+    const { error } = await supabase.from("profiles").update(updates).eq("id", id)
 
     if (error) {
       console.error("[profiles/[id] PATCH]", error.message)
       return NextResponse.json({ error: "Mise à jour impossible" }, { status: 400 })
     }
+
+    const profile = await loadOwnProfile(supabase)
 
     return NextResponse.json({
       profile,

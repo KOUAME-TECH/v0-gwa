@@ -27,8 +27,10 @@ import { OtpInput, OtpCountdown } from "@/components/auth/otp-input"
 import { maskPhone } from "@/lib/auth/phone"
 import {
   computeProfileCompletion,
+  destinationForProfile,
   USER_TYPE_MAP,
 } from "@/lib/auth/post-auth"
+import { loadOwnProfile } from "@/lib/profile/self"
 import { mergeGuestCartToUser } from "@/lib/cart/guest"
 import { cn } from "@/lib/utils"
 import { HibpPasswordBanner } from "@/components/auth/hibp-password-banner"
@@ -119,15 +121,23 @@ function SignupForm() {
   useEffect(() => {
     if (!resumeOnboarding) return
     const supabase = createClient()
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) {
-        setPhoneVerified(true)
-        setAuthMethod("phone")
-        setStep(2)
-        if (user.phone) setPhone(user.phone.replace(/^\+225/, "0"))
+    void supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) return
+      const profile = await loadOwnProfile<{ full_name?: string | null; user_type?: string | null }>(supabase)
+      const dest = destinationForProfile({
+        userType: profile?.user_type,
+        fullName: profile?.full_name,
+      })
+      if (!dest.isNewUser) {
+        router.replace(dest.path)
+        return
       }
+      setPhoneVerified(true)
+      setAuthMethod("phone")
+      setStep(2)
+      if (user.phone) setPhone(user.phone.replace(/^\+225/, "0"))
     })
-  }, [resumeOnboarding])
+  }, [resumeOnboarding, router])
 
   const handleSendOtp = async () => {
     setIsLoading(true)
@@ -232,6 +242,12 @@ function SignupForm() {
       setError(profileError.message)
       return false
     }
+
+    await fetch("/api/auth/choose-role", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: mappedType }),
+    })
 
     await supabase.auth.updateUser({
       data: {
@@ -374,6 +390,11 @@ function SignupForm() {
         .eq("id", data.user.id)
 
       if (data.session) {
+        await fetch("/api/auth/choose-role", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ role: mappedType }),
+        })
         router.push("/profil")
       } else {
         localStorage.setItem("gwa_signup_email", formData.email)

@@ -7,6 +7,8 @@ import { useRouter } from "next/navigation"
 import Image from "next/image"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
+import { loadOwnProfile } from "@/lib/profile/self"
+import { loginHref } from "@/lib/auth/oauth"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -125,12 +127,12 @@ export default function EditProfilPage() {
       const { data: { user } } = await supabase.auth.getUser()
       
       if (!user) {
-        router.push("/auth/login")
+        router.push(loginHref("/profil/edit"))
         return
       }
 
-      const [{ data: profileData }, { data: kyc }] = await Promise.all([
-        supabase.from("profiles").select("*").eq("id", user.id).single(),
+      const [profileData, { data: kyc }] = await Promise.all([
+        loadOwnProfile<Profile & { digest_enabled?: boolean | null; linked_email?: string | null }>(supabase),
         supabase
           .from("verification_requests")
           .select("status")
@@ -336,7 +338,12 @@ export default function EditProfilPage() {
   }
 
   if (!profile) {
-    return null
+    return (
+      <div className="min-h-screen bg-[#FFF6E5] flex flex-col items-center justify-center gap-3 px-6 text-center">
+        <p className="text-base font-semibold text-[#111827]">Profil indisponible</p>
+        <Button onClick={() => window.location.reload()}>Réessayer</Button>
+      </div>
+    )
   }
 
   const showKycInSettings = shouldPromptIdentityVerification({

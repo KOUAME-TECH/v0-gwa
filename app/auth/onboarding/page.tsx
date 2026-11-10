@@ -3,28 +3,32 @@
 import { Suspense, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, Sprout, Users, Loader2, AlertCircle } from "lucide-react"
+import { ArrowLeft, Sprout, Users, ShoppingCart, Loader2, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { createClient } from "@/lib/supabase/client"
+import { dashboardPathForUserType } from "@/lib/dashboard/routing"
+import { hasProductAccount } from "@/lib/auth/dual-identity"
 import { cn } from "@/lib/utils"
 
-const SUB_TYPES = [
+const ROLES = [
   {
-    value: "producteur_individuel" as const,
-    userType: "producteur",
-    label: "Producteur individuel",
+    value: "producteur" as const,
+    label: "Producteur",
     description: "Exploitation agricole personnelle, vente directe de vos récoltes.",
     icon: Sprout,
-    redirect: "/auth/signup?resume=onboarding&type=farmer",
+  },
+  {
+    value: "acheteur" as const,
+    label: "Acheteur",
+    description: "Vous achetez des produits agricoles auprès des producteurs.",
+    icon: ShoppingCart,
   },
   {
     value: "cooperative" as const,
-    userType: "cooperative",
     label: "Coopérative",
     description: "Groupement de producteurs, gestion collective et commandes B2B.",
     icon: Users,
-    redirect: "/auth/signup?resume=onboarding&type=cooperative",
   },
 ]
 
@@ -44,13 +48,16 @@ function OnboardingForm() {
 
       supabase
         .from("profiles")
-        .select("sub_type, user_type")
+        .select("user_type, full_name")
         .eq("id", user.id)
         .maybeSingle()
         .then(({ data: profile }) => {
-          if (profile?.sub_type) {
-            const match = SUB_TYPES.find((s) => s.value === profile.sub_type)
-            router.replace(match?.redirect ?? "/profil")
+          if (hasProductAccount(profile?.user_type)) {
+            router.replace(
+              profile?.full_name
+                ? dashboardPathForUserType(profile.user_type)
+                : "/auth/signup?resume=onboarding",
+            )
             return
           }
           setLoading(false)
@@ -58,7 +65,7 @@ function OnboardingForm() {
     })
   }, [router, supabase])
 
-  const handleSelect = async (option: (typeof SUB_TYPES)[number]) => {
+  const handleSelect = async (option: (typeof ROLES)[number]) => {
     setSubmitting(option.value)
     setError(null)
 
@@ -71,30 +78,20 @@ function OnboardingForm() {
       return
     }
 
-    const res = await fetch(`/api/profiles/${user.id}`, {
-      method: "PATCH",
+    const res = await fetch("/api/auth/choose-role", {
+      method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sub_type: option.value,
-        user_type: option.userType,
-      }),
+      body: JSON.stringify({ role: option.value }),
     })
 
-    const data = await res.json()
+    const data = await res.json().catch(() => ({}))
     if (!res.ok) {
       setError(data.error || "Enregistrement impossible")
       setSubmitting(null)
       return
     }
 
-    await supabase
-      .from("profiles")
-      .update({
-        onboarding_completed_at: new Date().toISOString(),
-      })
-      .eq("id", user.id)
-
-    router.push(option.redirect)
+    router.replace(data.path || dashboardPathForUserType(option.value))
   }
 
   if (loading) {
@@ -129,7 +126,7 @@ function OnboardingForm() {
         </div>
 
         <div className="space-y-4">
-          {SUB_TYPES.map((option) => {
+          {ROLES.map((option) => {
             const Icon = option.icon
             const isSubmitting = submitting === option.value
 

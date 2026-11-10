@@ -23,6 +23,7 @@ import {
   LayoutList,
 } from "lucide-react"
 import { shouldShowVerifiedBadge } from "@/lib/verification/badge"
+import { loginHref } from "@/lib/auth/oauth"
 import { toast } from "sonner"
 
 type Profile = {
@@ -190,7 +191,7 @@ export default function PublicProfilePage() {
 
   async function toggleFollow() {
     if (!currentUser) {
-      router.push("/auth/login")
+      router.push(loginHref(`/profil/${profileId}`))
       return
     }
     setFollowLoading(true)
@@ -351,7 +352,14 @@ export default function PublicProfilePage() {
                 </>
               )}
             </Button>
-            <Link href={`/messages?to=${profileId}`} className="flex-1">
+            <Link
+              href={
+                currentUser
+                  ? `/messages?to=${profileId}`
+                  : loginHref(`/messages?to=${profileId}`)
+              }
+              className="flex-1"
+            >
               <Button
                 variant="outline"
                 className="w-full rounded-full h-11 font-semibold bg-transparent border-[#2F7D32] text-[#2F7D32]"
