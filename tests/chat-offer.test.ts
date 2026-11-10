@@ -12,11 +12,17 @@ describe("price offer chat", () => {
       amount: 15000,
       productName: "Cacao",
       note: "2 sacs",
+      quantity: 3,
+      location: "Abidjan",
+      deliveryBy: "3 jours",
     })
     const parsed = parseOfferContent(raw)
     expect(parsed?.amount).toBe(15000)
     expect(parsed?.productName).toBe("Cacao")
     expect(parsed?.status).toBe("pending")
+    expect(parsed?.quantity).toBe(3)
+    expect(parsed?.location).toBe("Abidjan")
+    expect(parsed?.deliveryBy).toBe("3 jours")
     expect(formatOfferAmount(15000)).toMatch(/15/)
   })
 

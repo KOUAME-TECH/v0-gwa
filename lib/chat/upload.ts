@@ -47,7 +47,8 @@ export const chatMediaPrepareSchema = z.object({
   conversationId: z.string().uuid(),
   kind: z.enum(["image", "file", "voice"]),
   mime: z.string().min(3).max(120),
-  size: z.number().int().positive().max(CHAT_MAX_FILE_BYTES),
+  /** Plafond = vocal (12 Mo) ; validateChatMedia resserre par kind. */
+  size: z.number().int().positive().max(CHAT_MAX_VOICE_BYTES),
   fileName: z.string().min(1).max(180),
 })
 
@@ -224,7 +225,6 @@ type SupabaseLike = {
   }
   storage: {
     from: (bucket: string) => {
-      getPublicUrl: (path: string) => { data: { publicUrl: string } }
       createSignedUrl: (
         path: string,
         expiresIn: number,
@@ -238,7 +238,8 @@ type SupabaseLike = {
 
 /**
  * Upload XHR avec progression réelle vers Supabase Storage.
- * Retourne path + URL d’affichage (signée de préférence, publique en secours).
+ * Retourne path (à persister en media_url) + URL signée d’affichage.
+ * Pas de fallback URL publique — bucket chat-media privé (068).
  */
 export async function uploadChatMedia(opts: {
   supabase: SupabaseLike
@@ -334,15 +335,15 @@ export async function uploadChatMedia(opts: {
     .from(CHAT_MEDIA_BUCKET)
     .createSignedUrl(path, CHAT_SIGNED_URL_TTL_SEC)
 
-  let displayUrl = signed?.signedUrl || ""
-  if (signErr || !displayUrl) {
-    displayUrl = opts.supabase.storage
-      .from(CHAT_MEDIA_BUCKET)
-      .getPublicUrl(path).data.publicUrl
+  if (signErr || !signed?.signedUrl) {
+    throw new ChatUploadError(
+      "Fichier envoyé mais lien privé impossible. Réessaie.",
+      "storage",
+    )
   }
 
   opts.onProgress?.({ percent: 100, stage: "done" })
-  return { path, displayUrl, contentType: mime }
+  return { path, displayUrl: signed.signedUrl, contentType: mime }
 }
 
 /** Résout une URL affichable (rafraîchit le lien signé si besoin). */
@@ -352,13 +353,15 @@ export async function resolveChatMediaUrl(
 ): Promise<string | null> {
   if (!mediaUrl) return null
   const path = extractChatStoragePath(mediaUrl)
-  if (!path) return mediaUrl
+  if (!path) {
+    // URL déjà signée / externe sans path extractible — laisser tel quel
+    if (/\/storage\/v1\/object\/sign\//i.test(mediaUrl)) return mediaUrl
+    return mediaUrl
+  }
   const { data, error } = await supabase.storage
     .from(CHAT_MEDIA_BUCKET)
     .createSignedUrl(path, CHAT_SIGNED_URL_TTL_SEC)
   if (!error && data?.signedUrl) return data.signedUrl
-  return (
-    supabase.storage.from(CHAT_MEDIA_BUCKET).getPublicUrl(path).data.publicUrl ||
-    mediaUrl
-  )
+  // Pas de fallback public : média privé indisponible
+  return null
 }

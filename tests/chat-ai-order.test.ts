@@ -58,4 +58,25 @@ describe("bon de commande", () => {
     expect(html).toMatch(/Manioc/)
     expect(html).toMatch(/window\.print/)
   })
+
+  it("échappe le HTML dangereux dans le bon imprimable", () => {
+    const po = parsePurchaseOrderContent(
+      buildPurchaseOrderContent({
+        orderId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+        amount: 500,
+        productName: `<img src=x onerror="alert(1)">`,
+      }),
+    )!
+    const html = purchaseOrderPrintHtml(po, {
+      buyerName: `<script>alert(1)</script>`,
+      sellerName: `Kouassi & Cie`,
+      origin: "https://mygwa.org",
+    })
+    expect(html).not.toMatch(/<script>/i)
+    expect(html).toMatch(/&lt;img src=x/)
+    expect(html).toMatch(/&lt;script&gt;/)
+    expect(html).toMatch(/&amp;/)
+    expect(html).toMatch(/Code de vérification/)
+    expect(html).toMatch(/data:image\/svg\+xml/)
+  })
 })

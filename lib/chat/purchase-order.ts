@@ -3,6 +3,18 @@
  * Stocké en messages.content (JSON) avec message_type = "order_sheet".
  */
 
+import { qrSvgDataUri } from "@/lib/chat/qr-svg"
+
+/** Escape HTML entities — obligatoire avant injection dans print HTML. */
+export function escapeHtml(value: string): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+}
+
 export type PurchaseOrderPayload = {
   v: 1
   kind: "purchase_order"
@@ -14,6 +26,8 @@ export type PurchaseOrderPayload = {
   productName?: string
   productId?: string
   offerMessageId?: string
+  location?: string
+  deliveryBy?: string
   /** Lien paiement / suivi — routes existantes, sans toucher APIs GeniusPay */
   payPath: string
   pinned?: boolean
@@ -27,6 +41,8 @@ export function buildPurchaseOrderContent(input: {
   productName?: string
   productId?: string
   offerMessageId?: string
+  location?: string
+  deliveryBy?: string
   payPath?: string
   pinned?: boolean
 }): string {
@@ -47,6 +63,8 @@ export function buildPurchaseOrderContent(input: {
   if (input.productName) payload.productName = input.productName
   if (input.productId) payload.productId = input.productId
   if (input.offerMessageId) payload.offerMessageId = input.offerMessageId
+  if (input.location) payload.location = input.location
+  if (input.deliveryBy) payload.deliveryBy = input.deliveryBy
   return JSON.stringify(payload)
 }
 
@@ -73,10 +91,25 @@ export function parsePurchaseOrderContent(
 export function purchaseOrderPrintHtml(po: PurchaseOrderPayload, parties: {
   buyerName?: string
   sellerName?: string
+  origin?: string
 }): string {
   const qty = po.quantity || 1
   const total = po.amount * qty
-  const num = po.orderNumber || po.orderId.slice(0, 8).toUpperCase()
+  const num = escapeHtml(po.orderNumber || po.orderId.slice(0, 8).toUpperCase())
+  const product = escapeHtml(po.productName || "Produit convenu")
+  const buyer = escapeHtml(parties.buyerName || "—")
+  const seller = escapeHtml(parties.sellerName || "—")
+  const location = po.location ? escapeHtml(po.location) : ""
+  const delivery = po.deliveryBy ? escapeHtml(po.deliveryBy) : ""
+  const origin =
+    parties.origin ||
+    (typeof window !== "undefined" ? window.location.origin : "https://mygwa.org")
+  const payUrl = escapeHtml(
+    `${origin.replace(/\/$/, "")}${po.payPath.startsWith("/") ? po.payPath : `/${po.payPath}`}`,
+  )
+  const verifyCode = escapeHtml(po.orderId.replace(/-/g, "").slice(0, 12).toUpperCase())
+  const amountFmt = escapeHtml(po.amount.toLocaleString("fr-FR"))
+  const totalFmt = escapeHtml(total.toLocaleString("fr-FR"))
   return `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"/><title>Bon de commande ${num}</title>
 <style>
 body{font-family:Georgia,serif;color:#111;padding:24px;max-width:640px;margin:0 auto}
@@ -86,21 +119,30 @@ table{width:100%;border-collapse:collapse;margin:16px 0}
 th,td{border:1px solid #ddd;padding:10px;text-align:left}
 th{background:#f5f6f6}
 .total{font-size:18px;font-weight:bold;color:#1F5C2E}
+.verify{margin-top:24px;padding:16px;border:1px dashed #1F5C2E;border-radius:8px;text-align:center}
+.verify code{font-size:18px;letter-spacing:0.12em;font-weight:bold}
 @media print{button{display:none}}
 </style></head><body>
 <h1>Bon de commande GWA</h1>
 <p class="meta">N° ${num} · Prix convenu entre les parties</p>
-<p><strong>Acheteur :</strong> ${parties.buyerName || "—"}<br/>
-<strong>Vendeur :</strong> ${parties.sellerName || "—"}</p>
+<p><strong>Acheteur :</strong> ${buyer}<br/>
+<strong>Vendeur :</strong> ${seller}</p>
 <table><thead><tr><th>Produit</th><th>Qté</th><th>Prix unitaire</th><th>Total</th></tr></thead>
 <tbody><tr>
-<td>${po.productName || "Produit convenu"}</td>
+<td>${product}</td>
 <td>${qty}</td>
-<td>${po.amount.toLocaleString("fr-FR")} FCFA</td>
-<td>${total.toLocaleString("fr-FR")} FCFA</td>
+<td>${amountFmt} FCFA</td>
+<td>${totalFmt} FCFA</td>
 </tr></tbody></table>
-<p class="total">Total : ${total.toLocaleString("fr-FR")} FCFA</p>
+${location || delivery ? `<p class="meta">${location ? `Lieu : ${location}` : ""}${location && delivery ? " · " : ""}${delivery ? `Délai : ${delivery}` : ""}</p>` : ""}
+<p class="total">Total : ${totalFmt} FCFA</p>
 <p class="meta">Paiement sécurisé via GWA. Ce document confirme l’accord négocié dans le chat.</p>
+<div class="verify">
+  <p class="meta" style="margin:0 0 8px">Code de vérification</p>
+  <img src="${qrSvgDataUri(payUrl, 128)}" width="128" height="128" alt="QR code ISO de suivi et paiement GWA"/>
+  <p><code>${verifyCode}</code></p>
+  <p class="meta" style="margin:12px 0 0">Suivi / paiement : ${payUrl}</p>
+</div>
 <button onclick="window.print()">Imprimer</button>
 </body></html>`
 }

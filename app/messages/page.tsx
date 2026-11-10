@@ -260,8 +260,8 @@ function MessagesContent() {
   if (loading) {
     return (
       <div className="min-h-[100dvh] bg-white flex flex-col items-center justify-center gap-3">
-        <div className="w-10 h-10 border-[3px] border-[#1DA1F2] border-t-transparent rounded-full animate-spin" />
-        <p className="text-[#667781] text-sm">Chargement...</p>
+        <div className="w-10 h-10 border-[3px] border-[#1F5C2E] border-t-transparent rounded-full animate-spin" aria-hidden />
+        <p className="text-[#667781] text-sm" role="status">Chargement des messages…</p>
       </div>
     )
   }
@@ -320,8 +320,8 @@ export default function MessagesPage() {
   return (
     <Suspense fallback={
       <div className="min-h-[100dvh] bg-white flex flex-col items-center justify-center gap-3">
-        <div className="w-10 h-10 border-[3px] border-[#1DA1F2] border-t-transparent rounded-full animate-spin" />
-        <p className="text-[#667781] text-sm">Chargement...</p>
+        <div className="w-10 h-10 border-[3px] border-[#1F5C2E] border-t-transparent rounded-full animate-spin" aria-hidden />
+        <p className="text-[#667781] text-sm" role="status">Chargement des messages…</p>
       </div>
     }>
       <MessagesContent />

@@ -25,6 +25,16 @@ export function AdminModeBanner() {
     let mounted = true
     const run = async () => {
       try {
+        const supabase = createClient()
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+        if (!mounted) return
+        if (!user) {
+          setShow(false)
+          return
+        }
+
         const res = await fetch("/api/auth/admin-status")
         const data = await res.json().catch(() => ({}))
         if (!mounted || !data.isAdmin) {
@@ -32,19 +42,13 @@ export function AdminModeBanner() {
           return
         }
 
-        const supabase = createClient()
-        const {
-          data: { user },
-        } = await supabase.auth.getUser()
         let userType: string | null = null
-        if (user) {
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("user_type")
-            .eq("id", user.id)
-            .maybeSingle()
-          userType = profile?.user_type ?? null
-        }
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("user_type")
+          .eq("id", user.id)
+          .maybeSingle()
+        userType = profile?.user_type ?? null
 
         if (!mounted) return
         setDual(isDualIdentity(true, userType))
