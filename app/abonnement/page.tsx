@@ -158,7 +158,7 @@ export default function AbonnementPage() {
         </div>
 
         <p className="text-sm text-[#4B5563]">
-          Acheteurs : gratuit. Toi vendeur : moins de commission = plus tu montes de palier.
+          L’acheteur paie un frais de service ajouté à chaque commande, lu dans les réglages (250 FCFA). Toi, vendeur : la commission baisse quand tu montes de palier.
         </p>
 
         <div className="space-y-3">
