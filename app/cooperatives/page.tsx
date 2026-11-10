@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { CoopJoinSimulator } from "@/components/cooperatives/coop-advantage"
 import {
   Search, Users, MapPin, Calendar,
   ShieldCheck, Sprout, Hammer, Plus, Building2,
@@ -85,11 +86,12 @@ export default function CooperativesPage() {
     return (
       <div className="min-h-screen bg-background">
         <Navigation />
-        <div className="container mx-auto px-4 py-8">
-          <div className="flex items-center justify-center h-64">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
+        <main className="container mx-auto max-w-lg px-4 py-8">
+          <CoopJoinSimulator ctaHref="#liste-cooperatives" />
+          <div className="mt-8 flex items-center justify-center">
+            <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-primary" />
           </div>
-        </div>
+        </main>
       </div>
     )
   }
@@ -103,7 +105,7 @@ export default function CooperativesPage() {
           <div>
             <h1 className="text-3xl font-bold mb-2">Coopératives</h1>
             <p className="text-muted-foreground">
-              Rejoignez ou créez une coopérative pour mutualiser vos ressources
+              Rejoignez ou créez une coopérative pour mutualiser vos ressources.
             </p>
           </div>
           {user && (
@@ -116,6 +118,10 @@ export default function CooperativesPage() {
           )}
         </div>
 
+        <div className="mb-8 max-w-lg">
+          <CoopJoinSimulator ctaHref="#liste-cooperatives" />
+        </div>
+
         {loadError && (
           <Card className="mb-6 border-destructive/40 bg-destructive/5">
             <CardContent className="p-4 text-sm text-destructive">
@@ -124,7 +130,7 @@ export default function CooperativesPage() {
           </Card>
         )}
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div id="liste-cooperatives" className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <Card>
             <CardContent className="p-4 flex items-center gap-3">
               <div className="p-2 rounded-lg bg-primary/10">

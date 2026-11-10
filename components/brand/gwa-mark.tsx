@@ -25,6 +25,9 @@ export function GwaMark({
         alt="GWA"
         width={size}
         height={size}
+        loading="lazy"
+        fetchPriority="low"
+        decoding="async"
         className="rounded-lg shadow-sm ring-1 ring-black/5 object-cover shrink-0"
         style={{ width: size, height: size }}
       />

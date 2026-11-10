@@ -26,6 +26,7 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { entitlementsForTier } from "@/lib/pricing/entitlements"
 import { productDetailPath } from "@/lib/products/paths"
 import { PlanSwitchBanner } from "@/components/pricing/plan-switch-banner"
+import { CoopJoinSimulator } from "@/components/cooperatives/coop-advantage"
 
 interface Product {
   id: string
@@ -282,6 +283,13 @@ export default function FarmerDashboard() {
       </header>
 
       <PlanSwitchBanner />
+
+      <div className="px-4 mb-4 space-y-3">
+        <CoopJoinSimulator />
+        <Link href="/offres-groupees" className="inline-flex h-11 items-center text-sm font-semibold text-[#1F5C2E] underline">
+          Voir les offres groupées
+        </Link>
+      </div>
 
       <div className="px-4 mb-4">
         {showCoach && coachDims ? (

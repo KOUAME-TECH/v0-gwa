@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { useFeatureFlag } from "@/hooks/use-feature-flag"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { toast } from "sonner"
 import { GwaMark } from "@/components/brand/gwa-mark"
@@ -119,6 +120,7 @@ export function ChatConversation({
   viewerUserType = null,
   onBack,
 }: ChatConversationProps) {
+  const videoCalls = useFeatureFlag("video_calls")
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState("")
   const [sending, setSending] = useState(false)
@@ -1842,6 +1844,7 @@ export function ChatConversation({
         >
           <Phone className="h-5 w-5" />
         </button>
+        {videoCalls ? (
         <button
           type="button"
           onClick={() => void callOther("video")}
@@ -1850,6 +1853,7 @@ export function ChatConversation({
         >
           <Video className="h-5 w-5" />
         </button>
+        ) : null}
 
         <div className="relative">
           <button

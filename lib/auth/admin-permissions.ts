@@ -1,7 +1,7 @@
 /**
  * Matrice d'accès back-office GWA — rôles stockés dans admin_roles.role
  */
-export type AdminRole = "super_admin" | "admin" | "moderator" | "support"
+export type AdminRole = "super_admin" | "finance_admin" | "admin" | "moderator" | "support"
 
 export type AdminSection =
   | "dashboard"
@@ -24,6 +24,7 @@ export type AdminSection =
 
 export const ADMIN_ROLE_LABELS: Record<AdminRole, string> = {
   super_admin: "Super administrateur",
+  finance_admin: "Responsable financier",
   admin: "Administrateur",
   moderator: "Modérateur",
   support: "Support",
@@ -54,6 +55,7 @@ const ALL_SECTIONS: AdminSection[] = ADMIN_NAV.map((n) => n.section)
 
 const ROLE_SECTIONS: Record<AdminRole, AdminSection[]> = {
   super_admin: ALL_SECTIONS,
+  finance_admin: ["dashboard", "finances", "pricing", "settings", "orders", "subscriptions"],
   admin: ALL_SECTIONS,
   support: [
     "dashboard",
@@ -88,6 +90,10 @@ export type AdminAction =
   | "grant_admin"
   | "revoke_admin"
 
+export function canEditCommercialSettings(role: AdminRole): boolean {
+  return role === "super_admin" || role === "finance_admin"
+}
+
 const ROLE_ACTIONS: Record<AdminRole, AdminAction[]> = {
   super_admin: [
     "verify",
@@ -107,6 +113,7 @@ const ROLE_ACTIONS: Record<AdminRole, AdminAction[]> = {
     "grant_admin",
     "revoke_admin",
   ],
+  finance_admin: ["export_orders"],
   admin: [
     "verify",
     "unverify",
@@ -149,7 +156,13 @@ export const DEFAULT_SUPPORT_PERMISSIONS = {
 export const DEFAULT_ADMIN_PERMISSIONS = { all: true }
 
 export function isAdminRole(value: string | null | undefined): value is AdminRole {
-  return value === "super_admin" || value === "admin" || value === "moderator" || value === "support"
+  return (
+    value === "super_admin" ||
+    value === "finance_admin" ||
+    value === "admin" ||
+    value === "moderator" ||
+    value === "support"
+  )
 }
 
 export function canAccessSection(role: AdminRole, section: AdminSection): boolean {

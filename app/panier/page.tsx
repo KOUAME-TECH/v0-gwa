@@ -356,7 +356,7 @@ export default function CartPage() {
 
       router.push(`/commandes/confirmation?order=${createdOrderIds[0]}`)
     } catch (err) {
-      console.log("[v0] Checkout error:", err)
+      console.error("[panier] commande", err)
       const raw =
         err instanceof Error && err.message ? err.message : ""
       // Masquer le jargon technique / noms fournisseurs côté UI
@@ -393,7 +393,7 @@ export default function CartPage() {
         <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mb-4">
           <ShoppingCart className="h-10 w-10 text-primary" />
         </div>
-        <h2 className="text-xl font-bold mb-2">Panier vide</h2>
+        <h2 className="text-xl font-bold mb-2">Votre panier est vide</h2>
         <p className="text-muted-foreground text-sm text-center mb-6 max-w-xs">
           Ajoute un produit, ou connecte-toi pour retrouver un panier déjà enregistré.
         </p>
@@ -415,7 +415,7 @@ export default function CartPage() {
         <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center mb-4">
           <ShoppingCart className="h-10 w-10 text-muted-foreground" />
         </div>
-        <h2 className="text-xl font-bold mb-2">Panier vide</h2>
+        <h2 className="text-xl font-bold mb-2">Votre panier est vide</h2>
         <p className="text-muted-foreground text-sm text-center mb-6 max-w-xs">
           Explorez nos produits agricoles
         </p>
