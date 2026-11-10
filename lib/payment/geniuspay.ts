@@ -15,6 +15,7 @@ type GeniusPayResponse = {
     status?: string
     checkout_url?: string
     payment_url?: string
+    environment?: string
     metadata?: Record<string, unknown>
   }
   error?: { code?: string; message?: string }
@@ -270,4 +271,12 @@ export async function getGeniusPayPayment(
   } catch (error) {
     return { ok: false as const, error: error instanceof Error ? error.message : "GENIUSPAY_REQUEST_FAILED" }
   }
+}
+
+/** GET /api/v1/merchant/payments/:reference — même contrat que getGeniusPayPayment. */
+export async function getPayment(
+  reference: string,
+  mode: GeniusPayEnvironment = getGeniusPayMode(),
+) {
+  return getGeniusPayPayment(reference, mode)
 }
