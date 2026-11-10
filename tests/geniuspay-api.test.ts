@@ -7,6 +7,7 @@ vi.mock("@/lib/ops/platform-secrets", () => ({
 
 import {
   createGeniusPayCheckout,
+  extractGeniusPayPayment,
   getGeniusPayPayment,
 } from "@/lib/payment/geniuspay"
 
@@ -20,6 +21,27 @@ const checkoutResponse = {
     metadata: { order_id: "order-123", user_id: "buyer-123" },
   },
 }
+
+describe("extractGeniusPayPayment", () => {
+  it("lit une référence à la racine ou dans l'URL de checkout", () => {
+    expect(
+      extractGeniusPayPayment({
+        success: true,
+        reference: "MTX-ROOT",
+        checkout_url: "https://geniuspay.ci/checkout/MTX-ROOT",
+      })?.reference,
+    ).toBe("MTX-ROOT")
+    expect(
+      extractGeniusPayPayment({
+        data: {
+          payment: {
+            checkout_url: "https://checkout.geniuspay.ci/checkout/MTX-NEST",
+          },
+        },
+      })?.reference,
+    ).toBe("MTX-NEST")
+  })
+})
 
 describe("GeniusPay API client", () => {
   afterEach(() => {
@@ -96,6 +118,33 @@ describe("GeniusPay API client", () => {
       "X-API-Key": "test-api-key",
       "X-API-Secret": "test-api-secret",
       "Content-Type": "application/json",
+    })
+  })
+
+  it("accepts the existing Vercel names X_API_Key and X_API_Secret", async () => {
+    vi.stubEnv("X_API_Key", "header-key")
+    vi.stubEnv("X_API_Secret", "header-secret")
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(checkoutResponse), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const result = await createGeniusPayCheckout({
+      amount: 200,
+      orderId: "order-x",
+      userId: "buyer-x",
+      description: "Test",
+      customer: { phone: "+2250788326019", country: "CI" },
+    })
+
+    expect(result.ok).toBe(true)
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(init.headers).toMatchObject({
+      "X-API-Key": "header-key",
+      "X-API-Secret": "header-secret",
     })
   })
 

@@ -15,8 +15,9 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Package, Truck, CheckCircle2, Clock, XCircle,
   Search, Eye, MapPin, Calendar,
-  ArrowRight, RefreshCw, FileText, History, AlertTriangle,
+  ArrowRight, RefreshCw, FileText, History,   AlertTriangle,
   ShoppingBag,
+  MessageCircle,
 } from "lucide-react"
 import Link from "next/link"
 import { formatDistanceToNow } from "date-fns"
@@ -771,7 +772,15 @@ function OrderCard({
               </p>
             </div>
             <div className="flex flex-wrap gap-2 lg:justify-end">
-              <Button variant="outline" size="sm" className="rounded-xl" onClick={onViewDetails}>
+              {!isSeller && order.seller_id ? (
+                <Button variant="outline" size="sm" className="min-h-11 rounded-xl" asChild>
+                  <Link href={`/messages?to=${order.seller_id}`}>
+                    <MessageCircle className="h-4 w-4 mr-1" />
+                    Contacter
+                  </Link>
+                </Button>
+              ) : null}
+              <Button variant="outline" size="sm" className="min-h-11 rounded-xl" onClick={onViewDetails}>
                 <Eye className="h-4 w-4 mr-1" />
                 Voir
               </Button>
@@ -819,7 +828,7 @@ function OrderCard({
               {canConfirmBuyer && (
                 <Button
                   size="sm"
-                  className="rounded-xl bg-[#1F5C2E] hover:bg-[#174a24]"
+                  className="min-h-11 rounded-xl bg-[#1F5C2E] hover:bg-[#174a24]"
                   onClick={() => onConfirmReception(order.id)}
                 >
                   <CheckCircle2 className="h-4 w-4 mr-1" />
@@ -830,7 +839,7 @@ function OrderCard({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="rounded-xl text-red-600 border-red-200"
+                  className="min-h-11 rounded-xl text-red-600 border-red-200"
                   onClick={() => onOpenLitige(order.id)}
                 >
                   <AlertTriangle className="h-4 w-4 mr-1" />

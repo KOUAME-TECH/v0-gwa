@@ -21,12 +21,16 @@ import { createClient } from "@/lib/supabase/client"
 import { EmptyState } from "@/components/ui/empty-state"
 import { productDetailPath } from "@/lib/products/paths"
 import { ESCROW_COPY } from "@/lib/copy/escrow-fr"
+import { deriveLifecycle, ORDER_LIFECYCLE_LABELS } from "@/lib/orders/lifecycle"
 
 interface Order {
   id: string
   total_amount: number
   status: string
+  payment_status?: string | null
   escrow_status?: string | null
+  confirmed_by_buyer_at?: string | null
+  lifecycle_status?: string | null
   created_at: string
   order_items: {
     products: {
@@ -103,7 +107,7 @@ export default function BuyerDashboard() {
         .from("orders")
         .select(
           `
-          id, total_amount, status, escrow_status, created_at,
+          id, total_amount, status, payment_status, escrow_status, confirmed_by_buyer_at, lifecycle_status, created_at,
           order_items(products(name, images, profiles:seller_id(full_name)))
         `,
         )
@@ -285,7 +289,7 @@ export default function BuyerDashboard() {
                 </div>
                 <Button
                   size="sm"
-                  className="shrink-0 rounded-full bg-[#1F5C2E] hover:bg-[#174824]"
+                  className="min-h-11 shrink-0 rounded-full bg-[#1F5C2E] hover:bg-[#174824]"
                   disabled={confirmBusy === o.id}
                   onClick={() => void confirmReception(o.id)}
                 >
@@ -431,7 +435,9 @@ export default function BuyerDashboard() {
                         Confirmer
                       </Badge>
                     ) : (
-                      <Badge variant="secondary">{order.status}</Badge>
+                      <Badge variant="secondary">
+                        {ORDER_LIFECYCLE_LABELS[deriveLifecycle(order)]}
+                      </Badge>
                     )}
                   </Link>
                 </li>

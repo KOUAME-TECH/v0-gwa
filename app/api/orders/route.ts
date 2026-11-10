@@ -9,12 +9,13 @@ import {
   insufficientStockMessage,
   selfPurchaseMessage,
 } from "@/lib/orders/purchase-guards"
-
-type OrderItemInput = {
-  product_id: string
-  quantity: number
-  unit_price?: number
-}
+import {
+  allocateStock,
+  releaseProduct,
+  reserveProduct,
+  type Reservation,
+} from "@/lib/features/agritech/handle-stock"
+import { createOrderSchema, zodErrorMessage } from "@/lib/validation/public-api"
 
 /**
  * GET /api/orders — commandes de l'utilisateur (acheteur ou vendeur)
@@ -69,20 +70,17 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const items = (body?.items || []) as OrderItemInput[]
-
-    if (!Array.isArray(items) || items.length === 0) {
-      return NextResponse.json(
-        { error: "Ajoutez au moins un produit avant de commander." },
-        { status: 400 },
-      )
+    const parsed = createOrderSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json({ error: zodErrorMessage() }, { status: 400 })
     }
+    const items = parsed.data.items
 
     // Résoudre prix depuis produits
     const productIds = items.map((i) => i.product_id)
     const { data: products, error: pErr } = await supabase
       .from("products")
-      .select("id, price, seller_id, name, stock_quantity, status, product_type")
+      .select("id, price, seller_id, name, stock_quantity, preorder_quantity, harvest_date, status, product_type")
       .in("id", productIds)
       .eq("status", "active")
 
@@ -137,12 +135,17 @@ export async function POST(request: NextRequest) {
         )
       }
       const qty = Math.max(1, Math.min(999_999, Number(item.quantity) || 1))
-      const available =
+      const stock =
         product.stock_quantity == null ? null : Number(product.stock_quantity)
-      if (available != null && Number.isFinite(available) && qty > available) {
+      const preorder =
+        product.preorder_quantity == null ? null : Number(product.preorder_quantity)
+      const allocation = allocateStock(stock, preorder, qty)
+      if (!allocation.ok) {
+        const left =
+          stock == null ? 0 : Math.max(0, Math.floor(stock)) + Math.max(0, Math.floor(preorder || 0))
         return NextResponse.json(
           {
-            error: insufficientStockMessage(String(product.name || "Ce produit"), available),
+            error: insufficientStockMessage(String(product.name || "Ce produit"), left),
             code: "OUT_OF_STOCK",
           },
           { status: 409 },
@@ -165,9 +168,25 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    const admin = createAdminClient()
+    const reservations: Reservation[] = []
+    for (const line of lineItems) {
+      const reserved = await reserveProduct(admin as never, line.product_id, line.quantity)
+      if (!reserved.ok) {
+        for (const previous of reservations) await releaseProduct(admin as never, previous)
+        return NextResponse.json({ error: reserved.error, code: "HARVEST_CAPACITY" }, { status: 400 })
+      }
+      reservations.push(reserved.reservation)
+    }
+    const fulfillmentMode = reservations.some((item) => item.mode === "preorder") ? "preorder" : "stock"
+    const harvestDate =
+      reservations.map((item) => item.harvestDate).filter((value): value is string => Boolean(value)).sort()[0] ||
+      null
+
     const shipping = 0
     const priced = await quoteSellerPricing(resolvedSellerId, subtotal)
     if ("error" in priced) {
+      for (const previous of reservations) await releaseProduct(admin as never, previous)
       return NextResponse.json(
         { error: "Grille tarifaire indisponible", code: "PRICING_UNAVAILABLE" },
         { status: 503 },
@@ -182,7 +201,7 @@ export async function POST(request: NextRequest) {
 
     const orderNumber = `GWA-${Date.now().toString(36).toUpperCase()}`
 
-    const { data: order, error: orderError } = await createAdminClient()
+    const { data: order, error: orderError } = await admin
       .from("orders")
       .insert({
         buyer_id: user.id,
@@ -196,6 +215,7 @@ export async function POST(request: NextRequest) {
         status: "pending",
         payment_status: "pending",
         escrow_status: "pending",
+        fulfillment_mode: fulfillmentMode,
         paiement_schema: body?.paiement_schema || "100_livraison",
         paiement_type: body?.payment_method || "mobile_money",
         payment_method: body?.payment_method || "mobile_money",
@@ -219,18 +239,23 @@ export async function POST(request: NextRequest) {
 
     if (orderError || !order) {
       console.error("[api/orders POST]", orderError?.message)
-      return NextResponse.json(
-        { error: orderError?.message || "Création commande échouée" },
-        { status: 400 },
-      )
+      for (const previous of reservations) await releaseProduct(admin as never, previous)
+      return NextResponse.json({ error: "La commande n’a pas pu être créée. Réessaie." }, { status: 400 })
     }
 
-    const { error: itemsError } = await createAdminClient().from("order_items").insert(
-      lineItems.map((li) => ({ ...li, order_id: order.id })),
+    const { error: itemsError } = await admin.from("order_items").insert(
+      lineItems.map((li, index) => ({
+        ...li,
+        order_id: order.id,
+        stock_taken: reservations[index]?.stockTaken || 0,
+        preorder_taken: reservations[index]?.preorderTaken || 0,
+      })),
     )
     if (itemsError) {
       console.error("[api/orders items]", itemsError.message)
-      return NextResponse.json({ error: itemsError.message }, { status: 400 })
+      await admin.from("orders").delete().eq("id", order.id)
+      for (const previous of reservations) await releaseProduct(admin as never, previous)
+      return NextResponse.json({ error: "La commande n’a pas pu être créée. Réessaie." }, { status: 400 })
     }
 
     await supabase.from("escrow_transactions").insert({
@@ -269,7 +294,10 @@ export async function POST(request: NextRequest) {
       data: { order_id: order.id },
     })
 
-    return NextResponse.json({ order }, { status: 201 })
+    return NextResponse.json(
+      { order, fulfillment_mode: fulfillmentMode, harvest_date: harvestDate },
+      { status: 201 },
+    )
   } catch (err) {
     console.error("[api/orders POST]", err)
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 })

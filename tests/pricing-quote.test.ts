@@ -10,37 +10,36 @@ import {
 const aggregator = { rate: 0.03, fixed: 50, alertBelow: 2_000 }
 
 describe("grille tarifaire validée", () => {
-  it("FREE 30 000 F : 8 % et marge sous 2 000 F après agrégateur", () => {
+  it("Graine 30 000 F : 9 % et marge sous 2 000 F après agrégateur", () => {
     const quote = quotePricing(seedPlan("FREE"), 30_000)
-    expect(quote.seller_commission).toBe(2_400)
+    expect(quote.seller_commission).toBe(2_700)
     expect(quote.buyer_service_fee).toBe(0)
     expect(quote.total_amount).toBe(30_000)
-    expect(quote.seller_net_amount).toBe(27_600)
+    expect(quote.seller_net_amount).toBe(27_300)
     expect(quote.franchise_applied).toBe(false)
     const margin = simulateMargin(seedPlan("FREE"), 30_000, aggregator)
     expect(margin.aggregator_fee).toBe(950)
-    expect(margin.gwa_net_margin).toBe(1_450)
+    expect(margin.gwa_net_margin).toBe(1_750)
     expect(margin.margin_alert).toBe(true)
   })
 
   it("applique le plafond seulement au-dessus du seuil", () => {
-    expect(quotePricing(seedPlan("FREE"), 100_000).seller_commission).toBe(8_000)
-    expect(quotePricing(seedPlan("FREE"), 100_001).franchise_applied).toBe(true)
-    expect(quotePricing(seedPlan("FREE"), 500_000).seller_commission).toBe(8_000)
-    expect(quotePricing(seedPlan("STARTER"), 200_000).seller_commission).toBe(14_000)
-    expect(quotePricing(seedPlan("STARTER"), 500_000).seller_commission).toBe(12_000)
-    expect(quotePricing(seedPlan("PRO"), 500_000).seller_commission).toBe(30_000)
-    expect(quotePricing(seedPlan("PRO"), 500_001).seller_commission).toBe(18_000)
+    expect(quotePricing(seedPlan("FREE"), 133_000).seller_commission).toBe(11_970)
+    expect(quotePricing(seedPlan("FREE"), 133_001).franchise_applied).toBe(true)
+    expect(quotePricing(seedPlan("FREE"), 133_001).seller_commission).toBe(12_000)
+    expect(quotePricing(seedPlan("STARTER"), 200_000).seller_commission).toBe(16_000)
+    expect(quotePricing(seedPlan("STARTER"), 312_001).seller_commission).toBe(25_000)
+    expect(quotePricing(seedPlan("PRO"), 500_000).seller_commission).toBe(35_000)
+    expect(quotePricing(seedPlan("PRO"), 642_001).seller_commission).toBe(45_000)
   })
 
-  it("coopératives : 6 %, 5 %, et 4 % sans franchise à 0", () => {
-    expect(quotePricing(seedPlan("COOP_START"), 300_000).seller_commission).toBe(18_000)
-    expect(quotePricing(seedPlan("COOP_START"), 1_000_000).seller_commission).toBe(12_000)
-    expect(quotePricing(seedPlan("COOP_PRO"), 1_000_000).seller_commission).toBe(50_000)
-    expect(quotePricing(seedPlan("COOP_PRO"), 1_000_001).seller_commission).toBe(32_000)
-    const enterprise = quotePricing(seedPlan("COOP_ENTERPRISE"), 2_000_000)
-    expect(enterprise.franchise_applied).toBe(false)
-    expect(enterprise.seller_commission).toBe(80_000)
+  it("coopératives : 7 %, 6 %, et 5 % sans franchise à 0", () => {
+    expect(quotePricing(seedPlan("COOP_START"), 300_000).seller_commission).toBe(21_000)
+    expect(quotePricing(seedPlan("COOP_START"), 500_001).seller_commission).toBe(35_000)
+    expect(quotePricing(seedPlan("COOP_PRO"), 1_000_000).seller_commission).toBe(60_000)
+    expect(quotePricing(seedPlan("COOP_PRO"), 1_000_001).seller_commission).toBe(60_000)
+    expect(quotePricing(seedPlan("COOP_ENTERPRISE"), 2_000_000).franchise_applied).toBe(false)
+    expect(quotePricing(seedPlan("COOP_ENTERPRISE"), 2_000_000).seller_commission).toBe(100_000)
   })
 
   it("ajoute des frais acheteur configurés au total payé", () => {
@@ -52,8 +51,8 @@ describe("grille tarifaire validée", () => {
     const quote = quotePricing(plan, 10_000)
     expect(quote.buyer_service_fee).toBe(200)
     expect(quote.total_amount).toBe(10_200)
-    expect(quote.seller_commission).toBe(800)
-    expect(quote.seller_net_amount).toBe(9_200)
+    expect(quote.seller_commission).toBe(900)
+    expect(quote.seller_net_amount).toBe(9_100)
   })
 
   it("mappe le palier legacy vers la bonne grille", () => {

@@ -199,7 +199,7 @@ export default function ProduitPage() {
       const { addGuestCartItem } = await import("@/lib/cart/guest")
       addGuestCartItem(product.id, quantity)
       setAdding(false)
-      toast.success(goCheckout ? "Dans ta charette (hors ligne)" : "Ajouté à la charette")
+      toast.success(goCheckout ? "C’est dans ton panier" : "Ajouté au panier")
       if (goCheckout) router.push("/panier")
       return
     }
@@ -282,7 +282,7 @@ export default function ProduitPage() {
       <button
         type="button"
         onClick={() => handleQuantityChange(-1)}
-        className="flex h-9 w-9 items-center justify-center rounded-full bg-white shadow-sm active:scale-95"
+        className="flex h-11 w-11 items-center justify-center rounded-full bg-white shadow-sm active:scale-95"
         disabled={quantity <= minQty}
         aria-label="Moins"
       >
@@ -301,7 +301,7 @@ export default function ProduitPage() {
       <button
         type="button"
         onClick={() => handleQuantityChange(1)}
-        className="flex h-9 w-9 items-center justify-center rounded-full bg-white shadow-sm active:scale-95"
+        className="flex h-11 w-11 items-center justify-center rounded-full bg-white shadow-sm active:scale-95"
         disabled={quantity >= product.stock_quantity}
         aria-label="Plus"
       >
@@ -390,7 +390,7 @@ export default function ProduitPage() {
             fill
             className="object-cover"
             priority
-            sizes="100vw"
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
           />
           {images.length > 1 ? (
             <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-2">

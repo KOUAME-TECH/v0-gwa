@@ -11,10 +11,11 @@ import { Badge } from "@/components/ui/badge"
 import { formatFcfa, SELLER_PLANS, type SellerPlan } from "@/lib/pricing/plans"
 import {
   legacyTierPlanName,
-  PRICING_SEED,
+  type PricingPlanInput,
   seedPlan,
   subscriptionTierForPlan,
 } from "@/lib/pricing/quote"
+import { loadPricingPlans } from "@/lib/pricing/load-plans"
 import {
   normalizeSubscriptionTier,
   type SubscriptionTier,
@@ -30,6 +31,7 @@ export default function AbonnementPage() {
   const [tier, setTier] = useState<SubscriptionTier>("free")
   const [userType, setUserType] = useState<string | null>(null)
   const [pendingTier, setPendingTier] = useState<string | null>(null)
+  const [plans, setPlans] = useState<PricingPlanInput[] | null>(null)
 
   const refresh = useCallback(async () => {
     const supabase = createClient()
@@ -65,6 +67,7 @@ export default function AbonnementPage() {
 
   useEffect(() => {
     void refresh()
+    void loadPricingPlans().then(setPlans)
   }, [refresh])
 
   const requestPlan = async (plan: SellerPlan) => {
@@ -99,7 +102,7 @@ export default function AbonnementPage() {
     }
   }
 
-  if (loading) {
+  if (loading || !plans) {
     return (
       <div className="min-h-dvh bg-[#FFF6E5] flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-[#2F7D32]" />
@@ -108,8 +111,12 @@ export default function AbonnementPage() {
   }
 
   const seller = isSellerRole(userType)
-  const currentPlan = seedPlan(legacyTierPlanName(userType, tier))
-  const visiblePlans = PRICING_SEED.filter(
+  const catalog = plans
+  const currentCode = legacyTierPlanName(userType, tier)
+  const currentPlan =
+    catalog.find((plan) => plan.name === currentCode || plan.displayName === currentCode) ||
+    seedPlan(currentCode)
+  const visiblePlans = catalog.filter(
     (plan) => plan.target === (userType === "cooperative" ? "cooperative" : "producer"),
   )
 
@@ -138,7 +145,7 @@ export default function AbonnementPage() {
           <p className="text-sm text-white/80">Ton palier actuel</p>
           <p className="text-2xl font-bold mt-1 flex items-center gap-2">
             <Crown className="h-6 w-6" />
-            {currentPlan.name}
+            {currentPlan.displayName || currentPlan.name}
           </p>
           <p className="text-sm text-white/90 mt-1">
             Commission {Math.round(currentPlan.commission_rate * 100)} % sur tes ventes
@@ -177,7 +184,7 @@ export default function AbonnementPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
-                      <h2 className="font-semibold text-[#111827]">{seed.name}</h2>
+                      <h2 className="font-semibold text-[#111827]">{seed.displayName || seed.name}</h2>
                       {isCurrent && (
                         <Badge className="bg-[#2F7D32]/10 text-[#2F7D32]">Actuel</Badge>
                       )}
@@ -215,7 +222,7 @@ export default function AbonnementPage() {
                       void requestPlan({
                         ...plan,
                         tier: tierKey,
-                        label: seed.name,
+                        label: seed.displayName || seed.name,
                         priceFcfa: seed.name === "COOP_ENTERPRISE" ? null : seed.monthly_fee,
                       })
                     }
@@ -225,7 +232,7 @@ export default function AbonnementPage() {
                     ) : (
                       <>
                         <MessageCircle className="h-4 w-4 mr-2" />
-                        {isCurrent ? "Plan actuel" : isPending ? "Rouvrir WhatsApp" : plan.cta}
+                        {isCurrent ? "Plan actuel" : isPending ? "Rouvrir WhatsApp" : `Passer à ${seed.displayName || seed.name}`}
                       </>
                     )}
                   </Button>

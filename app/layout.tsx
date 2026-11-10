@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next"
+import { Outfit } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { OneSignalProvider } from "@/components/pwa/onesignal-provider"
 import { ServiceWorkerRegister } from "@/components/pwa/service-worker-register"
@@ -26,13 +27,20 @@ export const viewport: Viewport = {
   themeColor: "#1F5C2E",
 }
 
+const outfit = Outfit({
+  subsets: ["latin"],
+  display: "swap",
+  preload: false,
+  variable: "--font-outfit",
+})
+
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
   return (
-    <html lang="fr">
+    <html lang="fr" className={outfit.variable}>
       <head>
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />

@@ -17,6 +17,7 @@ import { toast } from "sonner"
 import { isFactoringEligible } from "@/lib/factoring/eligibility"
 import { Banknote } from "lucide-react"
 import { PlanSwitchBanner } from "@/components/pricing/plan-switch-banner"
+import { CoopFeeShareLive } from "@/components/cooperatives/coop-advantage"
 import {
   canAssignCoopRoles,
   canInviteMembers,
@@ -451,6 +452,8 @@ export default function CooperativeDashboard() {
         ) : null}
 
         {/* Liste des membres */}
+        <CoopFeeShareLive activeMembers={stats.totalMembers} />
+
         <div className="mb-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-bold text-[#111827] flex items-center gap-2">

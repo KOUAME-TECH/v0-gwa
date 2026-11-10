@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { requireAdminSection } from "@/lib/auth/require-admin"
+import { canEditCommercialSettings } from "@/lib/auth/admin-permissions"
 import { assertSameOrigin } from "@/lib/security/csrf"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 
@@ -75,10 +76,16 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })
     }
     const gate = await requireAdminSection("pricing")
-    if (!gate.isAdmin || !gate.admin || !gate.user) {
+    if (!gate.isAdmin || !gate.admin || !gate.user || !gate.role) {
       return NextResponse.json(
         { error: gate.error || "Accès refusé" },
         { status: gate.user ? 403 : 401 },
+      )
+    }
+    if (!canEditCommercialSettings(gate.role.role)) {
+      return NextResponse.json(
+        { error: "Seul un responsable financier peut modifier ces montants." },
+        { status: 403 },
       )
     }
 
@@ -161,6 +168,14 @@ export async function PATCH(request: NextRequest) {
       action: "plan_update",
       before_state: before,
       after_state: after,
+    })
+    await gate.admin.from("audit_logs").insert({
+      action: "pricing_plan_update",
+      user_id: gate.user.id,
+      target_id: planId,
+      target_type: "pricing_plans",
+      metadata: { before, after },
+      severity: "warning",
     })
     return NextResponse.json({ success: true, plan: after })
   } catch (err) {

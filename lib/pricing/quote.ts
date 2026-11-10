@@ -8,7 +8,10 @@
 export type PricingTarget = "producer" | "cooperative"
 
 export type PricingPlanInput = {
+  /** Code stable, inchangé pour les clés et les commandes déjà créées. */
   name: string
+  /** Nom affiché. Peut changer sans casser les commandes. */
+  displayName?: string
   target: PricingTarget
   monthly_fee: number
   commission_rate: number
@@ -16,6 +19,7 @@ export type PricingPlanInput = {
   buyer_service_fee_rate: number
   franchise_threshold: number
   franchise_cap: number
+  payout_included?: number
   switch_threshold: number | null
 }
 
@@ -35,79 +39,11 @@ export type MarginSimulation = PricingQuote & {
   margin_alert: boolean
 }
 
-export const PRICING_SEED: PricingPlanInput[] = [
-  {
-    name: "FREE",
-    target: "producer",
-    monthly_fee: 0,
-    commission_rate: 0.08,
-    buyer_service_fee_fixed: 0,
-    buyer_service_fee_rate: 0,
-    franchise_threshold: 100_000,
-    franchise_cap: 8_000,
-    switch_threshold: 250_000,
-  },
-  {
-    name: "STARTER",
-    target: "producer",
-    monthly_fee: 2_500,
-    commission_rate: 0.07,
-    buyer_service_fee_fixed: 0,
-    buyer_service_fee_rate: 0,
-    franchise_threshold: 200_000,
-    franchise_cap: 12_000,
-    switch_threshold: 500_000,
-  },
-  {
-    name: "PRO",
-    target: "producer",
-    monthly_fee: 7_500,
-    commission_rate: 0.06,
-    buyer_service_fee_fixed: 0,
-    buyer_service_fee_rate: 0,
-    franchise_threshold: 500_000,
-    franchise_cap: 18_000,
-    switch_threshold: null,
-  },
-  {
-    name: "COOP_START",
-    target: "cooperative",
-    monthly_fee: 5_000,
-    commission_rate: 0.06,
-    buyer_service_fee_fixed: 0,
-    buyer_service_fee_rate: 0,
-    franchise_threshold: 300_000,
-    franchise_cap: 12_000,
-    switch_threshold: 1_000_000,
-  },
-  {
-    name: "COOP_PRO",
-    target: "cooperative",
-    monthly_fee: 15_000,
-    commission_rate: 0.05,
-    buyer_service_fee_fixed: 0,
-    buyer_service_fee_rate: 0,
-    franchise_threshold: 1_000_000,
-    franchise_cap: 32_000,
-    switch_threshold: null,
-  },
-  {
-    name: "COOP_ENTERPRISE",
-    target: "cooperative",
-    monthly_fee: 0,
-    commission_rate: 0.04,
-    buyer_service_fee_fixed: 0,
-    buyer_service_fee_rate: 0,
-    franchise_threshold: 0,
-    franchise_cap: 0,
-    switch_threshold: null,
-  },
-]
+export { PRICING_SEED, seedPlan } from "@/lib/pricing/published-grid"
 
-export function seedPlan(name: string): PricingPlanInput {
-  const plan = PRICING_SEED.find((p) => p.name === name)
-  if (!plan) throw new Error(`plan inconnu: ${name}`)
-  return plan
+/** Filtre PostgREST : le code stable ou le nom affiché. */
+export function pricingPlanMatchFilter(codeOrName: string): string {
+  return `code.eq.${codeOrName},name.eq.${codeOrName}`
 }
 
 /** Arrondi FCFA (demi supérieur), identique à ROUND() Postgres sur un montant positif. */
@@ -116,14 +52,20 @@ export function roundFcfa(value: number): number {
   return Math.round(value)
 }
 
-export function quotePricing(plan: PricingPlanInput, productPrice: number): PricingQuote {
+export function quotePricing(
+  plan: PricingPlanInput,
+  productPrice: number,
+  options?: { franchiseSurplusRate?: number | null },
+): PricingQuote {
   const price = roundFcfa(Math.max(0, productPrice))
   const rate = Number(plan.commission_rate) || 0
   const threshold = Number(plan.franchise_threshold) || 0
   const cap = Number(plan.franchise_cap) || 0
   const franchiseApplied = threshold > 0 && cap > 0 && price > threshold
+  const surplusRate =
+    plan.target === "cooperative" ? Math.max(0, Number(options?.franchiseSurplusRate) || 0) : 0
   const sellerCommission = franchiseApplied
-    ? roundFcfa(cap)
+    ? roundFcfa(cap) + roundFcfa((price - threshold) * surplusRate)
     : roundFcfa(price * rate)
   const buyerFee = roundFcfa(
     (Number(plan.buyer_service_fee_fixed) || 0) +
@@ -180,12 +122,17 @@ export function legacyTierPlanName(
 export function subscriptionTierForPlan(name: string): "free" | "starter" | "pro" | "enterprise" {
   switch (name) {
     case "STARTER":
+    case "Pousse":
     case "COOP_START":
+    case "Coopérative":
       return "starter"
     case "PRO":
+    case "Récolte":
     case "COOP_PRO":
+    case "Union":
       return "pro"
     case "COOP_ENTERPRISE":
+    case "Fédération":
       return "enterprise"
     default:
       return "free"

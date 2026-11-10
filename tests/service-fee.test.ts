@@ -15,37 +15,37 @@ describe("seller commission (DG 28/07)", () => {
     expect(normalizeSubscriptionTier("business")).toBe("enterprise")
   })
 
-  it("rates: free 8%, starter 7%, pro 6%, enterprise coop 4%", () => {
-    expect(sellerCommissionRateForTier("free")).toBe(0.08)
-    expect(sellerCommissionRateForTier("starter")).toBe(0.07)
-    expect(sellerCommissionRateForTier("pro")).toBe(0.06)
-    expect(sellerCommissionRateForTier("enterprise")).toBe(0.04)
+  it("rates: Graine 9 %, Pousse 8 %, Récolte 7 %, Fédération 5 %", () => {
+    expect(sellerCommissionRateForTier("free")).toBe(0.09)
+    expect(sellerCommissionRateForTier("starter")).toBe(0.08)
+    expect(sellerCommissionRateForTier("pro")).toBe(0.07)
+    expect(sellerCommissionRateForTier("enterprise")).toBe(0.05)
   })
 
   it("computes seller commission on subtotal; buyer fee 0", () => {
     const free = computeSellerCommission(100_000, "free")
-    expect(free.commissionFcfa).toBe(8_000)
-    expect(free.vendeurRecoitFcfa).toBe(92_000)
+    expect(free.commissionFcfa).toBe(9_000)
+    expect(free.vendeurRecoitFcfa).toBe(91_000)
     expect(free.buyerServiceFee).toBe(0)
-    expect(free.pctLabel).toBe("8 %")
+    expect(free.pctLabel).toBe("9 %")
 
     const starter = computeSellerCommission(100_000, "starter")
-    expect(starter.commissionFcfa).toBe(7_000)
+    expect(starter.commissionFcfa).toBe(8_000)
 
     const pro = computeSellerCommission(100_000, "pro")
-    expect(pro.commissionFcfa).toBe(6_000)
+    expect(pro.commissionFcfa).toBe(7_000)
   })
 
-  it("caps a large FREE basket at the franchise", () => {
+  it("caps a large Graine basket at the franchise", () => {
     const capped = computeSellerCommission(500_000, "free")
-    expect(capped.commissionFcfa).toBe(8_000)
-    expect(capped.vendeurRecoitFcfa).toBe(492_000)
+    expect(capped.commissionFcfa).toBe(12_000)
+    expect(capped.vendeurRecoitFcfa).toBe(488_000)
   })
 
   it("abo prices match the validated grid", () => {
     expect(SUBSCRIPTION_PRICES_FCFA.free).toBe(0)
-    expect(SUBSCRIPTION_PRICES_FCFA.starter).toBe(2_500)
-    expect(SUBSCRIPTION_PRICES_FCFA.pro).toBe(7_500)
+    expect(SUBSCRIPTION_PRICES_FCFA.starter).toBe(3_000)
+    expect(SUBSCRIPTION_PRICES_FCFA.pro).toBe(8_000)
     expect(SUBSCRIPTION_PRICES_FCFA.enterprise).toBeNull()
   })
 

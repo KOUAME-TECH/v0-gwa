@@ -52,6 +52,9 @@ const nextConfig = {
   compress: true,
   experimental: {
     optimizePackageImports: ["lucide-react", "date-fns"],
+    optimizeCss: true,
+    // Le même CSS, écrit dans la page, pour ne plus attendre un fichier séparé.
+    inlineCss: true,
   },
   headers: async () => [
     { source: "/(.*)", headers: securityHeaders },

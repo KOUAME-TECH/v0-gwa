@@ -639,7 +639,9 @@ function SignupForm() {
               )}
 
               <div>
-                <label className="text-sm font-medium text-neutral-700 mb-3 block">Vous êtes</label>
+                <label className="text-sm font-medium text-neutral-700 mb-3 block">
+                  Vous êtes <span className="text-red-700">*</span>
+                </label>
                 <div className="grid grid-cols-2 gap-2">
                   {userTypes.map((type) => (
                     <button
