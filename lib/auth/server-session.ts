@@ -7,6 +7,7 @@ import {
   classifySession,
   hasSupabaseAuthCookie,
   isTransientNetworkError,
+  TRANSIENT_AUTH_RETRY_LIMIT,
   type SessionKind,
 } from "@/lib/auth/session-state"
 
@@ -36,11 +37,11 @@ export async function readServerSession(): Promise<ServerSession> {
   let user: User | null = null
   let transientError = false
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  for (let attempt = 0; attempt <= TRANSIENT_AUTH_RETRY_LIMIT; attempt += 1) {
     const { data, error } = await supabase.auth.getUser()
     user = data.user ?? null
     transientError = isTransientNetworkError(error)
-    if (user || !transientError || attempt === 1) break
+    if (user || !transientError || attempt === TRANSIENT_AUTH_RETRY_LIMIT) break
     await pause(RETRY_DELAY_MS)
   }
 

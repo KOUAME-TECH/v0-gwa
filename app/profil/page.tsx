@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { readServerSession } from "@/lib/auth/server-session"
-import { loadOwnProfile } from "@/lib/profile/self"
+import { loadOwnProfile, toDisplayedProfile } from "@/lib/profile/self"
 import ProfilScreen from "./profil-screen"
 
 export const dynamic = "force-dynamic"
@@ -37,5 +37,5 @@ export default async function ProfilPage() {
 
   const { profile, partial } = await loadOwnProfile(session.supabase, session.user)
 
-  return <ProfilScreen profile={profile} partial={partial} />
+  return <ProfilScreen profile={toDisplayedProfile(profile)} partial={partial} />
 }

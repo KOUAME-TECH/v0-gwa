@@ -3,9 +3,8 @@ import { expect, test } from "@playwright/test"
 test("un compte connecté voit son nom sur /profil", async ({ page }) => {
   const email = process.env.E2E_EMAIL
   const password = process.env.E2E_PASSWORD
-  if (!email || !password) {
-    throw new Error("E2E_EMAIL et E2E_PASSWORD sont requis")
-  }
+  test.skip(!email || !password, "E2E_EMAIL et E2E_PASSWORD sont requis")
+  if (!email || !password) return
 
   await page.goto("/auth/login?redirect=/profil")
   await page.getByRole("tab", { name: "Email" }).click()

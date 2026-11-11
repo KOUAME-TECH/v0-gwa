@@ -1,7 +1,11 @@
 "use client"
 
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { isTransientNetworkError, type SessionKind } from "@/lib/auth/session-state"
+import {
+  isTransientNetworkError,
+  TRANSIENT_AUTH_RETRY_LIMIT,
+  type SessionKind,
+} from "@/lib/auth/session-state"
 
 const RETRY_DELAY_MS = 350
 const INITIAL_SESSION_WAIT_MS = 1500
@@ -20,7 +24,11 @@ export async function waitForBrowserSession(
   supabase: SupabaseClient,
 ): Promise<SessionKind> {
   let kind = await readSession(supabase)
-  if (kind === "unavailable") {
+  for (
+    let attempt = 0;
+    kind === "unavailable" && attempt < TRANSIENT_AUTH_RETRY_LIMIT;
+    attempt += 1
+  ) {
     await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS))
     kind = await readSession(supabase)
   }

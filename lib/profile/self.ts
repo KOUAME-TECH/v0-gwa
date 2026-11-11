@@ -1,5 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { isTransientNetworkError } from "@/lib/auth/session-state"
+import {
+  isTransientNetworkError,
+  TRANSIENT_AUTH_RETRY_LIMIT,
+} from "@/lib/auth/session-state"
 
 /**
  * Colonnes lisibles par `authenticated` sans GRANT sur le PII.
@@ -12,7 +15,6 @@ export const PROFILE_SAFE_COLUMNS =
 export type OwnProfile = {
   id: string
   full_name: string
-  email: string
   avatar_url: string | null
   bio: string | null
   user_type: string | null
@@ -20,9 +22,18 @@ export type OwnProfile = {
   country: string | null
   is_verified: boolean
   rating: number | null
-  phone: string | null
-  phone_verified: boolean | null
-  linked_email: string | null
+}
+
+/** Champs réellement affichés par /profil. Email et téléphone n'y figurent pas. */
+export type DisplayedProfile = {
+  id: string
+  full_name: string
+  avatar_url: string | null
+  bio: string | null
+  user_type: string | null
+  city: string | null
+  country: string | null
+  is_verified: boolean
 }
 
 export type LoadedOwnProfile = {
@@ -48,7 +59,6 @@ export function profileFromRow(
   return {
     id: text(row.id) ?? user.id,
     full_name: text(row.full_name) ?? "Utilisateur GWA",
-    email: text(row.linked_email) ?? text(row.email) ?? text(user.email) ?? "",
     avatar_url: text(row.avatar_url),
     bio: text(row.bio),
     user_type: text(row.user_type),
@@ -56,9 +66,19 @@ export function profileFromRow(
     country: text(row.country),
     is_verified: row.is_verified === true,
     rating: typeof row.rating === "number" ? row.rating : null,
-    phone: text(row.phone),
-    phone_verified: typeof row.phone_verified === "boolean" ? row.phone_verified : null,
-    linked_email: text(row.linked_email),
+  }
+}
+
+export function toDisplayedProfile(profile: OwnProfile): DisplayedProfile {
+  return {
+    id: profile.id,
+    full_name: profile.full_name,
+    avatar_url: profile.avatar_url,
+    bio: profile.bio,
+    user_type: profile.user_type,
+    city: profile.city,
+    country: profile.country,
+    is_verified: profile.is_verified,
   }
 }
 
@@ -71,16 +91,24 @@ export function profileFromAuthUser(user: {
 
 /**
  * Profil du compte connecté.
- * 1. `profile_self()` (SECURITY DEFINER) lit la ligne du `auth.uid()`, y compris le PII.
+ * 1. `profile_self()` (SECURITY DEFINER) lit la ligne du `auth.uid()`.
+ *    Email et téléphone de la ligne ne sont pas recopiés.
  * 2. Sinon, colonnes publiques explicitement accordées.
  * 3. Sinon, identité auth minimale : l'utilisateur reste connecté.
+ * Un timeout est retenté au plus TRANSIENT_AUTH_RETRY_LIMIT fois.
  */
 export async function loadOwnProfile(
   supabase: SupabaseClient,
   user: { id: string; email?: string | null },
 ): Promise<LoadedOwnProfile> {
   let rpc = await supabase.rpc("profile_self")
-  if (rpc.error && isTransientNetworkError(rpc.error)) {
+  for (
+    let attempt = 0;
+    rpc.error &&
+    isTransientNetworkError(rpc.error) &&
+    attempt < TRANSIENT_AUTH_RETRY_LIMIT;
+    attempt += 1
+  ) {
     await new Promise((resolve) => setTimeout(resolve, 350))
     rpc = await supabase.rpc("profile_self")
   }

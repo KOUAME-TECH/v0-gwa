@@ -1,6 +1,10 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-import { isTransientNetworkError } from '@/lib/auth/session-state'
+import {
+  isTransientNetworkError,
+  shouldRedirectToLogin,
+  TRANSIENT_AUTH_RETRY_LIMIT,
+} from '@/lib/auth/session-state'
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -90,7 +94,13 @@ export async function updateSession(request: NextRequest) {
   }
 
   await readUser()
-  if (!user && isTransientNetworkError(authError)) {
+  for (
+    let attempt = 0;
+    !user &&
+    isTransientNetworkError(authError) &&
+    attempt < TRANSIENT_AUTH_RETRY_LIMIT;
+    attempt += 1
+  ) {
     await new Promise((resolve) => setTimeout(resolve, 350))
     await readUser()
   }
@@ -114,7 +124,14 @@ export async function updateSession(request: NextRequest) {
   )
 
   // Un timeout vers Auth n'est pas une session absente : la page affiche Réessayer.
-  if (needsAuth && !user && !isTransientNetworkError(authError)) {
+  // Une 500 durable ou un échec non réseau redirige vers la connexion.
+  if (
+    shouldRedirectToLogin({
+      needsAuth,
+      hasUser: Boolean(user),
+      error: authError,
+    })
+  ) {
     const url = request.nextUrl.clone()
     url.pathname = '/auth/login'
     url.searchParams.set('redirect', path)

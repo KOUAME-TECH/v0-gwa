@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
-import type { OwnProfile } from "@/lib/profile/self"
+import type { DisplayedProfile } from "@/lib/profile/self"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -48,7 +48,7 @@ export default function ProfilScreen({
   profile,
   partial,
 }: {
-  profile: OwnProfile
+  profile: DisplayedProfile
   partial: boolean
 }) {
   const router = useRouter()

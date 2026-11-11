@@ -31,4 +31,8 @@ $$;
 COMMENT ON FUNCTION public.profile_self() IS
   'Ligne profiles du compte courant, y compris les colonnes sans GRANT SELECT. Ne remplace pas une policy RLS.';
 
-GRANT EXECUTE ON FUNCTION public.profile_self() TO anon, authenticated, service_role;
+-- anon ne doit pas exécuter profile_self(). Un GRANT TO anon rejoué après
+-- le REVOKE élargi le réaccorderait. PUBLIC est révoqué explicitement
+-- (EXECUTE est accordé à PUBLIC par défaut à la création).
+REVOKE EXECUTE ON FUNCTION public.profile_self() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.profile_self() TO authenticated, service_role;
