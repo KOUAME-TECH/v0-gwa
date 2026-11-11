@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { sendPushToUser } from "@/lib/notifications/push"
 import { mapPaymentMethodToNetwork } from "@/lib/payment/networks"
 import { evaluatePlanSwitch } from "@/lib/pricing/switch"
-import { payoutLedgerLines, recordLedgerLines } from "@/lib/features/payments/ledger"
+import { recordReleaseSplitOnce } from "@/lib/features/payments/ledger"
 import { sellerReceivesAfterPayoutFee } from "@/lib/features/payments/payout-fee"
 
 type Ctx = { params: Promise<{ id: string }> }
@@ -190,17 +190,14 @@ export async function POST(request: NextRequest, context: Ctx) {
       )
     }
 
-    const ledger = await recordLedgerLines(
-      admin as never,
-      payoutLedgerLines({
-        transactionId: id,
-        sellerNet: payoutAmount,
-        commission: Math.round(Number(order.commission_fcfa ?? order.seller_commission) || 0),
-        buyerFee: Math.round(Number(order.buyer_service_fee) || 0),
-        payoutFee,
-        currency: order.currency || "XOF",
-      }),
-    )
+    const ledger = await recordReleaseSplitOnce(admin as never, {
+      transactionId: id,
+      sellerNet: payoutAmount,
+      commission: Math.round(Number(order.commission_fcfa ?? order.seller_commission) || 0),
+      buyerFee: Math.round(Number(order.buyer_service_fee) || 0),
+      payoutFee,
+      currency: order.currency || "XOF",
+    })
     if (!ledger.ok) console.error("[api/orders/confirm] ledger", ledger.error)
 
     const sellerMsg =

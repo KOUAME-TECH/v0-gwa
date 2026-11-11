@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest"
 import { seedPlan } from "@/lib/pricing/quote"
 import { calculateOrderTotals } from "@/lib/features/payments/calculate-order"
-import { ledgerIsBalanced, payInLedgerLines, payoutLedgerLines } from "@/lib/features/payments/ledger"
+import {
+  ledgerAccountBalances,
+  ledgerIsBalanced,
+  payInLedgerLines,
+  payoutLedgerLines,
+} from "@/lib/features/payments/ledger"
 import { payoutFeeFcfa, sellerReceivesAfterPayoutFee } from "@/lib/features/payments/payout-fee"
 import { allocateStock } from "@/lib/features/agritech/handle-stock"
 import { requestIsMatched } from "@/lib/features/agritech/rfq-engine"
@@ -73,8 +78,13 @@ describe("grand livre", () => {
       payoutFee: fee,
     })
     expect(ledgerIsBalanced(payIn, payout)).toBe(true)
-    expect(payIn[0]?.amount).toBe(30_250)
+    expect(payIn[0]).toMatchObject({
+      debitAccount: "GATEWAY_GENIUSPAY",
+      creditAccount: "ESCROW_GWA",
+      amount: 30_250,
+    })
     expect(payout.reduce((sum, line) => sum + line.amount, 0)).toBe(30_250)
+    expect(ledgerAccountBalances([...payIn, ...payout]).ESCROW_GWA).toBe(0)
   })
 })
 
