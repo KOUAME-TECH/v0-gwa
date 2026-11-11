@@ -1,5 +1,6 @@
 -- 076_profile_self_owner_read.sql
 -- NON APPLIQUÉ. La fonction existe déjà en production (audit lecture seule).
+-- ORDRE : appliquer 02-revoke-elargi D'ABORD, puis 076 (ou jamais). 076 avant 02 fait échouer la garde ACL de 02 et annule tout 02 ; le rollback de 02 rend EXECUTE à anon sur profile_self et défait 076.
 --
 -- RLS public.profiles (prod) :
 --   profiles_select_all  SELECT  USING (true)

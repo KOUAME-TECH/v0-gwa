@@ -27,18 +27,8 @@ export const TRANSIENT_AUTH_RETRY_LIMIT = 1
 
 const TRANSIENT_HTTP_STATUSES = new Set([408, 502, 503, 504, 522, 524])
 
-/**
- * Timeout ou coupure réseau uniquement.
- * Une 500 Auth durable, ou un message qui contient « abort » sans être
- * un timeout / un échec fetch, ne doit pas empêcher la redirection login.
- */
-export function isTransientNetworkError(error: AuthLikeError): boolean {
-  if (!error) return false
+function hasNetworkFailureSignal(error: { message?: string; name?: string }): boolean {
   if (error.name === "AuthRetryableFetchError") return true
-  if (error.status === 0) return true
-  if (typeof error.status === "number" && TRANSIENT_HTTP_STATUSES.has(error.status)) {
-    return true
-  }
   const message = `${error.name ?? ""} ${error.message ?? ""}`.toLowerCase()
   return (
     message.includes("authretryablefetcherror") ||
@@ -49,6 +39,21 @@ export function isTransientNetworkError(error: AuthLikeError): boolean {
     message.includes("fetch failed") ||
     message.includes("econnreset")
   )
+}
+
+/**
+ * Timeout ou coupure réseau uniquement.
+ * auth-js 2.118 pose le nom AuthRetryableFetchError sur toute 5xx, y compris
+ * une 500 durable. Un statut HTTP positif décide seul (408, 502-504, 522, 524).
+ * Le nom et les messages réseau ne comptent que si le statut est 0 ou absent.
+ */
+export function isTransientNetworkError(error: AuthLikeError): boolean {
+  if (!error) return false
+  if (typeof error.status === "number" && error.status > 0) {
+    return TRANSIENT_HTTP_STATUSES.has(error.status)
+  }
+  if (error.status === 0) return true
+  return hasNetworkFailureSignal(error)
 }
 
 /**

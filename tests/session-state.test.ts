@@ -1,3 +1,6 @@
+import { createRequire } from "node:module"
+import { dirname, join } from "node:path"
+import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 import {
   classifySession,
@@ -7,6 +10,14 @@ import {
   TRANSIENT_AUTH_RETRY_LIMIT,
 } from "@/lib/auth/session-state"
 import { profileFromRow } from "@/lib/profile/self"
+
+const require = createRequire(fileURLToPath(import.meta.url))
+const supabaseEntry = require.resolve("@supabase/supabase-js")
+const { AuthRetryableFetchError } = require(join(dirname(supabaseEntry), "../../auth-js")) as {
+  AuthRetryableFetchError: new (message: string, status?: number) => Error & {
+    status?: number
+  }
+}
 
 describe("hasSupabaseAuthCookie", () => {
   it("reconnaît le cookie de session et ses chunks", () => {
@@ -80,11 +91,37 @@ describe("isTransientNetworkError", () => {
     expect(isTransientNetworkError(null)).toBe(false)
     expect(isTransientNetworkError({ message: "Internal Server Error", status: 500 })).toBe(false)
     expect(isTransientNetworkError({ status: 500 })).toBe(false)
+    expect(
+      isTransientNetworkError({
+        name: "AuthRetryableFetchError",
+        message: "network timeout",
+        status: 500,
+      }),
+    ).toBe(false)
     expect(isTransientNetworkError({ message: "The user aborted a request" })).toBe(false)
     expect(isTransientNetworkError({ message: "statement aborted" })).toBe(false)
     expect(
       isTransientNetworkError({ name: "AbortError", message: "This operation was aborted" }),
     ).toBe(false)
+  })
+
+  it("ignore le nom AuthRetryableFetchError quand le statut HTTP est positif", () => {
+    const denied = new AuthRetryableFetchError("Internal Server Error", 500)
+    expect(denied.name).toBe("AuthRetryableFetchError")
+    expect(denied.status).toBe(500)
+    expect(isTransientNetworkError(denied)).toBe(false)
+    expect(
+      shouldRedirectToLogin({ needsAuth: true, hasUser: false, error: denied }),
+    ).toBe(true)
+
+    const gateway = new AuthRetryableFetchError("Gateway Timeout", 504)
+    expect(isTransientNetworkError(gateway)).toBe(true)
+    expect(
+      shouldRedirectToLogin({ needsAuth: true, hasUser: false, error: gateway }),
+    ).toBe(false)
+
+    expect(isTransientNetworkError(new AuthRetryableFetchError("Failed to fetch", 0))).toBe(true)
+    expect(isTransientNetworkError({ status: 0 })).toBe(true)
   })
 
   it("garde un abort qui est aussi un timeout réseau", () => {
