@@ -4,8 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { sendPushToUser } from "@/lib/notifications/push"
 import { mapPaymentMethodToNetwork } from "@/lib/payment/networks"
 import { evaluatePlanSwitch } from "@/lib/pricing/switch"
-import { recordReleaseSplitOnce } from "@/lib/features/payments/ledger"
-import { sellerReceivesAfterPayoutFee } from "@/lib/features/payments/payout-fee"
+import { prepareReleaseSplit, recordReleaseSplitOnce, releaseLedgerHttp } from "@/lib/features/payments/ledger"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -69,18 +68,13 @@ export async function POST(request: NextRequest, context: Ctx) {
     const admin = createAdminClient()
     const now = new Date().toISOString()
 
-    const sellerNet =
-      order.vendeur_recoit_fcfa != null
-        ? Math.round(Number(order.vendeur_recoit_fcfa))
-        : Math.max(
-            0,
-            Math.round(Number(order.total_amount) || 0) -
-              Math.round(Number(order.commission_fcfa) || 0) -
-              Math.round(Number(order.service_fee) || 0),
-          )
-    const { data: payoutFeeRaw } = await admin.rpc("gwa_payout_fee", { p_seller_id: order.seller_id })
-    const payoutFee = Math.min(sellerNet, Math.max(0, Math.round(Number(payoutFeeRaw) || 0)))
-    const payoutAmount = sellerReceivesAfterPayoutFee(sellerNet, payoutFee)
+    const prepared = prepareReleaseSplit(order)
+    if (!prepared.ok) {
+      const http = releaseLedgerHttp(prepared)
+      return NextResponse.json(http.body, { status: http.status })
+    }
+    const payoutFee = prepared.split.payoutFee
+    const payoutAmount = prepared.split.sellerNet
 
     let payoutStatus = "skipped_no_provider"
     let payoutRef: string | null = null
@@ -132,6 +126,13 @@ export async function POST(request: NextRequest, context: Ctx) {
         .filter(Boolean)
         .join("\n")
         .slice(0, 2000)
+    }
+
+    const ledger = await recordReleaseSplitOnce(admin as never, prepared.split)
+    if (!ledger.ok) {
+      console.error("[api/orders/confirm] ledger", ledger.code)
+      const http = releaseLedgerHttp(ledger)
+      return NextResponse.json(http.body, { status: http.status })
     }
 
     const { error: updErr } = await admin.from("orders").update(orderPatch).eq("id", id)
@@ -189,16 +190,6 @@ export async function POST(request: NextRequest, context: Ctx) {
         { onConflict: "order_id", ignoreDuplicates: true },
       )
     }
-
-    const ledger = await recordReleaseSplitOnce(admin as never, {
-      transactionId: id,
-      sellerNet: payoutAmount,
-      commission: Math.round(Number(order.commission_fcfa ?? order.seller_commission) || 0),
-      buyerFee: Math.round(Number(order.buyer_service_fee) || 0),
-      payoutFee,
-      currency: order.currency || "XOF",
-    })
-    if (!ledger.ok) console.error("[api/orders/confirm] ledger", ledger.error)
 
     const sellerMsg =
       payoutFee > 0

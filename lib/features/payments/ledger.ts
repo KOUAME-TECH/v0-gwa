@@ -10,22 +10,15 @@ export type LedgerLine = {
 
 /**
  * Sens des soldes de `ledgerAccountBalances` : crédit − débit.
- * ESCROW_GWA est un passif (dû aux parties) : le pay-in le crédite, la
- * libération le débite. WALLET_SELLER et les comptes REVENUE_* sont positifs
- * quand ils détiennent le net ou les frais. GATEWAY_GENIUSPAY est le compte
- * de passage : il est débité du brut encaissé, donc son solde vaut −brut.
- * Après pay-in + libération d'une même transaction, ESCROW_GWA vaut 0.
+ * ESCROW_GWA est un passif : le pay-in le crédite, la libération le débite.
+ * WALLET_SELLER et REVENUE_* sont positifs quand ils détiennent le net ou les frais.
+ * GATEWAY_GENIUSPAY est débité du brut, donc son solde vaut −brut.
+ * Après pay-in + libération, ESCROW_GWA vaut 0.
  */
 export const ESCROW_ACCOUNT = "ESCROW_GWA"
 export const GATEWAY_ACCOUNT = "GATEWAY_GENIUSPAY"
 export const SELLER_WALLET_ACCOUNT = "WALLET_SELLER"
-
-const RELEASE_CREDIT_ACCOUNTS = new Set([
-  SELLER_WALLET_ACCOUNT,
-  "REVENUE_GWA",
-  "REVENUE_GWA_BUYER_FEE",
-  "REVENUE_GWA_PAYOUT",
-])
+export const RELEASE_SPLIT_RPC = "gwa_post_release_split"
 
 export function payInLedgerLines(input: {
   transactionId: string
@@ -74,6 +67,26 @@ export function payoutLedgerLines(input: {
   return lines
 }
 
+export type ReleaseSplit = {
+  transactionId: string
+  sellerNet: number
+  commission: number
+  buyerFee: number
+  payoutFee: number
+  currency: string
+}
+
+export type ReleaseAttempt =
+  | { ok: true; skipped: boolean }
+  | {
+      ok: false
+      code: string
+      missing?: boolean
+      gross?: number
+      splitSum?: number
+      escrowBalance?: number
+    }
+
 type ReleaseOrder = {
   id: string
   vendeur_recoit_fcfa?: unknown
@@ -83,6 +96,7 @@ type ReleaseOrder = {
   service_fee?: unknown
   buyer_service_fee?: unknown
   currency?: string | null
+  payout_fee_frozen_fcfa?: unknown
 }
 
 function roundFcfa(value: unknown): number {
@@ -90,27 +104,61 @@ function roundFcfa(value: unknown): number {
   return Number.isFinite(rounded) ? rounded : 0
 }
 
-/** Même ventilation que la confirmation acheteur : net après frais de versement. */
-export function buildReleaseLedgerInput(order: ReleaseOrder, payoutFee: number) {
+/**
+ * Le frais figé au paiement est `payout_fee_frozen_fcfa`.
+ * NULL (colonne absente, commande antérieure au 5 nov, ou jamais payée
+ * depuis la migration) n'est pas un zéro : la libération automatique est refusée.
+ * `payout_fee_fcfa` (NOT NULL DEFAULT 0, écrit à la confirmation) ne remplace pas ce gel.
+ */
+export function readFrozenPayoutFee(
+  value: unknown,
+): { ok: true; fee: number } | { ok: false; code: "payout_fee_not_frozen" } {
+  if (value == null || value === "") return { ok: false, code: "payout_fee_not_frozen" }
+  const fee = typeof value === "number" ? value : Number(value)
+  if (!Number.isSafeInteger(fee) || fee < 0) return { ok: false, code: "payout_fee_not_frozen" }
+  return { ok: true, fee }
+}
+
+/**
+ * Construit la ventilation. Le repli total − commission − service_fee n'est
+ * gardé que s'il reconstitue le brut (`total_amount`). Sinon refus, sans montant inventé.
+ */
+export function prepareReleaseSplit(
+  order: ReleaseOrder,
+): { ok: true; split: ReleaseSplit } | Extract<ReleaseAttempt, { ok: false }> {
+  const frozen = readFrozenPayoutFee(order.payout_fee_frozen_fcfa)
+  if (!frozen.ok) return frozen
+
+  const gross = roundFcfa(order.total_amount)
   const sellerBefore =
     order.vendeur_recoit_fcfa != null
       ? roundFcfa(order.vendeur_recoit_fcfa)
       : Math.max(
           0,
-          roundFcfa(order.total_amount) - roundFcfa(order.commission_fcfa) - roundFcfa(order.service_fee),
+          gross - roundFcfa(order.commission_fcfa) - roundFcfa(order.service_fee),
         )
-  const fee = Math.min(Math.max(sellerBefore, 0), Math.max(0, roundFcfa(payoutFee)))
+  const payoutFee = frozen.fee
+  const sellerNet = sellerReceivesAfterPayoutFee(sellerBefore, payoutFee)
+  const commission = roundFcfa(order.commission_fcfa ?? order.seller_commission)
+  const buyerFee = roundFcfa(order.buyer_service_fee)
+  const splitSum = sellerNet + commission + buyerFee + payoutFee
+  if (gross <= 0 || splitSum !== gross) {
+    return { ok: false, code: "split_mismatch", gross, splitSum }
+  }
   return {
-    transactionId: order.id,
-    sellerNet: sellerReceivesAfterPayoutFee(sellerBefore, fee),
-    commission: roundFcfa(order.commission_fcfa ?? order.seller_commission),
-    buyerFee: roundFcfa(order.buyer_service_fee),
-    payoutFee: fee,
-    currency: order.currency || "XOF",
+    ok: true,
+    split: {
+      transactionId: order.id,
+      sellerNet,
+      commission,
+      buyerFee,
+      payoutFee,
+      currency: order.currency || "XOF",
+    },
   }
 }
 
-/** Compare les totaux. Ne prouve pas que chaque compte est soldé : voir `ledgerAccountBalances`. */
+/** Compare les totaux. Ne prouve pas que chaque compte est soldé. */
 export function ledgerIsBalanced(payIn: LedgerLine[], payout: LedgerLine[]): boolean {
   const payInTotal = payIn.reduce((sum, line) => sum + line.amount, 0)
   const payoutTotal = payout.reduce((sum, line) => sum + line.amount, 0)
@@ -126,51 +174,61 @@ export function ledgerAccountBalances(lines: LedgerLine[]): Record<string, numbe
   return balances
 }
 
-/**
- * Vrai si cette transaction a déjà une jambe de libération
- * (ESCROW_GWA → WALLET_SELLER ou un compte REVENUE_*).
- * Le statut escrow ne compte pas : une correction peut laisser les écritures
- * alors que `escrow_status` vaut encore `held`.
- */
-export function releaseSplitAlreadyPosted(lines: LedgerLine[], transactionId: string): boolean {
+export function hasPayInLine(lines: LedgerLine[], transactionId: string): boolean {
   return lines.some(
     (line) =>
       line.transactionId === transactionId &&
-      line.debitAccount === ESCROW_ACCOUNT &&
-      RELEASE_CREDIT_ACCOUNTS.has(line.creditAccount),
+      line.debitAccount === GATEWAY_ACCOUNT &&
+      line.creditAccount === ESCROW_ACCOUNT &&
+      line.amount > 0,
   )
 }
 
-/** Lignes à ajouter. Tableau vide si la ventilation est déjà dans le livre. */
-export function releaseLinesToAppend(existing: LedgerLine[], proposed: LedgerLine[]): LedgerLine[] {
-  const transactionId = proposed[0]?.transactionId
-  if (!transactionId || proposed.length === 0) return []
-  if (releaseSplitAlreadyPosted(existing, transactionId)) return []
-  return proposed
+/**
+ * Ventilation déjà ouverte si le net (crédit − débit) de WALLET_SELLER
+ * ou d'un compte REVENUE_* est > 0. Une extourne en miroir ramène le net à 0
+ * et autorise une nouvelle libération, sans colonne reversal_of.
+ * Aligné sur `gwa_post_release_split`.
+ */
+export function releaseNetAlreadyPosted(lines: LedgerLine[], transactionId: string): boolean {
+  const balances = ledgerAccountBalances(lines.filter((line) => line.transactionId === transactionId))
+  return Object.entries(balances).some(([account, net]) => {
+    if (net <= 0) return false
+    return account === SELLER_WALLET_ACCOUNT || account.startsWith("REVENUE_")
+  })
 }
 
-type LedgerCall = { error: { message: string } | null }
+export type ReleaseDecision =
+  | { ok: true; skipped: false; lines: LedgerLine[] }
+  | { ok: true; skipped: true; reason: "already_posted" }
+  | { ok: false; code: "pay_in_missing" | "split_mismatch"; escrowBalance?: number; splitSum?: number }
+
+/** Même ordre que la fonction SQL : pay-in, net déjà ouvert, somme = solde séquestre. */
+export function decideReleasePost(
+  existing: LedgerLine[],
+  proposed: LedgerLine[],
+  transactionId: string,
+): ReleaseDecision {
+  const scoped = existing.filter((line) => line.transactionId === transactionId)
+  if (!hasPayInLine(scoped, transactionId)) return { ok: false, code: "pay_in_missing" }
+  if (releaseNetAlreadyPosted(scoped, transactionId)) {
+    return { ok: true, skipped: true, reason: "already_posted" }
+  }
+  const escrowBalance = ledgerAccountBalances(scoped)[ESCROW_ACCOUNT] ?? 0
+  const splitSum = proposed.reduce((sum, line) => sum + line.amount, 0)
+  if (splitSum !== escrowBalance) {
+    return { ok: false, code: "split_mismatch", escrowBalance, splitSum }
+  }
+  return { ok: true, skipped: false, lines: proposed }
+}
+
+type LedgerCall = {
+  data?: unknown
+  error: { message: string; code?: string } | null
+}
 
 type LedgerClient = {
   rpc: (fn: string, args: Record<string, unknown>) => PromiseLike<LedgerCall>
-}
-
-type LedgerRow = {
-  transaction_id?: string | null
-  account_debit?: string | null
-  account_credit?: string | null
-  amount?: number | null
-  currency?: string | null
-}
-
-type LedgerRead = { data: LedgerRow[] | null; error: { message: string } | null }
-
-type LedgerReader = {
-  from: (table: string) => {
-    select: (columns: string) => {
-      eq: (column: string, value: string) => PromiseLike<LedgerRead>
-    }
-  }
 }
 
 export async function recordLedgerEntry(
@@ -199,49 +257,86 @@ export async function recordLedgerLines(
   return { ok: true }
 }
 
-function rowsToLines(rows: LedgerRow[]): LedgerLine[] {
-  return rows.flatMap((row) => {
-    if (!row.transaction_id || !row.account_debit || !row.account_credit) return []
-    const amount = Math.round(Number(row.amount) || 0)
-    if (amount <= 0) return []
-    return [
-      {
-        transactionId: row.transaction_id,
-        debitAccount: row.account_debit,
-        creditAccount: row.account_credit,
-        amount,
-        currency: row.currency || "XOF",
-      },
-    ]
-  })
+export function isMissingReleaseFunction(error: { message?: string; code?: string } | null): boolean {
+  if (!error) return false
+  if (error.code === "42883" || error.code === "PGRST202") return true
+  const message = error.message || ""
+  return /gwa_post_release_split/i.test(message) && /does not exist|could not find|schema cache|introuvable/i.test(message)
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null
+  return value as Record<string, unknown>
 }
 
 /**
- * Poste la ventilation de libération une seule fois pour la transaction.
- * Si une jambe ESCROW_GWA → WALLET_SELLER / REVENUE_* existe déjà, ne réécrit rien.
- * Une lecture impossible bloque l'écriture : on ne devine pas que le livre est vide.
+ * Un seul RPC `gwa_post_release_split`. Pas de lecture puis d'écritures ligne à ligne.
+ * Fonction absente : échec, sans repli. L'appelant ne doit pas modifier la commande.
  */
 export async function recordReleaseSplitOnce(
-  client: LedgerClient & LedgerReader,
-  input: {
-    transactionId: string
-    sellerNet: number
-    commission: number
-    buyerFee?: number
-    payoutFee?: number
-    currency?: string
+  client: LedgerClient,
+  input: ReleaseSplit,
+): Promise<ReleaseAttempt> {
+  let response: LedgerCall
+  try {
+    response = await client.rpc(RELEASE_SPLIT_RPC, {
+      p_transaction_id: input.transactionId,
+      p_seller_net: input.sellerNet,
+      p_commission: input.commission,
+      p_buyer_fee: input.buyerFee,
+      p_payout_fee: input.payoutFee,
+      p_currency: input.currency,
+    })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "ledger"
+    const missing = isMissingReleaseFunction({ message })
+    return { ok: false, code: missing ? "function_missing" : "ledger_failed", missing }
+  }
+  if (response.error) {
+    const missing = isMissingReleaseFunction(response.error)
+    return { ok: false, code: missing ? "function_missing" : "ledger_failed", missing }
+  }
+  const data = asRecord(response.data)
+  if (data?.ok === true) return { ok: true, skipped: data.skipped === true }
+  if (data?.ok === false) {
+    return {
+      ok: false,
+      code: String(data.error || "ledger_failed"),
+      escrowBalance: typeof data.escrow_balance === "number" ? data.escrow_balance : undefined,
+      splitSum: typeof data.split_sum === "number" ? data.split_sum : undefined,
+    }
+  }
+  return { ok: false, code: "ledger_failed" }
+}
+
+const RELEASE_HTTP: Record<string, { status: number; error: string }> = {
+  function_missing: { status: 503, error: "L’écriture comptable n’a pas pu être enregistrée." },
+  ledger_failed: { status: 503, error: "L’écriture comptable n’a pas pu être enregistrée." },
+  pay_in_missing: {
+    status: 409,
+    error: "Libération refusée : aucun encaissement GATEWAY_GENIUSPAY → ESCROW_GWA dans le livre.",
   },
-): Promise<{ ok: true; skipped: boolean } | { ok: false; error: string }> {
-  const { data, error } = await client
-    .from("financial_ledger")
-    .select("transaction_id, account_debit, account_credit, amount, currency")
-    .eq("transaction_id", input.transactionId)
-  if (error) return { ok: false, error: "L’écriture comptable n’a pas pu être enregistrée." }
-  const existing = rowsToLines(data || [])
-  const proposed = payoutLedgerLines(input)
-  const toPost = releaseLinesToAppend(existing, proposed)
-  if (toPost.length === 0) return { ok: true, skipped: true }
-  const recorded = await recordLedgerLines(client, toPost)
-  if (!recorded.ok) return recorded
-  return { ok: true, skipped: false }
+  split_mismatch: {
+    status: 409,
+    error: "Libération refusée : la ventilation ne solde pas le séquestre.",
+  },
+  payout_fee_not_frozen: {
+    status: 409,
+    error: "Frais de versement non figé au paiement. Revue manuelle requise, sans recalcul.",
+  },
+}
+
+/** 503 si la fonction manque ou échoue. 409 pour un refus métier. Jamais d'écriture commande. */
+export function releaseLedgerHttp(result: ReleaseAttempt): {
+  status: number
+  mutateOrder: boolean
+  body: { error: string; code: string } | null
+} {
+  if (result.ok) return { status: 200, mutateOrder: true, body: null }
+  const mapped = RELEASE_HTTP[result.code] || RELEASE_HTTP.ledger_failed
+  return {
+    status: mapped.status,
+    mutateOrder: false,
+    body: { error: mapped.error, code: result.code },
+  }
 }

@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { sendPushNotification } from "@/lib/notifications/push"
 import { sendSMSFallback } from "@/lib/notifications/sms"
-import { buildReleaseLedgerInput, recordReleaseSplitOnce } from "@/lib/features/payments/ledger"
+import { prepareReleaseSplit, recordReleaseSplitOnce, releaseLedgerHttp } from "@/lib/features/payments/ledger"
 
 export async function POST(
   request: NextRequest,
@@ -121,22 +121,17 @@ await sendPushNotification({ externalUserIds: [order.seller_id],
       return NextResponse.json({ error: "Escrow déjà libéré", already_released: true })
     }
 
-    // Le statut escrow ne suffit pas : une correction peut avoir déjà ventilé
-    // ESCROW_GWA → WALLET_SELLER / REVENUE_* alors que escrow_status vaut encore held.
-    if (order.payment_status === "paid" || order.escrow_status === "held") {
-      const admin = createAdminClient()
-      const { data: payoutFeeRaw } = await admin.rpc("gwa_payout_fee", {
-        p_seller_id: order.seller_id,
-      })
-      const split = buildReleaseLedgerInput(order, Number(payoutFeeRaw) || 0)
-      const ledger = await recordReleaseSplitOnce(admin as never, split)
-      if (!ledger.ok) {
-        console.error("[api/orders/release] ledger", ledger.error)
-        return NextResponse.json(
-          { error: "L’écriture comptable n’a pas pu être enregistrée." },
-          { status: 503 },
-        )
-      }
+    const prepared = prepareReleaseSplit(order)
+    if (!prepared.ok) {
+      const http = releaseLedgerHttp(prepared)
+      return NextResponse.json(http.body, { status: http.status })
+    }
+    const admin = createAdminClient()
+    const ledger = await recordReleaseSplitOnce(admin as never, prepared.split)
+    if (!ledger.ok) {
+      console.error("[api/orders/release] ledger", ledger.code)
+      const http = releaseLedgerHttp(ledger)
+      return NextResponse.json(http.body, { status: http.status })
     }
 
     await supabase.from("orders").update({
