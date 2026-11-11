@@ -76,6 +76,23 @@ export type ReleaseSplit = {
   currency: string
 }
 
+export type ReleaseCommand = ReleaseSplit & {
+  action?: "confirm" | "release"
+  nextEscrow?: "held" | "released"
+  nextStatus?: string
+  confirmedAt?: string | null
+  payoutStatus?: string | null
+  payoutAt?: string | null
+}
+
+export type EscrowOrderState = {
+  id: string
+  escrow_status: string
+  payment_status: string
+  confirmed_by_buyer_at: string | null
+  status: string
+}
+
 export type ReleaseAttempt =
   | { ok: true; skipped: boolean }
   | {
@@ -117,6 +134,35 @@ export function readFrozenPayoutFee(
   const fee = typeof value === "number" ? value : Number(value)
   if (!Number.isSafeInteger(fee) || fee < 0) return { ok: false, code: "payout_fee_not_frozen" }
   return { ok: true, fee }
+}
+
+/** Une erreur RPC n'est jamais un frais de 0. */
+export function payoutFeeFromRpc(result: {
+  data: unknown
+  error: { message?: string } | null
+}): { ok: true; fee: number } | { ok: false; code: "payout_fee_failed" } {
+  if (result.error || result.data == null || result.data === "") {
+    return { ok: false, code: "payout_fee_failed" }
+  }
+  const fee = typeof result.data === "number" ? result.data : Number(result.data)
+  if (!Number.isSafeInteger(fee) || fee < 0) return { ok: false, code: "payout_fee_failed" }
+  return { ok: true, fee }
+}
+
+/** Seul un séquestre exactement held et un paiement paid peuvent être libérés. */
+export function releaseEscrowGate(order: {
+  escrow_status?: string | null
+  payment_status?: string | null
+}): { ok: true } | { ok: false; status: 409; code: "ESCROW_NOT_HELD"; error: string } {
+  if (order.payment_status !== "paid" || order.escrow_status !== "held") {
+    return {
+      ok: false,
+      status: 409,
+      code: "ESCROW_NOT_HELD",
+      error: "Libération refusée : le séquestre doit être held et le paiement paid.",
+    }
+  }
+  return { ok: true }
 }
 
 /**
@@ -184,6 +230,20 @@ export function hasPayInLine(lines: LedgerLine[], transactionId: string): boolea
   )
 }
 
+/** Montant encaissé net : pay-in GATEWAY → ESCROW, moins une extourne miroir. */
+export function collectedPayIn(lines: LedgerLine[], transactionId: string): number {
+  return lines.reduce((sum, line) => {
+    if (line.transactionId !== transactionId) return sum
+    if (line.debitAccount === GATEWAY_ACCOUNT && line.creditAccount === ESCROW_ACCOUNT) {
+      return sum + line.amount
+    }
+    if (line.debitAccount === ESCROW_ACCOUNT && line.creditAccount === GATEWAY_ACCOUNT) {
+      return sum - line.amount
+    }
+    return sum
+  }, 0)
+}
+
 /**
  * Ventilation déjà ouverte si le net (crédit − débit) de WALLET_SELLER
  * ou d'un compte REVENUE_* est > 0. Une extourne en miroir ramène le net à 0
@@ -203,7 +263,10 @@ export type ReleaseDecision =
   | { ok: true; skipped: true; reason: "already_posted" }
   | { ok: false; code: "pay_in_missing" | "split_mismatch"; escrowBalance?: number; splitSum?: number }
 
-/** Même ordre que la fonction SQL : pay-in, net déjà ouvert, somme = solde séquestre. */
+/**
+ * Même ordre que `gwa_post_release_split` : pay-in, somme = encaissé = solde
+ * séquestre, puis net déjà ouvert. Une ventilation incomplète n'est pas « déjà postée ».
+ */
 export function decideReleasePost(
   existing: LedgerLine[],
   proposed: LedgerLine[],
@@ -211,15 +274,57 @@ export function decideReleasePost(
 ): ReleaseDecision {
   const scoped = existing.filter((line) => line.transactionId === transactionId)
   if (!hasPayInLine(scoped, transactionId)) return { ok: false, code: "pay_in_missing" }
+  const escrowBalance = ledgerAccountBalances(scoped)[ESCROW_ACCOUNT] ?? 0
+  const collected = collectedPayIn(scoped, transactionId)
+  const splitSum = proposed.reduce((sum, line) => sum + line.amount, 0)
   if (releaseNetAlreadyPosted(scoped, transactionId)) {
+    if (escrowBalance !== 0) {
+      return { ok: false, code: "split_mismatch", escrowBalance, splitSum }
+    }
     return { ok: true, skipped: true, reason: "already_posted" }
   }
-  const escrowBalance = ledgerAccountBalances(scoped)[ESCROW_ACCOUNT] ?? 0
-  const splitSum = proposed.reduce((sum, line) => sum + line.amount, 0)
-  if (splitSum !== escrowBalance) {
+  if (splitSum !== escrowBalance || splitSum !== collected) {
     return { ok: false, code: "split_mismatch", escrowBalance, splitSum }
   }
   return { ok: true, skipped: false, lines: proposed }
+}
+
+export type ReleaseTransition =
+  | { ok: true; skipped: boolean; order: EscrowOrderState; lines: LedgerLine[] }
+  | { ok: false; code: string; order: EscrowOrderState; lines: LedgerLine[] }
+
+/**
+ * Effet de la RPC : statut et lignes bougent ensemble, ou pas du tout.
+ * `escrow_status` autre que held, ou paiement autre que paid, ne change rien.
+ */
+export function applyReleaseTransaction(
+  order: EscrowOrderState,
+  lines: LedgerLine[],
+  command: ReleaseCommand,
+): ReleaseTransition {
+  if (order.payment_status !== "paid" || order.escrow_status !== "held") {
+    return { ok: false, code: "escrow_not_held", order, lines }
+  }
+  if ((command.action ?? "release") === "confirm" && order.confirmed_by_buyer_at) {
+    return { ok: false, code: "already_confirmed", order, lines }
+  }
+  const proposed = payoutLedgerLines(command)
+  const decision = decideReleasePost(lines, proposed, command.transactionId)
+  if (!decision.ok) return { ok: false, code: decision.code, order, lines }
+  const action = command.action ?? "release"
+  const next: EscrowOrderState = {
+    ...order,
+    escrow_status: action === "release" ? "released" : command.nextEscrow || "held",
+    status: action === "release" ? command.nextStatus || "livre" : "delivered",
+    confirmed_by_buyer_at:
+      action === "confirm" ? command.confirmedAt || new Date(0).toISOString() : order.confirmed_by_buyer_at,
+  }
+  return {
+    ok: true,
+    skipped: decision.skipped,
+    order: next,
+    lines: decision.skipped ? lines : [...lines, ...decision.lines],
+  }
 }
 
 type LedgerCall = {
@@ -273,10 +378,20 @@ function asRecord(value: unknown): Record<string, unknown> | null {
  * Un seul RPC `gwa_post_release_split`. Pas de lecture puis d'écritures ligne à ligne.
  * Fonction absente : échec, sans repli. L'appelant ne doit pas modifier la commande.
  */
+function refusalFromMessage(message: string): string | null {
+  if (/escrow_not_held/i.test(message)) return "escrow_not_held"
+  if (/already_confirmed/i.test(message)) return "already_confirmed"
+  if (/escrow_conflict/i.test(message)) return "escrow_conflict"
+  if (/split_mismatch/i.test(message)) return "split_mismatch"
+  if (/pay_in_missing/i.test(message)) return "pay_in_missing"
+  return null
+}
+
 export async function recordReleaseSplitOnce(
   client: LedgerClient,
-  input: ReleaseSplit,
+  input: ReleaseCommand,
 ): Promise<ReleaseAttempt> {
+  const action = input.action ?? "release"
   let response: LedgerCall
   try {
     response = await client.rpc(RELEASE_SPLIT_RPC, {
@@ -286,15 +401,30 @@ export async function recordReleaseSplitOnce(
       p_buyer_fee: input.buyerFee,
       p_payout_fee: input.payoutFee,
       p_currency: input.currency,
+      p_action: action,
+      p_next_escrow: action === "release" ? "released" : input.nextEscrow || "held",
+      p_next_status: action === "release" ? input.nextStatus || "livre" : "delivered",
+      p_confirmed_at: input.confirmedAt ?? null,
+      p_payout_status: input.payoutStatus ?? null,
+      p_payout_at: input.payoutAt ?? null,
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : "ledger"
     const missing = isMissingReleaseFunction({ message })
-    return { ok: false, code: missing ? "function_missing" : "ledger_failed", missing }
+    return {
+      ok: false,
+      code: missing ? "function_missing" : refusalFromMessage(message) || "ledger_failed",
+      missing,
+    }
   }
   if (response.error) {
     const missing = isMissingReleaseFunction(response.error)
-    return { ok: false, code: missing ? "function_missing" : "ledger_failed", missing }
+    const message = response.error.message || ""
+    return {
+      ok: false,
+      code: missing ? "function_missing" : refusalFromMessage(message) || "ledger_failed",
+      missing,
+    }
   }
   const data = asRecord(response.data)
   if (data?.ok === true) return { ok: true, skipped: data.skipped === true }
@@ -323,6 +453,22 @@ const RELEASE_HTTP: Record<string, { status: number; error: string }> = {
   payout_fee_not_frozen: {
     status: 409,
     error: "Frais de versement non figé au paiement. Revue manuelle requise, sans recalcul.",
+  },
+  payout_fee_failed: {
+    status: 503,
+    error: "Le frais de versement n’a pas pu être lu. Il n’est pas remplacé par 0.",
+  },
+  escrow_not_held: {
+    status: 409,
+    error: "Libération refusée : le séquestre doit être held et le paiement paid.",
+  },
+  already_confirmed: {
+    status: 409,
+    error: "Réception déjà confirmée.",
+  },
+  escrow_conflict: {
+    status: 409,
+    error: "La commande a changé pendant la libération. Aucune écriture n’a été gardée.",
   },
 }
 

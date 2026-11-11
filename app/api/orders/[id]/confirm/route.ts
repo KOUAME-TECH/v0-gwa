@@ -4,7 +4,12 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { sendPushToUser } from "@/lib/notifications/push"
 import { mapPaymentMethodToNetwork } from "@/lib/payment/networks"
 import { evaluatePlanSwitch } from "@/lib/pricing/switch"
-import { prepareReleaseSplit, recordReleaseSplitOnce, releaseLedgerHttp } from "@/lib/features/payments/ledger"
+import {
+  prepareReleaseSplit,
+  recordReleaseSplitOnce,
+  releaseEscrowGate,
+  releaseLedgerHttp,
+} from "@/lib/features/payments/ledger"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -54,15 +59,9 @@ export async function POST(request: NextRequest, context: Ctx) {
     if (order.confirmed_by_buyer_at) {
       return NextResponse.json({ error: "Réception déjà confirmée" }, { status: 400 })
     }
-    if (order.payment_status !== "paid" || order.escrow_status !== "held") {
-      return NextResponse.json(
-        {
-          error:
-            "Impossible de libérer : paiement non confirmé ou fonds non en séquestre",
-          code: "ESCROW_NOT_HELD",
-        },
-        { status: 400 },
-      )
+    const gate = releaseEscrowGate(order)
+    if (!gate.ok) {
+      return NextResponse.json({ error: gate.error, code: gate.code }, { status: gate.status })
     }
 
     const admin = createAdminClient()
@@ -128,26 +127,27 @@ export async function POST(request: NextRequest, context: Ctx) {
         .slice(0, 2000)
     }
 
-    const ledger = await recordReleaseSplitOnce(admin as never, prepared.split)
+    const ledger = await recordReleaseSplitOnce(admin as never, {
+      ...prepared.split,
+      action: "confirm",
+      nextEscrow: escrowStatus === "released" ? "released" : "held",
+      nextStatus: "delivered",
+      confirmedAt: now,
+      payoutStatus,
+      payoutAt: payoutNotRequired ? now : null,
+    })
     if (!ledger.ok) {
       console.error("[api/orders/confirm] ledger", ledger.code)
       const http = releaseLedgerHttp(ledger)
       return NextResponse.json(http.body, { status: http.status })
     }
 
-    const { error: updErr } = await admin.from("orders").update(orderPatch).eq("id", id)
-    if (updErr) {
-      console.warn("[api/orders/confirm] payout cols?", updErr.message)
+    if (receptionPhotoUrl) {
       await admin
         .from("orders")
-        .update({
-          status: "delivered",
-          escrow_status: escrowStatus,
-          confirmed_by_buyer_at: now,
-          delivered_at: order.delivered_at || now,
-          updated_at: now,
-        })
+        .update({ notes: orderPatch.notes, updated_at: now })
         .eq("id", id)
+        .is("confirmed_by_buyer_at", now)
     }
 
     if (escrowStatus === "released") {

@@ -4,50 +4,61 @@ import { describe, expect, it } from "vitest"
 import { seedPlan } from "@/lib/pricing/quote"
 import { calculateOrderTotals } from "@/lib/features/payments/calculate-order"
 import {
+  applyReleaseTransaction,
   decideReleasePost,
   ledgerAccountBalances,
   payInLedgerLines,
+  payoutFeeFromRpc,
   payoutLedgerLines,
   prepareReleaseSplit,
   readFrozenPayoutFee,
   recordReleaseSplitOnce,
+  releaseEscrowGate,
   releaseLedgerHttp,
   releaseNetAlreadyPosted,
+  type EscrowOrderState,
   type LedgerLine,
+  type ReleaseCommand,
   type ReleaseSplit,
 } from "@/lib/features/payments/ledger"
 import { sellerReceivesAfterPayoutFee } from "@/lib/features/payments/payout-fee"
-
-type StoredRow = {
-  transaction_id: string
-  account_debit: string
-  account_credit: string
-  amount: number
-  currency: string
-}
-
-function toLines(rows: StoredRow[]): LedgerLine[] {
-  return rows.map((row) => ({
-    transactionId: row.transaction_id,
-    debitAccount: row.account_debit,
-    creditAccount: row.account_credit,
-    amount: row.amount,
-    currency: row.currency,
-  }))
-}
 
 /**
  * Simule gwa_post_release_split : un verrou sérialise les appels,
  * l'insertion est tout ou rien, et aucun RPC ligne à ligne n'existe.
  */
-function transactionalLedger(seed: LedgerLine[] = []) {
-  const rows: StoredRow[] = seed.map((line) => ({
-    transaction_id: line.transactionId,
-    account_debit: line.debitAccount,
-    account_credit: line.creditAccount,
-    amount: line.amount,
-    currency: line.currency,
-  }))
+function heldOrder(id: string, escrow = "held"): EscrowOrderState {
+  return {
+    id,
+    escrow_status: escrow,
+    payment_status: "paid",
+    confirmed_by_buyer_at: null,
+    status: "confirmed",
+  }
+}
+
+function commandFromArgs(args: Record<string, unknown>): ReleaseCommand {
+  const action = args.p_action === "confirm" ? "confirm" : "release"
+  return {
+    transactionId: String(args.p_transaction_id),
+    sellerNet: Number(args.p_seller_net),
+    commission: Number(args.p_commission),
+    buyerFee: Number(args.p_buyer_fee),
+    payoutFee: Number(args.p_payout_fee),
+    currency: String(args.p_currency || "XOF"),
+    action,
+    nextEscrow: args.p_next_escrow === "released" ? "released" : "held",
+    nextStatus: String(args.p_next_status || ""),
+    confirmedAt: args.p_confirmed_at ? String(args.p_confirmed_at) : null,
+    payoutStatus: args.p_payout_status ? String(args.p_payout_status) : null,
+    payoutAt: args.p_payout_at ? String(args.p_payout_at) : null,
+  }
+}
+
+function transactionalLedger(seed: LedgerLine[] = [], order?: EscrowOrderState) {
+  const id = seed[0]?.transactionId || order?.id || "order-pro-500"
+  let lines = seed.slice()
+  let current = order || heldOrder(id)
   let tail: Promise<void> = Promise.resolve()
   let failNext = false
   const calls: string[] = []
@@ -56,19 +67,17 @@ function transactionalLedger(seed: LedgerLine[] = []) {
     failNextPost() {
       failNext = true
     },
-    addLines(lines: LedgerLine[]) {
-      for (const line of lines) {
-        rows.push({
-          transaction_id: line.transactionId,
-          account_debit: line.debitAccount,
-          account_credit: line.creditAccount,
-          amount: line.amount,
-          currency: line.currency,
-        })
-      }
+    addLines(extra: LedgerLine[]) {
+      lines = [...lines, ...extra]
     },
     lines(): LedgerLine[] {
-      return toLines(rows)
+      return lines.slice()
+    },
+    order(): EscrowOrderState {
+      return { ...current }
+    },
+    setOrder(next: EscrowOrderState) {
+      current = next
     },
     rpc(fn: string, args: Record<string, unknown>) {
       const run = tail.then(async () => {
@@ -79,44 +88,21 @@ function transactionalLedger(seed: LedgerLine[] = []) {
             error: { message: `function ${fn} does not exist`, code: "42883" },
           }
         }
-        const input: ReleaseSplit = {
-          transactionId: String(args.p_transaction_id),
-          sellerNet: Number(args.p_seller_net),
-          commission: Number(args.p_commission),
-          buyerFee: Number(args.p_buyer_fee),
-          payoutFee: Number(args.p_payout_fee),
-          currency: String(args.p_currency || "XOF"),
-        }
-        const proposed = payoutLedgerLines(input)
-        const decision = decideReleasePost(toLines(rows), proposed, input.transactionId)
-        if (!decision.ok) {
-          return {
-            data: {
-              ok: false,
-              error: decision.code,
-              escrow_balance: decision.escrowBalance,
-              split_sum: decision.splitSum,
-            },
-            error: null,
-          }
-        }
-        if (decision.skipped) {
-          return { data: { ok: true, skipped: true, reason: "already_posted" }, error: null }
-        }
         if (failNext) {
           failNext = false
           return { data: null, error: { message: "insert failed mid-transaction", code: "23505" } }
         }
-        for (const line of decision.lines) {
-          rows.push({
-            transaction_id: line.transactionId,
-            account_debit: line.debitAccount,
-            account_credit: line.creditAccount,
-            amount: line.amount,
-            currency: line.currency,
-          })
+        const beforeLines = lines
+        const beforeOrder = current
+        const applied = applyReleaseTransaction(current, lines, commandFromArgs(args))
+        if (!applied.ok) {
+          lines = beforeLines
+          current = beforeOrder
+          return { data: null, error: { message: applied.code, code: "P0001" } }
         }
-        return { data: { ok: true, skipped: false }, error: null }
+        lines = applied.lines
+        current = applied.order
+        return { data: { ok: true, skipped: applied.skipped }, error: null }
       })
       tail = run.then(
         () => undefined,
@@ -210,6 +196,34 @@ describe("ventilation — frais figé et somme", () => {
     expect(readFrozenPayoutFee(null).ok).toBe(false)
     expect(readFrozenPayoutFee(undefined).ok).toBe(false)
     expect(readFrozenPayoutFee(0)).toEqual({ ok: true, fee: 0 })
+    const failed = payoutFeeFromRpc({ data: null, error: { message: "gwa_payout_fee down" } })
+    expect(failed).toEqual({ ok: false, code: "payout_fee_failed" })
+    if (!failed.ok) {
+      expect(releaseLedgerHttp(failed)).toMatchObject({ status: 503, mutateOrder: false })
+    }
+  })
+
+  it("refuse disputed, refunded et released : seul held + paid passe", () => {
+    expect(releaseEscrowGate({ payment_status: "paid", escrow_status: "held" }).ok).toBe(true)
+    for (const escrow_status of ["disputed", "refunded", "released", "pending"]) {
+      const gate = releaseEscrowGate({ payment_status: "paid", escrow_status })
+      expect(gate.ok).toBe(false)
+      if (!gate.ok) expect(gate.status).toBe(409)
+    }
+    expect(releaseEscrowGate({ payment_status: "refunded", escrow_status: "held" }).ok).toBe(false)
+  })
+
+  it("refuse une livraison dans le brut qui n'est pas dans la ventilation", () => {
+    const refused = prepareReleaseSplit({
+      id: "order-shipping",
+      total_amount: 600,
+      vendeur_recoit_fcfa: 470,
+      commission_fcfa: 30,
+      buyer_service_fee: 0,
+      service_fee: 0,
+      payout_fee_frozen_fcfa: 0,
+    })
+    expect(refused).toMatchObject({ ok: false, code: "split_mismatch", gross: 600, splitSum: 500 })
   })
 
   it("refuse le repli total − commission − service_fee quand la somme n'est pas le brut", () => {
@@ -247,8 +261,9 @@ describe("ventilation — frais figé et somme", () => {
 
     const short = transactionalLedger(payInLedgerLines({ transactionId: proSplit.transactionId, totalPaid: 400 }))
     const mismatch = await recordReleaseSplitOnce(short, proSplit)
-    expect(mismatch).toMatchObject({ ok: false, code: "split_mismatch", escrowBalance: 400, splitSum: 500 })
+    expect(mismatch).toMatchObject({ ok: false, code: "split_mismatch" })
     expect(short.lines()).toHaveLength(1)
+    expect(short.order().escrow_status).toBe("held")
     expect(releaseLedgerHttp(mismatch).status).toBe(409)
     expect(releaseLedgerHttp(mismatch).mutateOrder).toBe(false)
   })
@@ -268,10 +283,14 @@ describe("ventilation — solde net, extourne, atomicité", () => {
     expect(ledgerAccountBalances(client.lines()).ESCROW_GWA).toBe(500)
     expect(ledgerAccountBalances(client.lines()).WALLET_SELLER).toBe(0)
 
+    client.setOrder(heldOrder(id))
     const again = await recordReleaseSplitOnce(client, proSplit)
     const blocked = await recordReleaseSplitOnce(client, proSplit)
     expect(again).toEqual({ ok: true, skipped: false })
-    expect(blocked).toEqual({ ok: true, skipped: true })
+    expect(blocked).toMatchObject({ ok: false, code: "escrow_not_held" })
+    client.setOrder(heldOrder(id))
+    const heldAgain = await recordReleaseSplitOnce(client, proSplit)
+    expect(heldAgain).toEqual({ ok: true, skipped: true })
     expect(ledgerAccountBalances(client.lines()).WALLET_SELLER).toBe(470)
     expect(ledgerAccountBalances(client.lines()).REVENUE_GWA).toBe(30)
     expect(ledgerAccountBalances(client.lines()).ESCROW_GWA).toBe(0)
@@ -301,10 +320,9 @@ describe("ventilation — solde net, extourne, atomicité", () => {
       recordReleaseSplitOnce(client, proSplit),
       recordReleaseSplitOnce(client, proSplit),
     ])
-    const skipped = [left, right].filter((result) => result.ok && result.skipped)
     const posted = [left, right].filter((result) => result.ok && !result.skipped)
     expect(posted).toHaveLength(1)
-    expect(skipped).toHaveLength(1)
+    expect(ledgerAccountBalances(client.lines()).ESCROW_GWA).toBe(0)
     expect(ledgerAccountBalances(client.lines()).WALLET_SELLER).toBe(470)
     expect(client.lines().filter((line) => line.creditAccount === "WALLET_SELLER")).toHaveLength(1)
   })
@@ -371,7 +389,12 @@ describe("migration 076", () => {
     expect(sql).toMatch(/REVOKE ALL ON FUNCTION public\.gwa_post_release_split/)
     expect(sql).toMatch(/FROM PUBLIC, anon, authenticated/)
     expect(sql).toMatch(/GRANT EXECUTE ON FUNCTION public\.gwa_post_release_split[\s\S]*TO service_role/)
-    expect(sql).not.toMatch(/UPDATE\s+public\.orders/i)
+    expect(sql).toMatch(/FOR UPDATE/)
+    expect(sql).toMatch(/confirmed_by_buyer_at IS NULL/)
+    expect(sql).toMatch(/RAISE EXCEPTION 'escrow_not_held'/)
+    expect(sql).toMatch(/ALTER COLUMN transaction_id SET NOT NULL/)
+    expect(sql).not.toMatch(/ON CONFLICT/)
+    expect(sql).not.toMatch(/UPDATE\s+public\.orders\s+SET\s+payout_fee_frozen_fcfa/i)
     expect(sql).toMatch(/payout_fee_frozen_fcfa/)
     expect(sql).toMatch(/payout_plan_id_at_payment/)
     expect(sql).toMatch(/DROP INDEX IF EXISTS public\.financial_ledger_pair_uidx/)

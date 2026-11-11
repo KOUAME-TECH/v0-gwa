@@ -6,6 +6,7 @@ DROP TRIGGER IF EXISTS trg_z_orders_freeze_payout_fee ON public.orders;
 DROP FUNCTION IF EXISTS public.orders_freeze_payout_fee();
 
 DROP FUNCTION IF EXISTS public.gwa_post_release_split(uuid, integer, integer, integer, integer, text);
+DROP FUNCTION IF EXISTS public.gwa_post_release_split(uuid, integer, integer, integer, integer, text, text, text, text, timestamptz, text, timestamptz);
 
 CREATE OR REPLACE FUNCTION public.protect_order_privileged_columns()
 RETURNS trigger
@@ -61,6 +62,9 @@ ALTER TABLE public.orders
 ALTER TABLE public.orders
   DROP COLUMN IF EXISTS payout_plan_id_at_payment,
   DROP COLUMN IF EXISTS payout_fee_frozen_fcfa;
+
+ALTER TABLE public.financial_ledger
+  ALTER COLUMN transaction_id DROP NOT NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS financial_ledger_pair_uidx
   ON public.financial_ledger (transaction_id, account_debit, account_credit);

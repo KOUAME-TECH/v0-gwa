@@ -97,11 +97,20 @@ BEGIN
      AND OLD.payment_status IS DISTINCT FROM 'paid'
      AND NEW.payout_fee_frozen_fcfa IS NULL
   THEN
-    NEW.payout_fee_frozen_fcfa := public.gwa_payout_fee(NEW.seller_id);
-    SELECT p.pricing_plan_id
-      INTO NEW.payout_plan_id_at_payment
-    FROM public.profiles p
-    WHERE p.id = NEW.seller_id;
+    -- Une exception de gwa_payout_fee annule le passage en paid.
+    -- Un NULL n'est pas converti en 0 : la libération restera refusée.
+    DECLARE
+      v_fee integer;
+    BEGIN
+      v_fee := public.gwa_payout_fee(NEW.seller_id);
+      IF v_fee IS NOT NULL THEN
+        NEW.payout_fee_frozen_fcfa := v_fee;
+        SELECT p.pricing_plan_id
+          INTO NEW.payout_plan_id_at_payment
+        FROM public.profiles p
+        WHERE p.id = NEW.seller_id;
+      END IF;
+    END;
   END IF;
   RETURN NEW;
 END;
@@ -116,8 +125,8 @@ CREATE TRIGGER trg_z_orders_freeze_payout_fee
 -- L'index unique (transaction_id, account_debit, account_credit) empêche
 -- une seconde libération après extourne : la paire ESCROW → WALLET existe
 -- encore. L'idempotence est le solde net, sous verrou, pas cet index.
--- ON CONFLICT de gwa_record_ledger_entry cible cet index : on retire
--- le conflit avant de dropper l'index, sinon l'encaissement casse.
+-- L'ancienne RPC absorbait un doublon sans erreur. On retire cette clause
+-- avant de dropper l'index, sinon l'encaissement casse.
 CREATE OR REPLACE FUNCTION public.gwa_record_ledger_entry(
   p_transaction_id uuid,
   p_debit text,
@@ -150,31 +159,80 @@ GRANT EXECUTE ON FUNCTION public.gwa_record_ledger_entry(uuid, text, text, integ
 
 DROP INDEX IF EXISTS public.financial_ledger_pair_uidx;
 
--- hashtext renvoie integer ; le verrou à un argument prend bigint.
-CREATE OR REPLACE FUNCTION public.gwa_post_release_split(
+-- NULL n'est pas unique : un transaction_id vide doublerait sans limite.
+ALTER TABLE public.financial_ledger
+  ALTER COLUMN transaction_id SET NOT NULL;
+
+-- Une seule transaction : verrou ligne commande, ventilation complète, statut.
+-- Un doublon de contrainte lève une erreur et annule le statut avec les lignes.
+DROP FUNCTION IF EXISTS public.gwa_post_release_split(uuid, integer, integer, integer, integer, text);
+DROP FUNCTION IF EXISTS public.gwa_post_release_split(uuid, integer, integer, integer, integer, text, text, text, text, timestamptz, text, timestamptz);
+
+CREATE FUNCTION public.gwa_post_release_split(
   p_transaction_id uuid,
   p_seller_net integer,
   p_commission integer,
   p_buyer_fee integer,
   p_payout_fee integer,
-  p_currency text DEFAULT 'XOF'
+  p_currency text DEFAULT 'XOF',
+  p_action text DEFAULT 'release',
+  p_next_escrow text DEFAULT 'released',
+  p_next_status text DEFAULT 'livre',
+  p_confirmed_at timestamptz DEFAULT NULL,
+  p_payout_status text DEFAULT NULL,
+  p_payout_at timestamptz DEFAULT NULL
 ) RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
+  v_order public.orders%ROWTYPE;
   v_escrow bigint;
+  v_collected bigint;
   v_sum bigint;
   v_currency text;
   v_has_payin boolean;
   v_posted boolean;
+  v_updated integer;
+  v_escrow_next text;
+  v_status_next text;
 BEGIN
   IF p_transaction_id IS NULL THEN
-    RETURN jsonb_build_object('ok', false, 'error', 'pay_in_missing');
+    RAISE EXCEPTION 'pay_in_missing';
+  END IF;
+  IF p_action NOT IN ('confirm', 'release') THEN
+    RAISE EXCEPTION 'escrow_not_held';
   END IF;
 
   PERFORM pg_advisory_xact_lock(hashtext(p_transaction_id::text)::bigint);
+
+  SELECT * INTO v_order
+  FROM public.orders
+  WHERE id = p_transaction_id
+  FOR UPDATE;
+
+  IF NOT FOUND
+     OR v_order.payment_status IS DISTINCT FROM 'paid'
+     OR v_order.escrow_status IS DISTINCT FROM 'held'
+  THEN
+    RAISE EXCEPTION 'escrow_not_held';
+  END IF;
+
+  IF p_action = 'confirm' AND v_order.confirmed_by_buyer_at IS NOT NULL THEN
+    RAISE EXCEPTION 'already_confirmed';
+  END IF;
+
+  IF p_action = 'release' THEN
+    v_escrow_next := 'released';
+    v_status_next := 'livre';
+  ELSE
+    IF p_next_escrow NOT IN ('held', 'released') THEN
+      RAISE EXCEPTION 'escrow_not_held';
+    END IF;
+    v_escrow_next := p_next_escrow;
+    v_status_next := 'delivered';
+  END IF;
 
   SELECT EXISTS (
     SELECT 1
@@ -186,8 +244,37 @@ BEGIN
   ) INTO v_has_payin;
 
   IF NOT COALESCE(v_has_payin, false) THEN
-    RETURN jsonb_build_object('ok', false, 'error', 'pay_in_missing');
+    RAISE EXCEPTION 'pay_in_missing';
   END IF;
+
+  IF COALESCE(p_seller_net, 0) < 0
+     OR COALESCE(p_commission, 0) < 0
+     OR COALESCE(p_buyer_fee, 0) < 0
+     OR COALESCE(p_payout_fee, 0) < 0
+  THEN
+    RAISE EXCEPTION 'split_mismatch';
+  END IF;
+
+  v_sum := COALESCE(p_seller_net, 0)
+         + COALESCE(p_commission, 0)
+         + COALESCE(p_buyer_fee, 0)
+         + COALESCE(p_payout_fee, 0);
+
+  SELECT COALESCE(SUM(amount) FILTER (
+           WHERE account_debit = 'GATEWAY_GENIUSPAY' AND account_credit = 'ESCROW_GWA'
+         ), 0)
+       - COALESCE(SUM(amount) FILTER (
+           WHERE account_debit = 'ESCROW_GWA' AND account_credit = 'GATEWAY_GENIUSPAY'
+         ), 0)
+    INTO v_collected
+  FROM public.financial_ledger
+  WHERE transaction_id = p_transaction_id;
+
+  SELECT COALESCE(SUM(amount) FILTER (WHERE account_credit = 'ESCROW_GWA'), 0)
+       - COALESCE(SUM(amount) FILTER (WHERE account_debit = 'ESCROW_GWA'), 0)
+    INTO v_escrow
+  FROM public.financial_ledger
+  WHERE transaction_id = p_transaction_id;
 
   SELECT EXISTS (
     SELECT 1
@@ -209,57 +296,77 @@ BEGIN
   ) INTO v_posted;
 
   IF COALESCE(v_posted, false) THEN
-    RETURN jsonb_build_object('ok', true, 'skipped', true, 'reason', 'already_posted');
+    -- Déjà ventilé mais séquestre non soldé : refus, sans deuxième jambe partielle.
+    IF v_escrow IS DISTINCT FROM 0 THEN
+      RAISE EXCEPTION 'split_mismatch';
+    END IF;
+  ELSE
+    IF v_sum IS DISTINCT FROM v_escrow OR v_sum IS DISTINCT FROM v_collected THEN
+      RAISE EXCEPTION 'split_mismatch';
+    END IF;
+
+    v_currency := COALESCE(NULLIF(p_currency, ''), 'XOF');
+
+    INSERT INTO public.financial_ledger (
+      transaction_id, account_debit, account_credit, amount, currency
+    )
+    SELECT p_transaction_id, v.debit, v.credit, v.amount, v_currency
+    FROM (
+      VALUES
+        ('ESCROW_GWA', 'WALLET_SELLER', COALESCE(p_seller_net, 0)),
+        ('ESCROW_GWA', 'REVENUE_GWA', COALESCE(p_commission, 0)),
+        ('ESCROW_GWA', 'REVENUE_GWA_BUYER_FEE', COALESCE(p_buyer_fee, 0)),
+        ('ESCROW_GWA', 'REVENUE_GWA_PAYOUT', COALESCE(p_payout_fee, 0))
+    ) AS v(debit, credit, amount)
+    WHERE v.amount > 0;
   END IF;
 
-  IF COALESCE(p_seller_net, 0) < 0
-     OR COALESCE(p_commission, 0) < 0
-     OR COALESCE(p_buyer_fee, 0) < 0
-     OR COALESCE(p_payout_fee, 0) < 0
-  THEN
-    RETURN jsonb_build_object('ok', false, 'error', 'split_mismatch');
+  UPDATE public.orders
+  SET
+    escrow_status = v_escrow_next,
+    status = v_status_next,
+    confirmed_by_buyer_at = CASE
+      WHEN p_action = 'confirm' THEN COALESCE(p_confirmed_at, now())
+      ELSE confirmed_by_buyer_at
+    END,
+    delivered_at = CASE
+      WHEN p_action = 'confirm' THEN COALESCE(delivered_at, COALESCE(p_confirmed_at, now()))
+      ELSE delivered_at
+    END,
+    payout_status = CASE
+      WHEN p_action = 'confirm' THEN p_payout_status
+      ELSE payout_status
+    END,
+    payout_fee_fcfa = CASE
+      WHEN p_action = 'confirm' THEN COALESCE(p_payout_fee, 0)
+      ELSE payout_fee_fcfa
+    END,
+    payout_at = CASE
+      WHEN p_action = 'confirm' THEN p_payout_at
+      ELSE payout_at
+    END,
+    updated_at = now()
+  WHERE id = p_transaction_id
+    AND escrow_status = 'held'
+    AND payment_status = 'paid'
+    AND (p_action <> 'confirm' OR confirmed_by_buyer_at IS NULL);
+
+  GET DIAGNOSTICS v_updated = ROW_COUNT;
+  IF v_updated <> 1 THEN
+    RAISE EXCEPTION 'escrow_conflict';
   END IF;
 
-  v_sum := COALESCE(p_seller_net, 0)
-         + COALESCE(p_commission, 0)
-         + COALESCE(p_buyer_fee, 0)
-         + COALESCE(p_payout_fee, 0);
-
-  SELECT COALESCE(SUM(amount) FILTER (WHERE account_credit = 'ESCROW_GWA'), 0)
-       - COALESCE(SUM(amount) FILTER (WHERE account_debit = 'ESCROW_GWA'), 0)
-    INTO v_escrow
-  FROM public.financial_ledger
-  WHERE transaction_id = p_transaction_id;
-
-  IF v_sum IS DISTINCT FROM v_escrow THEN
-    RETURN jsonb_build_object(
-      'ok', false,
-      'error', 'split_mismatch',
-      'escrow_balance', v_escrow,
-      'split_sum', v_sum
-    );
-  END IF;
-
-  v_currency := COALESCE(NULLIF(p_currency, ''), 'XOF');
-
-  INSERT INTO public.financial_ledger (
-    transaction_id, account_debit, account_credit, amount, currency
-  )
-  SELECT p_transaction_id, v.debit, v.credit, v.amount, v_currency
-  FROM (
-    VALUES
-      ('ESCROW_GWA', 'WALLET_SELLER', COALESCE(p_seller_net, 0)),
-      ('ESCROW_GWA', 'REVENUE_GWA', COALESCE(p_commission, 0)),
-      ('ESCROW_GWA', 'REVENUE_GWA_BUYER_FEE', COALESCE(p_buyer_fee, 0)),
-      ('ESCROW_GWA', 'REVENUE_GWA_PAYOUT', COALESCE(p_payout_fee, 0))
-  ) AS v(debit, credit, amount)
-  WHERE v.amount > 0;
-
-  RETURN jsonb_build_object('ok', true, 'skipped', false, 'split_sum', v_sum);
+  RETURN jsonb_build_object(
+    'ok', true,
+    'skipped', COALESCE(v_posted, false),
+    'escrow_status', v_escrow_next,
+    'split_sum', v_sum,
+    'collected', v_collected
+  );
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.gwa_post_release_split(uuid, integer, integer, integer, integer, text)
+REVOKE ALL ON FUNCTION public.gwa_post_release_split(uuid, integer, integer, integer, integer, text, text, text, text, timestamptz, text, timestamptz)
   FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.gwa_post_release_split(uuid, integer, integer, integer, integer, text)
+GRANT EXECUTE ON FUNCTION public.gwa_post_release_split(uuid, integer, integer, integer, integer, text, text, text, text, timestamptz, text, timestamptz)
   TO service_role;
