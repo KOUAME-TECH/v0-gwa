@@ -37,6 +37,24 @@ function log(o) {
 
 writeFileSync("debug-d90786.log", "", "utf8")
 const env = loadEnv()
+
+function credential(name) {
+  return (process.env[name] || env[name] || "").trim()
+}
+
+const email = credential("E2E_EMAIL")
+const password = credential("E2E_PASSWORD")
+if (!email || !password) {
+  console.error(
+    "E2E_EMAIL et E2E_PASSWORD sont requis. Définissez-les dans l'environnement ou dans .env.local. Le mot de passe n'est jamais journalisé.",
+  )
+  process.exit(1)
+}
+
+function redactSecrets(message) {
+  return String(message ?? "").split(password).join("[redacted]")
+}
+
 const admin = createClient(
   env.NEXT_PUBLIC_SUPABASE_URL,
   env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SECRET_KEY,
@@ -128,15 +146,15 @@ const anon = createClient(
   env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
 )
 const { data: authData, error: authErr } = await anon.auth.signInWithPassword({
-  email: "kouamecorporation@gmail.com",
-  password: "GwaLocal!WUrNIevV",
+  email,
+  password,
 })
 if (authErr) {
   log({
     hypothesisId: "E",
     location: "verify:login",
     message: "login_fail",
-    data: { err: authErr.message.slice(0, 100) },
+    data: { err: redactSecrets(authErr.message).slice(0, 100) },
   })
 } else {
   const { data: role, error: roleErr } = await anon
