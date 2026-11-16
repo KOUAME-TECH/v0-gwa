@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { loginHref } from "@/lib/auth/oauth"
 import { ScgGauge, ScgDimensions } from "@/components/scg/scg-display"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -44,7 +45,7 @@ export default function ScgPage() {
       data: { user },
     } = await supabase.auth.getUser()
     if (!user) {
-      router.push("/auth/login")
+      router.push(loginHref("/scg"))
       return
     }
 

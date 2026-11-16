@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { loadOwnProfile } from "@/lib/profile/self"
+import { loginHref } from "@/lib/auth/oauth"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -68,17 +70,15 @@ export default function WalletPage() {
   async function loadWalletData() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
-      router.push('/auth/login')
+      router.push(loginHref("/wallet"))
       return
     }
     setUser(user)
 
-    // Get profile
-    const { data: profileData } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single()
+    const profileData = await loadOwnProfile<{
+      phone?: string | null
+      user_type?: string | null
+    }>(supabase)
     
     setProfile(profileData)
     setWithdrawPhone(profileData?.phone || "")

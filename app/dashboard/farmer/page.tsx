@@ -16,6 +16,8 @@ import {
   Eye,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+import { loadOwnProfile } from "@/lib/profile/self"
+import { loginHref } from "@/lib/auth/oauth"
 import { WeatherWidget } from "@/components/weather-widget"
 import { isFactoringEligible } from "@/lib/factoring/eligibility"
 import { getCoachActions } from "@/lib/scg/coach"
@@ -72,15 +74,11 @@ export default function FarmerDashboard() {
         data: { user: authUser },
       } = await supabase.auth.getUser()
       if (!authUser) {
-        router.push("/auth/login")
+        router.push(loginHref("/dashboard/farmer"))
         return
       }
 
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", authUser.id)
-        .single()
+      const profileData = await loadOwnProfile(supabase)
       setProfile(profileData)
 
       const { data: productsData } = await supabase

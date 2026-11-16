@@ -95,8 +95,10 @@ export async function updateSession(request: NextRequest) {
 
   if (needsAuth && !user) {
     const url = request.nextUrl.clone()
-    url.pathname = '/auth/login'
-    url.searchParams.set('redirect', path)
+    const returnTo = `${path}${request.nextUrl.search}`
+    url.pathname = "/auth/login"
+    url.search = ""
+    url.searchParams.set("redirect", returnTo)
     return NextResponse.redirect(url)
   }
 

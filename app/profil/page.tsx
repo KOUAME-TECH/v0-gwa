@@ -28,6 +28,7 @@ import {
   LayoutDashboard,
 } from "lucide-react"
 import { shouldShowVerifiedBadge } from "@/lib/verification/badge"
+import { loadOwnProfile } from "@/lib/profile/self"
 import { dashboardPathForUserType, isSellerRole } from "@/lib/dashboard/routing"
 import {
   isDualIdentity,
@@ -67,6 +68,7 @@ export default function ProfilPage() {
   const [unreadMsgs, setUnreadMsgs] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [loadError, setLoadError] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
   const [adminRoleLabel, setAdminRoleLabel] = useState<string | null>(null)
   const supabase = createClient()
@@ -84,17 +86,17 @@ export default function ProfilPage() {
         return
       }
 
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .single()
+      const profileData = await loadOwnProfile<Profile>(supabase)
 
       if (!mounted) return
 
-      if (profileData) {
-        setProfile({ ...profileData, email: user.email || profileData.email || "" })
+      if (!profileData) {
+        setLoadError(true)
+        setIsLoading(false)
+        return
       }
+
+      setProfile({ ...profileData, email: user.email || profileData.email || "" })
 
       const [productsRes, ordersRes, favoritesRes, adminRes, notifRes, msgRes] =
         await Promise.all([
@@ -195,17 +197,17 @@ export default function ProfilPage() {
     )
   }
 
-  if (!profile) {
+  if (loadError || !profile) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center p-5 gwa-shell-page">
         <div className="text-center">
-          <h2 className="text-xl font-semibold mb-2">Connectez-vous</h2>
+          <h2 className="text-xl font-semibold mb-2">Profil indisponible</h2>
           <p className="text-neutral-500 text-sm mb-6">
-            pour accéder à votre espace Moi
+            La lecture du compte a échoué. Réessaie dans un instant.
           </p>
-          <Link href="/auth/login?redirect=/profil">
-            <Button className="rounded-full px-8">Se connecter</Button>
-          </Link>
+          <Button className="rounded-full px-8" onClick={() => window.location.reload()}>
+            Réessayer
+          </Button>
         </div>
       </div>
     )

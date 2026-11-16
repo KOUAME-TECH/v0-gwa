@@ -9,6 +9,7 @@ import { useHideOnScroll } from "@/hooks/use-hide-on-scroll"
 import { useNavBadges } from "@/hooks/use-nav-badges"
 import { shouldShowDesktopNav } from "@/lib/navigation/shell-routes"
 import { cn } from "@/lib/utils"
+import { loginHref } from "@/lib/auth/oauth"
 
 const LINKS = [
   { href: "/", label: "Accueil", match: (p: string) => p === "/" },
@@ -42,7 +43,7 @@ export function Navigation() {
   const pathname = usePathname() || "/"
   const visible = shouldShowDesktopNav(pathname)
   const scrollHidden = useHideOnScroll(visible)
-  const { unreadMessages } = useNavBadges({ enabled: visible })
+  const { unreadMessages, userId } = useNavBadges({ enabled: visible })
 
   if (!visible) return null
 
@@ -64,12 +65,18 @@ export function Navigation() {
 
         <nav className="flex flex-1 items-stretch justify-center gap-1">
           {LINKS.map(({ href, label, match }) => {
+            const guestHref =
+              !userId && href === "/profil"
+                ? loginHref("/profil")
+                : !userId && href === "/messages"
+                  ? loginHref("/messages")
+                  : href
             const active = match(pathname)
             const showMsgBadge = href === "/messages" && unreadMessages > 0
             return (
               <Link
                 key={href}
-                href={href}
+                href={guestHref}
                 tabIndex={scrollHidden ? -1 : undefined}
                 className={cn(
                   "relative flex items-center gap-1.5 px-3 text-[0.95rem] transition-colors",
@@ -111,7 +118,7 @@ export function Navigation() {
             Digest
           </Link>
           <Link
-            href="/publier"
+            href={userId ? "/publier" : loginHref("/publier")}
             tabIndex={scrollHidden ? -1 : undefined}
             className="inline-flex items-center gap-1.5 rounded-xl bg-[#1F5C2E] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#184a25]"
           >

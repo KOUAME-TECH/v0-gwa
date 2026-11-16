@@ -18,6 +18,7 @@ import {
   AlertCircle,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+import { loginHref } from "@/lib/auth/oauth"
 import { EmptyState } from "@/components/ui/empty-state"
 import { productDetailPath } from "@/lib/products/paths"
 import { ESCROW_COPY } from "@/lib/copy/escrow-fr"
@@ -92,7 +93,7 @@ export default function BuyerDashboard() {
       } = await supabase.auth.getUser()
 
       if (!authUser) {
-        router.push("/auth/login")
+        router.push(loginHref("/dashboard/buyer"))
         return
       }
 
