@@ -70,13 +70,25 @@ export function parsePurchaseOrderContent(
   return null
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+}
+
 export function purchaseOrderPrintHtml(po: PurchaseOrderPayload, parties: {
   buyerName?: string
   sellerName?: string
 }): string {
   const qty = po.quantity || 1
   const total = po.amount * qty
-  const num = po.orderNumber || po.orderId.slice(0, 8).toUpperCase()
+  const num = escapeHtml(po.orderNumber || po.orderId.slice(0, 8).toUpperCase())
+  const buyerName = escapeHtml(parties.buyerName || "—")
+  const sellerName = escapeHtml(parties.sellerName || "—")
+  const productName = escapeHtml(po.productName || "Produit convenu")
   return `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"/><title>Bon de commande ${num}</title>
 <style>
 body{font-family:Georgia,serif;color:#111;padding:24px;max-width:640px;margin:0 auto}
@@ -90,11 +102,11 @@ th{background:#f5f6f6}
 </style></head><body>
 <h1>Bon de commande GWA</h1>
 <p class="meta">N° ${num} · Prix convenu entre les parties</p>
-<p><strong>Acheteur :</strong> ${parties.buyerName || "—"}<br/>
-<strong>Vendeur :</strong> ${parties.sellerName || "—"}</p>
+<p><strong>Acheteur :</strong> ${buyerName}<br/>
+<strong>Vendeur :</strong> ${sellerName}</p>
 <table><thead><tr><th>Produit</th><th>Qté</th><th>Prix unitaire</th><th>Total</th></tr></thead>
 <tbody><tr>
-<td>${po.productName || "Produit convenu"}</td>
+<td>${productName}</td>
 <td>${qty}</td>
 <td>${po.amount.toLocaleString("fr-FR")} FCFA</td>
 <td>${total.toLocaleString("fr-FR")} FCFA</td>

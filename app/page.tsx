@@ -1907,6 +1907,29 @@ function CommentThread({
     }
   }
 
+  const reportComment = async () => {
+    if (!currentUserId) return
+    if (!confirm("Signaler ce commentaire à la modération ?")) return
+    setBusy(true)
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.from("reports").insert({
+        reporter_id: currentUserId,
+        reported_type: "comment",
+        reported_id: comment.id,
+        reason: "contenu_inapproprie",
+        description: "Commentaire signalé depuis le fil.",
+      })
+      if (error) {
+        toast.error("Signalement impossible. Réessaie.")
+        return
+      }
+      toast.success("Signalement envoyé. L’équipe GWA le verra.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const remove = async () => {
     if (!confirm("Supprimer ce commentaire ?")) return
     setBusy(true)
@@ -1998,6 +2021,16 @@ function CommentThread({
                 Répondre
               </button>
             )}
+            {currentUserId && !isMine ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void reportComment()}
+                className="font-medium text-[#4B5563]"
+              >
+                Signaler
+              </button>
+            ) : null}
             {isMine && !editing ? (
               <>
                 <button

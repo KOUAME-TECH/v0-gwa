@@ -22,7 +22,7 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline' https://onesignal.com https://cdn.onesignal.com",
       // unsafe-inline: Next inline + OneSignal SDK. Éviter unsafe-eval (retiré).
       "script-src 'self' 'unsafe-inline' https://cdn.onesignal.com https://onesignal.com https://api.onesignal.com",
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://onesignal.com https://*.onesignal.com https://api.onesignal.com https://api.open-meteo.com https://*.upstash.io https://nominatim.openstreetmap.org https://api.openai.com https://api.groq.com https://*.vercel.app",
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://onesignal.com https://*.onesignal.com https://api.onesignal.com https://api.open-meteo.com https://*.upstash.io https://nominatim.openstreetmap.org https://*.vercel.app",
       "frame-src 'self' https://www.openstreetmap.org",
       "worker-src 'self' blob:",
       "manifest-src 'self'",

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { formatPhoneE164, validateWestAfricaPhone } from "@/lib/auth/phone"
 import { getLinkCooldown, linkCooldownMessage } from "@/lib/auth/link-cooldown"
 
@@ -29,7 +30,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Email invalide" }, { status: 400 })
     }
 
-    const { data: profile } = await supabase
+    const { data: profile } = await createAdminClient()
       .from("profiles")
       .select("phone, email, linked_email, email_linked_at, phone_verified")
       .eq("id", user.id)

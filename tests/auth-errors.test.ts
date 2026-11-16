@@ -12,8 +12,10 @@ describe("mapAuthErrorMessage", () => {
     )
   })
 
-  it("garde un message inconnu lisible", () => {
-    expect(mapAuthErrorMessage("Something weird")).toBe("Something weird")
+  it("masque un message fournisseur inconnu", () => {
+    expect(mapAuthErrorMessage("Something weird")).toBe(
+      "Connexion impossible. Réessayez, ou utilisez un autre moyen.",
+    )
   })
 
   it("explique un provider Google non activé", () => {

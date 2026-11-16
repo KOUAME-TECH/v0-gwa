@@ -13,6 +13,7 @@ import {
   Building2, Sprout, CheckCircle2, AlertCircle, Globe, Plus, Copy
 } from 'lucide-react'
 import { createClient } from "@/lib/supabase/client"
+import { loadOwnProfile } from "@/lib/auth/own-profile"
 import { toast } from "sonner"
 import { isFactoringEligible } from "@/lib/factoring/eligibility"
 import { Banknote } from "lucide-react"
@@ -137,11 +138,7 @@ export default function CooperativeDashboard() {
         return
       }
 
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', authUser.id)
-        .single()
+      const profileData = await loadOwnProfile(supabase)
       setProfile(profileData)
 
       // Résolution multi-gestion : membership d’abord (admin/manager/member), puis admin_id, puis coop_id

@@ -99,11 +99,16 @@ export async function sendPushToUser(
   userId: string,
   notification: Omit<PushNotificationPayload, "playerIds" | "externalUserIds">,
 ): Promise<PushNotificationResult> {
-  const { data: profile } = await supabase
+  const { createAdminClient } = await import("@/lib/supabase/admin")
+  const { data: profile } = await createAdminClient()
     .from("profiles")
-    .select("onesignal_player_id")
+    .select("onesignal_player_id, notify_push")
     .eq("id", userId)
     .maybeSingle()
+
+  if (profile?.notify_push === false) {
+    return { success: false, error: "PUSH_DISABLED" }
+  }
 
   if (profile?.onesignal_player_id) {
     return sendPushNotification({

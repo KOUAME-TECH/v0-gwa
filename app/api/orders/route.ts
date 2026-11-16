@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { assertSameOrigin } from "@/lib/security/csrf"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { sendPushToUser } from "@/lib/notifications/push"
 import { isAgriculturalProductType } from "@/lib/catalog/scope"
@@ -42,7 +43,8 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await query
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      console.error("[api/orders GET]", error.message)
+      return NextResponse.json({ error: "Impossible de charger les commandes" }, { status: 500 })
     }
 
     return NextResponse.json({ orders: data ?? [] })
@@ -54,6 +56,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const csrf = assertSameOrigin(request)
+    if (csrf) return csrf
     const rate = await checkRateLimit("API_CREATE")
     if (!rate.success) {
       return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })

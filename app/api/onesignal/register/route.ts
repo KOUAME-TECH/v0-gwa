@@ -29,7 +29,7 @@ export async function POST(request: Request) {
         updated_at: new Date().toISOString(),
       })
       .eq("id", user.id)
-      .select("id, onesignal_player_id")
+      .select("id")
       .maybeSingle()
 
     if (error) {
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       profile_id: profile?.id,
-      onesignal_player_id: profile?.onesignal_player_id,
+      onesignal_player_id: playerId,
     })
   } catch (err) {
     console.error("[onesignal/register]", err)
