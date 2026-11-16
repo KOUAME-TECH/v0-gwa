@@ -35,19 +35,37 @@ function log(o) {
   )
 }
 
+function credential(name) {
+  return (process.env[name] || env[name] || "").trim()
+}
+
+const email = credential("E2E_EMAIL")
+const password = credential("E2E_PASSWORD")
+if (!email || !password) {
+  console.error(
+    "E2E_EMAIL et E2E_PASSWORD sont requis. Définissez-les dans l'environnement ou dans .env.local. Le mot de passe n'est jamais journalisé.",
+  )
+  process.exit(1)
+}
+
+function redactSecrets(message) {
+  return String(message ?? "").split(password).join("[redacted]")
+}
+
 const { data, error } = await sb.auth.signInWithPassword({
-  email: "kouamecorporation@gmail.com",
-  password: "GwaLocal!WUrNIevV",
+  email,
+  password,
 })
 
 if (error) {
+  const err = redactSecrets(error.message).slice(0, 100)
   log({
     hypothesisId: "H5",
     location: "auth-smoke",
     message: "login_fail",
-    data: { err: error.message.slice(0, 100) },
+    data: { err },
   })
-  console.log("login_fail", error.message)
+  console.log("login_fail", err)
   process.exit(0)
 }
 
