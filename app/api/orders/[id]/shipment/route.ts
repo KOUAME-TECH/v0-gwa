@@ -4,6 +4,7 @@
  */
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { compressFile } from "@/lib/images/compress"
 import { sendPushNotification } from "@/lib/notifications/push"
 
@@ -26,7 +27,7 @@ export async function POST(
       .single()
 
     if (!order) return NextResponse.json({ error: "Commande introuvable" }, { status: 404 })
-    if (!["confirme", "en_preparation", "paiement_escrow"].includes(order.status)) {
+    if (!["confirmed", "paid_preorder", "processing"].includes(order.status)) {
       return NextResponse.json(
         { error: "Statut de commande incompatible pour l'expédition" },
         { status: 400 }
@@ -67,14 +68,17 @@ export async function POST(
     const now = new Date().toISOString()
 
     // Mettre à jour la commande
-    const { error: updateError } = await supabase
+    // service_role : le statut est protégé par trigger (068) ; le vendeur est vérifié plus haut.
+    const { error: updateError } = await createAdminClient()
       .from("orders")
       .update({
         proof_of_shipment_url: proof_url,
-        status: "en_transit",
+        status: "shipped",
         updated_at: now,
       })
       .eq("id", orderId)
+      .eq("seller_id", user.id)
+      .eq("payment_status", "paid")
 
     if (updateError) {
       console.error("[GWA] shipment order update error:", updateError)

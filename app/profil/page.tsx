@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
+import { purgeClientCaches } from "@/lib/security/purge-client-caches"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -85,10 +86,8 @@ export default function ProfilPage() {
       }
 
       const { data: profileData } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .single()
+        .rpc("get_own_profile")
+        .maybeSingle<Profile>()
 
       if (!mounted) return
 
@@ -158,10 +157,12 @@ export default function ProfilPage() {
     try {
       await fetch("/api/auth/logout", { method: "POST" })
       await supabase.auth.signOut()
+      await purgeClientCaches()
       router.replace("/auth/login")
       router.refresh()
     } catch {
       await supabase.auth.signOut()
+      await purgeClientCaches()
       router.replace("/auth/login")
     }
   }

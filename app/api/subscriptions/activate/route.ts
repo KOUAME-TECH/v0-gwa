@@ -5,12 +5,26 @@ import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { sanitizeForQuery } from "@/lib/security/validation"
 import { normalizeSubscriptionTier } from "@/lib/pricing/service-fee"
 import { legacyTierPlanName, pricingPlanMatchFilter } from "@/lib/pricing/quote"
+import { z } from "zod"
 import { isSellerRole } from "@/lib/dashboard/routing"
+
+const activateSchema = z
+  .object({
+    admin_id: z.string().uuid(),
+    request_id: z.string().uuid().optional(),
+    user_id: z.string().uuid().optional(),
+    phone: z.string().trim().min(6).max(20).optional(),
+    tier: z.string().trim().max(30).optional(),
+  })
+  .strict()
+  .refine((v) => v.request_id || ((v.user_id || v.phone) && v.tier), {
+    message: "request_id ou (user_id|phone + tier) requis",
+  })
 
 /**
  * POST /api/subscriptions/activate
  * Admin only (section subscriptions) — active un palier après preuve WhatsApp.
- * Body: { request_id } OU { user_id, tier } OU { phone, tier }
+ * Body: { admin_id (= admin connecté) } + { request_id } OU { user_id, tier } OU { phone, tier }
  */
 export async function POST(request: NextRequest) {
   try {
@@ -31,7 +45,18 @@ export async function POST(request: NextRequest) {
     }
 
     const admin = gate.admin
-    const body = await request.json().catch(() => null)
+    const rawBody = await request.json().catch(() => null)
+    const parsedBody = activateSchema.safeParse(rawBody)
+    if (!parsedBody.success) {
+      return NextResponse.json(
+        { error: "Requête invalide", details: parsedBody.error.flatten() },
+        { status: 400 },
+      )
+    }
+    const body = parsedBody.data
+    if (body.admin_id !== gate.user.id) {
+      return NextResponse.json({ error: "admin_id ne correspond pas à l’admin connecté" }, { status: 403 })
+    }
     let targetUserId = String(body?.user_id || "")
     let tier = normalizeSubscriptionTier(body?.tier)
     const requestId = String(body?.request_id || "")
@@ -127,6 +152,18 @@ export async function POST(request: NextRequest) {
     if (updErr) {
       console.error("[api/subscriptions/activate] profile", updErr.message)
       return NextResponse.json({ error: "Activation impossible" }, { status: 500 })
+    }
+
+    const { error: auditErr } = await admin.from("pricing_plan_audit").insert({
+      plan_id: planRow?.id ?? null,
+      actor_id: gate.user.id,
+      action: "subscription_activate",
+      before_state: { user_id: targetUserId, tier: targetProfile.subscription_tier },
+      after_state: { user_id: targetUserId, tier, request_id: requestId || null },
+    })
+    if (auditErr) {
+      console.error("[api/subscriptions/activate] audit", auditErr.message)
+      return NextResponse.json({ error: "Audit impossible, activation signalée à vérifier" }, { status: 500 })
     }
 
     if (requestId) {

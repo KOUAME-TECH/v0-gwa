@@ -122,7 +122,8 @@ export async function POST(request: NextRequest) {
     const result = await askYelly({
       message,
       page,
-      contextHint: [contextHint, cityHint].filter(Boolean).join(" | ") || undefined,
+      contextHint:
+        redactPiiForAi([contextHint, cityHint].filter(Boolean).join(" | "), 400) || undefined,
     })
 
     let savedId: string | null = conversationId

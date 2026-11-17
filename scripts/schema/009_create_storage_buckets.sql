@@ -1,3 +1,4 @@
+-- NB : les policies INSERT ci-dessous sont remplacées par 080_module6_storage_policies.sql (dossier = auth.uid()).
 -- Create storage buckets for file uploads
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES 

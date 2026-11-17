@@ -32,9 +32,6 @@ const securityHeaders = [
 ]
 
 const nextConfig = {
-  typescript: {
-    ignoreBuildErrors: true,
-  },
   images: {
     formats: ["image/avif", "image/webp"],
     minimumCacheTTL: 86400,

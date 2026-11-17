@@ -180,7 +180,31 @@ export function getRecommandation(score: number, dims: SCGDimensions): string {
   return "Profil insuffisant — Effectuer au moins 5 transactions pour activer le score complet."
 }
 
+/** Compte sans aucune activité mesurable : score 0, statut « Insuffisant » (aucun bonus d'ancienneté). */
+export function isEmptyAccount(d: ProducteurData): boolean {
+  return (
+    (d.commandes_total ?? 0) === 0 &&
+    (d.nb_evaluations ?? 0) === 0 &&
+    (d.offres_publiees_total ?? 0) === 0 &&
+    (d.gmv_cumule_fcfa ?? 0) === 0
+  )
+}
+
 export function calculateSCG(data: ProducteurData): SCGResult {
+  if (isEmptyAccount(data)) {
+    const dimensions: SCGDimensions = { fiabilite: 0, qualite: 0, engagement: 0, volumes: 0, stabilite: 0 }
+    const badge = getBadge(0)
+    return {
+      user_id: data.user_id,
+      score_total: 0,
+      badge: badge.id,
+      badge_label: badge.label,
+      dimensions,
+      recommandation: getRecommandation(0, dimensions),
+      bancable: false,
+      calculated_at: new Date().toISOString(),
+    }
+  }
   const d1 = scoreFiabilite(data)
   const d2 = scoreQualite(data)
   const d3 = scoreEngagement(data)

@@ -1,5 +1,6 @@
 "use client"
 
+import { createClient } from "@/lib/supabase/client"
 import { useCallback, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -84,13 +85,20 @@ export default function AdminSubscriptionsPage() {
     void load()
   }, [load])
 
+  async function currentAdminId(): Promise<string> {
+    const {
+      data: { user },
+    } = await createClient().auth.getUser()
+    return user?.id ?? ""
+  }
+
   async function activate(id: string) {
     setBusy(id)
     try {
       const res = await fetch("/api/subscriptions/activate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ request_id: id }),
+        body: JSON.stringify({ request_id: id, admin_id: await currentAdminId() }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -139,6 +147,7 @@ export default function AdminSubscriptionsPage() {
         body: JSON.stringify({
           phone: manualPhone.trim(),
           tier: manualTier,
+          admin_id: await currentAdminId(),
         }),
       })
       const data = await res.json().catch(() => ({}))

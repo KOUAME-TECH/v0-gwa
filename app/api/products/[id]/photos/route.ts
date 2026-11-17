@@ -80,7 +80,7 @@ export async function POST(
       const originalKb = Math.round(file.size / 1024)
 
       // Upload vers Supabase Storage (bucket "products")
-      const fileName = `${productId}/${Date.now()}-${Math.random().toString(36).slice(2)}.webp`
+      const fileName = `${user.id}/${productId}/${Date.now()}-${Math.random().toString(36).slice(2)}.webp`
 
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from("products")

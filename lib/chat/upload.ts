@@ -224,7 +224,6 @@ type SupabaseLike = {
   }
   storage: {
     from: (bucket: string) => {
-      getPublicUrl: (path: string) => { data: { publicUrl: string } }
       createSignedUrl: (
         path: string,
         expiresIn: number,
@@ -334,11 +333,9 @@ export async function uploadChatMedia(opts: {
     .from(CHAT_MEDIA_BUCKET)
     .createSignedUrl(path, CHAT_SIGNED_URL_TTL_SEC)
 
-  let displayUrl = signed?.signedUrl || ""
+  const displayUrl = signed?.signedUrl || ""
   if (signErr || !displayUrl) {
-    displayUrl = opts.supabase.storage
-      .from(CHAT_MEDIA_BUCKET)
-      .getPublicUrl(path).data.publicUrl
+    throw new Error("Lien média indisponible")
   }
 
   opts.onProgress?.({ percent: 100, stage: "done" })
@@ -357,8 +354,5 @@ export async function resolveChatMediaUrl(
     .from(CHAT_MEDIA_BUCKET)
     .createSignedUrl(path, CHAT_SIGNED_URL_TTL_SEC)
   if (!error && data?.signedUrl) return data.signedUrl
-  return (
-    supabase.storage.from(CHAT_MEDIA_BUCKET).getPublicUrl(path).data.publicUrl ||
-    mediaUrl
-  )
+  return null
 }

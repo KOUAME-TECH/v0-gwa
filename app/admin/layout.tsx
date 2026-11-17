@@ -6,6 +6,7 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { purgeClientCaches } from "@/lib/security/purge-client-caches"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { GwaMark } from "@/components/brand/gwa-mark"
@@ -178,6 +179,7 @@ export default function AdminLayout({
   const handleLogout = async () => {
     const supabase = createClient()
     await supabase.auth.signOut()
+    await purgeClientCaches()
     router.push("/auth/login")
   }
 

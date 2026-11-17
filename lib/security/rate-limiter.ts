@@ -142,8 +142,14 @@ export async function rateLimit(
     const redisResult = await rateLimitRedis(key, config)
     if (redisResult) return redisResult
   } catch (err) {
-    console.error("[rate-limit] upstash fallback", err)
+    console.error("[rate-limit] upstash error", err)
   }
+  // Production : Redis (Upstash) obligatoire — fail-closed, jamais de compteur en mémoire par instance.
+  if (process.env.NODE_ENV === "production") {
+    console.error("[rate-limit] Upstash indisponible ou non configuré : requête refusée")
+    return { success: false, remaining: 0, resetAt: Date.now() + config.windowMs, blocked: false }
+  }
+  // Dev / tests uniquement.
   return rateLimitMemory(key, config)
 }
 

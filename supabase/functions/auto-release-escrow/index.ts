@@ -14,7 +14,7 @@ Deno.serve(async () => {
   const { data: orders, error } = await supabase
     .from('orders')
     .select('id, order_number, seller_id, vendeur_recoit_fcfa, total_amount')
-    .eq('status', 'livre')
+    .eq('status', 'delivered')
     .eq('escrow_status', 'held')
     .lt('confirmed_by_buyer_at', limit72h)
 

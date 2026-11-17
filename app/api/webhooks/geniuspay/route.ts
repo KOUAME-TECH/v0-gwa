@@ -1,7 +1,11 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { resolveGeniusPayWebhookSecret } from "@/lib/payment/geniuspay";
+import { getGeniusPayPayment, resolveGeniusPayWebhookSecret } from "@/lib/payment/geniuspay";
+import {
+  isGeniusPayPaymentForOrder,
+  isGeniusPaySuccessStatus,
+} from "@/lib/payment/geniuspay-validation";
 import { payInLedgerLines, recordLedgerLines } from "@/lib/features/payments/ledger";
 
 export async function POST(request: Request) {
@@ -27,55 +31,81 @@ export async function POST(request: Request) {
   const b = Buffer.from(signature.replace(/^sha256=/i, "").trim());
   if (a.length !== b.length || !timingSafeEqual(a, b))
     return NextResponse.json({ error: "Signature invalide" }, { status: 401 });
-  const payload = JSON.parse(raw) as Record<string, any>;
+  let payload: Record<string, any>;
+  try {
+    payload = JSON.parse(raw) as Record<string, any>;
+  } catch {
+    return NextResponse.json({ error: "Payload invalide" }, { status: 400 });
+  }
   const reference = String(payload.reference || payload.data?.reference || "");
   const status = String(
     payload.status || payload.data?.status || "",
   ).toLowerCase();
-  const amount = Number(payload.amount ?? payload.data?.amount);
+  const rawAmount = payload.amount ?? payload.data?.amount;
+  const amount =
+    rawAmount === null || rawAmount === undefined || rawAmount === ""
+      ? Number.NaN
+      : Number(rawAmount);
+  const currency = String(payload.currency ?? payload.data?.currency ?? "")
+    .trim()
+    .toUpperCase();
   if (!reference)
     return NextResponse.json({ error: "reference manquante" }, { status: 400 });
   const admin = createAdminClient();
   const { data: order } = await admin
     .from("orders")
-    .select("id,total_amount,payment_status,escrow_status,fulfillment_mode,currency")
+    .select("id,buyer_id,total_amount,payment_status,escrow_status,fulfillment_mode,currency")
     .eq("payment_reference", reference)
     .maybeSingle();
   if (!order) return NextResponse.json({ received: true, matched: false });
   if (["completed", "success", "successful", "paid"].includes(status)) {
-    if (Number.isFinite(amount) && amount !== Number(order.total_amount))
-      return NextResponse.json({ error: "Montant invalide" }, { status: 422 });
-    // Idempotence : déjà payé → ACK sans double écriture.
-    if (order.payment_status === "paid") {
-      return NextResponse.json({
-        received: true,
-        matched: true,
-        idempotent: true,
-      });
+    // Montant et devise obligatoires et cohérents avec la commande.
+    if (!Number.isFinite(amount) || amount <= 0 || !currency)
+      return NextResponse.json({ error: "Montant ou devise manquant" }, { status: 422 });
+    if (
+      amount !== Math.round(Number(order.total_amount)) ||
+      currency !== String(order.currency || "XOF").toUpperCase()
+    )
+      return NextResponse.json({ error: "Montant ou devise incohérent" }, { status: 422 });
+    let newlyPaid = false;
+    if (order.payment_status !== "paid") {
+      // Contre-vérification serveur à serveur auprès de GeniusPay avant de libérer quoi que ce soit.
+      const verified = await getGeniusPayPayment(reference);
+      if (!verified.ok || !verified.data) {
+        return NextResponse.json({ error: "Vérification GeniusPay indisponible" }, { status: 502 });
+      }
+      const remote = verified.data as unknown as Parameters<typeof isGeniusPayPaymentForOrder>[0];
+      if (
+        !isGeniusPaySuccessStatus(String(remote.status || "")) ||
+        !isGeniusPayPaymentForOrder(remote, {
+          id: order.id,
+          userId: order.buyer_id,
+          totalAmount: Math.round(Number(order.total_amount)),
+          reference,
+        })
+      ) {
+        console.error("[webhooks/geniuspay] verification mismatch", { orderId: order.id });
+        return NextResponse.json({ error: "Paiement non concordant" }, { status: 422 });
+      }
+      // Update conditionnel anti-race (deux webhooks simultanés).
+      const { data: paidRows, error: payErr } = await admin
+        .from("orders")
+        .update({
+          payment_status: "paid",
+          escrow_status: "held",
+          status: order.fulfillment_mode === "preorder" ? "paid_preorder" : "confirmed",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", order.id)
+        .neq("payment_status", "paid")
+        .select("id");
+      if (payErr) {
+        console.error("[webhooks/geniuspay] order update", payErr.message.slice(0, 120));
+        return NextResponse.json({ error: "Le paiement n’a pas pu être enregistré." }, { status: 500 });
+      }
+      newlyPaid = Boolean(paidRows?.length);
     }
-    // Update conditionnel anti-race (deux webhooks simultanés).
-    const { data: paidRows, error: payErr } = await admin
-      .from("orders")
-      .update({
-        payment_status: "paid",
-        escrow_status: "held",
-        status: order.fulfillment_mode === "preorder" ? "paid_preorder" : "confirmed",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", order.id)
-      .neq("payment_status", "paid")
-      .select("id");
-    if (payErr) {
-      console.error("[webhooks/geniuspay] order update", payErr.message.slice(0, 120));
-      return NextResponse.json({ error: "Le paiement n’a pas pu être enregistré." }, { status: 500 });
-    }
-    if (!paidRows?.length) {
-      return NextResponse.json({
-        received: true,
-        matched: true,
-        idempotent: true,
-      });
-    }
+    if (newlyPaid) {
     await admin
       .from("escrow_transactions")
       .update({ status: "held", paid_at: new Date().toISOString() })
@@ -89,6 +119,8 @@ export async function POST(request: Request) {
         new_value: "held",
         notes: `reference=${reference}`,
       });
+    }
+    // Rejeu : le grand livre est idempotent (clé transaction/comptes/montant), toujours tenté.
     const ledger = await recordLedgerLines(
       admin as never,
       payInLedgerLines({
@@ -97,7 +129,12 @@ export async function POST(request: Request) {
         currency: order.currency || "XOF",
       }),
     );
-    if (!ledger.ok) console.error("[webhooks/geniuspay] ledger", ledger.error);
+    if (!ledger.ok) {
+      console.error("[webhooks/geniuspay] ledger", ledger.error);
+      // 5xx : GeniusPay rejouera ; l'écriture conditionnelle ci-dessus rend le rejeu idempotent côté commande,
+      // et gwa_record_ledger_entry est idempotent par (transaction, comptes, montant).
+      return NextResponse.json({ error: "Écriture comptable en échec" }, { status: 500 });
+    }
   }
   return NextResponse.json({ received: true, matched: true });
 }

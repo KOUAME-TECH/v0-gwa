@@ -1,7 +1,7 @@
 /* GWA PWA + OneSignal — v21 offline (OneSignal + shell) (navigations + shell + fallback) */
 importScripts("https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js")
 
-const CACHE = "gwa-v21-offline"
+const CACHE = "gwa-v22-private-safe"
 const SHELL = [
   "/",
   "/marketplace",
@@ -29,6 +29,36 @@ self.addEventListener("activate", (event) => {
     ),
   )
   self.clients.claim()
+})
+
+// Routes privées : jamais mises en cache (réseau uniquement).
+const PRIVATE_PREFIXES = [
+  "/profil",
+  "/admin",
+  "/api",
+  "/auth",
+  "/wallet",
+  "/dashboard",
+  "/messages",
+  "/commandes",
+  "/notifications",
+  "/abonnement",
+]
+function isPrivatePath(pathname) {
+  return PRIVATE_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"))
+}
+function isCacheable(response) {
+  const cc = response.headers.get("Cache-Control") || ""
+  return response.ok && !/no-store|private/i.test(cc)
+}
+
+// Déconnexion : purge totale des caches (postMessage {type:"GWA_LOGOUT"} depuis la page).
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "GWA_LOGOUT") {
+    event.waitUntil(
+      caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k)))),
+    )
+  }
 })
 
 async function offlineFallback(request) {
@@ -60,7 +90,7 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url)
 
   // API / OneSignal : réseau pur
-  if (url.pathname.startsWith("/api/")) return
+  if (isPrivatePath(url.pathname)) return
   if (url.hostname.includes("onesignal.com")) return
 
   // Navigations HTML : network-first → cache page → offline.html
@@ -68,7 +98,7 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(event.request)
         .then((response) => {
-          if (response.ok && url.origin === self.location.origin) {
+          if (isCacheable(response) && url.origin === self.location.origin) {
             const clone = response.clone()
             caches.open(CACHE).then((cache) => cache.put(event.request, clone))
           }
@@ -89,7 +119,7 @@ self.addEventListener("fetch", (event) => {
         (cached) =>
           cached ||
           fetch(event.request).then((response) => {
-            if (response.ok && url.origin === self.location.origin) {
+            if (isCacheable(response) && url.origin === self.location.origin) {
               const clone = response.clone()
               caches.open(CACHE).then((cache) => cache.put(event.request, clone))
             }
@@ -104,7 +134,7 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        if (response.ok && url.origin === self.location.origin) {
+        if (isCacheable(response) && url.origin === self.location.origin) {
           const clone = response.clone()
           caches.open(CACHE).then((cache) => cache.put(event.request, clone))
         }

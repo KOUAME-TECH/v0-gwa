@@ -130,7 +130,7 @@ export default function EditProfilPage() {
       }
 
       const [{ data: profileData }, { data: kyc }] = await Promise.all([
-        supabase.from("profiles").select("*").eq("id", user.id).single(),
+        supabase.rpc("get_own_profile").maybeSingle<Profile & Record<string, any>>(),
         supabase
           .from("verification_requests")
           .select("status")

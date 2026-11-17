@@ -31,6 +31,7 @@ import {
 } from "@/lib/auth/post-auth"
 import { mergeGuestCartToUser } from "@/lib/cart/guest"
 import { cn } from "@/lib/utils"
+import { signupSchema } from "@/lib/validation/profile"
 import { HibpPasswordBanner } from "@/components/auth/hibp-password-banner"
 import { GoogleOAuthButton } from "@/components/auth/google-oauth-button"
 import { useRealtimeLocation, formatCoords } from "@/hooks/use-realtime-location"
@@ -322,6 +323,13 @@ function SignupForm() {
 
     if (authMethod === "phone" && phoneVerified) {
       await completePhoneProfile()
+      setIsLoading(false)
+      return
+    }
+
+    const validation = signupSchema.safeParse(formData)
+    if (!validation.success) {
+      setError(validation.error.issues[0]?.message ?? "Formulaire invalide")
       setIsLoading(false)
       return
     }
