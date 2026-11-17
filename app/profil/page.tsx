@@ -77,10 +77,25 @@ export default function ProfilPage() {
 
       let profileData: Profile | null = null
       try {
-        const result = await supabase.rpc("get_own_profile").maybeSingle<Profile>()
+        // profiles_public excludes columns whose SELECT privilege was revoked in
+        // migration 037. Selecting from profiles with "*" fails as a whole,
+        // including the non-PII fields needed to render this page.
+        const result = await supabase
+          .from("profiles_public")
+          .select("id, full_name, avatar_url, bio, user_type, city, country, is_verified, rating")
+          .eq("id", currentUser.id)
+          .maybeSingle()
         profileData = result.data
+          ? {
+              ...result.data,
+              email: currentUser.email || "",
+            }
+          : null
         if (result.error) {
-          console.error("[profil] lecture du profil indisponible", result.error.code)
+          console.error("[profil] lecture du profil indisponible", {
+            code: result.error.code,
+            message: result.error.message,
+          })
         }
       } catch {
         console.error("[profil] lecture du profil indisponible")
