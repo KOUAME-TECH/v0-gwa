@@ -1,4 +1,13 @@
 /* GWA PWA + OneSignal — v21 offline (OneSignal + shell) (navigations + shell + fallback) */
+// Register synchronously before loading the SDK so it is present during initial evaluation.
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "GWA_LOGOUT") {
+    event.waitUntil(
+      caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k)))),
+    )
+  }
+})
+
 importScripts("https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js")
 
 const CACHE = "gwa-v22-private-safe"
@@ -51,15 +60,6 @@ function isCacheable(response) {
   const cc = response.headers.get("Cache-Control") || ""
   return response.ok && !/no-store|private/i.test(cc)
 }
-
-// Déconnexion : purge totale des caches (postMessage {type:"GWA_LOGOUT"} depuis la page).
-self.addEventListener("message", (event) => {
-  if (event.data && event.data.type === "GWA_LOGOUT") {
-    event.waitUntil(
-      caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k)))),
-    )
-  }
-})
 
 async function offlineFallback(request) {
   const cached = await caches.match(request)

@@ -8,10 +8,12 @@ describe.each(["sw.js", "OneSignalSDKWorker.js", "OneSignalSDKUpdaterWorker.js"]
   (worker) => {
     it("enregistre le traitement de déconnexion pendant l'évaluation initiale", async () => {
       const listeners: Record<string, (event: any) => void> = {}
+      const evaluationOrder: string[] = []
       const remove = vi.fn().mockResolvedValue(true)
       const caches = { keys: vi.fn().mockResolvedValue(["gwa-test"]), delete: remove }
       const self = {
         addEventListener: (name: string, handler: (event: any) => void) => {
+          evaluationOrder.push(`listener:${name}`)
           listeners[name] = handler
         },
       }
@@ -19,10 +21,13 @@ describe.each(["sw.js", "OneSignalSDKWorker.js", "OneSignalSDKUpdaterWorker.js"]
       runInNewContext(readFileSync(resolve(process.cwd(), "public", worker), "utf8"), {
         self,
         caches,
-        importScripts: vi.fn(),
+        importScripts: () => evaluationOrder.push("importScripts"),
       })
 
       expect(listeners.message).toBeTypeOf("function")
+      expect(evaluationOrder.indexOf("listener:message")).toBeLessThan(
+        evaluationOrder.indexOf("importScripts"),
+      )
       let pending: Promise<unknown> | undefined
       listeners.message({
         data: { type: "GWA_LOGOUT" },

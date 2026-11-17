@@ -13,10 +13,12 @@ export async function GET() {
       return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
     }
 
+    // This endpoint is consumed by the factoring UI, which needs only public
+    // profile attributes and SCG fields. Never request restricted PII here.
     const { data: profile, error: profileError } = await supabase
-      .from("profiles")
+      .from("profiles_public")
       .select(
-        "id, email, linked_email, full_name, phone, phone_verified, user_type, sub_type, country, city, address, avatar_url, bio, is_verified, rating, total_reviews, auth_method, preferred_language, profile_completion_pct, onboarding_completed_at, scg_score, scg_badge, scg_bancable, scg_calculated_at, created_at, updated_at",
+        "id, full_name, user_type, sub_type, country, city, avatar_url, bio, is_verified, rating, total_reviews, profile_completion_pct, scg_score, scg_badge, scg_bancable, created_at",
       )
       .eq("id", user.id)
       .maybeSingle()
@@ -30,15 +32,15 @@ export async function GET() {
       profile: profile
         ? {
             ...profile,
-            email: profile.linked_email || profile.email || user.email || null,
-            phone: profile.phone || user.phone || null,
+            email: user.email || null,
+            phone: user.phone || null,
           }
         : null,
       scg_score: profile?.scg_score ?? 0,
       identity: {
         auth_phone: user.phone || null,
         auth_email: user.email || null,
-        linked: !!(profile?.phone && (profile?.linked_email || profile?.email || user.email)),
+        linked: Boolean(user.phone && user.email),
       },
     })
   } catch (err) {
