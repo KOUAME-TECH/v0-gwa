@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next"
-import { Outfit } from "next/font/google"
+import localFont from "next/font/local"
 import { Analytics } from "@vercel/analytics/next"
 import { OneSignalProvider } from "@/components/pwa/onesignal-provider"
 import { ServiceWorkerRegister } from "@/components/pwa/service-worker-register"
@@ -27,11 +27,12 @@ export const viewport: Viewport = {
   themeColor: "#1F5C2E",
 }
 
-const outfit = Outfit({
-  subsets: ["latin"],
+const outfit = localFont({
+  src: "../public/fonts/outfit-latin-wght-normal.woff2",
   display: "swap",
   preload: false,
   variable: "--font-outfit",
+  weight: "100 900",
 })
 
 export default function RootLayout({
