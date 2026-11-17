@@ -74,14 +74,25 @@ export default function WalletPage() {
     setUser(user)
 
     // Get profile
-    const { data: profileData } = await supabase
+    const { data: profileData, error: profileError } = await supabase
       .from('profiles')
-      .select('*')
+      .select('id, user_type')
       .eq('id', user.id)
       .single()
-    
+
+    if (profileError || !profileData) {
+      setError("Impossible de charger votre profil. Réessayez.")
+      setLoading(false)
+      return
+    }
+
     setProfile(profileData)
-    setWithdrawPhone(profileData?.phone || "")
+    try {
+      const { data: ownProfile } = await supabase.rpc("get_own_profile").maybeSingle<{ phone: string | null }>()
+      setWithdrawPhone(ownProfile?.phone || user.phone || "")
+    } catch {
+      setWithdrawPhone(user.phone || "")
+    }
 
     if (!isSellerRole(profileData?.user_type)) {
       setLoading(false)
@@ -281,6 +292,21 @@ export default function WalletPage() {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
           </div>
         </div>
+      </div>
+    )
+  }
+
+  if (!profile && error) {
+    return (
+      <div className="min-h-screen bg-background p-6">
+        <p role="alert">{error}</p>
+        <Button onClick={() => {
+          setError(null)
+          setLoading(true)
+          void loadWalletData()
+        }}>
+          Réessayer
+        </Button>
       </div>
     )
   }

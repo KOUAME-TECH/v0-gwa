@@ -139,7 +139,7 @@ export default function CooperativeDashboard() {
 
       const { data: profileData } = await supabase
         .from('profiles')
-        .select('*')
+        .select('id, coop_id, scg_bancable, scg_score')
         .eq('id', authUser.id)
         .single()
       setProfile(profileData)

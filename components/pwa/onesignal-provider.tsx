@@ -105,7 +105,7 @@ export function OneSignalProvider({ children }: { children: React.ReactNode }) {
           origin: window.location.origin,
         }
         // Domaine preview non déclaré dans OneSignal Dashboard → message actionnable
-        if (/not configured for web push/i.test(msg)) {
+        if (/not configured for web push|can only be used on/i.test(msg)) {
           console.warn(
             `[OneSignal] Ajoutez l'origine ${window.location.origin} dans OneSignal → Settings → Platforms → Web`,
           )

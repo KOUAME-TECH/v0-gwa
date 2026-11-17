@@ -71,7 +71,7 @@ export function PushSettingsCard() {
       await refresh()
       if (window.__GWA_ONESIGNAL_STATUS && !window.__GWA_ONESIGNAL_STATUS.ok) {
         toast.error(
-          /not configured for web push/i.test(window.__GWA_ONESIGNAL_STATUS.error || "")
+          /not configured for web push|can only be used on/i.test(window.__GWA_ONESIGNAL_STATUS.error || "")
             ? "Domaine non autorisé dans OneSignal Dashboard"
             : window.__GWA_ONESIGNAL_STATUS.error || "Init OneSignal échouée",
         )
