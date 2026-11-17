@@ -34,6 +34,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       try {
         const { data, error: authError } = await supabase.auth.getUser()
         if (!active || current !== generation) return
+        if (process.env.NODE_ENV === "development") {
+          console.debug("[auth] getUser", {
+            hasUser: Boolean(data.user),
+            error: authError?.name ?? null,
+          })
+        }
         setUser(data.user)
         setError(Boolean(!data.user && authError && authError.name !== "AuthSessionMissingError"))
       } catch {
@@ -46,7 +52,14 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
 
     void loadUser()
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (process.env.NODE_ENV === "development") {
+        console.debug("[auth] état de session", {
+          event,
+          hasSession: Boolean(session),
+          hasUser: Boolean(session?.user),
+        })
+      }
       if (event === "SIGNED_OUT") {
         generation++
         clearTimeout(timer)
