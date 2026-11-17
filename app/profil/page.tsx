@@ -29,27 +29,12 @@ import {
   LayoutDashboard,
 } from "lucide-react"
 import { shouldShowVerifiedBadge } from "@/lib/verification/badge"
+import { profileForAuthenticatedUser, type DisplayProfile as Profile } from "@/lib/auth/profile-display"
 import { dashboardPathForUserType, isSellerRole } from "@/lib/dashboard/routing"
 import {
   isDualIdentity,
   productEspaceLabel,
 } from "@/lib/auth/dual-identity"
-type Profile = {
-  id: string
-  full_name: string
-  email: string
-  avatar_url: string | null
-  bio: string | null
-  user_type: string | null
-  city: string | null
-  country: string | null
-  is_verified: boolean
-  rating: number | null
-  phone?: string | null
-  phone_verified?: boolean | null
-  linked_email?: string | null
-}
-
 type MenuItem = {
   icon: typeof Package
   label: string
@@ -67,6 +52,8 @@ export default function ProfilPage() {
   const [unreadNotifs, setUnreadNotifs] = useState(0)
   const [unreadMsgs, setUnreadMsgs] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
+  const [sessionError, setSessionError] = useState(false)
+  const [profileUnavailable, setProfileUnavailable] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
   const [adminRoleLabel, setAdminRoleLabel] = useState<string | null>(null)
@@ -74,26 +61,60 @@ export default function ProfilPage() {
 
   useEffect(() => {
     let mounted = true
+    let generation = 0
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined
 
     const loadProfile = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
+      const current = ++generation
+      let result: Awaited<ReturnType<typeof supabase.auth.getUser>>
+      try {
+        result = await supabase.auth.getUser()
+      } catch {
+        if (mounted && current === generation) {
+          setSessionError(true)
+          setIsLoading(false)
+        }
+        return
+      }
+
+      if (!mounted || current !== generation) return
+      const { user } = result.data
 
       if (!user) {
+        if (result.error && result.error.name !== "AuthSessionMissingError") {
+          setSessionError(true)
+          setIsLoading(false)
+          return
+        }
         router.replace("/auth/login?redirect=/profil")
         return
       }
 
-      const { data: profileData } = await supabase
-        .rpc("get_own_profile")
-        .maybeSingle<Profile>()
+      setSessionError(false)
+      setProfileUnavailable(false)
+      setIsAdmin(false)
+      setAdminRoleLabel(null)
+      setUnreadNotifs(0)
+      setUnreadMsgs(0)
+      setStats({ products: 0, orders: 0, favorites: 0 })
+      setProfile(profileForAuthenticatedUser(user, null))
+      setIsLoading(false)
 
-      if (!mounted) return
-
-      if (profileData) {
-        setProfile({ ...profileData, email: user.email || profileData.email || "" })
+      let profileData: Profile | null = null
+      try {
+        const result = await supabase.rpc("get_own_profile").maybeSingle<Profile>()
+        profileData = result.data
+        if (result.error) {
+          console.error("[profil] lecture du profil indisponible", result.error.code)
+        }
+      } catch {
+        console.error("[profil] lecture du profil indisponible")
       }
+
+      if (!mounted || current !== generation) return
+
+      setProfile(profileForAuthenticatedUser(user, profileData))
+      setProfileUnavailable(!profileData || profileData.id !== user.id)
 
       const [productsRes, ordersRes, favoritesRes, adminRes, notifRes, msgRes] =
         await Promise.all([
@@ -127,7 +148,7 @@ export default function ProfilPage() {
             .neq("sender_id", user.id),
         ])
 
-      if (!mounted) return
+      if (!mounted || current !== generation) return
 
       setIsAdmin(!!adminRes.data)
       setAdminRoleLabel(
@@ -142,12 +163,26 @@ export default function ProfilPage() {
         orders: ordersRes.count || 0,
         favorites: favoritesRes.count || 0,
       })
-      setIsLoading(false)
     }
 
     void loadProfile()
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT") {
+        generation++
+        clearTimeout(refreshTimer)
+        setProfile(null)
+        setIsLoading(true)
+        router.replace("/auth/login?redirect=/profil")
+      } else if (event === "SIGNED_IN" || event === "USER_UPDATED") {
+        clearTimeout(refreshTimer)
+        refreshTimer = setTimeout(() => void loadProfile(), 0)
+      }
+    })
     return () => {
       mounted = false
+      generation++
+      clearTimeout(refreshTimer)
+      subscription.unsubscribe()
     }
   }, [supabase, router])
 
@@ -196,14 +231,21 @@ export default function ProfilPage() {
     )
   }
 
-  if (!profile) {
+  if (sessionError || !profile) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center p-5 gwa-shell-page">
         <div className="text-center">
-          <h2 className="text-xl font-semibold mb-2">Connectez-vous</h2>
+          <h2 className="text-xl font-semibold mb-2">
+            {sessionError ? "Impossible de vérifier votre session" : "Connectez-vous"}
+          </h2>
           <p className="text-neutral-500 text-sm mb-6">
-            pour accéder à votre espace Moi
+            {sessionError ? "Vérifiez votre connexion et réessayez." : "pour accéder à votre espace Moi"}
           </p>
+          {sessionError && (
+            <Button className="rounded-full px-8 mr-2" onClick={() => window.location.reload()}>
+              Réessayer
+            </Button>
+          )}
           <Link href="/auth/login?redirect=/profil">
             <Button className="rounded-full px-8">Se connecter</Button>
           </Link>
@@ -424,6 +466,11 @@ export default function ProfilPage() {
             Modifier le profil
           </Button>
         </Link>
+        {profileUnavailable && (
+          <p role="status" className="mt-3 text-sm text-neutral-600">
+            Les informations complètes de votre profil sont temporairement indisponibles.
+          </p>
+        )}
       </header>
 
       <div className="px-5 -mt-3 mb-4">
