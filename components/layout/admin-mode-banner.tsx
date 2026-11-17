@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation"
 import { Shield } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { isDualIdentity } from "@/lib/auth/dual-identity"
+import { useUser } from "@/components/auth/user-context"
 
 /**
  * Bandeau discret hors /admin : rappelle l’accès backoffice
@@ -15,9 +16,10 @@ export function AdminModeBanner() {
   const pathname = usePathname() || "/"
   const [show, setShow] = useState(false)
   const [dual, setDual] = useState(false)
+  const { user, isLoading } = useUser()
 
   useEffect(() => {
-    if (pathname.startsWith("/admin") || pathname.startsWith("/auth")) {
+    if (isLoading || !user || pathname.startsWith("/admin") || pathname.startsWith("/auth")) {
       setShow(false)
       return
     }
@@ -33,18 +35,13 @@ export function AdminModeBanner() {
         }
 
         const supabase = createClient()
-        const {
-          data: { user },
-        } = await supabase.auth.getUser()
         let userType: string | null = null
-        if (user) {
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("user_type")
-            .eq("id", user.id)
-            .maybeSingle()
-          userType = profile?.user_type ?? null
-        }
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("user_type")
+          .eq("id", user.id)
+          .maybeSingle()
+        userType = profile?.user_type ?? null
 
         if (!mounted) return
         setDual(isDualIdentity(true, userType))
@@ -57,7 +54,7 @@ export function AdminModeBanner() {
     return () => {
       mounted = false
     }
-  }, [pathname])
+  }, [pathname, user, isLoading])
 
   if (!show) return null
 

@@ -4,6 +4,7 @@ import { Analytics } from "@vercel/analytics/next"
 import { OneSignalProvider } from "@/components/pwa/onesignal-provider"
 import { ServiceWorkerRegister } from "@/components/pwa/service-worker-register"
 import { AppShell } from "@/components/layout/app-shell"
+import { UserProvider } from "@/components/auth/user-context"
 import "./globals.css"
 
 export const metadata: Metadata = {
@@ -50,11 +51,13 @@ export default function RootLayout({
         <link rel="dns-prefetch" href="https://cdn.onesignal.com" />
       </head>
       <body className="font-sans antialiased min-h-dvh bg-background text-foreground">
-        <OneSignalProvider>
-          <ServiceWorkerRegister />
-          <AppShell>{children}</AppShell>
-          <Analytics />
-        </OneSignalProvider>
+        <UserProvider>
+          <OneSignalProvider>
+            <ServiceWorkerRegister />
+            <AppShell>{children}</AppShell>
+            <Analytics />
+          </OneSignalProvider>
+        </UserProvider>
       </body>
     </html>
   )

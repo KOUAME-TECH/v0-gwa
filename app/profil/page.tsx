@@ -30,6 +30,7 @@ import {
 } from "lucide-react"
 import { shouldShowVerifiedBadge } from "@/lib/verification/badge"
 import { profileForAuthenticatedUser, type DisplayProfile as Profile } from "@/lib/auth/profile-display"
+import { useUser } from "@/components/auth/user-context"
 import { dashboardPathForUserType, isSellerRole } from "@/lib/dashboard/routing"
 import {
   isDualIdentity,
@@ -47,12 +48,11 @@ const APP_VERSION = "1.0.0"
 
 export default function ProfilPage() {
   const router = useRouter()
-  const [profile, setProfile] = useState<Profile | null>(null)
+  const [storedProfile, setProfile] = useState<Profile | null>(null)
   const [stats, setStats] = useState({ products: 0, orders: 0, favorites: 0 })
   const [unreadNotifs, setUnreadNotifs] = useState(0)
   const [unreadMsgs, setUnreadMsgs] = useState(0)
-  const [isLoading, setIsLoading] = useState(true)
-  const [sessionError, setSessionError] = useState(false)
+  const { user, isLoading, error: sessionError, refresh } = useUser()
   const [profileUnavailable, setProfileUnavailable] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
@@ -61,44 +61,19 @@ export default function ProfilPage() {
 
   useEffect(() => {
     let mounted = true
-    let generation = 0
-    let refreshTimer: ReturnType<typeof setTimeout> | undefined
-
+    if (!user) {
+      setProfile(null)
+      return () => { mounted = false }
+    }
+    const currentUser = user
     const loadProfile = async () => {
-      const current = ++generation
-      let result: Awaited<ReturnType<typeof supabase.auth.getUser>>
-      try {
-        result = await supabase.auth.getUser()
-      } catch {
-        if (mounted && current === generation) {
-          setSessionError(true)
-          setIsLoading(false)
-        }
-        return
-      }
-
-      if (!mounted || current !== generation) return
-      const { user } = result.data
-
-      if (!user) {
-        if (result.error && result.error.name !== "AuthSessionMissingError") {
-          setSessionError(true)
-          setIsLoading(false)
-          return
-        }
-        router.replace("/auth/login?redirect=/profil")
-        return
-      }
-
-      setSessionError(false)
       setProfileUnavailable(false)
       setIsAdmin(false)
       setAdminRoleLabel(null)
       setUnreadNotifs(0)
       setUnreadMsgs(0)
       setStats({ products: 0, orders: 0, favorites: 0 })
-      setProfile(profileForAuthenticatedUser(user, null))
-      setIsLoading(false)
+      setProfile(profileForAuthenticatedUser(currentUser, null))
 
       let profileData: Profile | null = null
       try {
@@ -111,44 +86,44 @@ export default function ProfilPage() {
         console.error("[profil] lecture du profil indisponible")
       }
 
-      if (!mounted || current !== generation) return
+      if (!mounted) return
 
-      setProfile(profileForAuthenticatedUser(user, profileData))
-      setProfileUnavailable(!profileData || profileData.id !== user.id)
+      setProfile(profileForAuthenticatedUser(currentUser, profileData))
+      setProfileUnavailable(!profileData || profileData.id !== currentUser.id)
 
       const [productsRes, ordersRes, favoritesRes, adminRes, notifRes, msgRes] =
         await Promise.all([
           supabase
             .from("products")
             .select("id", { count: "exact", head: true })
-            .eq("seller_id", user.id),
+            .eq("seller_id", currentUser.id),
           supabase
             .from("orders")
             .select("id", { count: "exact", head: true })
-            .or(`buyer_id.eq.${user.id},seller_id.eq.${user.id}`),
+            .or(`buyer_id.eq.${currentUser.id},seller_id.eq.${currentUser.id}`),
           supabase
             .from("favorites")
             .select("id", { count: "exact", head: true })
-            .eq("user_id", user.id),
+            .eq("user_id", currentUser.id),
           supabase
             .from("admin_roles")
             .select("role")
-            .eq("user_id", user.id)
+            .eq("user_id", currentUser.id)
             .eq("is_active", true)
             .maybeSingle(),
           supabase
             .from("notifications")
             .select("id", { count: "exact", head: true })
-            .eq("user_id", user.id)
+            .eq("user_id", currentUser.id)
             .eq("is_read", false),
           supabase
             .from("messages")
             .select("id", { count: "exact", head: true })
             .eq("is_read", false)
-            .neq("sender_id", user.id),
+            .neq("sender_id", currentUser.id),
         ])
 
-      if (!mounted || current !== generation) return
+      if (!mounted) return
 
       setIsAdmin(!!adminRes.data)
       setAdminRoleLabel(
@@ -166,25 +141,10 @@ export default function ProfilPage() {
     }
 
     void loadProfile()
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "SIGNED_OUT") {
-        generation++
-        clearTimeout(refreshTimer)
-        setProfile(null)
-        setIsLoading(true)
-        router.replace("/auth/login?redirect=/profil")
-      } else if (event === "SIGNED_IN" || event === "USER_UPDATED") {
-        clearTimeout(refreshTimer)
-        refreshTimer = setTimeout(() => void loadProfile(), 0)
-      }
-    })
     return () => {
       mounted = false
-      generation++
-      clearTimeout(refreshTimer)
-      subscription.unsubscribe()
     }
-  }, [supabase, router])
+  }, [supabase, user])
 
   const handleLogout = async () => {
     if (isLoggingOut) return
@@ -231,7 +191,7 @@ export default function ProfilPage() {
     )
   }
 
-  if (sessionError || !profile) {
+  if (sessionError || !user) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center p-5 gwa-shell-page">
         <div className="text-center">
@@ -242,7 +202,7 @@ export default function ProfilPage() {
             {sessionError ? "Vérifiez votre connexion et réessayez." : "pour accéder à votre espace Moi"}
           </p>
           {sessionError && (
-            <Button className="rounded-full px-8 mr-2" onClick={() => window.location.reload()}>
+            <Button className="rounded-full px-8 mr-2" onClick={refresh}>
               Réessayer
             </Button>
           )}
@@ -254,6 +214,7 @@ export default function ProfilPage() {
     )
   }
 
+  const profile = storedProfile?.id === user.id ? storedProfile : profileForAuthenticatedUser(user, null)
   const isSeller = isSellerRole(profile.user_type)
   const isCooperative = profile.user_type === "cooperative"
   const roleHome = dashboardPathForUserType(profile.user_type)
