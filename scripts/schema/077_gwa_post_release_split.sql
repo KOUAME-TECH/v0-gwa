@@ -177,7 +177,7 @@ CREATE FUNCTION public.gwa_post_release_split(
   p_currency text DEFAULT 'XOF',
   p_action text DEFAULT 'release',
   p_next_escrow text DEFAULT 'released',
-  p_next_status text DEFAULT 'livre',
+  p_next_status text DEFAULT 'delivered',
   p_confirmed_at timestamptz DEFAULT NULL,
   p_payout_status text DEFAULT NULL,
   p_payout_at timestamptz DEFAULT NULL
@@ -201,7 +201,7 @@ BEGIN
   IF p_transaction_id IS NULL THEN
     RAISE EXCEPTION 'pay_in_missing';
   END IF;
-  IF p_action NOT IN ('confirm', 'release') THEN
+  IF p_action NOT IN ('confirm', 'release', 'dispute_release') THEN
     RAISE EXCEPTION 'escrow_not_held';
   END IF;
 
@@ -214,7 +214,9 @@ BEGIN
 
   IF NOT FOUND
      OR v_order.payment_status IS DISTINCT FROM 'paid'
-     OR v_order.escrow_status IS DISTINCT FROM 'held'
+     OR NOT (v_order.escrow_status = 'held'
+             OR (p_action = 'dispute_release' AND v_order.escrow_status IN ('frozen', 'disputed')))
+     OR v_order.status = 'cancelled'
   THEN
     RAISE EXCEPTION 'escrow_not_held';
   END IF;
@@ -223,9 +225,10 @@ BEGIN
     RAISE EXCEPTION 'already_confirmed';
   END IF;
 
-  IF p_action = 'release' THEN
+  IF p_action IN ('release', 'dispute_release') THEN
     v_escrow_next := 'released';
-    v_status_next := 'livre';
+    -- 'livre' est refusé par orders_order_status_check (prod) : 'delivered' (fix/065-payout-whitelist).
+    v_status_next := 'delivered';
   ELSE
     IF p_next_escrow NOT IN ('held', 'released') THEN
       RAISE EXCEPTION 'escrow_not_held';
@@ -335,7 +338,8 @@ BEGIN
     END,
     payout_status = CASE
       WHEN p_action = 'confirm' THEN p_payout_status
-      ELSE payout_status
+      -- libération sans /confirm préalable (litige) : entre dans la file de versement (065 liste blanche)
+      ELSE COALESCE(payout_status, 'pending_ops')
     END,
     payout_fee_fcfa = CASE
       WHEN p_action = 'confirm' THEN COALESCE(p_payout_fee, 0)
@@ -347,7 +351,7 @@ BEGIN
     END,
     updated_at = now()
   WHERE id = p_transaction_id
-    AND escrow_status = 'held'
+    AND escrow_status = v_order.escrow_status
     AND payment_status = 'paid'
     AND (p_action <> 'confirm' OR confirmed_by_buyer_at IS NULL);
 

@@ -77,7 +77,7 @@ export type ReleaseSplit = {
 }
 
 export type ReleaseCommand = ReleaseSplit & {
-  action?: "confirm" | "release"
+  action?: "confirm" | "release" | "dispute_release"
   nextEscrow?: "held" | "released"
   nextStatus?: string
   confirmedAt?: string | null
@@ -315,7 +315,7 @@ export function applyReleaseTransaction(
   const next: EscrowOrderState = {
     ...order,
     escrow_status: action === "release" ? "released" : command.nextEscrow || "held",
-    status: action === "release" ? command.nextStatus || "livre" : "delivered",
+    status: "delivered",
     confirmed_by_buyer_at:
       action === "confirm" ? command.confirmedAt || new Date(0).toISOString() : order.confirmed_by_buyer_at,
   }
@@ -402,8 +402,8 @@ export async function recordReleaseSplitOnce(
       p_payout_fee: input.payoutFee,
       p_currency: input.currency,
       p_action: action,
-      p_next_escrow: action === "release" ? "released" : input.nextEscrow || "held",
-      p_next_status: action === "release" ? input.nextStatus || "livre" : "delivered",
+      p_next_escrow: action === "confirm" ? input.nextEscrow || "held" : "released",
+      p_next_status: "delivered",
       p_confirmed_at: input.confirmedAt ?? null,
       p_payout_status: input.payoutStatus ?? null,
       p_payout_at: input.payoutAt ?? null,
