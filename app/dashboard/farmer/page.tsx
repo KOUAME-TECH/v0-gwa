@@ -16,6 +16,7 @@ import {
   Eye,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+import { PUBLIC_PROFILE_COLUMNS } from "@/lib/profile/columns"
 import { WeatherWidget } from "@/components/weather-widget"
 import { isFactoringEligible } from "@/lib/factoring/eligibility"
 import { getCoachActions } from "@/lib/scg/coach"
@@ -78,7 +79,7 @@ export default function FarmerDashboard() {
 
       const { data: profileData } = await supabase
         .from("profiles")
-        .select("*")
+        .select(PUBLIC_PROFILE_COLUMNS)
         .eq("id", authUser.id)
         .single()
       setProfile(profileData)

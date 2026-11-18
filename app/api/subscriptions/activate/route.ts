@@ -129,6 +129,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Activation impossible" }, { status: 500 })
     }
 
+    if (body?.admin_id && body.admin_id !== gate.user.id) {
+      return NextResponse.json({ error: "admin_id ne correspond pas à la session" }, { status: 403 })
+    }
+
+    if (planRow?.id) {
+      await admin.from("pricing_plan_audit").insert({
+        plan_id: planRow.id,
+        actor_id: gate.user.id,
+        action: "admin_activate",
+        before_state: { subscription_tier: targetProfile.subscription_tier },
+        after_state: { subscription_tier: tier, pricing_plan_id: planRow.id },
+      })
+    }
+
     if (requestId) {
       await admin
         .from("subscription_requests")

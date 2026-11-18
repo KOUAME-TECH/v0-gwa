@@ -387,16 +387,7 @@ export function ChatConversation({
 
       // Mark unread as read only when l'utilisateur voit vraiment la conversation
       if (typeof document !== "undefined" && document.visibilityState === "visible") {
-        await supabase
-          .from("messages")
-          .update({
-            is_read: true,
-            status: "read",
-            read_at: new Date().toISOString(),
-          })
-          .eq("conversation_id", conversation.id)
-          .neq("sender_id", userId)
-          .eq("is_read", false)
+        await supabase.rpc("mark_messages_read", { p_conversation_id: conversation.id })
       }
     }
     load()
@@ -413,14 +404,7 @@ export function ChatConversation({
           setMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg])
           scroll()
           if (msg.sender_id !== userId && document.visibilityState === "visible") {
-            void supabase
-              .from("messages")
-              .update({
-                is_read: true,
-                status: "read",
-                read_at: new Date().toISOString(),
-              })
-              .eq("id", msg.id)
+            void supabase.rpc("mark_messages_read", { p_conversation_id: conversation.id })
           }
         }
       )

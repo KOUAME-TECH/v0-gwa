@@ -74,7 +74,7 @@ export default function AdminAnalyticsPage() {
     // Users
     const { count: totalUsers } = await supabase
       .from('profiles')
-      .select('*', { count: 'exact', head: true })
+      .select("id", { count: "exact", head: true })
 
     const { data: usersByTypeData } = await supabase
       .from('profiles')
@@ -102,19 +102,19 @@ export default function AdminAnalyticsPage() {
 
     const { count: newUsersThisMonth } = await supabase
       .from('profiles')
-      .select('*', { count: 'exact', head: true })
+      .select("id", { count: "exact", head: true })
       .gte('created_at', thisMonthStart.toISOString())
 
     const { count: newUsersLastMonth } = await supabase
       .from('profiles')
-      .select('*', { count: 'exact', head: true })
+      .select("id", { count: "exact", head: true })
       .gte('created_at', lastMonthStart.toISOString())
       .lt('created_at', lastMonthEnd.toISOString())
 
     // Products
     const { count: totalProducts } = await supabase
       .from('products')
-      .select('*', { count: 'exact', head: true })
+      .select("id", { count: "exact", head: true })
       .eq('status', 'active')
 
     const { data: productsByTypeData } = await supabase
@@ -206,21 +206,21 @@ export default function AdminAnalyticsPage() {
     // Cooperatives
     const { count: totalCooperatives } = await supabase
       .from('cooperatives')
-      .select('*', { count: 'exact', head: true })
+      .select("id", { count: "exact", head: true })
 
     const { count: verifiedCooperatives } = await supabase
       .from('cooperatives')
-      .select('*', { count: 'exact', head: true })
+      .select("id", { count: "exact", head: true })
       .eq('is_verified', true)
 
     // RFQs
     const { count: totalRfqs } = await supabase
       .from('rfq_requests')
-      .select('*', { count: 'exact', head: true })
+      .select("id", { count: "exact", head: true })
 
     const { count: openRfqs } = await supabase
       .from('rfq_requests')
-      .select('*', { count: 'exact', head: true })
+      .select("id", { count: "exact", head: true })
       .eq('status', 'open')
 
     setData({

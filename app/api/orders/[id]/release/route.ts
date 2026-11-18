@@ -6,6 +6,7 @@
  */
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { sendPushNotification } from "@/lib/notifications/push"
 import { sendSMSFallback } from "@/lib/notifications/sms"
 
@@ -40,7 +41,7 @@ export async function POST(
       if (order.escrow_status === "released") {
         return NextResponse.json({ error: "L'escrow est déjà libéré" }, { status: 400 })
       }
-      if (order.status === "litige") {
+      if (order.status === "disputed") {
         return NextResponse.json({ error: "Litige déjà ouvert" }, { status: 400 })
       }
 
@@ -52,7 +53,7 @@ export async function POST(
       }
 
       await supabase.from("orders").update({
-        status: "litige",
+        status: "disputed",
         escrow_status: "disputed",
         litige_description: description,
         litige_photos: photo_urls,
@@ -119,11 +120,21 @@ await sendPushNotification({ externalUserIds: [order.seller_id],
       return NextResponse.json({ error: "Escrow déjà libéré", already_released: true })
     }
 
-    await supabase.from("orders").update({
+    if (order.payment_status !== "paid" || order.escrow_status !== "held") {
+      return NextResponse.json({ error: "Le paiement n'est pas en séquestre." }, { status: 409 })
+    }
+
+    const admin = createAdminClient()
+    const { error: releaseError } = await admin.from("orders").update({
       escrow_status: "released",
-      status: "livre",
+      status: "delivered",
       updated_at: now,
-    }).eq("id", orderId)
+    }).eq("id", orderId).eq("payment_status", "paid").eq("escrow_status", "held")
+
+    if (releaseError) {
+      console.error("[release]", releaseError.message)
+      return NextResponse.json({ error: "La libération a échoué." }, { status: 500 })
+    }
 
     await supabase.from("escrow_transactions")
       .update({ status: "released", released_at: now })

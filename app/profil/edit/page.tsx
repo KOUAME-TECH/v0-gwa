@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation"
 import Image from "next/image"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
+import { PUBLIC_PROFILE_COLUMNS } from "@/lib/profile/columns"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -130,7 +131,7 @@ export default function EditProfilPage() {
       }
 
       const [{ data: profileData }, { data: kyc }] = await Promise.all([
-        supabase.from("profiles").select("*").eq("id", user.id).single(),
+        supabase.from("profiles").select(PUBLIC_PROFILE_COLUMNS).eq("id", user.id).single(),
         supabase
           .from("verification_requests")
           .select("status")
@@ -142,16 +143,22 @@ export default function EditProfilPage() {
       ])
 
       if (profileData) {
-        setProfile({ ...profileData, email: user.email || "" })
+        setProfile({
+          ...profileData,
+          email: user.email || "",
+          phone: user.phone || "",
+          address: "",
+          linked_email: null,
+        })
         setFormData({
           full_name: profileData.full_name || "",
-          email: profileData.linked_email || profileData.email || user.email || "",
+          email: user.email || "",
           bio: profileData.bio || "",
           user_type: profileData.user_type || "",
-          phone: profileData.phone || user.phone || "",
+          phone: user.phone || "",
           city: profileData.city || "",
           country: profileData.country || "",
-          address: profileData.address || "",
+          address: "",
           digest_enabled: profileData.digest_enabled !== false,
         })
       }
