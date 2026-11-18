@@ -15,12 +15,13 @@ import { maskPhone } from "@/lib/auth/phone"
 import { HibpPasswordBanner } from "@/components/auth/hibp-password-banner"
 import { GoogleOAuthButton } from "@/components/auth/google-oauth-button"
 import { GwaMark } from "@/components/brand/gwa-mark"
+import { safeOAuthNextPath } from "@/lib/auth/oauth"
 import { mergeGuestCartToUser } from "@/lib/cart/guest"
 
 function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const redirectTo = searchParams.get("redirect")
+  const redirectTo = safeOAuthNextPath(searchParams.get("redirect"))
 
   const [authTab, setAuthTab] = useState<"phone" | "email">("phone")
   const [phoneStep, setPhoneStep] = useState<"input" | "otp">("input")

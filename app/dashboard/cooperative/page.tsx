@@ -13,6 +13,7 @@ import {
   Building2, Sprout, CheckCircle2, AlertCircle, Globe, Plus, Copy
 } from 'lucide-react'
 import { createClient } from "@/lib/supabase/client"
+import { PUBLIC_PROFILE_COLUMNS } from "@/lib/profile/columns"
 import { toast } from "sonner"
 import { isFactoringEligible } from "@/lib/factoring/eligibility"
 import { Banknote } from "lucide-react"
@@ -139,7 +140,7 @@ export default function CooperativeDashboard() {
 
       const { data: profileData } = await supabase
         .from('profiles')
-        .select('*')
+        .select(PUBLIC_PROFILE_COLUMNS)
         .eq('id', authUser.id)
         .single()
       setProfile(profileData)

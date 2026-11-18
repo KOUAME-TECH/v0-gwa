@@ -1,7 +1,16 @@
 /* GWA PWA + OneSignal — v21 offline (OneSignal + shell) (navigations + shell + fallback) */
 importScripts("https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js")
 
-const CACHE = "gwa-v21-offline"
+const CACHE = "gwa-v22-offline"
+const PRIVATE = /^\/(profil|admin|api|dashboard|wallet|messages|panier|auth)(\/|$)/
+
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "LOGOUT") {
+    event.waitUntil(
+      caches.keys().then((keys) => Promise.all(keys.map((key) => caches.delete(key)))),
+    )
+  }
+})
 const SHELL = [
   "/",
   "/marketplace",
@@ -61,6 +70,7 @@ self.addEventListener("fetch", (event) => {
 
   // API / OneSignal : réseau pur
   if (url.pathname.startsWith("/api/")) return
+  if (PRIVATE.test(url.pathname)) return
   if (url.hostname.includes("onesignal.com")) return
 
   // Navigations HTML : network-first → cache page → offline.html
@@ -68,7 +78,7 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(event.request)
         .then((response) => {
-          if (response.ok && url.origin === self.location.origin) {
+          if (response.ok && url.origin === self.location.origin && !PRIVATE.test(url.pathname)) {
             const clone = response.clone()
             caches.open(CACHE).then((cache) => cache.put(event.request, clone))
           }
@@ -89,7 +99,7 @@ self.addEventListener("fetch", (event) => {
         (cached) =>
           cached ||
           fetch(event.request).then((response) => {
-            if (response.ok && url.origin === self.location.origin) {
+            if (response.ok && url.origin === self.location.origin && !PRIVATE.test(url.pathname)) {
               const clone = response.clone()
               caches.open(CACHE).then((cache) => cache.put(event.request, clone))
             }

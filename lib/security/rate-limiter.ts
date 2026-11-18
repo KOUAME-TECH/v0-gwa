@@ -144,6 +144,14 @@ export async function rateLimit(
   } catch (err) {
     console.error("[rate-limit] upstash fallback", err)
   }
+  if (process.env.NODE_ENV === "production") {
+    return {
+      success: false,
+      remaining: 0,
+      resetAt: Date.now() + 60_000,
+      blocked: true,
+    }
+  }
   return rateLimitMemory(key, config)
 }
 

@@ -29,6 +29,7 @@ import {
 } from "lucide-react"
 import { shouldShowVerifiedBadge } from "@/lib/verification/badge"
 import { dashboardPathForUserType, isSellerRole } from "@/lib/dashboard/routing"
+import { PUBLIC_PROFILE_COLUMNS } from "@/lib/profile/columns"
 import {
   isDualIdentity,
   productEspaceLabel,
@@ -84,17 +85,20 @@ export default function ProfilPage() {
         return
       }
 
-      const { data: profileData } = await supabase
+      const { data: profileData, error: profileError } = await supabase
         .from("profiles")
-        .select("*")
+        .select(PUBLIC_PROFILE_COLUMNS)
         .eq("id", user.id)
         .single()
 
       if (!mounted) return
 
-      if (profileData) {
-        setProfile({ ...profileData, email: user.email || profileData.email || "" })
+      if (profileError || !profileData) {
+        setIsLoading(false)
+        return
       }
+
+      setProfile({ ...profileData, email: user.email || "" })
 
       const [productsRes, ordersRes, favoritesRes, adminRes, notifRes, msgRes] =
         await Promise.all([
@@ -157,6 +161,9 @@ export default function ProfilPage() {
     setIsLoggingOut(true)
     try {
       await fetch("/api/auth/logout", { method: "POST" })
+      if (typeof navigator !== "undefined" && navigator.serviceWorker?.controller) {
+        navigator.serviceWorker.controller.postMessage({ type: "LOGOUT" })
+      }
       await supabase.auth.signOut()
       router.replace("/auth/login")
       router.refresh()
@@ -199,13 +206,13 @@ export default function ProfilPage() {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center p-5 gwa-shell-page">
         <div className="text-center">
-          <h2 className="text-xl font-semibold mb-2">Connectez-vous</h2>
+          <h2 className="text-xl font-semibold mb-2">Profil indisponible</h2>
           <p className="text-neutral-500 text-sm mb-6">
-            pour accéder à votre espace Moi
+            La session est ouverte, mais la fiche n&apos;a pas pu être lue.
           </p>
-          <Link href="/auth/login?redirect=/profil">
-            <Button className="rounded-full px-8">Se connecter</Button>
-          </Link>
+          <Button className="rounded-full px-8" onClick={() => window.location.reload()}>
+            Réessayer
+          </Button>
         </div>
       </div>
     )

@@ -4,8 +4,13 @@
  */
 
 export function safeOAuthNextPath(next: string | null | undefined): string | null {
-  if (!next || !next.startsWith("/") || next.startsWith("//")) return null
-  return next
+  if (!next) return null
+  const value = next.trim()
+  if (!value.startsWith("/") || value.startsWith("//")) return null
+  if (value.includes("\\") || value.includes("://")) return null
+  const lower = value.toLowerCase()
+  if (lower.includes("%5c") || lower.includes("%2f%2f")) return null
+  return value
 }
 
 /**

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { PUBLIC_PROFILE_COLUMNS } from "@/lib/profile/columns"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -76,12 +77,12 @@ export default function WalletPage() {
     // Get profile
     const { data: profileData } = await supabase
       .from('profiles')
-      .select('*')
+      .select(PUBLIC_PROFILE_COLUMNS)
       .eq('id', user.id)
       .single()
     
     setProfile(profileData)
-    setWithdrawPhone(profileData?.phone || "")
+    setWithdrawPhone(user.phone || "")
 
     if (!isSellerRole(profileData?.user_type)) {
       setLoading(false)

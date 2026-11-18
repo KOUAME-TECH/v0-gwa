@@ -4,6 +4,7 @@
  */
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { sendPushNotification } from "@/lib/notifications/push"
 import { sendSMSFallback } from "@/lib/notifications/sms"
 import { evaluatePlanSwitch } from "@/lib/pricing/switch"
@@ -26,7 +27,10 @@ export async function POST(
       .single()
 
     if (!order) return NextResponse.json({ error: "Commande introuvable" }, { status: 404 })
-    if (!["en_transit", "paiement_escrow", "confirme", "livre"].includes(order.status)) {
+    if (order.payment_status !== "paid" || order.escrow_status !== "held") {
+      return NextResponse.json({ error: "Le paiement n'est pas en séquestre." }, { status: 409 })
+    }
+    if (!["shipped", "processing", "confirmed", "paid", "paid_preorder"].includes(order.status)) {
       return NextResponse.json({ error: "Statut de commande incompatible" }, { status: 400 })
     }
     if (order.escrow_status === "released") {
@@ -35,17 +39,33 @@ export async function POST(
 
     const now = new Date().toISOString()
 
-    // Marquer livraison confirmée
-    await supabase
+    const admin = createAdminClient()
+    const { error: releaseError } = await admin
       .from("orders")
       .update({
-        status: "livre",
+        status: "delivered",
         escrow_status: "released",
         confirmed_by_buyer_at: now,
         delivered_at: now,
         updated_at: now,
       })
       .eq("id", orderId)
+      .eq("payment_status", "paid")
+      .eq("escrow_status", "held")
+
+    if (releaseError) {
+      console.error("[confirm-delivery]", releaseError.message)
+      return NextResponse.json({ error: "La libération a échoué." }, { status: 500 })
+    }
+
+    const { error: queueError } = await admin.from("scg_events_queue").insert({
+      user_id: order.seller_id,
+      order_id: orderId,
+      event_type: "delivery",
+    })
+    if (queueError && !/does not exist|42P01/i.test(queueError.message)) {
+      console.error("[confirm-delivery] scg queue", queueError.message)
+    }
 
     // Libérer toutes les escrow_transactions en attente
     await supabase

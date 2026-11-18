@@ -32,8 +32,8 @@ const securityHeaders = [
 ]
 
 const nextConfig = {
-  typescript: {
-    ignoreBuildErrors: true,
+    typescript: {
+    ignoreBuildErrors: false,
   },
   images: {
     formats: ["image/avif", "image/webp"],

@@ -41,6 +41,14 @@ const BY_ROLE: Record<AdminRole, Omit<AdminAiEntitlements, "role">> = {
     canSuggestFactoring: true,
     canAnalyzeCoop: true,
   },
+  finance_admin: {
+    requestsPerDay: 80,
+    canDraftModeration: false,
+    canDraftSupportReply: false,
+    canSummarizeDispute: true,
+    canSuggestFactoring: true,
+    canAnalyzeCoop: true,
+  },
   super_admin: {
     requestsPerDay: null,
     canDraftModeration: true,
