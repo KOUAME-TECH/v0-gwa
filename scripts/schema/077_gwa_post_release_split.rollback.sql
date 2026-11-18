@@ -1,6 +1,6 @@
 -- ROLLBACK 077 — ne pas exécuter en production sans revue.
--- Recréer l'index unique échoue s'il existe déjà deux lignes de même paire
--- (libération, extourne, nouvelle libération).
+-- Recréer l'index unique (financial_ledger_pair_uidx) échoue dès qu'il existe un
+-- doublon de paire (pay-in doublé, ou re-libération après extourne).
 
 DROP TRIGGER IF EXISTS trg_z_orders_freeze_payout_fee ON public.orders;
 DROP FUNCTION IF EXISTS public.orders_freeze_payout_fee();

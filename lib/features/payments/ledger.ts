@@ -1,5 +1,3 @@
-import { sellerReceivesAfterPayoutFee } from "@/lib/features/payments/payout-fee"
-
 export type LedgerLine = {
   transactionId: string
   debitAccount: string
@@ -60,10 +58,10 @@ export function payoutLedgerLines(input: {
       currency,
     })
   }
+  // Modèle (b) : le frais REVENUE_GWA_PAYOUT se poste au versement (079), pas ici.
   push(ESCROW_ACCOUNT, SELLER_WALLET_ACCOUNT, input.sellerNet)
   push(ESCROW_ACCOUNT, "REVENUE_GWA", input.commission)
   push(ESCROW_ACCOUNT, "REVENUE_GWA_BUYER_FEE", input.buyerFee || 0)
-  push(ESCROW_ACCOUNT, "REVENUE_GWA_PAYOUT", input.payoutFee || 0)
   return lines
 }
 
@@ -183,11 +181,13 @@ export function prepareReleaseSplit(
           0,
           gross - roundFcfa(order.commission_fcfa) - roundFcfa(order.service_fee),
         )
-  const payoutFee = frozen.fee
-  const sellerNet = sellerReceivesAfterPayoutFee(sellerBefore, payoutFee)
+  // Frais figé toujours exigé pour autoriser la libération, mais non déduit du net :
+  // il se facture une fois par versement (079), pas par commande.
+  const payoutFee = 0
+  const sellerNet = sellerBefore
   const commission = roundFcfa(order.commission_fcfa ?? order.seller_commission)
   const buyerFee = roundFcfa(order.buyer_service_fee)
-  const splitSum = sellerNet + commission + buyerFee + payoutFee
+  const splitSum = sellerNet + commission + buyerFee
   if (gross <= 0 || splitSum !== gross) {
     return { ok: false, code: "split_mismatch", gross, splitSum }
   }

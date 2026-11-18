@@ -1,4 +1,7 @@
 -- 077 — Libération atomique du séquestre, frais de versement figé au paiement.
+-- Modèle (b) : gwa_post_release_split n'écrit plus REVENUE_GWA_PAYOUT.
+-- Jambes à la libération : ESCROW_GWA → WALLET_SELLER (net de commission),
+-- REVENUE_GWA (commission), REVENUE_GWA_BUYER_FEE. Le frais se poste au versement (079).
 -- Ne recalcule aucune commande déjà payée. Aucun UPDATE de données.
 -- Les commandes antérieures, y compris celles d'avant le 5 novembre 2026,
 -- restent à payout_fee_frozen_fcfa NULL : la libération automatique doit refuser.
@@ -12,6 +15,37 @@
 -- Colonnes ajoutées, toutes les deux NULL, sans valeur par défaut, sans backfill :
 --   payout_fee_frozen_fcfa     frais lu par gwa_payout_fee au passage en paid
 --   payout_plan_id_at_payment  plan du profil à ce même instant
+
+BEGIN;
+
+-- Gardes (C1 QA) : échouer ici laisse le schéma intact (transaction unique).
+-- Ordre d'application : 02 → 03a → 076 (#48) → 077, go écrit de Yao, exécution humaine.
+DO $gwa077_guard$
+BEGIN
+  IF to_regprocedure('public.gwa_record_ledger_entry(uuid,text,text,integer,text)') IS NOT NULL
+     AND EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon')
+     AND has_function_privilege('anon', 'public.gwa_record_ledger_entry(uuid,text,text,integer,text)', 'EXECUTE')
+  THEN
+    RAISE EXCEPTION '077: étape 02 requise (révoquer EXECUTE de anon sur gwa_record_ledger_entry)';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'financial_ledger' AND column_name = 'entry_type'
+  ) THEN
+    RAISE EXCEPTION '077: migration 03a requise (financial_ledger.entry_type)';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public' AND c.relname = 'financial_ledger_pair_uidx'
+  ) THEN
+    RAISE EXCEPTION '077: index financial_ledger_pair_uidx requis (03a corrigée)';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.financial_ledger WHERE transaction_id IS NULL) THEN
+    RAISE EXCEPTION '077: des transaction_id NULL existent, NOT NULL impossible';
+  END IF;
+END
+$gwa077_guard$;
 
 ALTER TABLE public.orders
   ADD COLUMN IF NOT EXISTS payout_fee_frozen_fcfa integer;
@@ -122,6 +156,8 @@ CREATE TRIGGER trg_z_orders_freeze_payout_fee
   FOR EACH ROW
   EXECUTE FUNCTION public.orders_freeze_payout_fee();
 
+REVOKE ALL ON FUNCTION public.orders_freeze_payout_fee() FROM PUBLIC, anon, authenticated;
+
 -- L'index unique (transaction_id, account_debit, account_credit) empêche
 -- une seconde libération après extourne : la paire ESCROW → WALLET existe
 -- encore. L'idempotence est le solde net, sous verrou, pas cet index.
@@ -217,6 +253,8 @@ BEGIN
      OR NOT (v_order.escrow_status = 'held'
              OR (p_action = 'dispute_release' AND v_order.escrow_status IN ('frozen', 'disputed')))
      OR v_order.status = 'cancelled'
+     -- confirm/release : une commande 'disputed' ne se libère pas, même si le séquestre est encore held.
+     OR (p_action <> 'dispute_release' AND v_order.status = 'disputed')
   THEN
     RAISE EXCEPTION 'escrow_not_held';
   END IF;
@@ -258,10 +296,12 @@ BEGIN
     RAISE EXCEPTION 'split_mismatch';
   END IF;
 
+  -- Modèle (b) Finance : le frais de versement se facture au versement (079),
+  -- pas à la libération. p_payout_fee reste dans la signature pour compatibilité
+  -- et n'entre plus dans la somme ni dans le livre.
   v_sum := COALESCE(p_seller_net, 0)
          + COALESCE(p_commission, 0)
-         + COALESCE(p_buyer_fee, 0)
-         + COALESCE(p_payout_fee, 0);
+         + COALESCE(p_buyer_fee, 0);
 
   SELECT COALESCE(SUM(amount) FILTER (
            WHERE account_debit = 'GATEWAY_GENIUSPAY' AND account_credit = 'ESCROW_GWA'
@@ -318,8 +358,7 @@ BEGIN
       VALUES
         ('ESCROW_GWA', 'WALLET_SELLER', COALESCE(p_seller_net, 0)),
         ('ESCROW_GWA', 'REVENUE_GWA', COALESCE(p_commission, 0)),
-        ('ESCROW_GWA', 'REVENUE_GWA_BUYER_FEE', COALESCE(p_buyer_fee, 0)),
-        ('ESCROW_GWA', 'REVENUE_GWA_PAYOUT', COALESCE(p_payout_fee, 0))
+        ('ESCROW_GWA', 'REVENUE_GWA_BUYER_FEE', COALESCE(p_buyer_fee, 0))
     ) AS v(debit, credit, amount)
     WHERE v.amount > 0;
   END IF;
@@ -374,3 +413,5 @@ REVOKE ALL ON FUNCTION public.gwa_post_release_split(uuid, integer, integer, int
   FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.gwa_post_release_split(uuid, integer, integer, integer, integer, text, text, text, text, timestamptz, text, timestamptz)
   TO service_role;
+
+COMMIT;

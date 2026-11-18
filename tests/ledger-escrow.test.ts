@@ -21,7 +21,6 @@ import {
   type ReleaseCommand,
   type ReleaseSplit,
 } from "@/lib/features/payments/ledger"
-import { sellerReceivesAfterPayoutFee } from "@/lib/features/payments/payout-fee"
 
 /**
  * Simule gwa_post_release_split : un verrou sérialise les appels,
@@ -162,31 +161,28 @@ describe("grand livre — sens du séquestre", () => {
     expect(balances.GATEWAY_GENIUSPAY).toBe(-500)
   })
 
-  it("attribue les frais acheteur et de versement sans laisser de solde au séquestre", () => {
+  it("à la libération, le vendeur reçoit le net de commission ; le frais de versement n'est pas posté", () => {
     const totals = calculateOrderTotals(10_000, 1, seedPlan("PRO"), {
       buyer_service_fee_fixed: 250,
     })
-    const payoutFee = 300
-    const sellerNet = sellerReceivesAfterPayoutFee(totals.sellerNet, payoutFee)
     const id = "order-pro-fees"
     const lines = [
       ...payInLedgerLines({ transactionId: id, totalPaid: totals.totalPaid }),
       ...payoutLedgerLines({
         transactionId: id,
-        sellerNet,
+        sellerNet: totals.sellerNet,
         commission: totals.commission,
         buyerFee: totals.buyerFee,
-        payoutFee,
       }),
     ]
     expect(totals.buyerFee).toBe(250)
-    expect(sellerNet + totals.commission + totals.buyerFee + payoutFee).toBe(totals.totalPaid)
+    expect(totals.sellerNet + totals.commission + totals.buyerFee).toBe(totals.totalPaid)
     const balances = ledgerAccountBalances(lines)
     expect(balances.ESCROW_GWA).toBe(0)
-    expect(balances.WALLET_SELLER).toBe(sellerNet)
+    expect(balances.WALLET_SELLER).toBe(totals.sellerNet)
     expect(balances.REVENUE_GWA).toBe(totals.commission)
     expect(balances.REVENUE_GWA_BUYER_FEE).toBe(250)
-    expect(balances.REVENUE_GWA_PAYOUT).toBe(300)
+    expect(balances.REVENUE_GWA_PAYOUT ?? 0).toBe(0)
     expect(balances.GATEWAY_GENIUSPAY).toBe(-totals.totalPaid)
   })
 })
