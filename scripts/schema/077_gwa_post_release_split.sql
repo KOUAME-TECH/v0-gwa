@@ -59,6 +59,9 @@ ALTER TABLE public.orders
 ALTER TABLE public.orders
   ADD COLUMN IF NOT EXISTS payout_plan_id_at_payment uuid REFERENCES public.pricing_plans (id);
 
+ALTER TABLE public.orders
+  ADD COLUMN IF NOT EXISTS provider_reference text;
+
 COMMENT ON COLUMN public.orders.payout_fee_frozen_fcfa IS
   'Frais de versement figé quand payment_status passe à paid. NULL = non figé : refuser la libération automatique, revue manuelle, ne pas rappeler gwa_payout_fee. Les commandes déjà payées, y compris avant le 5 nov 2026, restent NULL.';
 
@@ -105,6 +108,8 @@ BEGIN
   NEW.commission_rate_applied := OLD.commission_rate_applied;
   NEW.lifecycle_status := OLD.lifecycle_status;
   NEW.currency := OLD.currency;
+  NEW.payout_network := OLD.payout_network;
+  NEW.provider_reference := OLD.provider_reference;
   NEW.payout_fee_frozen_fcfa := OLD.payout_fee_frozen_fcfa;
   NEW.payout_plan_id_at_payment := OLD.payout_plan_id_at_payment;
 
