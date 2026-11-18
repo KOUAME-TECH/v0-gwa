@@ -73,17 +73,22 @@ export default function WalletPage() {
     }
     setUser(user)
 
-    // Get profile
-    const { data: profileData } = await supabase
-      .from('profiles')
-      .select('id, phone, user_type')
-      .eq('id', user.id)
-      .single()
-    
-    setProfile(profileData)
-    setWithdrawPhone(profileData?.phone || "")
+    // Colonnes accordées uniquement ; le téléphone vient de profile_self (évite 42501).
+    const [{ data: profileData }, { data: self }] = await Promise.all([
+      supabase.from('profiles').select('id, user_type').eq('id', user.id).single(),
+      supabase.rpc('profile_self'),
+    ])
+    const selfRow = (Array.isArray(self) ? self[0] : self) as { phone?: string | null; user_type?: string | null; id?: string } | null
+    const profile = {
+      ...(profileData || {}),
+      id: profileData?.id || selfRow?.id || user.id,
+      user_type: selfRow?.user_type || profileData?.user_type,
+      phone: selfRow?.phone || "",
+    }
+    setProfile(profile)
+    setWithdrawPhone(profile.phone || "")
 
-    if (!isSellerRole(profileData?.user_type)) {
+    if (!isSellerRole(profile.user_type)) {
       setLoading(false)
       return
     }
