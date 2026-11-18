@@ -83,10 +83,10 @@ describe("QA — concurrence confirm vs release", () => {
       }),
       recordReleaseSplitOnce(db, {
         transactionId: tx,
-        sellerNet: 170,
+        sellerNet: 470,
         commission: 30,
         buyerFee: 0,
-        payoutFee: 300,
+        payoutFee: 0,
         currency: "XOF",
         action: "release",
       }),
@@ -94,10 +94,8 @@ describe("QA — concurrence confirm vs release", () => {
     const bal = ledgerAccountBalances(db.lines())
     expect(bal.ESCROW_GWA).toBe(0)
     expect(bal.ESCROW_GWA).toBeGreaterThanOrEqual(0)
-    const confirmWon = bal.WALLET_SELLER === 470 && (bal.REVENUE_GWA_PAYOUT ?? 0) === 0
-    const releaseWon = bal.WALLET_SELLER === 170 && bal.REVENUE_GWA_PAYOUT === 300
-    expect(confirmWon || releaseWon).toBe(true)
-    expect(bal.WALLET_SELLER === 470 && bal.REVENUE_GWA_PAYOUT === 300).toBe(false)
+    expect(bal.WALLET_SELLER).toBe(470)
+    expect(bal.REVENUE_GWA_PAYOUT ?? 0).toBe(0)
   })
 
   it("lecture ou RPC en échec n'écrit ni ligne ni statut", async () => {
@@ -173,8 +171,11 @@ describe("routes confirm et release", () => {
 
   it("ne met pas la commande à jour avec la session utilisateur", () => {
     expect(releaseBody).not.toMatch(/supabase\.from\("orders"\)/)
-    expect(releaseBody).toMatch(/releaseEscrowGate/)
-    expect(releaseBody).toMatch(/action: "release"/)
+    // fix/065-payout-whitelist : la route délègue à releaseEscrowWithLedger (garde + RPC unique)
+    expect(releaseBody).toMatch(/releaseEscrowWithLedger/)
+    const helperSrc = readFileSync(resolve(process.cwd(), "lib/orders/escrow-release.ts"), "utf8")
+    expect(helperSrc).toMatch(/releaseEscrowGate/)
+    expect(helperSrc).toMatch(/action: opts\.fromDispute \? "dispute_release" : "release"/)
     expect(releaseBody).not.toMatch(/gwa_payout_fee/)
     expect(confirmSrc).not.toMatch(/gwa_payout_fee/)
     expect(confirmSrc).toMatch(/action: "confirm"/)

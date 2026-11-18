@@ -9,12 +9,8 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { sendPushNotification } from "@/lib/notifications/push"
 import { sendSMSFallback } from "@/lib/notifications/sms"
-import {
-  prepareReleaseSplit,
-  recordReleaseSplitOnce,
-  releaseEscrowGate,
-  releaseLedgerHttp,
-} from "@/lib/features/payments/ledger"
+import { releaseEscrowWithLedger } from "@/lib/orders/escrow-release"
+import { canReleaseFunds } from "@/lib/auth/admin-permissions"
 
 export async function POST(
   request: NextRequest,
@@ -116,33 +112,21 @@ await sendPushNotification({ externalUserIds: [order.seller_id],
     const is72hPassed = order.confirmed_by_buyer_at &&
       new Date().getTime() - new Date(order.confirmed_by_buyer_at).getTime() > 72 * 60 * 60 * 1000
 
-    if (!adminRole && !is72hPassed) {
+    const adminCanRelease = canReleaseFunds(adminRole?.role)
+    if (!adminCanRelease && !is72hPassed) {
       return NextResponse.json({
-        error: "Libération possible uniquement par admin ou après 72h de confirmation de livraison"
+        error: "Libération possible uniquement par admin finance ou après 72h de confirmation de livraison"
       }, { status: 403 })
     }
 
-    const gate = releaseEscrowGate(order)
-    if (!gate.ok) {
-      return NextResponse.json({ error: gate.error, code: gate.code }, { status: gate.status })
-    }
-
-    const prepared = prepareReleaseSplit(order)
-    if (!prepared.ok) {
-      const http = releaseLedgerHttp(prepared)
-      return NextResponse.json(http.body, { status: http.status })
+    if (order.status === "cancelled") {
+      return NextResponse.json({ error: "Commande annulée", code: "ESCROW_NOT_HELD" }, { status: 409 })
     }
     const admin = createAdminClient()
-    const ledger = await recordReleaseSplitOnce(admin as never, {
-      ...prepared.split,
-      action: "release",
-      nextEscrow: "released",
-      nextStatus: "livre",
-    })
-    if (!ledger.ok) {
-      console.error("[api/orders/release] ledger", ledger.code)
-      const http = releaseLedgerHttp(ledger)
-      return NextResponse.json(http.body, { status: http.status })
+    const released = await releaseEscrowWithLedger(admin as never, order)
+    if (!released.ok) {
+      console.error("[api/orders/release] ledger", released.body.code)
+      return NextResponse.json(released.body, { status: released.status })
     }
 
     await admin
