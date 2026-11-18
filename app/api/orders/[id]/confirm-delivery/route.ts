@@ -3,6 +3,7 @@
  * L'acheteur confirme la réception → libère l'escrow
  */
 import { type NextRequest, NextResponse } from "next/server"
+import { buildEscrowReleasePatch } from "@/lib/orders/escrow-release"
 import { createClient } from "@/lib/supabase/server"
 import { sendPushNotification } from "@/lib/notifications/push"
 import { sendSMSFallback } from "@/lib/notifications/sms"
@@ -39,11 +40,9 @@ export async function POST(
     await supabase
       .from("orders")
       .update({
-        status: "livre",
-        escrow_status: "released",
+        ...buildEscrowReleasePatch(order, now),
         confirmed_by_buyer_at: now,
         delivered_at: now,
-        updated_at: now,
       })
       .eq("id", orderId)
 

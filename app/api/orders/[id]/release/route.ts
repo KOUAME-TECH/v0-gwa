@@ -6,6 +6,8 @@
  */
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
+import { buildEscrowReleasePatch } from "@/lib/orders/escrow-release"
 import { sendPushNotification } from "@/lib/notifications/push"
 import { sendSMSFallback } from "@/lib/notifications/sms"
 
@@ -119,11 +121,25 @@ await sendPushNotification({ externalUserIds: [order.seller_id],
       return NextResponse.json({ error: "Escrow déjà libéré", already_released: true })
     }
 
-    await supabase.from("orders").update({
-      escrow_status: "released",
-      status: "livre",
-      updated_at: now,
-    }).eq("id", orderId)
+    // Seule une commande payée, en séquestre et non annulée est libérable (refunded/cancelled exclus).
+    if (order.escrow_status !== "held" || order.payment_status !== "paid" || order.status === "cancelled") {
+      return NextResponse.json({ error: "Commande non libérable", code: "ESCROW_NOT_HELD" }, { status: 400 })
+    }
+
+    // Client admin : protect_order_privileged_columns remet escrow/payout à OLD hors service_role.
+    // Garde optimiste sur l'état lu (pas de double libération concurrente).
+    const admin = createAdminClient()
+    const { data: released, error: releaseError } = await admin
+      .from("orders")
+      .update(buildEscrowReleasePatch(order, now))
+      .eq("id", orderId)
+      .eq("escrow_status", "held")
+      .eq("payment_status", "paid")
+      .select("id")
+    if (releaseError || !released?.length) {
+      console.error("[GWA] release update failed:", releaseError?.message)
+      return NextResponse.json({ error: "Libération impossible" }, { status: 409 })
+    }
 
     await supabase.from("escrow_transactions")
       .update({ status: "released", released_at: now })

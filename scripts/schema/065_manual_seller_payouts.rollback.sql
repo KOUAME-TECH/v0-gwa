@@ -5,6 +5,7 @@ DROP FUNCTION IF EXISTS public.admin_update_manual_payout(UUID, TEXT, TEXT, TEXT
 DROP FUNCTION IF EXISTS public.get_seller_earnings_summary();
 DROP FUNCTION IF EXISTS public.request_manual_payout(INTEGER, TEXT, TEXT);
 DROP FUNCTION IF EXISTS public.get_seller_eligible_proceeds(UUID);
+DROP FUNCTION IF EXISTS public.gwa_payout_eligible_orders(UUID);
 
 DROP TABLE IF EXISTS public.withdrawal_request_events;
 

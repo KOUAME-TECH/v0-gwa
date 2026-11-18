@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server"
+import { buildEscrowReleasePatch } from "@/lib/orders/escrow-release"
 import { requireAdminSection } from "@/lib/auth/require-admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { sendPushToUser } from "@/lib/notifications/push"
@@ -121,7 +122,7 @@ export async function PATCH(request: NextRequest, context: Ctx) {
     ) {
       const { data: order } = await gate.admin
         .from("orders")
-        .select("id, order_number, buyer_id, seller_id, escrow_status, status")
+        .select("id, order_number, buyer_id, seller_id, escrow_status, status, payout_status")
         .eq("id", existing.order_id)
         .maybeSingle()
 
@@ -129,11 +130,7 @@ export async function PATCH(request: NextRequest, context: Ctx) {
         if (escrowOutcomeRaw === "release_seller") {
           await gate.admin
             .from("orders")
-            .update({
-              status: "delivered",
-              escrow_status: "released",
-              updated_at: now,
-            })
+            .update(buildEscrowReleasePatch(order, now))
             .eq("id", order.id)
           await gate.admin
             .from("escrow_transactions")

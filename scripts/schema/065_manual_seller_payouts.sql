@@ -1,4 +1,6 @@
 -- 065 — Producer-visible sales proceeds and audited manual payout operations.
+-- 18/11 : get_seller_eligible_proceeds en LISTE BLANCHE via gwa_payout_eligible_orders (remplace le NOT IN).
+-- NON APPLIQUÉE EN PROD. Clone d'abord ; application sur GO écrit de Finance, QA et Yao.
 ALTER TABLE public.orders
   ADD COLUMN IF NOT EXISTS provider_reference TEXT,
   ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'XOF';
@@ -105,25 +107,40 @@ ALTER TABLE public.withdrawal_request_events ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.withdrawal_request_events FROM PUBLIC, anon, authenticated;
 GRANT ALL ON public.withdrawal_request_events TO service_role;
 
+-- BEGIN-WHITELIST (stabilisation 18/11 : liste BLANCHE, remplace le NOT IN qui laissait passer
+-- cancelled / released / NULL / toute valeur inconnue). Source unique de l'éligibilité au versement.
+-- Statuts d'attente réels (écrits par confirm/route.ts ; pas de CHECK en prod) :
+--   pending_ops, failed (nouvel essai), skipped_no_provider. Jamais : cancelled, paid, processing,
+--   released, skipped_sim, skipped_zero, NULL. Commandes de test internes exclues par id.
+CREATE OR REPLACE FUNCTION public.gwa_payout_eligible_orders(p_seller_id UUID)
+RETURNS TABLE (order_id UUID, amount_fcfa NUMERIC)
+LANGUAGE SQL
+STABLE
+SET search_path = public
+AS $$
+  SELECT id,
+         COALESCE(vendeur_recoit_fcfa,
+                  GREATEST(0, total_amount - COALESCE(commission_fcfa, 0) - COALESCE(service_fee, 0)))
+  FROM public.orders
+  WHERE seller_id = p_seller_id
+    AND payment_status = 'paid'
+    AND status = 'delivered'
+    AND escrow_status = 'released'
+    AND payout_status IN ('pending_ops', 'failed', 'skipped_no_provider')
+    AND id <> ALL (ARRAY['e09af219-2831-4308-b235-b37fb6df82e8']::uuid[]);  -- GWA-MW16COUJ, test interne (variante E)
+$$;
+
+REVOKE ALL ON FUNCTION public.gwa_payout_eligible_orders(UUID) FROM PUBLIC, anon, authenticated;
+
 CREATE OR REPLACE FUNCTION public.get_seller_eligible_proceeds(p_seller_id UUID)
 RETURNS NUMERIC
 LANGUAGE SQL
 STABLE
 SET search_path = public
 AS $$
-  SELECT COALESCE(SUM(
-    COALESCE(
-      vendeur_recoit_fcfa,
-      GREATEST(0, total_amount - COALESCE(commission_fcfa, 0) - COALESCE(service_fee, 0))
-    )
-  ), 0)
-  FROM public.orders
-  WHERE seller_id = p_seller_id
-    AND payment_status = 'paid'
-    AND status = 'delivered'
-    AND escrow_status = 'released'
-    AND COALESCE(payout_status, '') NOT IN ('processing', 'paid', 'skipped_sim', 'skipped_zero');
+  SELECT COALESCE(SUM(amount_fcfa), 0) FROM public.gwa_payout_eligible_orders(p_seller_id);
 $$;
+-- END-WHITELIST
 
 REVOKE ALL ON FUNCTION public.get_seller_eligible_proceeds(UUID) FROM PUBLIC, anon, authenticated;
 
