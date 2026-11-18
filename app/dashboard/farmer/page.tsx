@@ -78,7 +78,7 @@ export default function FarmerDashboard() {
 
       const { data: profileData } = await supabase
         .from("profiles")
-        .select("*")
+        .select("id, full_name, subscription_tier, scg_score, scg_bancable")
         .eq("id", authUser.id)
         .single()
       setProfile(profileData)

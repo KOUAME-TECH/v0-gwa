@@ -43,10 +43,6 @@ type Profile = {
   city: string | null
   country: string | null
   is_verified: boolean
-  rating: number | null
-  phone?: string | null
-  phone_verified?: boolean | null
-  linked_email?: string | null
 }
 
 type MenuItem = {
@@ -86,7 +82,7 @@ export default function ProfilPage() {
 
       const { data: profileData } = await supabase
         .from("profiles")
-        .select("*")
+        .select("id, full_name, email, avatar_url, bio, user_type, city, country, is_verified")
         .eq("id", user.id)
         .single()
 

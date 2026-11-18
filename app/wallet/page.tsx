@@ -76,7 +76,7 @@ export default function WalletPage() {
     // Get profile
     const { data: profileData } = await supabase
       .from('profiles')
-      .select('*')
+      .select('id, phone, user_type')
       .eq('id', user.id)
       .single()
     
