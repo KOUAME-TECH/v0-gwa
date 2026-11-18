@@ -372,9 +372,9 @@ describe("ventilation — solde net, extourne, atomicité", () => {
   })
 })
 
-describe("migration 076", () => {
+describe("migration 077", () => {
   const sql = readFileSync(
-    resolve(process.cwd(), "scripts/schema/076_gwa_post_release_split.sql"),
+    resolve(process.cwd(), "scripts/schema/077_gwa_post_release_split.sql"),
     "utf8",
   )
 
