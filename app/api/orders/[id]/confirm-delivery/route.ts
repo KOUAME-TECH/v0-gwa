@@ -3,7 +3,8 @@
  * L'acheteur confirme la réception → libère l'escrow
  */
 import { type NextRequest, NextResponse } from "next/server"
-import { buildEscrowReleasePatch } from "@/lib/orders/escrow-release"
+import { releaseEscrowWithLedger } from "@/lib/orders/escrow-release"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { sendPushNotification } from "@/lib/notifications/push"
 import { sendSMSFallback } from "@/lib/notifications/sms"
@@ -36,15 +37,10 @@ export async function POST(
 
     const now = new Date().toISOString()
 
-    // Marquer livraison confirmée
-    await supabase
-      .from("orders")
-      .update({
-        ...buildEscrowReleasePatch(order, now),
-        confirmed_by_buyer_at: now,
-        delivered_at: now,
-      })
-      .eq("id", orderId)
+    // Libération : RPC transactionnelle (statut + grand livre). Échec → aucune écriture, statut inchangé.
+    const admin = createAdminClient()
+    const released = await releaseEscrowWithLedger(admin as never, order)
+    if (!released.ok) return NextResponse.json(released.body, { status: released.status })
 
     // Libérer toutes les escrow_transactions en attente
     await supabase

@@ -1,17 +1,49 @@
 /**
- * Patch commun de libération du séquestre (route /release, litige « release_seller », confirm-delivery).
- * - status = 'delivered' : 'livre' est refusé par le CHECK orders_order_status_check en prod.
- * - payout_status NULL → 'pending_ops' : sinon la commande libérée n'entre jamais dans la file
- *   de versement (065 en liste blanche : pending_ops | failed | skipped_no_provider).
- *   Une valeur existante (pending_ops, failed, cancelled…) n'est jamais écrasée.
+ * Libération du séquestre : UN SEUL chemin, la RPC transactionnelle gwa_post_release_split (077, PR #49).
+ * Statut + écritures (ESCROW_GWA → WALLET_SELLER net, → REVENUE_GWA commission,
+ * → REVENUE_GWA_BUYER_FEE frais acheteur, → REVENUE_GWA_PAYOUT frais de versement) dans la même
+ * transaction : si une écriture échoue, le statut n'est pas modifié. Jamais de released sans écritures.
+ * La RPC pose status='delivered' et payout_status NULL → 'pending_ops' (065 liste blanche).
  */
-export type ReleasableOrder = { payout_status?: string | null }
+import {
+  prepareReleaseSplit,
+  recordReleaseSplitOnce,
+  releaseEscrowGate,
+  releaseLedgerHttp,
+  type ReleaseAttempt,
+} from "@/lib/features/payments/ledger"
 
-export function buildEscrowReleasePatch(order: ReleasableOrder, nowIso: string) {
-  return {
-    escrow_status: "released" as const,
-    status: "delivered" as const,
-    updated_at: nowIso,
-    payout_status: order.payout_status ?? "pending_ops",
+type RpcClient = Parameters<typeof recordReleaseSplitOnce>[0]
+type Order = Parameters<typeof prepareReleaseSplit>[0] & Parameters<typeof releaseEscrowGate>[0]
+
+export type EscrowReleaseResult =
+  | { ok: true; skipped: boolean }
+  | { ok: false; status: number; body: { error: string; code: string } }
+
+export async function releaseEscrowWithLedger(
+  admin: RpcClient,
+  order: Order,
+  opts: { fromDispute?: boolean } = {},
+): Promise<EscrowReleaseResult> {
+  // Litige : le séquestre peut être frozen/disputed ; la RPC (action dispute_release) le vérifie sous verrou.
+  if (!opts.fromDispute) {
+    const gate = releaseEscrowGate(order)
+    if (!gate.ok) return { ok: false, status: gate.status, body: { error: gate.error, code: gate.code } }
   }
+  const prepared = prepareReleaseSplit(order)
+  if (!prepared.ok) {
+    const http = releaseLedgerHttp(prepared)
+    return { ok: false, status: http.status, body: http.body! }
+  }
+  const result: ReleaseAttempt = await recordReleaseSplitOnce(admin, {
+    ...prepared.split,
+    action: opts.fromDispute ? "dispute_release" : "release",
+    nextEscrow: "released",
+    nextStatus: "delivered",
+  })
+  if (!result.ok) {
+    const http = releaseLedgerHttp(result)
+    return { ok: false, status: http.status, body: http.body! }
+  }
+  return { ok: true, skipped: result.skipped }
 }
