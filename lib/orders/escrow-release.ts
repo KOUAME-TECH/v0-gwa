@@ -1,8 +1,9 @@
 /**
  * Libération du séquestre : UN SEUL chemin, la RPC transactionnelle gwa_post_release_split (077, PR #49).
- * Statut + écritures (ESCROW_GWA → WALLET_SELLER net, → REVENUE_GWA commission,
- * → REVENUE_GWA_BUYER_FEE frais acheteur, → REVENUE_GWA_PAYOUT frais de versement) dans la même
- * transaction : si une écriture échoue, le statut n'est pas modifié. Jamais de released sans écritures.
+ * Statut + écritures (ESCROW_GWA → WALLET_SELLER net de commission, → REVENUE_GWA commission,
+ * → REVENUE_GWA_BUYER_FEE frais acheteur) dans la même transaction : si une écriture échoue,
+ * le statut n'est pas modifié. Jamais de released sans écritures.
+ * Le frais de versement (REVENUE_GWA_PAYOUT) se poste au versement (079), pas à la libération.
  * La RPC pose status='delivered' et payout_status NULL → 'pending_ops' (065 liste blanche).
  */
 import {
