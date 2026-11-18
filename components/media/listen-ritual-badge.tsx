@@ -22,7 +22,7 @@ export function ListenRitualBadge({ streak, className }: ListenRitualBadgeProps)
         "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
         done
           ? "bg-[#1F5C2E]/12 text-[#1F5C2E] ring-1 ring-[#1F5C2E]/20"
-          : "bg-[#C27D10]/10 text-[#C27D10]",
+          : "bg-[#C27D10]/10 text-[#8B5A00]",
         className,
       )}
       title={done ? "Rituel Harmattan accompli" : `${streak}/${LISTEN_RITUAL_GOAL} jours d'écoute`}

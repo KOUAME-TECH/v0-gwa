@@ -882,7 +882,7 @@ export default function HomePage() {
   })
 
   return (
-    <div className="min-h-screen bg-[#FFF6E5]">
+    <div className="min-h-screen bg-[#FFF6E5] overflow-x-hidden">
       {/* Météo — mobile / tablette */}
       {userType && ["farmer", "cooperative"].includes(userType) && (
         <div className="gwa-shell-feed px-4 pt-3 lg:hidden">
@@ -899,34 +899,38 @@ export default function HomePage() {
         )}
         aria-hidden={headerHidden}
       >
-        <div className="px-4 py-3">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-2" aria-label="GWA accueil">
-              <GwaMark size={36} showWordmark wordmarkClassName="font-display text-2xl" />
+        <div className="px-3 py-3">
+          <div className="flex items-center justify-between gap-1 min-w-0">
+            <Link href="/" className="flex items-center gap-1.5 min-w-0 shrink" aria-label="GWA accueil">
+              <GwaMark size={32} showWordmark wordmarkClassName="font-display text-xl truncate" />
             </Link>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 shrink-0">
               <ListenRitualBadge streak={listenStreak} />
               <YellyAideButton source="mobile_feed_header" compact className="text-[#1F5C2E]" />
               <Link
                 href="/marketplace?digest=1"
-                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-xl bg-[#1F5C2E]/8 text-[#1F5C2E] text-xs font-semibold active:scale-95 transition-transform"
+                className="inline-flex items-center gap-1.5 h-8 px-2 rounded-xl bg-[#1F5C2E]/8 text-[#1F5C2E] text-xs font-semibold active:scale-95 transition-transform"
                 aria-label="Écouter les nouveautés — Harmattan Digest"
                 title="Écouter les nouveautés près de chez vous"
               >
                 Digest
               </Link>
-              <Link href="/recherche">
-                <Button variant="ghost" size="icon" className="rounded-full h-10 w-10">
-                  <Search className="h-5 w-5 text-[#4B5563]" />
-                </Button>
+              <Link
+                href="/recherche"
+                aria-label="Rechercher"
+                className="inline-flex items-center justify-center rounded-full h-9 w-9 text-[#4B5563] hover:bg-black/5"
+              >
+                <Search className="h-5 w-5" />
               </Link>
-              <Link href="/notifications" aria-label="Notifications">
-                <Button variant="ghost" size="icon" className="rounded-full h-10 w-10 relative">
-                  <Bell className="h-5 w-5 text-[#4B5563]" />
-                  {unreadNotifications > 0 && (
-                    <span className="absolute top-1 right-1 min-w-[8px] h-2 px-0.5 bg-[#F39A1F] rounded-full" />
-                  )}
-                </Button>
+              <Link
+                href="/notifications"
+                aria-label="Notifications"
+                className="relative inline-flex items-center justify-center rounded-full h-9 w-9 text-[#4B5563] hover:bg-black/5"
+              >
+                <Bell className="h-5 w-5" />
+                {unreadNotifications > 0 && (
+                  <span className="absolute top-1 right-1 min-w-[8px] h-2 px-0.5 bg-[#B45309] rounded-full" />
+                )}
               </Link>
             </div>
           </div>
@@ -1509,7 +1513,7 @@ const FeedCard = memo(function FeedCard({
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-[#6B7280] flex items-center gap-1 truncate">
+            <p className="text-[11px] text-[#4B5563] flex items-center gap-1 truncate">
               {isProduct ? (
                 <>
                   <MapPin className="h-3 w-3 shrink-0" />
@@ -1524,7 +1528,7 @@ const FeedCard = memo(function FeedCard({
         
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="rounded-full h-9 w-9 shrink-0">
+            <Button variant="ghost" size="icon" className="rounded-full h-9 w-9 shrink-0" aria-label="Plus d'actions">
               <MoreHorizontal className="h-5 w-5 text-[#4B5563]" />
             </Button>
           </DropdownMenuTrigger>
