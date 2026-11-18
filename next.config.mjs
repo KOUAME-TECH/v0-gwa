@@ -80,9 +80,19 @@ const nextConfig = {
       ],
     },
     {
+      source: "/gwa-sw-core.js",
+      headers: [
+        { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+      ],
+    },
+    {
       source: "/manifest.json",
       headers: [{ key: "Cache-Control", value: "public, max-age=3600" }],
     },
+    ...["/profil", "/admin", "/dashboard", "/wallet", "/messages", "/panier", "/commandes"].flatMap((p) => [
+      { source: p, headers: [{ key: "Cache-Control", value: "no-store" }] },
+      { source: `${p}/:path*`, headers: [{ key: "Cache-Control", value: "no-store" }] },
+    ]),
   ],
   /** Alias legacy — une seule source de vérité pour les redirections */
   redirects: async () => [
