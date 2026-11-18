@@ -13,28 +13,48 @@ import {
   getOneSignalRestApiKey,
 } from '@/lib/notifications/onesignal-config'
 import { getSmsOpsFailure, isOtpStoreReady } from '@/lib/auth/otp-store'
-import {
-  resolveGeniusPayCredentials,
-  resolveGeniusPayWebhookSecret,
-  type GeniusPayEnvironment,
-} from '@/lib/payment/geniuspay'
+import { authorizeCronRequest } from '@/lib/security/cron-auth'
+import { requireAdmin } from '@/lib/auth/require-admin'
 
 export const dynamic = 'force-dynamic'
+
+export const PUBLIC_HEALTH_KEYS = ['status', 'version', 'db'] as const
+
+/** Même URL pour le ping public et le détail ops : ne pas laisser un cache partagé rejouer le détail. */
+const HEALTH_HEADERS = {
+  'Cache-Control': 'private, no-store',
+  Vary: 'Authorization, Cookie',
+}
 
 function envSet(name: string): boolean {
   return !!(process.env[name] || '').replace(/^"|"$/g, '').trim()
 }
 
-export async function GET() {
-  let dbStatus = 'unknown'
-  try {
-    const supabase = await createClient()
-    await supabase.from('profiles').select('id').limit(1)
-    dbStatus = 'connected'
-  } catch {
-    dbStatus = 'error'
-  }
+export function publicHealthBody(dbStatus: string) {
   const healthy = dbStatus === 'connected'
+  return {
+    status: healthy ? 'healthy' : 'degraded',
+    version: '2.0.0',
+    db: dbStatus,
+  }
+}
+
+/** Détails ops : Bearer CRON_SECRET uniquement (pas x-vercel-cron ni le mode dev). */
+export function isHealthCronBearerAuthorized(request: Request): boolean {
+  return authorizeCronRequest(request).via === 'bearer'
+}
+
+export async function isHealthOpsAuthorized(request: Request): Promise<boolean> {
+  if (isHealthCronBearerAuthorized(request)) return true
+  try {
+    const gate = await requireAdmin()
+    return Boolean(gate.user && gate.isAdmin)
+  } catch {
+    return false
+  }
+}
+
+async function collectOpsDetails() {
   const smsConfigured = hasSmsProvider()
   const otpPepper = envSet('OTP_PEPPER')
   const cronSecret = envSet('CRON_SECRET')
@@ -67,7 +87,6 @@ export async function GET() {
     envSet('YELLY_API_KEY')
   if (!geminiReady) {
     try {
-      const { hasPlatformSecret } = await import('@/lib/ops/platform-secrets')
       geminiReady = await hasPlatformSecret('GEMINI_API_KEY', [
         'GOOGLE_GENERATIVE_AI_API_KEY',
         'YELLY_API_KEY',
@@ -76,14 +95,11 @@ export async function GET() {
       geminiReady = false
     }
   }
-  return NextResponse.json({
-    status: healthy ? 'healthy' : 'degraded',
-    app: 'GWA Platform',
-    tagline: 'Marche - langue Anoh, Cote d\'Ivoire',
-    version: '2.0.0',
+  return {
     ts: new Date().toISOString(),
     env: process.env.NODE_ENV,
-    db: dbStatus,
+    app: 'GWA Platform',
+    tagline: 'Marche - langue Anoh, Cote d\'Ivoire',
     // Booléens ops uniquement — jamais les valeurs des secrets
     secrets: {
       OTP_PEPPER: otpPepper,
@@ -106,16 +122,20 @@ export async function GET() {
       GENIUSPAY_WEBHOOK_SECRET: geniuspayWebhook,
     },
     geniuspay: {
-      configured: geniuspayKey && geniuspaySecret,
-      webhook_ready: geniuspayWebhook,
-      payin_ready: geniuspayKey && geniuspaySecret,
+      configured: Boolean(geniuspayKey && geniuspaySecret),
+      webhook_ready: Boolean(geniuspayWebhook),
+      payin_ready: Boolean(geniuspayKey && geniuspaySecret),
       payout_ready: false,
     },
     sms_delivery_ready: atKey && atLive && atSender,
-    // Dernier échec OTP/SMS (codes ops only) — aide à distinguer config OK vs rejet AT réel
     sms_last_failure: await getSmsOpsFailure(),
     deploy: {
-      git_sha: (process.env.VERCEL_GIT_COMMIT_SHA || process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA || '').slice(0, 12) || null,
+      git_sha:
+        (
+          process.env.VERCEL_GIT_COMMIT_SHA ||
+          process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA ||
+          ''
+        ).slice(0, 12) || null,
       vercel_env: process.env.VERCEL_ENV || null,
     },
     resilience: {
@@ -127,5 +147,25 @@ export async function GET() {
       sw_cache: 'gwa-v21-offline',
       sw_worker: 'OneSignalSDKWorker.js',
     },
-  }, { status: healthy ? 200 : 503 })
+  }
+}
+
+export async function GET(request: Request) {
+  let dbStatus = 'unknown'
+  try {
+    const supabase = await createClient()
+    await supabase.from('profiles').select('id').limit(1)
+    dbStatus = 'connected'
+  } catch {
+    dbStatus = 'error'
+  }
+  const publicBody = publicHealthBody(dbStatus)
+  const httpStatus = dbStatus === 'connected' ? 200 : 503
+  if (await isHealthOpsAuthorized(request)) {
+    return NextResponse.json(
+      { ...publicBody, ...(await collectOpsDetails()) },
+      { status: httpStatus, headers: HEALTH_HEADERS },
+    )
+  }
+  return NextResponse.json(publicBody, { status: httpStatus, headers: HEALTH_HEADERS })
 }
