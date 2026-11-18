@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     if (q) {
       const { data, error } = await admin
         .from("profiles")
-        .select("*")
+        .select("id, full_name, email, user_type, country, city, is_verified, is_suspended, suspended_reason, created_at, avatar_url")
         .or(`full_name.ilike.%${q}%,email.ilike.%${q}%,phone.ilike.%${q}%`)
         .order("created_at", { ascending: false })
         .limit(50)
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
 
     let query = admin
       .from("profiles")
-      .select("*", { count: "exact" })
+      .select("id, full_name, email, user_type, country, city, is_verified, is_suspended, suspended_reason, created_at, avatar_url", { count: "exact" })
       .order("created_at", { ascending: false })
       .range(page * pageSize, (page + 1) * pageSize - 1)
 
