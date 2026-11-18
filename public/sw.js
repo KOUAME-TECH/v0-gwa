@@ -1,7 +1,7 @@
-/* GWA PWA + OneSignal — v21 offline (OneSignal + shell) (navigations + shell + fallback) */
+/* GWA PWA + OneSignal — v22 private network-only (OneSignal + shell) (navigations + shell + fallback) */
 importScripts("https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js")
 
-const CACHE = "gwa-v21-offline"
+const CACHE = "gwa-v22-offline"
 const SHELL = [
   "/",
   "/marketplace",
@@ -12,6 +12,32 @@ const SHELL = [
   "/icon.svg",
   "/apple-icon.png",
 ]
+
+const PRIVATE_PREFIXES = ["/profil", "/admin", "/dashboard", "/wallet"]
+
+function isPrivatePath(pathname) {
+  return PRIVATE_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"))
+}
+
+function hasAuthRequestHeaders(request) {
+  if (request.headers.get("Authorization")) return true
+  const cookie = request.headers.get("Cookie") || ""
+  return /(?:^|;\s*)(sb-[^=]+-auth-token(?:\.[0-9]+)?)=/i.test(cookie)
+}
+
+function isAuthenticatedResponse(response) {
+  if (response.headers.has("Set-Cookie")) return true
+  const cc = (response.headers.get("Cache-Control") || "").toLowerCase()
+  return /\bprivate\b|\bno-store\b/.test(cc)
+}
+
+function shouldBypassCache(request, response) {
+  const url = new URL(request.url)
+  if (isPrivatePath(url.pathname)) return true
+  if (request.mode === "navigate" && hasAuthRequestHeaders(request)) return true
+  if (response && isAuthenticatedResponse(response)) return true
+  return false
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -32,10 +58,20 @@ self.addEventListener("activate", (event) => {
 })
 
 async function offlineFallback(request) {
+  const url = new URL(request.url)
+  if (isPrivatePath(url.pathname)) {
+    return (
+      (await caches.match("/offline.html")) ||
+      new Response("Hors ligne", {
+        status: 503,
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      })
+    )
+  }
+
   const cached = await caches.match(request)
   if (cached) return cached
 
-  const url = new URL(request.url)
   if (url.pathname.startsWith("/marketplace") || url.pathname.startsWith("/produit/")) {
     const shop = await caches.match("/marketplace")
     if (shop) return shop
@@ -55,6 +91,12 @@ async function offlineFallback(request) {
   )
 }
 
+function networkOnly(request) {
+  return fetch(request).catch(() =>
+    request.mode === "navigate" ? offlineFallback(request) : Response.error(),
+  )
+}
+
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return
   const url = new URL(event.request.url)
@@ -63,12 +105,22 @@ self.addEventListener("fetch", (event) => {
   if (url.pathname.startsWith("/api/")) return
   if (url.hostname.includes("onesignal.com")) return
 
+  // Pages privées et navigations authentifiées : network-only, jamais de cache
+  if (shouldBypassCache(event.request)) {
+    event.respondWith(networkOnly(event.request))
+    return
+  }
+
   // Navigations HTML : network-first → cache page → offline.html
   if (event.request.mode === "navigate") {
     event.respondWith(
       fetch(event.request)
         .then((response) => {
-          if (response.ok && url.origin === self.location.origin) {
+          if (
+            response.ok &&
+            url.origin === self.location.origin &&
+            !shouldBypassCache(event.request, response)
+          ) {
             const clone = response.clone()
             caches.open(CACHE).then((cache) => cache.put(event.request, clone))
           }
@@ -89,7 +141,11 @@ self.addEventListener("fetch", (event) => {
         (cached) =>
           cached ||
           fetch(event.request).then((response) => {
-            if (response.ok && url.origin === self.location.origin) {
+            if (
+              response.ok &&
+              url.origin === self.location.origin &&
+              !shouldBypassCache(event.request, response)
+            ) {
               const clone = response.clone()
               caches.open(CACHE).then((cache) => cache.put(event.request, clone))
             }
@@ -104,7 +160,11 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        if (response.ok && url.origin === self.location.origin) {
+        if (
+          response.ok &&
+          url.origin === self.location.origin &&
+          !shouldBypassCache(event.request, response)
+        ) {
           const clone = response.clone()
           caches.open(CACHE).then((cache) => cache.put(event.request, clone))
         }
