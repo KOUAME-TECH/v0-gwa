@@ -4,8 +4,12 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { sendPushToUser } from "@/lib/notifications/push"
 import { mapPaymentMethodToNetwork } from "@/lib/payment/networks"
 import { evaluatePlanSwitch } from "@/lib/pricing/switch"
-import { payoutLedgerLines, recordLedgerLines } from "@/lib/features/payments/ledger"
-import { sellerReceivesAfterPayoutFee } from "@/lib/features/payments/payout-fee"
+import {
+  prepareReleaseSplit,
+  recordReleaseSplitOnce,
+  releaseEscrowGate,
+  releaseLedgerHttp,
+} from "@/lib/features/payments/ledger"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -55,32 +59,21 @@ export async function POST(request: NextRequest, context: Ctx) {
     if (order.confirmed_by_buyer_at) {
       return NextResponse.json({ error: "Réception déjà confirmée" }, { status: 400 })
     }
-    if (order.payment_status !== "paid" || order.escrow_status !== "held") {
-      return NextResponse.json(
-        {
-          error:
-            "Impossible de libérer : paiement non confirmé ou fonds non en séquestre",
-          code: "ESCROW_NOT_HELD",
-        },
-        { status: 400 },
-      )
+    const gate = releaseEscrowGate(order)
+    if (!gate.ok) {
+      return NextResponse.json({ error: gate.error, code: gate.code }, { status: gate.status })
     }
 
     const admin = createAdminClient()
     const now = new Date().toISOString()
 
-    const sellerNet =
-      order.vendeur_recoit_fcfa != null
-        ? Math.round(Number(order.vendeur_recoit_fcfa))
-        : Math.max(
-            0,
-            Math.round(Number(order.total_amount) || 0) -
-              Math.round(Number(order.commission_fcfa) || 0) -
-              Math.round(Number(order.service_fee) || 0),
-          )
-    const { data: payoutFeeRaw } = await admin.rpc("gwa_payout_fee", { p_seller_id: order.seller_id })
-    const payoutFee = Math.min(sellerNet, Math.max(0, Math.round(Number(payoutFeeRaw) || 0)))
-    const payoutAmount = sellerReceivesAfterPayoutFee(sellerNet, payoutFee)
+    const prepared = prepareReleaseSplit(order)
+    if (!prepared.ok) {
+      const http = releaseLedgerHttp(prepared)
+      return NextResponse.json(http.body, { status: http.status })
+    }
+    const payoutFee = prepared.split.payoutFee
+    const payoutAmount = prepared.split.sellerNet
 
     let payoutStatus = "skipped_no_provider"
     let payoutRef: string | null = null
@@ -134,19 +127,27 @@ export async function POST(request: NextRequest, context: Ctx) {
         .slice(0, 2000)
     }
 
-    const { error: updErr } = await admin.from("orders").update(orderPatch).eq("id", id)
-    if (updErr) {
-      console.warn("[api/orders/confirm] payout cols?", updErr.message)
+    const ledger = await recordReleaseSplitOnce(admin as never, {
+      ...prepared.split,
+      action: "confirm",
+      nextEscrow: escrowStatus === "released" ? "released" : "held",
+      nextStatus: "delivered",
+      confirmedAt: now,
+      payoutStatus,
+      payoutAt: payoutNotRequired ? now : null,
+    })
+    if (!ledger.ok) {
+      console.error("[api/orders/confirm] ledger", ledger.code)
+      const http = releaseLedgerHttp(ledger)
+      return NextResponse.json(http.body, { status: http.status })
+    }
+
+    if (receptionPhotoUrl) {
       await admin
         .from("orders")
-        .update({
-          status: "delivered",
-          escrow_status: escrowStatus,
-          confirmed_by_buyer_at: now,
-          delivered_at: order.delivered_at || now,
-          updated_at: now,
-        })
+        .update({ notes: orderPatch.notes, updated_at: now })
         .eq("id", id)
+        .is("confirmed_by_buyer_at", now)
     }
 
     if (escrowStatus === "released") {
@@ -189,19 +190,6 @@ export async function POST(request: NextRequest, context: Ctx) {
         { onConflict: "order_id", ignoreDuplicates: true },
       )
     }
-
-    const ledger = await recordLedgerLines(
-      admin as never,
-      payoutLedgerLines({
-        transactionId: id,
-        sellerNet: payoutAmount,
-        commission: Math.round(Number(order.commission_fcfa ?? order.seller_commission) || 0),
-        buyerFee: Math.round(Number(order.buyer_service_fee) || 0),
-        payoutFee,
-        currency: order.currency || "XOF",
-      }),
-    )
-    if (!ledger.ok) console.error("[api/orders/confirm] ledger", ledger.error)
 
     const sellerMsg =
       payoutFee > 0

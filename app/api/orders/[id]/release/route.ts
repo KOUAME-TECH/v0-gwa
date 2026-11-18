@@ -6,8 +6,15 @@
  */
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { sendPushNotification } from "@/lib/notifications/push"
 import { sendSMSFallback } from "@/lib/notifications/sms"
+import {
+  prepareReleaseSplit,
+  recordReleaseSplitOnce,
+  releaseEscrowGate,
+  releaseLedgerHttp,
+} from "@/lib/features/payments/ledger"
 
 export async function POST(
   request: NextRequest,
@@ -115,22 +122,36 @@ await sendPushNotification({ externalUserIds: [order.seller_id],
       }, { status: 403 })
     }
 
-    if (order.escrow_status === "released") {
-      return NextResponse.json({ error: "Escrow déjà libéré", already_released: true })
+    const gate = releaseEscrowGate(order)
+    if (!gate.ok) {
+      return NextResponse.json({ error: gate.error, code: gate.code }, { status: gate.status })
     }
 
-    await supabase.from("orders").update({
-      escrow_status: "released",
-      status: "livre",
-      updated_at: now,
-    }).eq("id", orderId)
+    const prepared = prepareReleaseSplit(order)
+    if (!prepared.ok) {
+      const http = releaseLedgerHttp(prepared)
+      return NextResponse.json(http.body, { status: http.status })
+    }
+    const admin = createAdminClient()
+    const ledger = await recordReleaseSplitOnce(admin as never, {
+      ...prepared.split,
+      action: "release",
+      nextEscrow: "released",
+      nextStatus: "livre",
+    })
+    if (!ledger.ok) {
+      console.error("[api/orders/release] ledger", ledger.code)
+      const http = releaseLedgerHttp(ledger)
+      return NextResponse.json(http.body, { status: http.status })
+    }
 
-    await supabase.from("escrow_transactions")
+    await admin
+      .from("escrow_transactions")
       .update({ status: "released", released_at: now })
       .eq("order_id", orderId)
       .in("status", ["held", "pending"])
 
-    await supabase.from("order_audit_log").insert({
+    await admin.from("order_audit_log").insert({
       order_id: orderId,
       action: "escrow_released",
       new_value: JSON.stringify({ triggered_by: adminRole ? "admin" : "auto_72h", amount: order.vendeur_recoit_fcfa }),
