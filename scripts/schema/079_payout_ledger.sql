@@ -3,39 +3,84 @@
 -- request_manual_payout, transitions) est déjà revue ; y mélanger le livre et le
 -- nouveau décompte du quota casserait le diff et le rollback déjà validés.
 -- 079 est additive : elle remplace admin_update_manual_payout, met à jour
--- gwa_payout_fee (quota décompté par versement payé) et lève la FK
--- financial_ledger.transaction_id → orders, pour que transaction_id puisse
--- être l'id du withdrawal_requests (payout_id).
+-- gwa_payout_fee (quota décompté par versement payé) et ajoute financial_ledger.payout_id.
+-- La FK financial_ledger.transaction_id → orders (ON DELETE RESTRICT) est conservée.
 --
 -- Compte de sortie :
 --   network = 'geniuspay' → GATEWAY_GENIUSPAY
 --   network IN (orange_ci, mtn_ci, moov_ci, wave_ci) → TREASURY_GWA
 -- TREASURY_GWA : compte d'attente pour un Mobile Money manuel ; sa validation
 -- définitive est à confirmer par Yao. Convention des soldes : crédit − débit.
+--
+-- Ordre SQL : 02 → 03a → 065 (si absente de la prod) → 076 → 077 → 078 → 079.
 
--- transaction_id = id de commande (077) ou id de versement (079). Plus de FK vers orders.
-DO $$
-DECLARE
-  r record;
+BEGIN;
+
+-- Gardes : échouer ici laisse le schéma intact (transaction unique).
+DO $gwa079_guard$
 BEGIN
-  FOR r IN
-    SELECT conname
-    FROM pg_constraint
+  IF to_regclass('public.withdrawal_request_events') IS NULL THEN
+    RAISE EXCEPTION '079: migration 065 requise (table withdrawal_request_events)';
+  END IF;
+  IF to_regprocedure('public.request_manual_payout(integer,text,text)') IS NULL
+     AND to_regprocedure('public.get_seller_eligible_proceeds(uuid)') IS NULL
+  THEN
+    RAISE EXCEPTION '079: migration 065 requise (fonctions de versement manuel)';
+  END IF;
+  IF to_regprocedure('public.gwa_post_release_split(uuid,integer,integer,integer,integer,text,text,text,text,timestamptz,text,timestamptz)') IS NULL THEN
+    RAISE EXCEPTION '079: migration 077 requise (gwa_post_release_split)';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'payout_fee_frozen_fcfa'
+  ) THEN
+    RAISE EXCEPTION '079: migration 077 requise (orders.payout_fee_frozen_fcfa)';
+  END IF;
+END
+$gwa079_guard$;
+
+-- payout_id distinct de transaction_id : on garde la FK vers orders (ON DELETE RESTRICT).
+ALTER TABLE public.financial_ledger
+  ADD COLUMN IF NOT EXISTS payout_id uuid REFERENCES public.withdrawal_requests (id) ON DELETE RESTRICT;
+
+COMMENT ON COLUMN public.financial_ledger.transaction_id IS
+  'orders.id pour les écritures de paiement / libération (077). NULL sur une jambe de versement (079).';
+COMMENT ON COLUMN public.financial_ledger.payout_id IS
+  'withdrawal_requests.id pour les écritures de versement (079). NULL sur une jambe de commande.';
+
+-- 077 a pu poser NOT NULL sur transaction_id ; une jambe de versement n'a pas de commande.
+ALTER TABLE public.financial_ledger
+  ALTER COLUMN transaction_id DROP NOT NULL;
+
+ALTER TABLE public.financial_ledger
+  DROP CONSTRAINT IF EXISTS financial_ledger_source_chk;
+ALTER TABLE public.financial_ledger
+  ADD CONSTRAINT financial_ledger_source_chk
+  CHECK (
+    (transaction_id IS NOT NULL AND payout_id IS NULL)
+    OR (transaction_id IS NULL AND payout_id IS NOT NULL)
+  );
+
+-- Si une ancienne 079 avait retiré la FK, la rétablir.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
     WHERE conrelid = 'public.financial_ledger'::regclass
       AND contype = 'f'
       AND confrelid = 'public.orders'::regclass
-  LOOP
-    EXECUTE format('ALTER TABLE public.financial_ledger DROP CONSTRAINT %I', r.conname);
-  END LOOP;
+  ) THEN
+    ALTER TABLE public.financial_ledger
+      ADD CONSTRAINT financial_ledger_transaction_id_fkey
+      FOREIGN KEY (transaction_id) REFERENCES public.orders (id) ON DELETE RESTRICT;
+  END IF;
 END $$;
 
-COMMENT ON COLUMN public.financial_ledger.transaction_id IS
-  'Id de l''opération : orders.id à la libération (077), withdrawal_requests.id au versement (079).';
-
--- Empêche un second jeu de jambes pour le même versement (idempotence).
-CREATE UNIQUE INDEX IF NOT EXISTS financial_ledger_payout_leg_uidx
-  ON public.financial_ledger (transaction_id, account_debit, account_credit)
-  WHERE account_debit = 'WALLET_SELLER'
+DROP INDEX IF EXISTS public.financial_ledger_payout_leg_uidx;
+CREATE UNIQUE INDEX financial_ledger_payout_leg_uidx
+  ON public.financial_ledger (payout_id, account_debit, account_credit)
+  WHERE payout_id IS NOT NULL
+    AND account_debit = 'WALLET_SELLER'
     AND account_credit IN ('REVENUE_GWA_PAYOUT', 'GATEWAY_GENIUSPAY', 'TREASURY_GWA');
 
 ALTER TABLE public.withdrawal_requests
@@ -112,6 +157,25 @@ $$;
 REVOKE ALL ON FUNCTION public.gwa_payout_fee(uuid, uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.gwa_payout_fee(uuid, uuid) TO service_role;
 
+CREATE OR REPLACE FUNCTION public.gwa_seller_wallet_balance(p_seller_id uuid)
+RETURNS integer
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT COALESCE((
+    SELECT SUM(CASE WHEN l.account_credit = 'WALLET_SELLER' THEN l.amount ELSE 0 END)
+         - SUM(CASE WHEN l.account_debit  = 'WALLET_SELLER' THEN l.amount ELSE 0 END)
+    FROM public.financial_ledger l
+    WHERE l.transaction_id IN (SELECT id FROM public.orders WHERE seller_id = p_seller_id)
+       OR l.payout_id IN (SELECT id FROM public.withdrawal_requests WHERE user_id = p_seller_id)
+  ), 0)::integer;
+$$;
+
+REVOKE ALL ON FUNCTION public.gwa_seller_wallet_balance(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.gwa_seller_wallet_balance(uuid) TO service_role;
+
 CREATE OR REPLACE FUNCTION public.admin_update_manual_payout(
   p_request_id uuid,
   p_new_status text,
@@ -134,6 +198,7 @@ DECLARE
   v_network text;
   v_ref text;
   v_posted boolean := false;
+  v_wallet integer := 0;
 BEGIN
   IF NOT EXISTS (
     SELECT 1
@@ -159,6 +224,14 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'payout request not found';
   END IF;
+
+  -- Serialise solde et quota de frais pour tous les versements du même vendeur.
+  PERFORM pg_advisory_xact_lock(hashtext(existing.user_id::text)::bigint);
+
+  IF p_actor IS NOT DISTINCT FROM existing.user_id THEN
+    RAISE EXCEPTION 'paid actor must differ from seller';
+  END IF;
+
   IF NOT (
     (existing.status = 'pending' AND p_new_status IN ('processing', 'failed'))
     OR (existing.status = 'processing' AND p_new_status IN ('paid', 'failed'))
@@ -196,13 +269,19 @@ BEGIN
     END IF;
 
     SELECT EXISTS (
-      SELECT 1 FROM public.financial_ledger WHERE transaction_id = p_request_id
+      SELECT 1 FROM public.financial_ledger WHERE payout_id = p_request_id
     ) INTO v_posted;
     IF COALESCE(v_posted, false) THEN
       RAISE EXCEPTION 'payout already posted';
     END IF;
 
+    v_wallet := public.gwa_seller_wallet_balance(existing.user_id);
+    IF existing.amount_fcfa > v_wallet THEN
+      RAISE EXCEPTION 'payout amount exceeds wallet balance';
+    END IF;
+
     -- Un versement peut couvrir plusieurs commandes ; le frais s'applique une seule fois.
+    -- Le quota est lu sous le verrou vendeur (après les versements déjà commités).
     v_fee := public.gwa_payout_fee(existing.user_id, p_request_id);
     IF v_fee > 0 AND existing.amount_fcfa <= v_fee THEN
       RAISE EXCEPTION 'payout amount too low for fee';
@@ -213,9 +292,9 @@ BEGIN
     END IF;
 
     INSERT INTO public.financial_ledger (
-      transaction_id, account_debit, account_credit, amount, currency
+      transaction_id, payout_id, account_debit, account_credit, amount, currency
     )
-    SELECT p_request_id, v.debit, v.credit, v.amount, 'XOF'
+    SELECT NULL, p_request_id, v.debit, v.credit, v.amount, 'XOF'
     FROM (
       VALUES
         ('WALLET_SELLER', 'REVENUE_GWA_PAYOUT', COALESCE(v_fee, 0)),
@@ -255,7 +334,8 @@ $$;
 REVOKE ALL ON FUNCTION public.admin_update_manual_payout(uuid, text, text, text, uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_update_manual_payout(uuid, text, text, text, uuid) TO service_role;
 
--- N2 : montant versable = solde WALLET_SELLER du livre, déjà net des frais postés au versement.
+-- N2 / QA-2 : montant versable = solde WALLET des commandes de la liste blanche,
+-- déjà net des frais postés au versement. Remboursées et litiges exclus.
 CREATE OR REPLACE FUNCTION public.gwa_payout_eligible_orders(p_seller_id UUID)
 RETURNS TABLE (order_id UUID, amount_fcfa NUMERIC)
 LANGUAGE SQL
@@ -272,8 +352,11 @@ AS $$
   FROM public.orders
   WHERE seller_id = p_seller_id
     AND payment_status = 'paid'
+    AND payment_status IS DISTINCT FROM 'refunded'
     AND status = 'delivered'
+    AND status IS DISTINCT FROM 'disputed'
     AND escrow_status = 'released'
+    AND escrow_status IS DISTINCT FROM 'disputed'
     AND payout_status IN ('pending_ops', 'failed', 'skipped_no_provider')
     AND id <> ALL (ARRAY['e09af219-2831-4308-b235-b37fb6df82e8']::uuid[]);
 $$;
@@ -290,9 +373,11 @@ AS $$
     SELECT SUM(CASE WHEN l.account_credit = 'WALLET_SELLER' THEN l.amount ELSE 0 END)
          - SUM(CASE WHEN l.account_debit  = 'WALLET_SELLER' THEN l.amount ELSE 0 END)
     FROM public.financial_ledger l
-    WHERE l.transaction_id IN (SELECT id FROM public.orders WHERE seller_id = p_seller_id)
-       OR l.transaction_id IN (SELECT id FROM public.withdrawal_requests WHERE user_id = p_seller_id)
+    WHERE l.transaction_id IN (SELECT order_id FROM public.gwa_payout_eligible_orders(p_seller_id))
+       OR l.payout_id IN (SELECT id FROM public.withdrawal_requests WHERE user_id = p_seller_id)
   ), 0));
 $$;
 
 REVOKE ALL ON FUNCTION public.get_seller_eligible_proceeds(UUID) FROM PUBLIC, anon, authenticated;
+
+COMMIT;

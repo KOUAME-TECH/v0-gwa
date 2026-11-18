@@ -1,30 +1,24 @@
--- Rollback 079 : retire le livre de versement et rétablit gwa_payout_fee (074)
--- et admin_update_manual_payout (065). À n'exécuter que s'il n'existe plus
--- de lignes financial_ledger dont transaction_id n'est pas un orders.id,
--- sinon la FK vers orders ne peut pas être recréée.
+-- Rollback 079 : retire le livre de versement (payout_id) et rétablit
+-- gwa_payout_fee (074) et admin_update_manual_payout (065).
+-- La FK financial_ledger.transaction_id → orders est conservée.
 
 DROP INDEX IF EXISTS public.financial_ledger_payout_leg_uidx;
+ALTER TABLE public.financial_ledger DROP CONSTRAINT IF EXISTS financial_ledger_source_chk;
 
--- Recrée la FK seulement si tous les transaction_id existent dans orders.
+-- Interdit le rollback s'il reste des jambes de versement (payout_id NOT NULL).
 DO $$
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM public.financial_ledger l
-    LEFT JOIN public.orders o ON o.id = l.transaction_id
-    WHERE o.id IS NULL
-  ) THEN
-    BEGIN
-      ALTER TABLE public.financial_ledger
-        ADD CONSTRAINT financial_ledger_transaction_id_fkey
-        FOREIGN KEY (transaction_id) REFERENCES public.orders (id) ON DELETE RESTRICT;
-    EXCEPTION WHEN duplicate_object THEN
-      NULL;
-    END;
-  ELSE
-    RAISE NOTICE '079 rollback : FK non recréée, des transaction_id ne sont pas des commandes';
+  IF EXISTS (SELECT 1 FROM public.financial_ledger WHERE payout_id IS NOT NULL) THEN
+    RAISE EXCEPTION '079 rollback : des écritures de versement (payout_id) existent encore';
+  END IF;
+  ALTER TABLE public.financial_ledger DROP COLUMN IF EXISTS payout_id;
+  -- 077 posait transaction_id NOT NULL.
+  IF NOT EXISTS (SELECT 1 FROM public.financial_ledger WHERE transaction_id IS NULL) THEN
+    ALTER TABLE public.financial_ledger ALTER COLUMN transaction_id SET NOT NULL;
   END IF;
 END $$;
+
+DROP FUNCTION IF EXISTS public.gwa_seller_wallet_balance(uuid);
 
 ALTER TABLE public.withdrawal_requests
   DROP COLUMN IF EXISTS processing_by;

@@ -20,6 +20,9 @@ BEGIN
 END;
 $$;
 
+-- Aligné sur le trigger de prod (pas de contournement admin, pas de feexpay_ref
+-- retiré en prod) + colonnes 065 (provider_reference, payout_network) + colonnes
+-- 077 si déjà présentes (payout_fee_frozen_fcfa, payout_plan_id_at_payment).
 CREATE OR REPLACE FUNCTION public.protect_order_privileged_columns()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -27,28 +30,22 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  jwt_role TEXT := COALESCE(
+  jwt_role text := coalesce(
     current_setting('request.jwt.claim.role', true),
     auth.role()
   );
-  is_admin BOOLEAN := false;
 BEGIN
   IF jwt_role = 'service_role' THEN
     RETURN NEW;
   END IF;
 
-  SELECT EXISTS (
-    SELECT 1
-    FROM public.admin_roles ar
-    WHERE ar.user_id = auth.uid() AND ar.is_active = true
-  ) INTO is_admin;
-
-  IF is_admin THEN
-    RETURN NEW;
-  END IF;
-
   NEW.payment_status := OLD.payment_status;
   NEW.escrow_status := OLD.escrow_status;
+  NEW.payout_status := OLD.payout_status;
+  NEW.payout_ref := OLD.payout_ref;
+  NEW.payout_at := OLD.payout_at;
+  NEW.payout_error := OLD.payout_error;
+  NEW.payout_network := OLD.payout_network;
   NEW.total_amount := OLD.total_amount;
   NEW.subtotal := OLD.subtotal;
   NEW.shipping_cost := OLD.shipping_cost;
@@ -58,14 +55,23 @@ BEGIN
   NEW.vendeur_recoit_fcfa := OLD.vendeur_recoit_fcfa;
   NEW.buyer_id := OLD.buyer_id;
   NEW.seller_id := OLD.seller_id;
-  NEW.feexpay_ref := OLD.feexpay_ref;
-  NEW.provider_reference := OLD.provider_reference;
+  NEW.product_price := OLD.product_price;
+  NEW.buyer_service_fee := OLD.buyer_service_fee;
+  NEW.seller_commission := OLD.seller_commission;
+  NEW.seller_net_amount := OLD.seller_net_amount;
+  NEW.pricing_plan_id := OLD.pricing_plan_id;
+  NEW.commission_rate_applied := OLD.commission_rate_applied;
+  NEW.lifecycle_status := OLD.lifecycle_status;
   NEW.currency := OLD.currency;
-  NEW.payout_ref := OLD.payout_ref;
-  NEW.payout_status := OLD.payout_status;
-  NEW.payout_network := OLD.payout_network;
-  NEW.payout_at := OLD.payout_at;
-  NEW.payout_error := OLD.payout_error;
+  NEW.provider_reference := OLD.provider_reference;
+
+  -- Colonnes ajoutées par 077 : no-op si 065 s'applique avant 077.
+  BEGIN
+    NEW.payout_fee_frozen_fcfa := OLD.payout_fee_frozen_fcfa;
+    NEW.payout_plan_id_at_payment := OLD.payout_plan_id_at_payment;
+  EXCEPTION WHEN undefined_column THEN
+    NULL;
+  END;
 
   IF OLD.status NOT IN ('pending') AND NEW.status IS DISTINCT FROM OLD.status THEN
     NEW.status := OLD.status;
@@ -130,8 +136,11 @@ AS $$
   FROM public.orders
   WHERE seller_id = p_seller_id
     AND payment_status = 'paid'
+    AND payment_status IS DISTINCT FROM 'refunded'
     AND status = 'delivered'
+    AND status IS DISTINCT FROM 'disputed'
     AND escrow_status = 'released'
+    AND escrow_status IS DISTINCT FROM 'disputed'
     AND payout_status IN ('pending_ops', 'failed', 'skipped_no_provider')
     AND id <> ALL (ARRAY['e09af219-2831-4308-b235-b37fb6df82e8']::uuid[]);  -- GWA-MW16COUJ, test interne (variante E)
 $$;
@@ -144,12 +153,13 @@ LANGUAGE SQL
 STABLE
 SET search_path = public
 AS $$
-  -- Solde WALLET_SELLER du vendeur, déjà net des frais et sorties postés au versement.
+  -- Uniquement les commandes de la liste blanche, plus les écritures de versement.
+  -- Une commande libérée puis remboursée (ou en litige) n'est plus versable.
   SELECT GREATEST(0, COALESCE((
     SELECT SUM(CASE WHEN l.account_credit = 'WALLET_SELLER' THEN l.amount ELSE 0 END)
          - SUM(CASE WHEN l.account_debit  = 'WALLET_SELLER' THEN l.amount ELSE 0 END)
     FROM public.financial_ledger l
-    WHERE l.transaction_id IN (SELECT id FROM public.orders WHERE seller_id = p_seller_id)
+    WHERE l.transaction_id IN (SELECT order_id FROM public.gwa_payout_eligible_orders(p_seller_id))
        OR l.transaction_id IN (SELECT id FROM public.withdrawal_requests WHERE user_id = p_seller_id)
   ), 0));
 $$;
