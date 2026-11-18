@@ -74,7 +74,7 @@ export default function AdminAnalyticsPage() {
     // Users
     const { count: totalUsers } = await supabase
       .from('profiles')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
 
     const { data: usersByTypeData } = await supabase
       .from('profiles')
@@ -102,12 +102,12 @@ export default function AdminAnalyticsPage() {
 
     const { count: newUsersThisMonth } = await supabase
       .from('profiles')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
       .gte('created_at', thisMonthStart.toISOString())
 
     const { count: newUsersLastMonth } = await supabase
       .from('profiles')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
       .gte('created_at', lastMonthStart.toISOString())
       .lt('created_at', lastMonthEnd.toISOString())
 

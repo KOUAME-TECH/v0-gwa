@@ -41,7 +41,7 @@ export async function GET() {
       factoringResult,
       subscriptionResult,
     ] = await Promise.all([
-      admin.from("profiles").select("*", { count: "exact", head: true }),
+      admin.from("profiles").select("id", { count: "exact", head: true }),
       admin.from("products").select("*", { count: "exact", head: true }),
       admin
         .from("products")
@@ -62,7 +62,7 @@ export async function GET() {
         .eq("status", "pending"),
       admin
         .from("profiles")
-        .select("*", { count: "exact", head: true })
+        .select("id", { count: "exact", head: true })
         .gte("created_at", today.toISOString()),
       admin
         .from("orders")
