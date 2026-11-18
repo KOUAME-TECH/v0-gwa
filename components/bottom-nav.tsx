@@ -69,7 +69,7 @@ export function BottomNav() {
   const activeWorld = getActiveWorld()
 
   const worldColors = {
-    social: { bg: "bg-[#F39A1F]", text: "text-[#F39A1F]" },
+    social: { bg: "bg-[#B45309]", text: "text-[#B45309]" },
     commerce: { bg: "bg-[#2F7D32]", text: "text-[#2F7D32]" },
     messaging: { bg: "bg-[#1DA1F2]", text: "text-[#1DA1F2]" },
     profile: { bg: "bg-[#6B7280]", text: "text-[#6B7280]" },
@@ -134,7 +134,7 @@ export function BottomNav() {
               className="pointer-events-auto flex min-h-11 items-center gap-2 bg-white border border-[#E5E7EB] rounded-full pl-3 pr-4 py-2.5 shadow-md active:scale-95 transition-transform"
               aria-label={`${unreadNotifications} notification${unreadNotifications > 1 ? "s" : ""}`}
             >
-              <Bell className="h-4 w-4 text-[#F39A1F]" />
+              <Bell className="h-4 w-4 text-[#B45309]" />
               <span className="text-xs font-semibold text-[#111827]">{unreadNotifications}</span>
             </Link>
           )}
@@ -200,7 +200,7 @@ export function BottomNav() {
                         "w-[52px] h-[52px] rounded-2xl flex items-center justify-center shadow-lg active:scale-90 transition-all duration-200",
                         isSeller
                           ? "bg-gradient-to-br from-[#2F7D32] to-[#1B5E20] shadow-[#2F7D32]/30"
-                          : "bg-gradient-to-br from-[#F39A1F] to-[#E88A0C] shadow-[#F39A1F]/30",
+                          : "bg-gradient-to-br from-[#B45309] to-[#9A4E00] shadow-[#B45309]/30",
                       )}
                     >
                       <Icon className="h-6 w-6 text-white" strokeWidth={2.5} />
@@ -208,7 +208,7 @@ export function BottomNav() {
                     <span
                       className={cn(
                         "text-[9px] font-semibold mt-0.5 block text-center",
-                        isSeller ? "text-[#2F7D32]" : "text-[#F39A1F]",
+                        isSeller ? "text-[#2F7D32]" : "text-[#B45309]",
                       )}
                     >
                       {item.label}
@@ -246,7 +246,7 @@ export function BottomNav() {
                             ? "bg-[#1DA1F2]"
                             : item.world === "commerce"
                               ? "bg-[#2F7D32]"
-                              : "bg-[#F39A1F]",
+                              : "bg-[#B45309]",
                         )}
                       >
                         {item.badge > 99 ? "99+" : item.badge}
