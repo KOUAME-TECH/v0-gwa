@@ -6,8 +6,11 @@
  */
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { sendPushNotification } from "@/lib/notifications/push"
 import { sendSMSFallback } from "@/lib/notifications/sms"
+import { releaseEscrowWithLedger } from "@/lib/orders/escrow-release"
+import { canReleaseFunds } from "@/lib/auth/admin-permissions"
 
 export async function POST(
   request: NextRequest,
@@ -109,28 +112,30 @@ await sendPushNotification({ externalUserIds: [order.seller_id],
     const is72hPassed = order.confirmed_by_buyer_at &&
       new Date().getTime() - new Date(order.confirmed_by_buyer_at).getTime() > 72 * 60 * 60 * 1000
 
-    if (!adminRole && !is72hPassed) {
+    const adminCanRelease = canReleaseFunds(adminRole?.role)
+    if (!adminCanRelease && !is72hPassed) {
       return NextResponse.json({
-        error: "Libération possible uniquement par admin ou après 72h de confirmation de livraison"
+        error: "Libération possible uniquement par admin finance ou après 72h de confirmation de livraison"
       }, { status: 403 })
     }
 
-    if (order.escrow_status === "released") {
-      return NextResponse.json({ error: "Escrow déjà libéré", already_released: true })
+    if (order.status === "cancelled") {
+      return NextResponse.json({ error: "Commande annulée", code: "ESCROW_NOT_HELD" }, { status: 409 })
+    }
+    const admin = createAdminClient()
+    const released = await releaseEscrowWithLedger(admin as never, order)
+    if (!released.ok) {
+      console.error("[api/orders/release] ledger", released.body.code)
+      return NextResponse.json(released.body, { status: released.status })
     }
 
-    await supabase.from("orders").update({
-      escrow_status: "released",
-      status: "livre",
-      updated_at: now,
-    }).eq("id", orderId)
-
-    await supabase.from("escrow_transactions")
+    await admin
+      .from("escrow_transactions")
       .update({ status: "released", released_at: now })
       .eq("order_id", orderId)
       .in("status", ["held", "pending"])
 
-    await supabase.from("order_audit_log").insert({
+    await admin.from("order_audit_log").insert({
       order_id: orderId,
       action: "escrow_released",
       new_value: JSON.stringify({ triggered_by: adminRole ? "admin" : "auto_72h", amount: order.vendeur_recoit_fcfa }),

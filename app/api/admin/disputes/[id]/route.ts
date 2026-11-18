@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
+import { releaseEscrowWithLedger } from "@/lib/orders/escrow-release"
 import { requireAdminSection } from "@/lib/auth/require-admin"
+import { canReleaseFunds } from "@/lib/auth/admin-permissions"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { sendPushToUser } from "@/lib/notifications/push"
 
@@ -101,6 +103,29 @@ export async function PATCH(request: NextRequest, context: Ctx) {
       updates.assigned_to = gate.user.id
     }
 
+    if (
+      (escrowOutcomeRaw === "release_seller" || escrowOutcomeRaw === "refund_buyer")
+      && !canReleaseFunds(gate.role.role)
+    ) {
+      return NextResponse.json(
+        { error: "Seuls super_admin, finance_admin et admin peuvent libérer ou rembourser des fonds" },
+        { status: 403 },
+      )
+    }
+
+    // Libération vendeur AVANT de clore le litige : RPC transactionnelle (statut + grand livre).
+    // Échec → 409, litige inchangé ; jamais de released sans écritures.
+    if ((status === "resolved" || status === "closed") && existing.order_id && escrowOutcomeRaw === "release_seller") {
+      const { data: toRelease } = await gate.admin.from("orders").select("*").eq("id", existing.order_id).maybeSingle()
+      if (toRelease && toRelease.escrow_status !== "released") {
+        const released = await releaseEscrowWithLedger(gate.admin as never, toRelease, { fromDispute: true })
+        if (!released.ok) {
+          console.error("[api/admin/disputes] release ledger", released.body.code)
+          return NextResponse.json(released.body, { status: released.status })
+        }
+      }
+    }
+
     const { data, error } = await gate.admin
       .from("disputes")
       .update(updates)
@@ -121,20 +146,13 @@ export async function PATCH(request: NextRequest, context: Ctx) {
     ) {
       const { data: order } = await gate.admin
         .from("orders")
-        .select("id, order_number, buyer_id, seller_id, escrow_status, status")
+        .select("id, order_number, buyer_id, seller_id, escrow_status, status, payout_status")
         .eq("id", existing.order_id)
         .maybeSingle()
 
       if (order) {
         if (escrowOutcomeRaw === "release_seller") {
-          await gate.admin
-            .from("orders")
-            .update({
-              status: "delivered",
-              escrow_status: "released",
-              updated_at: now,
-            })
-            .eq("id", order.id)
+          // statut + écritures déjà passés par releaseEscrowWithLedger (avant la mise à jour du litige)
           await gate.admin
             .from("escrow_transactions")
             .update({ status: "released", released_at: now })

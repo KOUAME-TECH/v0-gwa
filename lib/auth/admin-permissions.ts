@@ -55,7 +55,7 @@ const ALL_SECTIONS: AdminSection[] = ADMIN_NAV.map((n) => n.section)
 
 const ROLE_SECTIONS: Record<AdminRole, AdminSection[]> = {
   super_admin: ALL_SECTIONS,
-  finance_admin: ["dashboard", "finances", "pricing", "settings", "orders", "subscriptions"],
+  finance_admin: ["dashboard", "finances", "pricing", "settings", "orders", "subscriptions", "disputes"],
   admin: ALL_SECTIONS,
   support: [
     "dashboard",
@@ -92,6 +92,11 @@ export type AdminAction =
 
 export function canEditCommercialSettings(role: AdminRole): boolean {
   return role === "super_admin" || role === "finance_admin"
+}
+
+/** Libération de fonds (séquestre / litige) : pas support ni moderator. */
+export function canReleaseFunds(role: AdminRole | string | null | undefined): boolean {
+  return role === "super_admin" || role === "finance_admin" || role === "admin"
 }
 
 const ROLE_ACTIONS: Record<AdminRole, AdminAction[]> = {
