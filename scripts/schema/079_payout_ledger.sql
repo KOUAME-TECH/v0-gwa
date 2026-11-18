@@ -275,9 +275,10 @@ BEGIN
       RAISE EXCEPTION 'payout already posted';
     END IF;
 
-    v_wallet := public.gwa_seller_wallet_balance(existing.user_id);
+    -- Liste blanche (hors remboursées / litiges) + jambes de versement, sous le verrou vendeur.
+    v_wallet := public.get_seller_eligible_proceeds(existing.user_id);
     IF existing.amount_fcfa > v_wallet THEN
-      RAISE EXCEPTION 'payout amount exceeds wallet balance';
+      RAISE EXCEPTION 'payout amount exceeds eligible proceeds';
     END IF;
 
     -- Un versement peut couvrir plusieurs commandes ; le frais s'applique une seule fois.

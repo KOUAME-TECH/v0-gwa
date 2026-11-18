@@ -1,6 +1,28 @@
 -- 065 — Producer-visible sales proceeds and audited manual payout operations.
 -- 18/11 : get_seller_eligible_proceeds en LISTE BLANCHE via gwa_payout_eligible_orders (remplace le NOT IN).
 -- NON APPLIQUÉE EN PROD. Clone d'abord ; application sur GO écrit de Finance, QA et Yao.
+-- Ordre SQL : 02 → 03a → 065 (si absente de la prod) → 076 → 077 → 078 → 079.
+
+BEGIN;
+
+-- Gardes : échouer ici laisse le schéma intact (transaction unique).
+DO $gwa065_guard$
+BEGIN
+  IF to_regclass('public.orders') IS NULL THEN
+    RAISE EXCEPTION '065: table public.orders requise';
+  END IF;
+  IF to_regclass('public.profiles') IS NULL THEN
+    RAISE EXCEPTION '065: table public.profiles requise';
+  END IF;
+  IF to_regclass('public.financial_ledger') IS NULL THEN
+    RAISE EXCEPTION '065: table public.financial_ledger requise';
+  END IF;
+  IF to_regclass('public.withdrawal_requests') IS NULL THEN
+    RAISE EXCEPTION '065: table public.withdrawal_requests requise (053)';
+  END IF;
+END
+$gwa065_guard$;
+
 ALTER TABLE public.orders
   ADD COLUMN IF NOT EXISTS provider_reference TEXT,
   ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'XOF';
@@ -112,6 +134,12 @@ CREATE INDEX IF NOT EXISTS idx_withdrawal_events_request_created
 ALTER TABLE public.withdrawal_request_events ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.withdrawal_request_events FROM PUBLIC, anon, authenticated;
 GRANT ALL ON public.withdrawal_request_events TO service_role;
+
+-- Déjà en prod (053) : une seule demande ouverte par vendeur. IF NOT EXISTS pour les clones.
+CREATE UNIQUE INDEX IF NOT EXISTS withdrawal_requests_one_open_per_user
+  ON public.withdrawal_requests (user_id)
+  WHERE status = ANY (ARRAY['pending', 'processing', 'queued']);
+
 
 -- BEGIN-WHITELIST (stabilisation 18/11 : liste BLANCHE, remplace le NOT IN qui laissait passer
 -- cancelled / released / NULL / toute valeur inconnue). Source unique de l'éligibilité au versement.
@@ -226,6 +254,10 @@ BEGIN
   IF p_amount_fcfa > available_amount - reserved_amount THEN
     RAISE EXCEPTION 'insufficient available balance';
   END IF;
+
+  -- Trigger prod trg_protect_withdrawal_insert : INSERT réservé à service_role.
+  -- La fonction est déjà SECURITY DEFINER et a authentifié le vendeur (auth.uid()).
+  PERFORM set_config('request.jwt.claim.role', 'service_role', true);
 
   INSERT INTO public.withdrawal_requests (
     user_id, amount_fcfa, phone, network, status
@@ -394,3 +426,5 @@ $$;
 -- Only the finance API calls this with its authenticated admin id; the RPC also rechecks admin_roles.
 REVOKE ALL ON FUNCTION public.admin_update_manual_payout(UUID, TEXT, TEXT, TEXT, UUID) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_update_manual_payout(UUID, TEXT, TEXT, TEXT, UUID) TO service_role;
+
+COMMIT;

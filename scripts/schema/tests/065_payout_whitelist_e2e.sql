@@ -9,6 +9,33 @@
 --   Récolte, quota inclus : frais 0, 930 sortis, aucune ligne REVENUE_GWA_PAYOUT.
 BEGIN;
 SELECT set_config('request.jwt.claim.role', 'service_role', true);
+
+-- Protections déjà en prod (053) : les poser si le clone ne les a pas, pour que
+-- T065 se joue sur un catalogue fidèle (une demande ouverte, INSERT service_role).
+CREATE UNIQUE INDEX IF NOT EXISTS withdrawal_requests_one_open_per_user
+  ON public.withdrawal_requests (user_id)
+  WHERE status = ANY (ARRAY['pending', 'processing', 'queued']);
+CREATE OR REPLACE FUNCTION public.protect_withdrawal_insert()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $pw$
+DECLARE
+  jwt_role text := coalesce(current_setting('request.jwt.claim.role', true), auth.role());
+BEGIN
+  IF jwt_role = 'service_role' THEN
+    RETURN NEW;
+  END IF;
+  RAISE EXCEPTION 'withdrawal_insert_service_only' USING ERRCODE = '42501';
+END;
+$pw$;
+DROP TRIGGER IF EXISTS trg_protect_withdrawal_insert ON public.withdrawal_requests;
+CREATE TRIGGER trg_protect_withdrawal_insert
+  BEFORE INSERT ON public.withdrawal_requests
+  FOR EACH ROW
+  EXECUTE FUNCTION public.protect_withdrawal_insert();
+
 DO $$
 DECLARE
   v_seller uuid; v_buyer uuid; v_graine uuid; v_plan_r uuid; v_plan_g uuid;
@@ -200,6 +227,36 @@ BEGIN
   VALUES (act_proc, 'finance_admin', true), (act_paid, 'admin', true)
   ON CONFLICT (user_id) DO UPDATE SET role = EXCLUDED.role, is_active = true;
 
+  -- QA-2 au paiement : demande de 1 860 F créée quand A et B sont éligibles ;
+  -- après remboursement de B, l'éligible vaut 930 et le paiement est refusé.
+  elig := public.get_seller_eligible_proceeds(v_seller);
+  IF elig IS DISTINCT FROM 1860 THEN
+    RAISE EXCEPTION 'T065 QA-2 prérequis : proceeds Récolte = % (attendu 1860)', elig;
+  END IF;
+  INSERT INTO public.withdrawal_requests(user_id, amount_fcfa, phone, network, status)
+  VALUES (v_seller, 1860, '0700000010', 'orange_ci', 'pending') RETURNING id INTO pay_r;
+  r := public.admin_update_manual_payout(pay_r, 'processing', NULL, NULL, act_proc);
+  PERFORM set_config('request.jwt.claim.role', 'service_role', true);
+  UPDATE public.orders SET payment_status = 'refunded' WHERE id = oB;
+  elig := public.get_seller_eligible_proceeds(v_seller);
+  IF elig IS DISTINCT FROM 930 THEN
+    RAISE EXCEPTION 'T065 QA-2 : proceeds après remboursement = % (attendu 930)', elig;
+  END IF;
+  ok := false;
+  BEGIN
+    r := public.admin_update_manual_payout(pay_r, 'paid', 'REF-1860-AFTER-REFUND', NULL, act_paid);
+  EXCEPTION WHEN others THEN
+    ok := SQLERRM LIKE '%exceeds eligible proceeds%';
+    RAISE NOTICE 'T065 QA-2 paiement : %', SQLERRM;
+  END;
+  IF NOT ok THEN RAISE EXCEPTION 'T065 QA-2 : versement de 1860 après remboursement non refusé'; END IF;
+  IF EXISTS (SELECT 1 FROM public.financial_ledger WHERE payout_id = pay_r) THEN
+    RAISE EXCEPTION 'T065 QA-2 : écritures pour un versement de 1860 refusé';
+  END IF;
+  UPDATE public.withdrawal_requests SET status = 'failed', updated_at = NOW() WHERE id = pay_r;
+  UPDATE public.orders SET payment_status = 'paid' WHERE id = oB;
+  RAISE NOTICE 'T065 QA-2 paiement OK : 1860 refusé après remboursement (éligible 930)';
+
   ALTER TABLE public.withdrawal_requests DROP CONSTRAINT IF EXISTS withdrawal_requests_amount_fcfa_check;
 
   -- Récolte, versement inclus : frais 0, 930 sortis
@@ -287,6 +344,9 @@ BEGIN
     RAISE NOTICE 'T065 payout_ref manquant : %', SQLERRM;
   END;
   IF NOT ok THEN RAISE EXCEPTION 'T065 : payout_ref manquant non refusé'; END IF;
+  UPDATE public.withdrawal_requests
+     SET status = 'failed', updated_at = NOW()
+   WHERE id = pay_bad AND status IN ('pending', 'processing', 'queued');
 
   -- versement 300 F avec frais (Graine)
   INSERT INTO public.withdrawal_requests(user_id, amount_fcfa, phone, network, status)
@@ -296,13 +356,16 @@ BEGIN
   BEGIN
     r := public.admin_update_manual_payout(pay_bad, 'paid', 'REF-TOO-SMALL', NULL, act_paid);
   EXCEPTION WHEN others THEN
-    ok := SQLERRM LIKE '%payout amount too low%' OR SQLERRM LIKE '%exceeds wallet balance%';
+    ok := SQLERRM LIKE '%payout amount too low%' OR SQLERRM LIKE '%exceeds eligible proceeds%' OR SQLERRM LIKE '%exceeds wallet balance%';
     RAISE NOTICE 'T065 versement 300 F : %', SQLERRM;
   END;
   IF NOT ok THEN RAISE EXCEPTION 'T065 : versement de 300 F avec frais non refusé'; END IF;
   IF EXISTS (SELECT 1 FROM public.financial_ledger WHERE payout_id = pay_bad) THEN
     RAISE EXCEPTION 'T065 : écritures pour un versement de 300 F refusé';
   END IF;
+  UPDATE public.withdrawal_requests
+     SET status = 'failed', updated_at = NOW()
+   WHERE id = pay_bad AND status IN ('pending', 'processing', 'queued');
 
   -- même acteur
   INSERT INTO public.withdrawal_requests(user_id, amount_fcfa, phone, network, status)
@@ -316,6 +379,9 @@ BEGIN
     RAISE NOTICE 'T065 même acteur : %', SQLERRM;
   END;
   IF NOT ok THEN RAISE EXCEPTION 'T065 : même acteur non refusé'; END IF;
+  UPDATE public.withdrawal_requests
+     SET status = 'failed', updated_at = NOW()
+   WHERE id = pay_bad AND status IN ('pending', 'processing', 'queued');
 
   -- C : écriture du grand livre en échec
   CREATE TEMP TABLE _t065_fail(tx uuid) ON COMMIT DROP; INSERT INTO _t065_fail VALUES (oC);
@@ -378,7 +444,7 @@ BEGIN
     RAISE EXCEPTION 'T065 QA-2 : proceeds après remboursement = % (attendu 0)', public.get_seller_eligible_proceeds(v_seller);
   END IF;
   UPDATE public.orders SET payment_status = 'paid' WHERE id = oB;
-  PERFORM set_config('request.jwt.claim.role', NULL, true);
+  PERFORM set_config('request.jwt.claim.role', 'service_role', true);
   RAISE NOTICE 'T065 QA-2 OK : commande remboursée exclue des proceeds';
 
   -- QA-3 : versement supérieur au solde WALLET
@@ -389,35 +455,36 @@ BEGIN
   BEGIN
     r := public.admin_update_manual_payout(pay_bad, 'paid', 'REF-OVER-WALLET', NULL, act_paid);
   EXCEPTION WHEN others THEN
-    ok := SQLERRM LIKE '%exceeds wallet balance%';
+    ok := SQLERRM LIKE '%exceeds eligible proceeds%' OR SQLERRM LIKE '%exceeds wallet balance%';
     RAISE NOTICE 'T065 QA-3 solde : %', SQLERRM;
   END;
-  IF NOT ok THEN RAISE EXCEPTION 'T065 QA-3 : versement > solde non refusé'; END IF;
+  IF NOT ok THEN RAISE EXCEPTION 'T065 QA-3 : versement > éligible non refusé'; END IF;
   IF EXISTS (SELECT 1 FROM public.financial_ledger WHERE payout_id = pay_bad) THEN
-    RAISE EXCEPTION 'T065 QA-3 : écritures pour un versement au-delà du solde';
+    RAISE EXCEPTION 'T065 QA-3 : écritures pour un versement au-delà de l''éligible';
   END IF;
+  UPDATE public.withdrawal_requests
+     SET status = 'failed', updated_at = NOW()
+   WHERE id = pay_bad AND status IN ('pending', 'processing', 'queued');
 
-  -- QA-3 course : deux demandes de 930 pour un solde B = 930 ; le 2e paid est refusé.
-  -- PGlite est mono-connexion : on simule l'issue après verrou (séquentiel).
+  -- QA-3 / prod : une seule demande ouverte par vendeur (index) ; verrou en profondeur.
   IF position('pg_advisory_xact_lock' in pg_get_functiondef('public.admin_update_manual_payout(uuid,text,text,text,uuid)'::regprocedure)) = 0 THEN
     RAISE EXCEPTION 'T065 QA-3 : verrou vendeur absent de admin_update_manual_payout';
   END IF;
   INSERT INTO public.withdrawal_requests(user_id, amount_fcfa, phone, network, status)
   VALUES (v_seller, 930, '0700000007', 'orange_ci', 'pending') RETURNING id INTO pay_r;
-  INSERT INTO public.withdrawal_requests(user_id, amount_fcfa, phone, network, status)
-  VALUES (v_seller, 930, '0700000008', 'orange_ci', 'pending') RETURNING id INTO pay_m;
-  r := public.admin_update_manual_payout(pay_r, 'processing', NULL, NULL, act_proc);
-  r := public.admin_update_manual_payout(pay_m, 'processing', NULL, NULL, act_proc);
-  r := public.admin_update_manual_payout(pay_r, 'paid', 'REF-RACE-1', NULL, act_paid);
   ok := false;
   BEGIN
-    r := public.admin_update_manual_payout(pay_m, 'paid', 'REF-RACE-2', NULL, act_paid);
-  EXCEPTION WHEN others THEN
-    ok := SQLERRM LIKE '%exceeds wallet balance%';
-    RAISE NOTICE 'T065 QA-3 concurrence : %', SQLERRM;
+    INSERT INTO public.withdrawal_requests(user_id, amount_fcfa, phone, network, status)
+    VALUES (v_seller, 930, '0700000008', 'orange_ci', 'pending') RETURNING id INTO pay_m;
+  EXCEPTION WHEN unique_violation THEN
+    ok := true;
+    RAISE NOTICE 'T065 QA-3 index : une seule demande ouverte (%)', SQLERRM;
   END;
-  IF NOT ok THEN RAISE EXCEPTION 'T065 QA-3 : second versement concurrent non refusé'; END IF;
-  RAISE NOTICE 'T065 QA-3 OK : solde et second versement refusés, verrou présent';
+  IF NOT ok THEN RAISE EXCEPTION 'T065 QA-3 : 2e demande ouverte du même vendeur acceptée'; END IF;
+  UPDATE public.withdrawal_requests
+     SET status = 'failed', updated_at = NOW()
+   WHERE id = pay_r AND status IN ('pending', 'processing', 'queued');
+  RAISE NOTICE 'T065 QA-3 OK : éligible, index une demande ouverte, verrou présent';
 
   -- QA-5 : vendeur / authenticated ne peut pas écrire une colonne protégée
   DECLARE
@@ -432,7 +499,7 @@ BEGIN
            payout_fee_frozen_fcfa = 0,
            buyer_service_fee = 0
      WHERE id = oA;
-    PERFORM set_config('request.jwt.claim.role', NULL, true);
+    PERFORM set_config('request.jwt.claim.role', 'service_role', true);
     SELECT seller_net_amount INTO v_sn2 FROM public.orders WHERE id = oA;
     IF v_sn2 IS DISTINCT FROM v_sn
        OR (SELECT payout_fee_frozen_fcfa FROM public.orders WHERE id = oA) IS DISTINCT FROM v_fee_fr
