@@ -1,59 +1,48 @@
--- T065 — test de bout en bout (clone LOCAL, après 073/074 + 077 #49 + 065 liste blanche). ROLLBACK : n'écrit rien.
--- Pas de bouchon : gwa_quote_pricing (073) et gwa_payout_fee (074) sont appelées telles quelles.
+-- T065 — bout en bout LOCAL (073/074 + 077 #49 modèle b + 065 liste blanche + 079).
+-- ROLLBACK : n'écrit rien. Pas de bouchon : gwa_quote_pricing et gwa_payout_fee réelles.
 --
--- Origine du 7 % : l'ancien témoin figeait commission_fcfa=70 / vendeur=930, et le premier
--- profil du clone (24a869e6-…) est sur l'offre Récolte (code PRO, commission_rate=0.07,
+-- Origine du 7 % : le vendeur témoin du clone (24a869e6-…) est sur Récolte (PRO, 0.07,
 -- payout_included=99), grille du 5/11 (073) aussi en prod. Ce n'est pas Graine (FREE, 0.09).
--- Les montants A–E viennent désormais du devis réel (Récolte : 70 / 930 / frais 0).
--- Cas Graine : commission 90, net avant frais 910, gwa_payout_fee=300, net après frais 610.
---
--- Écart versement : gwa_post_release_split (077) poste le frais à la libération
--- (Débit ESCROW_GWA / Crédit REVENUE_GWA_PAYOUT). request_manual_payout et
--- admin_update_manual_payout (065) n'écrivent pas le grand livre : pas de
--- Débit WALLET_SELLER / Crédit REVENUE_GWA_PAYOUT, ni Débit WALLET_SELLER /
--- Crédit GATEWAY_* ou TREASURY. WALLET_SELLER reste donc au net après frais.
+-- Libération (077) : pas de REVENUE_GWA_PAYOUT. Récolte WALLET_SELLER=930 ; Graine=910.
+-- Versement (079) : frais une fois par versement si le quota (décompté en versements payés) est épuisé.
+--   Graine : WALLET 0, REVENUE_GWA_PAYOUT 300, 610 sortis (TREASURY_GWA).
+--   Récolte, quota inclus : frais 0, 930 sortis, aucune ligne REVENUE_GWA_PAYOUT.
 BEGIN;
 SELECT set_config('request.jwt.claim.role', 'service_role', true);
 DO $$
 DECLARE
   v_seller uuid; v_buyer uuid; v_graine uuid; v_plan_r uuid; v_plan_g uuid;
-  oA uuid; oB uuid; oC uuid; oX uuid; oG uuid; n_before int; ok boolean; r jsonb;
-  b record; q jsonb; v_fee int; v_net int; v_com int; v_bf int; v_brut int;
+  oA uuid; oB uuid; oC uuid; oX uuid; oG uuid; oG2 uuid;
+  r jsonb; q jsonb; b record;
+  v_fee int; v_net int; v_com int; v_bf int; v_brut int;
   v_fee_g int; v_net_g int; v_com_g int; v_bf_g int; v_brut_g int;
-  v_src text;
 BEGIN
-  IF to_regprocedure('public.gwa_payout_fee(uuid)') IS NULL THEN
-    RAISE EXCEPTION 'T065 : gwa_payout_fee absente (074 requise, sans bouchon)';
+  IF to_regprocedure('public.gwa_payout_fee(uuid,uuid)') IS NULL
+     AND to_regprocedure('public.gwa_payout_fee(uuid)') IS NULL THEN
+    RAISE EXCEPTION 'T065 : gwa_payout_fee absente';
   END IF;
   IF to_regprocedure('public.gwa_quote_pricing(uuid,numeric,uuid)') IS NULL THEN
-    RAISE EXCEPTION 'T065 : gwa_quote_pricing absente (073 requise)';
+    RAISE EXCEPTION 'T065 : gwa_quote_pricing absente';
   END IF;
   IF to_regprocedure('public.gwa_post_release_split(uuid,integer,integer,integer,integer,text,text,text,text,timestamptz,text,timestamptz)') IS NULL THEN
-    RAISE EXCEPTION 'T065 : gwa_post_release_split absente (077 requise)';
+    RAISE EXCEPTION 'T065 : gwa_post_release_split absente';
+  END IF;
+  IF to_regprocedure('public.admin_update_manual_payout(uuid,text,text,text,uuid)') IS NULL THEN
+    RAISE EXCEPTION 'T065 : admin_update_manual_payout absente (079 requise)';
   END IF;
 
   SELECT id INTO v_plan_r FROM public.pricing_plans WHERE code = 'PRO' AND is_active IS TRUE;
   SELECT id INTO v_plan_g FROM public.pricing_plans WHERE code = 'FREE' AND is_active IS TRUE;
-  IF v_plan_r IS NULL OR v_plan_g IS NULL THEN
-    RAISE EXCEPTION 'T065 : offres PRO/FREE absentes';
-  END IF;
-  IF (SELECT commission_rate FROM public.pricing_plans WHERE id = v_plan_r) <> 0.07 THEN
-    RAISE EXCEPTION 'T065 : Récolte n''est pas à 7 %%';
-  END IF;
-  IF (SELECT commission_rate FROM public.pricing_plans WHERE id = v_plan_g) <> 0.09
+  IF (SELECT commission_rate FROM public.pricing_plans WHERE id = v_plan_r) <> 0.07
+     OR (SELECT commission_rate FROM public.pricing_plans WHERE id = v_plan_g) <> 0.09
      OR (SELECT payout_included FROM public.pricing_plans WHERE id = v_plan_g) <> 0 THEN
-    RAISE EXCEPTION 'T065 : Graine n''est pas à 9 %% / 0 versement inclus';
+    RAISE EXCEPTION 'T065 : grilles Récolte/Graine hors cible';
   END IF;
 
-  -- Vendeur témoin historique : Récolte (7 %, quota 99). Acheteur distinct.
   SELECT id INTO v_seller FROM public.profiles WHERE pricing_plan_id = v_plan_r ORDER BY id LIMIT 1;
   SELECT id INTO v_buyer FROM public.profiles WHERE id <> v_seller ORDER BY id LIMIT 1;
-  IF v_seller IS NULL THEN
-    RAISE EXCEPTION 'T065 : aucun vendeur sur l''offre Récolte';
-  END IF;
   UPDATE public.profiles SET pricing_plan_id = v_plan_r WHERE id = v_seller;
 
-  -- Vendeur Graine (9 %, 0 versement inclus) pour le cas frais 300 F
   v_graine := 'aaaaaaaa-0000-4000-8000-000000000065';
   INSERT INTO auth.users(id) VALUES (v_graine) ON CONFLICT (id) DO NOTHING;
   INSERT INTO public.profiles(id, full_name, user_type, sub_type, subscription_tier, pricing_plan_id, profile_completion_pct)
@@ -61,12 +50,11 @@ BEGIN
   ON CONFLICT (id) DO UPDATE SET pricing_plan_id = EXCLUDED.pricing_plan_id, subscription_tier = 'free';
 
   q := public.gwa_quote_pricing(v_seller, 1000, NULL);
-  v_fee := public.gwa_payout_fee(v_seller);
   v_com := (q->>'seller_commission')::int;
   v_bf := (q->>'buyer_service_fee')::int;
   v_brut := (q->>'total_amount')::int;
-  v_net := (q->>'seller_net_amount')::int - v_fee;
-  IF v_net < 0 THEN RAISE EXCEPTION 'T065 : net vendeur négatif'; END IF;
+  v_net := (q->>'seller_net_amount')::int; -- 930, frais non déduits à la libération
+  v_fee := 0;
 
   INSERT INTO public.orders(order_number, buyer_id, seller_id, subtotal, total_amount)
   VALUES ('T065-A-CONFIRM-RELEASE', v_buyer, v_seller, 1000, 1000) RETURNING id INTO oA;
@@ -78,42 +66,43 @@ BEGIN
   VALUES ('T065-X-CANCELLED', v_buyer, v_seller, 1000, 1000, 'delivered', 'paid', 'released', 'cancelled') RETURNING id INTO oX;
   INSERT INTO public.orders(order_number, buyer_id, seller_id, subtotal, total_amount)
   VALUES ('T065-G-GRAINE-FEE', v_buyer, v_graine, 1000, 1000) RETURNING id INTO oG;
+  INSERT INTO public.orders(order_number, buyer_id, seller_id, subtotal, total_amount)
+  VALUES ('T065-G2-GRAINE-MULTI', v_buyer, v_graine, 1000, 1000) RETURNING id INTO oG2;
 
-  -- commission_rate_applied = taux de pricing_plans pour l'offre du vendeur au moment de la commande
   IF EXISTS (
     SELECT 1 FROM public.orders o
     JOIN public.pricing_plans p ON p.id = o.pricing_plan_id
-    WHERE o.id IN (oA, oB, oC, oX, oG)
+    WHERE o.id IN (oA, oB, oC, oX, oG, oG2)
       AND o.commission_rate_applied IS DISTINCT FROM p.commission_rate
   ) THEN
     RAISE EXCEPTION 'T065 : commission_rate_applied ≠ taux de pricing_plans';
   END IF;
-  IF (SELECT commission_rate_applied FROM public.orders WHERE id = oA) IS DISTINCT FROM 0.07
-     OR (SELECT pricing_plan_id FROM public.orders WHERE id = oA) IS DISTINCT FROM v_plan_r THEN
-    RAISE EXCEPTION 'T065 A : offre/taux Récolte attendus (origine du 7 %%)';
+  IF (SELECT commission_rate_applied FROM public.orders WHERE id = oA) IS DISTINCT FROM 0.07 THEN
+    RAISE EXCEPTION 'T065 A : taux Récolte (7 %%) attendu';
   END IF;
-  IF (SELECT commission_rate_applied FROM public.orders WHERE id = oG) IS DISTINCT FROM 0.09
-     OR (SELECT pricing_plan_id FROM public.orders WHERE id = oG) IS DISTINCT FROM v_plan_g THEN
-    RAISE EXCEPTION 'T065 G : offre/taux Graine (9 %%) attendus';
+  IF (SELECT commission_rate_applied FROM public.orders WHERE id = oG) IS DISTINCT FROM 0.09 THEN
+    RAISE EXCEPTION 'T065 G : taux Graine (9 %%) attendu';
   END IF;
 
-  -- webhook GeniusPay : paid + held (gel du frais par trigger 077, via gwa_payout_fee réelle)
-  UPDATE public.orders SET payment_status = 'paid', escrow_status = 'held' WHERE id IN (oA, oB, oC, oG);
-  IF (SELECT payout_fee_frozen_fcfa FROM public.orders WHERE id = oA) IS DISTINCT FROM v_fee
-     OR (SELECT payout_fee_frozen_fcfa FROM public.orders WHERE id = oG) IS DISTINCT FROM public.gwa_payout_fee(v_graine) THEN
-    RAISE EXCEPTION 'T065 : payout_fee_frozen_fcfa ≠ gwa_payout_fee';
-  END IF;
+  UPDATE public.orders SET payment_status = 'paid', escrow_status = 'held' WHERE id IN (oA, oB, oC, oG, oG2);
+  PERFORM public.gwa_record_ledger_entry(o, 'GATEWAY_GENIUSPAY', 'ESCROW_GWA', v_brut, 'XOF')
+    FROM unnest(ARRAY[oA, oB, oC, oG, oG2]) o;
 
-  PERFORM public.gwa_record_ledger_entry(o, 'GATEWAY_GENIUSPAY', 'ESCROW_GWA', v_brut, 'XOF') FROM unnest(ARRAY[oA, oB, oC]) o;
-
-  -- A : /confirm (payout manuel requis → held, pending_ops) puis /release
   r := public.gwa_post_release_split(oA, v_net, v_com, v_bf, v_fee, 'XOF', 'confirm', 'held', 'delivered', now(), 'pending_ops', NULL);
   r := public.gwa_post_release_split(oA, v_net, v_com, v_bf, v_fee, 'XOF', 'release', 'released', 'delivered', NULL, NULL, NULL);
-  -- B : litige release_seller sans /confirm (escrow frozen, payout NULL)
   UPDATE public.orders SET escrow_status = 'frozen' WHERE id = oB;
   r := public.gwa_post_release_split(oB, v_net, v_com, v_bf, v_fee, 'XOF', 'dispute_release', 'released', 'delivered', NULL, NULL, NULL);
 
-  -- Soldes crédit − débit (A et B) : Récolte, versement inclus → frais 0, pas de ligne REVENUE_GWA_PAYOUT
+  -- confirm/release d'une commande disputed doit échouer (C3 QA)
+  UPDATE public.orders SET status = 'disputed' WHERE id = oC;
+  BEGIN
+    r := public.gwa_post_release_split(oC, v_net, v_com, v_bf, v_fee, 'XOF', 'release', 'released', 'delivered', NULL, NULL, NULL);
+    RAISE EXCEPTION 'T065 : release d''une commande disputed aurait dû échouer';
+  EXCEPTION WHEN others THEN
+    IF SQLERRM NOT LIKE '%escrow_not_held%' THEN RAISE; END IF;
+  END;
+  UPDATE public.orders SET status = 'pending' WHERE id = oC; -- rétablit pour le cas C plus bas
+
   FOR b IN
     SELECT o.order_number, o.status, o.escrow_status, o.payout_status,
       sum(CASE WHEN l.account_credit='ESCROW_GWA' THEN l.amount ELSE 0 END) - sum(CASE WHEN l.account_debit='ESCROW_GWA' THEN l.amount ELSE 0 END) esc,
@@ -125,60 +114,60 @@ BEGIN
       count(*) n,
       count(*) FILTER (WHERE l.account_credit='REVENUE_GWA_PAYOUT') n_payout
     FROM public.orders o JOIN public.financial_ledger l ON l.transaction_id = o.id
-    WHERE o.id IN (oA, oB) GROUP BY o.order_number, o.status, o.escrow_status, o.payout_status ORDER BY 1
+    WHERE o.id IN (oA, oB) GROUP BY 1,2,3,4 ORDER BY 1
   LOOP
-    RAISE NOTICE 'T065 % Récolte : ESCROW_GWA=% WALLET_SELLER=% REVENUE_GWA=% REVENUE_GWA_BUYER_FEE=% REVENUE_GWA_PAYOUT=% GATEWAY_GENIUSPAY=% lignes=% n_payout=% | status=% escrow=% payout=% (fee=% net=%)',
-      b.order_number, b.esc, b.ws, b.rv, b.bf, b.pf, b.gw, b.n, b.n_payout, b.status, b.escrow_status, b.payout_status, v_fee, v_net;
-    IF b.esc <> 0 OR b.ws <> v_net OR b.rv <> v_com OR b.bf <> v_bf OR b.pf <> v_fee OR b.gw <> -v_brut THEN
-      RAISE EXCEPTION 'T065 % : soldes hors cible', b.order_number;
-    END IF;
-    IF v_fee = 0 AND (b.n_payout <> 0 OR b.n <> 4) THEN
-      RAISE EXCEPTION 'T065 % : une ligne REVENUE_GWA_PAYOUT est apparue alors que le frais est 0', b.order_number;
+    RAISE NOTICE 'T065 % Récolte libération : ESCROW=% WALLET_SELLER=% REVENUE_GWA=% BUYER_FEE=% PAYOUT=% GATEWAY=% lignes=%',
+      b.order_number, b.esc, b.ws, b.rv, b.bf, b.pf, b.gw, b.n;
+    IF b.esc <> 0 OR b.ws <> 930 OR b.rv <> 70 OR b.bf <> 250 OR b.pf <> 0 OR b.gw <> -1250 OR b.n <> 4 OR b.n_payout <> 0 THEN
+      RAISE EXCEPTION 'T065 % : soldes de libération hors cible (Récolte 930)', b.order_number;
     END IF;
     IF b.status <> 'delivered' OR b.escrow_status <> 'released' OR b.payout_status <> 'pending_ops' THEN
       RAISE EXCEPTION 'T065 % : statuts hors cible', b.order_number;
     END IF;
   END LOOP;
 
-  -- G : Graine, 0 versement inclus, vrai gwa_payout_fee (300)
   q := public.gwa_quote_pricing(v_graine, 1000, NULL);
   v_fee_g := public.gwa_payout_fee(v_graine);
   v_com_g := (q->>'seller_commission')::int;
   v_bf_g := (q->>'buyer_service_fee')::int;
   v_brut_g := (q->>'total_amount')::int;
-  v_net_g := (q->>'seller_net_amount')::int - v_fee_g;
+  v_net_g := (q->>'seller_net_amount')::int;
   IF v_fee_g IS DISTINCT FROM 300 OR v_com_g IS DISTINCT FROM 90 OR v_bf_g IS DISTINCT FROM 250
-     OR v_brut_g IS DISTINCT FROM 1250 OR v_net_g IS DISTINCT FROM 610 THEN
-    RAISE EXCEPTION 'T065 G : devis/frais Graine hors cible (fee=% com=% bf=% brut=% net=%)', v_fee_g, v_com_g, v_bf_g, v_brut_g, v_net_g;
+     OR v_brut_g IS DISTINCT FROM 1250 OR v_net_g IS DISTINCT FROM 910 THEN
+    RAISE EXCEPTION 'T065 G : devis hors cible (fee=% com=% net=%)', v_fee_g, v_com_g, v_net_g;
   END IF;
-  PERFORM public.gwa_record_ledger_entry(oG, 'GATEWAY_GENIUSPAY', 'ESCROW_GWA', v_brut_g, 'XOF');
-  r := public.gwa_post_release_split(oG, v_net_g, v_com_g, v_bf_g, v_fee_g, 'XOF', 'confirm', 'held', 'delivered', now(), 'pending_ops', NULL);
-  r := public.gwa_post_release_split(oG, v_net_g, v_com_g, v_bf_g, v_fee_g, 'XOF', 'release', 'released', 'delivered', NULL, NULL, NULL);
-  RAISE NOTICE 'T065 G devis : fee=% com=% buyer=% brut=% net_apres_frais=%', v_fee_g, v_com_g, v_bf_g, v_brut_g, v_net_g;
+  r := public.gwa_post_release_split(oG, v_net_g, v_com_g, v_bf_g, 0, 'XOF', 'confirm', 'held', 'delivered', now(), 'pending_ops', NULL);
+  r := public.gwa_post_release_split(oG, v_net_g, v_com_g, v_bf_g, 0, 'XOF', 'release', 'released', 'delivered', NULL, NULL, NULL);
+  r := public.gwa_post_release_split(oG2, v_net_g, v_com_g, v_bf_g, 0, 'XOF', 'confirm', 'held', 'delivered', now(), 'pending_ops', NULL);
+  r := public.gwa_post_release_split(oG2, v_net_g, v_com_g, v_bf_g, 0, 'XOF', 'release', 'released', 'delivered', NULL, NULL, NULL);
+  RAISE NOTICE 'T065 G devis : fee_quota=% com=% buyer=% brut=% net_liberation=%', v_fee_g, v_com_g, v_bf_g, v_brut_g, v_net_g;
 END $$;
 
--- Bloc G dédié (soldes + écart versement), puis C/D/E. Séparé pour des compteurs typés.
 DO $$
 DECLARE
-  oA uuid; oB uuid; oC uuid; oX uuid; oG uuid; v_seller uuid; v_graine uuid;
-  v_fee int; v_net int; v_com int; v_bf int; v_brut int;
+  oA uuid; oB uuid; oC uuid; oX uuid; oG uuid; oG2 uuid; oG3 uuid;
+  v_seller uuid; v_graine uuid; v_buyer uuid;
+  v_net int; v_com int; v_bf int; v_fee int; v_net_g int; v_com_g int; v_bf_g int;
+  act_proc uuid := 'eeeeeeee-0000-4000-8000-00000000000e';
+  act_paid uuid := 'ffffffff-0000-4000-8000-00000000000f';
+  pay_g uuid; pay_r uuid; pay_m uuid; pay_bad uuid;
   n_before int; ok boolean; r jsonb;
-  esc int; ws int; rv int; bf int; pf int; gw int; n int;
-  n_escrow_payout int; n_wallet_payout int; n_wallet_out int;
-  v_src text;
+  esc int; ws int; rv int; bf int; pf int; n int; tre int; n_payout int;
+  elig numeric;
 BEGIN
-  SELECT id INTO oA FROM public.orders WHERE order_number='T065-A-CONFIRM-RELEASE';
+  SELECT id, seller_id INTO oA, v_seller FROM public.orders WHERE order_number='T065-A-CONFIRM-RELEASE';
   SELECT id INTO oB FROM public.orders WHERE order_number='T065-B-DISPUTE-NULL';
   SELECT id INTO oC FROM public.orders WHERE order_number='T065-C-LEDGER-FAIL';
   SELECT id INTO oX FROM public.orders WHERE order_number='T065-X-CANCELLED';
-  SELECT id INTO oG FROM public.orders WHERE order_number='T065-G-GRAINE-FEE';
-  SELECT seller_id INTO v_seller FROM public.orders WHERE id=oA;
-  SELECT seller_id INTO v_graine FROM public.orders WHERE id=oG;
-  v_fee := (SELECT payout_fee_frozen_fcfa FROM public.orders WHERE id=oA);
+  SELECT id, seller_id, buyer_id INTO oG, v_graine, v_buyer FROM public.orders WHERE order_number='T065-G-GRAINE-FEE';
+  SELECT id INTO oG2 FROM public.orders WHERE order_number='T065-G2-GRAINE-MULTI';
   v_com := (SELECT commission_fcfa FROM public.orders WHERE id=oA);
   v_bf := (SELECT buyer_service_fee::int FROM public.orders WHERE id=oA);
-  v_brut := (SELECT total_amount::int FROM public.orders WHERE id=oA);
-  v_net := (SELECT vendeur_recoit_fcfa FROM public.orders WHERE id=oA) - v_fee;
+  v_net := (SELECT vendeur_recoit_fcfa FROM public.orders WHERE id=oA);
+  v_fee := 0;
+  v_net_g := (SELECT vendeur_recoit_fcfa FROM public.orders WHERE id=oG);
+  v_com_g := (SELECT commission_fcfa FROM public.orders WHERE id=oG);
+  v_bf_g := (SELECT buyer_service_fee::int FROM public.orders WHERE id=oG);
 
   SELECT
     sum(CASE WHEN account_credit='ESCROW_GWA' THEN amount ELSE 0 END) - sum(CASE WHEN account_debit='ESCROW_GWA' THEN amount ELSE 0 END),
@@ -186,39 +175,149 @@ BEGIN
     sum(CASE WHEN account_credit='REVENUE_GWA' THEN amount ELSE 0 END) - sum(CASE WHEN account_debit='REVENUE_GWA' THEN amount ELSE 0 END),
     sum(CASE WHEN account_credit='REVENUE_GWA_BUYER_FEE' THEN amount ELSE 0 END) - sum(CASE WHEN account_debit='REVENUE_GWA_BUYER_FEE' THEN amount ELSE 0 END),
     sum(CASE WHEN account_credit='REVENUE_GWA_PAYOUT' THEN amount ELSE 0 END) - sum(CASE WHEN account_debit='REVENUE_GWA_PAYOUT' THEN amount ELSE 0 END),
-    sum(CASE WHEN account_credit='GATEWAY_GENIUSPAY' THEN amount ELSE 0 END) - sum(CASE WHEN account_debit='GATEWAY_GENIUSPAY' THEN amount ELSE 0 END),
-    count(*)::int,
-    count(*) FILTER (WHERE account_debit='ESCROW_GWA' AND account_credit='REVENUE_GWA_PAYOUT' AND amount=300)::int,
-    count(*) FILTER (WHERE account_debit='WALLET_SELLER' AND account_credit='REVENUE_GWA_PAYOUT')::int,
-    count(*) FILTER (WHERE account_debit='WALLET_SELLER' AND (account_credit LIKE 'GATEWAY%' OR account_credit='TREASURY'))::int
-  INTO esc, ws, rv, bf, pf, gw, n, n_escrow_payout, n_wallet_payout, n_wallet_out
+    count(*)::int
+  INTO esc, ws, rv, bf, pf, n
   FROM public.financial_ledger WHERE transaction_id = oG;
-
-  RAISE NOTICE 'T065 G Graine : ESCROW_GWA=% WALLET_SELLER=% REVENUE_GWA=% REVENUE_GWA_BUYER_FEE=% REVENUE_GWA_PAYOUT=% GATEWAY_GENIUSPAY=% lignes=% | ESCROW→PAYOUT300=% WALLET→PAYOUT=% WALLET→GATEWAY/TREASURY=%',
-    esc, ws, rv, bf, pf, gw, n, n_escrow_payout, n_wallet_payout, n_wallet_out;
-  IF esc <> 0 OR ws <> 610 OR rv <> 90 OR bf <> 250 OR pf <> 300 OR gw <> -1250 OR n <> 5 OR n_escrow_payout <> 1 THEN
-    RAISE EXCEPTION 'T065 G : soldes de libération hors cible';
+  RAISE NOTICE 'T065 G Graine libération : ESCROW=% WALLET_SELLER=% REVENUE_GWA=% BUYER_FEE=% PAYOUT=% lignes=%', esc, ws, rv, bf, pf, n;
+  IF esc <> 0 OR ws <> 910 OR rv <> 90 OR bf <> 250 OR pf <> 0 OR n <> 4 THEN
+    RAISE EXCEPTION 'T065 G : soldes de libération hors cible (attendu WALLET 910, pas de PAYOUT)';
   END IF;
-  -- Écart : le versement 065 ne poste pas WALLET_SELLER → REVENUE_GWA_PAYOUT ni WALLET_SELLER → GATEWAY/TREASURY
-  IF n_wallet_payout <> 0 OR n_wallet_out <> 0 THEN
-    RAISE EXCEPTION 'T065 G : écriture de versement inattendue sur WALLET_SELLER';
+
+  elig := public.get_seller_eligible_proceeds(v_graine);
+  IF elig IS DISTINCT FROM 1820 THEN
+    RAISE EXCEPTION 'T065 N2 : proceeds Graine = % (attendu 1820, pas 1220)', elig;
   END IF;
-  RAISE NOTICE 'T065 G écart : frais posté à la libération (077 gwa_post_release_split, ESCROW_GWA→REVENUE_GWA_PAYOUT 300), pas au versement ; WALLET_SELLER reste 610 (pas 0) ; vendeur ne reçoit pas 630 (taux 9 %% → net 610, pas 7 %% → 630)';
+  IF (SELECT amount_fcfa FROM public.gwa_payout_eligible_orders(v_graine) WHERE order_id = oG) IS DISTINCT FROM 910 THEN
+    RAISE EXCEPTION 'T065 N2 : éligible G hors 910';
+  END IF;
+  RAISE NOTICE 'T065 N2 OK : proceeds Graine 1820 (2×910), frais 300 non déduits avant le versement';
 
-  FOREACH v_src IN ARRAY ARRAY['request_manual_payout','admin_update_manual_payout']
-  LOOP
-    IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname=v_src)
-       AND EXISTS (
-         SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
-         WHERE n.nspname='public' AND p.proname=v_src
-           AND pg_get_functiondef(p.oid) ~* 'financial_ledger|gwa_record_ledger'
-       ) THEN
-      RAISE EXCEPTION 'T065 : % écrit le grand livre, ce qui contredirait le constat d''écart', v_src;
-    END IF;
-  END LOOP;
-  RAISE NOTICE 'T065 écart 065 : request_manual_payout et admin_update_manual_payout n''écrivent pas financial_ledger';
+  INSERT INTO auth.users(id) VALUES (act_proc), (act_paid) ON CONFLICT (id) DO NOTHING;
+  INSERT INTO public.profiles(id, full_name, user_type, profile_completion_pct)
+  VALUES (act_proc, 'T065-PROC', 'acheteur', 10), (act_paid, 'T065-PAID', 'acheteur', 10)
+  ON CONFLICT (id) DO NOTHING;
+  INSERT INTO public.admin_roles(user_id, role, is_active)
+  VALUES (act_proc, 'finance_admin', true), (act_paid, 'admin', true)
+  ON CONFLICT (user_id) DO UPDATE SET role = EXCLUDED.role, is_active = true;
 
-  -- C : écriture du grand livre en échec → la libération échoue, statut inchangé, aucune ligne de ventilation
+  ALTER TABLE public.withdrawal_requests DROP CONSTRAINT IF EXISTS withdrawal_requests_amount_fcfa_check;
+
+  -- Récolte, versement inclus : frais 0, 930 sortis
+  INSERT INTO public.withdrawal_requests(user_id, amount_fcfa, phone, network, status)
+  VALUES (v_seller, 930, '0700000000', 'orange_ci', 'pending') RETURNING id INTO pay_r;
+  r := public.admin_update_manual_payout(pay_r, 'processing', NULL, NULL, act_proc);
+  r := public.admin_update_manual_payout(pay_r, 'paid', 'REF-RECOLTE-930', NULL, act_paid);
+  SELECT
+    sum(CASE WHEN account_credit='WALLET_SELLER' THEN amount ELSE 0 END) - sum(CASE WHEN account_debit='WALLET_SELLER' THEN amount ELSE 0 END),
+    coalesce(sum(CASE WHEN account_credit='REVENUE_GWA_PAYOUT' THEN amount ELSE 0 END), 0),
+    coalesce(sum(CASE WHEN account_credit='TREASURY_GWA' THEN amount ELSE 0 END), 0),
+    count(*) FILTER (WHERE account_credit='REVENUE_GWA_PAYOUT')
+  INTO ws, pf, tre, n_payout
+  FROM public.financial_ledger WHERE transaction_id IN (oA, pay_r);
+  RAISE NOTICE 'T065 Récolte versement : cycle WALLET=% PAYOUT=% TREASURY=% n_payout=%', ws, pf, tre, n_payout;
+  IF ws <> 0 OR pf <> 0 OR tre <> 930 OR n_payout <> 0 THEN
+    RAISE EXCEPTION 'T065 Récolte versement hors cible (930 sortis, frais 0)';
+  END IF;
+
+  -- Graine, une commande : 910 → frais 300, 610 sortis, WALLET 0
+  INSERT INTO public.withdrawal_requests(user_id, amount_fcfa, phone, network, status)
+  VALUES (v_graine, 910, '0700000001', 'orange_ci', 'pending') RETURNING id INTO pay_g;
+  r := public.admin_update_manual_payout(pay_g, 'processing', NULL, NULL, act_proc);
+  r := public.admin_update_manual_payout(pay_g, 'paid', 'REF-GRAINE-910', NULL, act_paid);
+  SELECT
+    sum(CASE WHEN account_credit='WALLET_SELLER' THEN amount ELSE 0 END) - sum(CASE WHEN account_debit='WALLET_SELLER' THEN amount ELSE 0 END),
+    coalesce(sum(CASE WHEN account_credit='REVENUE_GWA_PAYOUT' THEN amount ELSE 0 END), 0),
+    coalesce(sum(CASE WHEN account_credit='TREASURY_GWA' THEN amount ELSE 0 END), 0)
+  INTO ws, pf, tre
+  FROM public.financial_ledger WHERE transaction_id IN (oG, pay_g);
+  RAISE NOTICE 'T065 G Graine versement : cycle WALLET=% PAYOUT=% TREASURY=%', ws, pf, tre;
+  IF ws <> 0 OR pf <> 300 OR tre <> 610 THEN
+    RAISE EXCEPTION 'T065 G versement hors cible (attendu WS 0, PAYOUT 300, 610 sortis)';
+  END IF;
+
+  -- Multi-commandes : G3 + G2 dans un seul versement de 1820, frais 300 une seule fois
+  UPDATE public.orders SET payment_status = 'paid', escrow_status = 'held'
+  WHERE order_number = 'T065-G3-GRAINE-MULTI'; -- may not exist yet
+  INSERT INTO public.orders(order_number, buyer_id, seller_id, subtotal, total_amount)
+  VALUES ('T065-G3-GRAINE-MULTI', v_buyer, v_graine, 1000, 1000)
+  ON CONFLICT (order_number) DO UPDATE SET subtotal = 1000
+  RETURNING id INTO oG3;
+  UPDATE public.orders SET payment_status = 'paid', escrow_status = 'held' WHERE id = oG3;
+  PERFORM public.gwa_record_ledger_entry(oG3, 'GATEWAY_GENIUSPAY', 'ESCROW_GWA', 1250, 'XOF');
+  r := public.gwa_post_release_split(oG3, v_net_g, v_com_g, v_bf_g, 0, 'XOF', 'confirm', 'held', 'delivered', now(), 'pending_ops', NULL);
+  r := public.gwa_post_release_split(oG3, v_net_g, v_com_g, v_bf_g, 0, 'XOF', 'release', 'released', 'delivered', NULL, NULL, NULL);
+  INSERT INTO public.withdrawal_requests(user_id, amount_fcfa, phone, network, status)
+  VALUES (v_graine, 1820, '0700000002', 'orange_ci', 'pending') RETURNING id INTO pay_m;
+  r := public.admin_update_manual_payout(pay_m, 'processing', NULL, NULL, act_proc);
+  r := public.admin_update_manual_payout(pay_m, 'paid', 'REF-GRAINE-1820', NULL, act_paid);
+  SELECT
+    coalesce(sum(CASE WHEN account_credit='REVENUE_GWA_PAYOUT' THEN amount ELSE 0 END), 0),
+    coalesce(sum(CASE WHEN account_credit='TREASURY_GWA' THEN amount ELSE 0 END), 0),
+    count(*) FILTER (WHERE account_credit='REVENUE_GWA_PAYOUT')
+  INTO pf, tre, n_payout
+  FROM public.financial_ledger WHERE transaction_id = pay_m;
+  RAISE NOTICE 'T065 multi-commandes : PAYOUT=% TREASURY=% n_payout=% (frais une fois sur 1820)', pf, tre, n_payout;
+  IF pf <> 300 OR tre <> 1520 OR n_payout <> 1 THEN
+    RAISE EXCEPTION 'T065 : frais non uniques sur un versement multi-commandes';
+  END IF;
+
+  -- Négatifs
+  -- rejeu
+  n_before := (SELECT count(*) FROM public.financial_ledger WHERE transaction_id = pay_g);
+  ok := false;
+  BEGIN
+    r := public.admin_update_manual_payout(pay_g, 'paid', 'REF-GRAINE-910-REPLAY', NULL, act_paid);
+  EXCEPTION WHEN others THEN
+    ok := true;
+    RAISE NOTICE 'T065 rejeu : refusé (%)', SQLERRM;
+  END;
+  IF NOT ok OR (SELECT count(*) FROM public.financial_ledger WHERE transaction_id = pay_g) <> n_before THEN
+    RAISE EXCEPTION 'T065 : rejeu non refusé ou lignes ajoutées';
+  END IF;
+
+  -- payout_ref manquant
+  INSERT INTO public.withdrawal_requests(user_id, amount_fcfa, phone, network, status)
+  VALUES (v_seller, 930, '0700000003', 'orange_ci', 'pending') RETURNING id INTO pay_bad;
+  r := public.admin_update_manual_payout(pay_bad, 'processing', NULL, NULL, act_proc);
+  ok := false;
+  BEGIN
+    r := public.admin_update_manual_payout(pay_bad, 'paid', '', NULL, act_paid);
+  EXCEPTION WHEN others THEN
+    ok := SQLERRM LIKE '%payout reference required%';
+    RAISE NOTICE 'T065 payout_ref manquant : %', SQLERRM;
+  END;
+  IF NOT ok THEN RAISE EXCEPTION 'T065 : payout_ref manquant non refusé'; END IF;
+
+  -- versement 300 F avec frais (Graine)
+  INSERT INTO public.withdrawal_requests(user_id, amount_fcfa, phone, network, status)
+  VALUES (v_graine, 300, '0700000004', 'orange_ci', 'pending') RETURNING id INTO pay_bad;
+  r := public.admin_update_manual_payout(pay_bad, 'processing', NULL, NULL, act_proc);
+  ok := false;
+  BEGIN
+    r := public.admin_update_manual_payout(pay_bad, 'paid', 'REF-TOO-SMALL', NULL, act_paid);
+  EXCEPTION WHEN others THEN
+    ok := SQLERRM LIKE '%payout amount too low%';
+    RAISE NOTICE 'T065 versement 300 F : %', SQLERRM;
+  END;
+  IF NOT ok THEN RAISE EXCEPTION 'T065 : versement de 300 F avec frais non refusé'; END IF;
+  IF EXISTS (SELECT 1 FROM public.financial_ledger WHERE transaction_id = pay_bad) THEN
+    RAISE EXCEPTION 'T065 : écritures pour un versement de 300 F refusé';
+  END IF;
+
+  -- même acteur
+  INSERT INTO public.withdrawal_requests(user_id, amount_fcfa, phone, network, status)
+  VALUES (v_seller, 930, '0700000005', 'orange_ci', 'pending') RETURNING id INTO pay_bad;
+  r := public.admin_update_manual_payout(pay_bad, 'processing', NULL, NULL, act_proc);
+  ok := false;
+  BEGIN
+    r := public.admin_update_manual_payout(pay_bad, 'paid', 'REF-SAME-ACTOR', NULL, act_proc);
+  EXCEPTION WHEN others THEN
+    ok := SQLERRM LIKE '%must differ%';
+    RAISE NOTICE 'T065 même acteur : %', SQLERRM;
+  END;
+  IF NOT ok THEN RAISE EXCEPTION 'T065 : même acteur non refusé'; END IF;
+
+  -- C : écriture du grand livre en échec
   CREATE TEMP TABLE _t065_fail(tx uuid) ON COMMIT DROP; INSERT INTO _t065_fail VALUES (oC);
   CREATE FUNCTION pg_temp.t065_fail() RETURNS trigger LANGUAGE plpgsql AS $f$
   BEGIN IF NEW.transaction_id IN (SELECT tx FROM _t065_fail) AND NEW.account_debit = 'ESCROW_GWA' THEN RAISE EXCEPTION 'T065 écriture refusée'; END IF; RETURN NEW; END $f$;
@@ -230,28 +329,39 @@ BEGIN
   END;
   DROP TRIGGER t065_fail ON public.financial_ledger;
   IF NOT ok THEN RAISE EXCEPTION 'T065 C : la libération aurait dû échouer'; END IF;
-  IF NOT EXISTS (SELECT 1 FROM public.orders WHERE id = oC AND escrow_status = 'held' AND payout_status IS NULL) THEN RAISE EXCEPTION 'T065 C : statut modifié malgré l''échec'; END IF;
-  IF (SELECT count(*) FROM public.financial_ledger WHERE transaction_id = oC) <> 1 THEN RAISE EXCEPTION 'T065 C : écritures partielles'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.orders WHERE id = oC AND escrow_status = 'held' AND payout_status IS NULL) THEN
+    RAISE EXCEPTION 'T065 C : statut modifié malgré l''échec';
+  END IF;
+  IF (SELECT count(*) FROM public.financial_ledger WHERE transaction_id = oC) <> 1 THEN
+    RAISE EXCEPTION 'T065 C : écritures partielles';
+  END IF;
   RAISE NOTICE 'T065 C OK : escrow toujours held, payout NULL, 1 seule ligne (pay-in)';
 
-  -- D : rejeu idempotent
+  -- D : rejeu idempotent de la libération
   SELECT count(*) INTO n_before FROM public.financial_ledger WHERE transaction_id IN (oA, oB);
-  ok := false; BEGIN r := public.gwa_post_release_split(oA, v_net, v_com, v_bf, v_fee, 'XOF', 'release', 'released', 'delivered', NULL, NULL, NULL);
-  EXCEPTION WHEN others THEN ok := true; END;
-  BEGIN r := public.gwa_post_release_split(oB, v_net, v_com, v_bf, v_fee, 'XOF', 'dispute_release', 'released', 'delivered', NULL, NULL, NULL);
-  ok := false; EXCEPTION WHEN others THEN NULL; END;
-  IF NOT ok OR (SELECT count(*) FROM public.financial_ledger WHERE transaction_id IN (oA, oB)) <> n_before THEN RAISE EXCEPTION 'T065 D : rejeu non idempotent'; END IF;
-  RAISE NOTICE 'T065 D OK : rejeux refusés (escrow_not_held), lignes inchangées (%)', n_before;
+  ok := true;
+  BEGIN
+    r := public.gwa_post_release_split(oA, v_net, v_com, v_bf, v_fee, 'XOF', 'release', 'released', 'delivered', NULL, NULL, NULL);
+    ok := false;
+  EXCEPTION WHEN others THEN NULL;
+  END;
+  BEGIN
+    r := public.gwa_post_release_split(oB, v_net, v_com, v_bf, v_fee, 'XOF', 'dispute_release', 'released', 'delivered', NULL, NULL, NULL);
+    ok := false;
+  EXCEPTION WHEN others THEN NULL;
+  END;
+  IF NOT ok OR (SELECT count(*) FROM public.financial_ledger WHERE transaction_id IN (oA, oB)) <> n_before THEN
+    RAISE EXCEPTION 'T065 D : rejeu non idempotent';
+  END IF;
+  RAISE NOTICE 'T065 D OK : rejeux refusés, lignes inchangées (%)', n_before;
 
-  -- E : file de versement (065 liste blanche)
-  IF NOT EXISTS (SELECT 1 FROM public.gwa_payout_eligible_orders(v_seller) WHERE order_id = oA)
-     OR NOT EXISTS (SELECT 1 FROM public.gwa_payout_eligible_orders(v_seller) WHERE order_id = oB) THEN RAISE EXCEPTION 'T065 E : A ou B absent de la file'; END IF;
+  -- E : file de versement
+  IF NOT EXISTS (SELECT 1 FROM public.gwa_payout_eligible_orders(v_seller) WHERE order_id = oB) THEN
+    RAISE EXCEPTION 'T065 E : B absent de la file';
+  END IF;
   IF EXISTS (SELECT 1 FROM public.gwa_payout_eligible_orders(v_seller) WHERE order_id IN (oC, oX, 'e09af219-2831-4308-b235-b37fb6df82e8')) THEN
-    RAISE EXCEPTION 'T065 E : C, X (cancelled) ou MW16COUJ éligible';
+    RAISE EXCEPTION 'T065 E : C, X ou MW16COUJ éligible';
   END IF;
-  IF NOT EXISTS (SELECT 1 FROM public.gwa_payout_eligible_orders(v_graine) WHERE order_id = oG) THEN
-    RAISE EXCEPTION 'T065 E : G (Graine, pending_ops) absente de la file';
-  END IF;
-  RAISE NOTICE 'T065 E OK : A, B et G éligibles ; C (held), X (cancelled) et MW16COUJ exclues';
+  RAISE NOTICE 'T065 E OK : B éligible ; C, X et MW16COUJ exclues';
 END $$;
 ROLLBACK;

@@ -118,9 +118,15 @@ LANGUAGE SQL
 STABLE
 SET search_path = public
 AS $$
+  -- Montant = solde WALLET_SELLER du grand livre sur la commande (crédit − débit),
+  -- pas vendeur_recoit_fcfa. Les frais de versement se déduisent au versement (079).
   SELECT id,
-         COALESCE(vendeur_recoit_fcfa,
-                  GREATEST(0, total_amount - COALESCE(commission_fcfa, 0) - COALESCE(service_fee, 0)))
+         GREATEST(0, COALESCE((
+           SELECT SUM(CASE WHEN l.account_credit = 'WALLET_SELLER' THEN l.amount ELSE 0 END)
+                - SUM(CASE WHEN l.account_debit  = 'WALLET_SELLER' THEN l.amount ELSE 0 END)
+           FROM public.financial_ledger l
+           WHERE l.transaction_id = orders.id
+         ), 0))
   FROM public.orders
   WHERE seller_id = p_seller_id
     AND payment_status = 'paid'
@@ -138,7 +144,14 @@ LANGUAGE SQL
 STABLE
 SET search_path = public
 AS $$
-  SELECT COALESCE(SUM(amount_fcfa), 0) FROM public.gwa_payout_eligible_orders(p_seller_id);
+  -- Solde WALLET_SELLER du vendeur, déjà net des frais et sorties postés au versement.
+  SELECT GREATEST(0, COALESCE((
+    SELECT SUM(CASE WHEN l.account_credit = 'WALLET_SELLER' THEN l.amount ELSE 0 END)
+         - SUM(CASE WHEN l.account_debit  = 'WALLET_SELLER' THEN l.amount ELSE 0 END)
+    FROM public.financial_ledger l
+    WHERE l.transaction_id IN (SELECT id FROM public.orders WHERE seller_id = p_seller_id)
+       OR l.transaction_id IN (SELECT id FROM public.withdrawal_requests WHERE user_id = p_seller_id)
+  ), 0));
 $$;
 -- END-WHITELIST
 
@@ -193,11 +206,12 @@ BEGIN
 
   available_amount := public.get_seller_eligible_proceeds(requester);
 
+  -- Les versements 'paid' sont déjà au débit de WALLET_SELLER : ne pas les réserver une seconde fois.
   SELECT COALESCE(SUM(amount_fcfa), 0)
     INTO reserved_amount
     FROM public.withdrawal_requests
     WHERE user_id = requester
-      AND status IN ('pending', 'processing', 'paid');
+      AND status IN ('pending', 'processing');
 
   IF p_amount_fcfa > available_amount - reserved_amount THEN
     RAISE EXCEPTION 'insufficient available balance';
@@ -277,7 +291,7 @@ BEGIN
     'paid_out', payout_requests.paid,
     'available_for_request', GREATEST(
       0,
-      seller_proceeds.eligible - payout_requests.reserved - payout_requests.paid
+      seller_proceeds.eligible - payout_requests.reserved
     )
   )
   INTO result
