@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { releaseEscrowWithLedger } from "@/lib/orders/escrow-release"
 import { requireAdminSection } from "@/lib/auth/require-admin"
+import { canReleaseFunds } from "@/lib/auth/admin-permissions"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { sendPushToUser } from "@/lib/notifications/push"
 
@@ -100,6 +101,16 @@ export async function PATCH(request: NextRequest, context: Ctx) {
 
     if (status === "under_review" && !existing.assigned_to) {
       updates.assigned_to = gate.user.id
+    }
+
+    if (
+      (escrowOutcomeRaw === "release_seller" || escrowOutcomeRaw === "refund_buyer")
+      && !canReleaseFunds(gate.role.role)
+    ) {
+      return NextResponse.json(
+        { error: "Seuls super_admin, finance_admin et admin peuvent libérer ou rembourser des fonds" },
+        { status: 403 },
+      )
     }
 
     // Libération vendeur AVANT de clore le litige : RPC transactionnelle (statut + grand livre).
