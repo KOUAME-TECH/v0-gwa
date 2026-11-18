@@ -93,6 +93,8 @@ export async function GET() {
       SMS_AT: atKey,
       SMS_AT_USERNAME_LIVE: atLive,
       SMS_AT_SENDER_ID: atSender,
+      // 'default' = sender par défaut Africa's Talking (pas de paramètre from)
+      SMS_AT_SENDER_MODE: atSender ? 'custom' : 'default',
       SMS_TWILIO:
         envSet('TWILIO_ACCOUNT_SID') &&
         envSet('TWILIO_AUTH_TOKEN') &&
@@ -111,7 +113,8 @@ export async function GET() {
       payin_ready: geniuspayKey && geniuspaySecret,
       payout_ready: false,
     },
-    sms_delivery_ready: atKey && atLive && atSender,
+    // Sender ID personnalisé optionnel : sans lui, AT utilise son sender par défaut.
+    sms_delivery_ready: atKey && atLive,
     // Dernier échec OTP/SMS (codes ops only) — aide à distinguer config OK vs rejet AT réel
     sms_last_failure: await getSmsOpsFailure(),
     deploy: {

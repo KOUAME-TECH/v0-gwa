@@ -4,7 +4,7 @@
  * Africa's Talking:
  *   AT_USERNAME (ou AFRICASTALKING_USERNAME) — "sandbox" en test
  *   AT_API_KEY  (ou AFRICASTALKING_API_KEY)
- *   AT_SENDER_ID (optionnel — shortcode / alphanumeric approuvé)
+ *   AT_SENDER_ID (optionnel ; absent = sender par défaut AT, sans paramètre from)
  *   AT_SANDBOX=true pour forcer l'API sandbox
  */
 
@@ -240,29 +240,18 @@ async function sendViaAfricasTalking(
     }
   }
 
-  // Queued ≠ livré : sans Sender ID approuvé CI, les opérateurs bloquent souvent.
-  const warning = !from
-    ? "AT_SENDER_ID manquant — en CI un Sender ID alphanumérique approuvé est souvent requis pour la livraison"
-    : undefined
-  if (warning) {
-    console.warn("[sms/africastalking]", warning, {
-      to: to.slice(0, 6) + "…",
-      status: first.status,
-      statusCode: first.statusCode,
-    })
-  } else {
-    console.info("[sms/africastalking] queued", {
-      status: first.status,
-      statusCode: first.statusCode,
-      sid: first.messageId,
-    })
-  }
+  // Sans Sender ID personnalisé, AT utilise son sender par défaut (choix GWA 18/11/2026).
+  console.info("[sms/africastalking] queued", {
+    sender: from ? "custom" : "default",
+    status: first.status,
+    statusCode: first.statusCode,
+    sid: first.messageId,
+  })
 
   return {
     success: true,
     provider: "africastalking",
     sid: first.messageId,
-    warning,
   }
 }
 

@@ -116,7 +116,11 @@ export async function GET() {
         (process.env.GENIUSPAY_API_KEY || process.env.X_API_Key || process.env.X_API_KEY) &&
         (process.env.GENIUSPAY_API_SECRET || process.env.X_API_Secret || process.env.X_API_SECRET),
       ),
-      sms: Boolean(process.env.AT_SENDER_ID || process.env.SMS_AT_SENDER_ID),
+      // Sender ID optionnel : prêt dès que la clé AT et un username live sont présents
+      sms: Boolean(
+        (process.env.AT_API_KEY || process.env.AFRICASTALKING_API_KEY) &&
+          (process.env.AT_USERNAME || process.env.AFRICASTALKING_USERNAME || 'sandbox').toLowerCase() !== 'sandbox',
+      ),
       gemini: Boolean(
         process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY,
       ),
