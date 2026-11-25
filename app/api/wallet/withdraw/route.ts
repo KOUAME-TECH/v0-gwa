@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth/require-admin"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { mapPaymentMethodToNetwork } from "@/lib/payment/networks"
+import { isWalletEnabled, walletDisabledResponse } from "@/lib/feature-flags/server"
 
 /**
  * GET /api/wallet/withdraw — historique demandes
@@ -10,6 +11,7 @@ import { mapPaymentMethodToNetwork } from "@/lib/payment/networks"
  */
 export async function GET() {
   try {
+    if (!(await isWalletEnabled())) return walletDisabledResponse()
     const { user, error } = await requireUser()
     if (!user) {
       return NextResponse.json({ error: error || "Non authentifié" }, { status: 401 })
@@ -38,6 +40,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    if (!(await isWalletEnabled())) return walletDisabledResponse()
     const rate = await checkRateLimit("PAYMENT")
     if (!rate.success) {
       return NextResponse.json({ error: "Trop de tentatives" }, { status: 429 })
