@@ -9,6 +9,8 @@ import {
   walletPathScope,
 } from "@/lib/feature-flags/core"
 
+const PRIVATE_NO_STORE = "private, no-store"
+
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"])
 
 /** Routes that intentionally allow cross-origin or non-browser callers. */
@@ -39,13 +41,16 @@ export async function proxy(request: NextRequest) {
     if (walletScope === "api") {
       return NextResponse.json(
         { error: "Fonctionnalité indisponible", code: "FEATURE_DISABLED" },
-        { status: 404, headers: { "Cache-Control": "no-store" } },
+        { status: 404, headers: { "Cache-Control": PRIVATE_NO_STORE } },
       )
     }
     const url = request.nextUrl.clone()
     url.pathname = WALLET_DISABLED_REDIRECT
     url.search = ""
-    return NextResponse.redirect(url)
+    // Jamais « public » : la réponse dépend d'un drapeau et d'une route privée.
+    const res = NextResponse.redirect(url)
+    res.headers.set("Cache-Control", PRIVATE_NO_STORE)
+    return res
   }
 
   // Protect admin routes
