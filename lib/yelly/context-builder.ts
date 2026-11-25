@@ -1,5 +1,6 @@
 /**
  * Construit le contexte envoyé au modèle : rôle, produit, historique du chat.
+ * Ce contexte est une donnée (bloc délimité du message utilisateur), pas une consigne.
  * Tout passe par redactPiiForAi : aucune PII (e-mail, téléphone, adresse) ne sort.
  */
 import { redactPiiForAi } from "@/lib/yelly/pii"
@@ -76,7 +77,13 @@ export function buildYellyContext(input: YellyContextInput): string {
       )
     }
   }
-  const task = capabilityInstruction(input.intent)
-  if (task) parts.push(task)
   return redactPiiForAi(parts.join("\n"), 1800)
+}
+
+/**
+ * Consigne de tâche selon l’intention : fixée côté serveur, elle va dans le prompt
+ * système (le contexte ci-dessus, lui, part comme donnée dans le message utilisateur).
+ */
+export function buildYellyTaskInstruction(intent: YellyIntent): string | null {
+  return capabilityInstruction(intent)
 }

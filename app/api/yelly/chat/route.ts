@@ -5,7 +5,6 @@ import {
   YELLY_GUEST_MAX_PER_DAY,
 } from "@/lib/pricing/entitlements"
 import { assertSameOrigin } from "@/lib/security/csrf"
-import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { yellyChatSchema } from "@/lib/security/validation"
 import { askYelly } from "@/lib/yelly/client"
 import {
@@ -14,7 +13,7 @@ import {
   loadYellyProductContext,
   persistYellyTurn,
 } from "@/lib/yelly/context"
-import { buildYellyContext } from "@/lib/yelly/context-builder"
+import { buildYellyContext, buildYellyTaskInstruction } from "@/lib/yelly/context-builder"
 import { detectYellyIntent } from "@/lib/yelly/capabilities"
 import {
   genericCacheKey,
@@ -24,7 +23,8 @@ import {
 } from "@/lib/yelly/faq-cache"
 import { redactPiiForAi } from "@/lib/yelly/pii"
 import { YELLY_DISCLAIMER } from "@/lib/yelly/prompt"
-import { checkYellyUserRateLimit } from "@/lib/yelly/rate-limit"
+import { checkYellyGuestRateLimit, checkYellyUserRateLimit } from "@/lib/yelly/rate-limit"
+import { checkRateLimit, getClientIdentifier } from "@/lib/security/rate-limiter"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 30
@@ -75,12 +75,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (user) {
-      const userRate = await checkYellyUserRateLimit(user.id)
+    {
+      // 10/min par utilisateur connecté, et aussi par IP pour les invités.
+      const userRate = user
+        ? await checkYellyUserRateLimit(user.id)
+        : await checkYellyGuestRateLimit(await getClientIdentifier())
       if (!userRate.success) {
         console.warn("[yelly] rate_limited", {
-          scope: "user",
-          user: user.id.slice(0, 8),
+          scope: user ? "user" : "guest",
+          user: user ? user.id.slice(0, 8) : null,
           resetAt: new Date(userRate.resetAt).toISOString(),
         })
         return NextResponse.json(
@@ -176,7 +179,12 @@ export async function POST(request: NextRequest) {
     } else if (cached) {
       result = { reply: cached, source: "cache" }
     } else {
-      result = await askYelly({ message, page, contextHint })
+      result = await askYelly({
+        message,
+        page,
+        contextHint,
+        taskInstruction: buildYellyTaskInstruction(intent),
+      })
       if (cacheKey && result.source === "llm") writeCachedReply(cacheKey, result.reply)
     }
 
