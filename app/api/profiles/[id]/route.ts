@@ -8,9 +8,6 @@ import { sanitizeHtml, sanitizePlainText } from "@/lib/security/validation"
 const PUBLIC_FIELDS =
   "id, full_name, avatar_url, bio, user_type, sub_type, country, city, is_verified, rating, total_reviews, scg_score, scg_badge, scg_bancable, created_at"
 
-const OWNER_EXTRA_FIELDS =
-  ", email, phone, address, auth_method, preferred_language, digest_enabled, profile_completion_pct, onboarding_completed_at, scg_calculated_at, updated_at"
-
 const PATCHABLE_FIELDS = [
   "full_name",
   "bio",
@@ -40,16 +37,24 @@ export async function GET(_request: Request, { params }: RouteParams) {
     } = await supabase.auth.getUser()
 
     const isOwner = user?.id === id
-    const selectFields = isOwner ? PUBLIC_FIELDS + OWNER_EXTRA_FIELDS : PUBLIC_FIELDS
-
-    const { data: profile, error } = await supabase
-      .from("profiles")
-      .select(selectFields)
-      .eq("id", id)
-      .maybeSingle()
-
-    if (error || !profile) {
-      return NextResponse.json({ error: "Profil introuvable" }, { status: 404 })
+    let profile: Record<string, unknown> | null = null
+    if (isOwner) {
+      const { data, error } = await supabase.rpc("profile_self")
+      const row = Array.isArray(data) ? data[0] : data
+      if (!error && row) {
+        profile = { ...(row as Record<string, unknown>), email: user.email || null }
+      }
+    }
+    if (!profile) {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select(PUBLIC_FIELDS)
+        .eq("id", id)
+        .maybeSingle()
+      if (error || !data) {
+        return NextResponse.json({ error: "Profil introuvable" }, { status: 404 })
+      }
+      profile = isOwner ? { ...(data as Record<string, unknown>), email: user?.email || null } : data
     }
 
     return NextResponse.json({
@@ -114,11 +119,15 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Aucun champ à mettre à jour" }, { status: 400 })
     }
 
-    const { data: existing } = await supabase
-      .from("profiles")
-      .select("full_name, user_type, country, city, phone, email")
-      .eq("id", id)
-      .maybeSingle()
+    const { data: self } = await supabase.rpc("profile_self")
+    const existing = (Array.isArray(self) ? self[0] : self) as {
+      full_name?: string | null
+      user_type?: string | null
+      country?: string | null
+      city?: string | null
+      phone?: string | null
+      email?: string | null
+    } | null
 
     updates.profile_completion_pct = computeProfileCompletion({
       ...existing,
@@ -126,17 +135,15 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     })
     updates.updated_at = new Date().toISOString()
 
-    const { data: profile, error } = await supabase
-      .from("profiles")
-      .update(updates)
-      .eq("id", id)
-      .select(PUBLIC_FIELDS + OWNER_EXTRA_FIELDS)
-      .maybeSingle()
+    const { error } = await supabase.from("profiles").update(updates).eq("id", id)
 
     if (error) {
       console.error("[profiles/[id] PATCH]", error.message)
       return NextResponse.json({ error: "Mise à jour impossible" }, { status: 400 })
     }
+
+    const { data: refreshed } = await supabase.rpc("profile_self")
+    const profile = Array.isArray(refreshed) ? refreshed[0] : refreshed
 
     return NextResponse.json({
       profile,

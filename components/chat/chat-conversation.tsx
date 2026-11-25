@@ -372,6 +372,25 @@ export function ChatConversation({
   // Load messages + realtime
   useEffect(() => {
     let mounted = true
+    // RPC mark_messages_read (migration 078). Tant qu'elle n'est pas appliquée,
+    // repli sur l'UPDATE direct autorisé par messages_update_participant (066).
+    async function markConversationRead() {
+      const { error } = await supabase.rpc("mark_messages_read", {
+        p_conversation_id: conversation.id,
+      })
+      if (!error) return
+      await supabase
+        .from("messages")
+        .update({
+          is_read: true,
+          status: "read",
+          read_at: new Date().toISOString(),
+        })
+        .eq("conversation_id", conversation.id)
+        .neq("sender_id", userId)
+        .eq("is_read", false)
+    }
+
     async function load() {
       const { data } = await supabase
         .from("messages")
@@ -387,16 +406,7 @@ export function ChatConversation({
 
       // Mark unread as read only when l'utilisateur voit vraiment la conversation
       if (typeof document !== "undefined" && document.visibilityState === "visible") {
-        await supabase
-          .from("messages")
-          .update({
-            is_read: true,
-            status: "read",
-            read_at: new Date().toISOString(),
-          })
-          .eq("conversation_id", conversation.id)
-          .neq("sender_id", userId)
-          .eq("is_read", false)
+        await markConversationRead()
       }
     }
     load()
@@ -413,14 +423,7 @@ export function ChatConversation({
           setMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg])
           scroll()
           if (msg.sender_id !== userId && document.visibilityState === "visible") {
-            void supabase
-              .from("messages")
-              .update({
-                is_read: true,
-                status: "read",
-                read_at: new Date().toISOString(),
-              })
-              .eq("id", msg.id)
+            void markConversationRead()
           }
         }
       )
