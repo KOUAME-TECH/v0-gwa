@@ -52,6 +52,12 @@ import {
   stripAiAdvicePrefix,
 } from "@/lib/chat/ai-advice"
 import {
+  loadPersistedChatPrefs,
+  persistHiddenForMe,
+  persistReaction,
+  reactionBadge,
+} from "@/lib/chat/persisted-reactions"
+import {
   buildPurchaseOrderContent,
   parsePurchaseOrderContent,
   purchaseOrderPrintHtml,
@@ -70,7 +76,7 @@ import {
   ArrowLeft, Send, Mic, Smile, Phone, Video, MoreVertical,
   Check, CheckCheck, ImageIcon, FileText, X, Trash2, Copy, Reply,
   Pin, BellOff, UserCircle, Flag, Paperclip, Camera, MapPin, HandCoins,
-  LifeBuoy, Search, SmilePlus, WifiOff, Printer, CreditCard,
+  LifeBuoy, Sparkles, Search, SmilePlus, WifiOff, Printer, CreditCard,
 } from "lucide-react"
 
 interface Message {
@@ -153,6 +159,7 @@ export function ChatConversation({
   const [searchQuery, setSearchQuery] = useState("")
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set())
   const [reactions, setReactions] = useState<MessageReactionMap>({})
+  const [peerReactions, setPeerReactions] = useState<MessageReactionMap>({})
   const [pendingOffline, setPendingOffline] = useState<PendingChatMessage[]>([])
   const [browserOffline, setBrowserOffline] = useState(false)
   const [pendingAccept, setPendingAccept] = useState<{
@@ -204,6 +211,35 @@ export function ChatConversation({
       /* ignore */
     }
   }, [prefsKey])
+
+  // Réactions et masquages persistés (migration 080) + temps réel ; repli local si absente
+  useEffect(() => {
+    let active = true
+    const refresh = async () => {
+      try {
+        const res = await loadPersistedChatPrefs(supabase, conversation.id, userId)
+        if (!active || !res.available) return
+        setReactions((prev) => ({ ...prev, ...res.reactions.own }))
+        setPeerReactions(res.reactions.peer)
+        if (res.hidden.length) {
+          setHiddenIds((prev) => new Set([...prev, ...res.hidden]))
+        }
+      } catch {
+        /* repli local */
+      }
+    }
+    void refresh()
+    const ch = supabase
+      .channel(`chat-reactions-${conversation.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "message_reactions" }, () => {
+        void refresh()
+      })
+      .subscribe()
+    return () => {
+      active = false
+      supabase.removeChannel(ch)
+    }
+  }, [conversation.id, userId])
 
   // Brouillon + masqués + réactions + file offline
   useEffect(() => {
@@ -608,7 +644,7 @@ export function ChatConversation({
         body: JSON.stringify({
           message: prompt.slice(0, 800),
           page: "messages/chat",
-          conversationId: conversation.id,
+          context: { chatConversationId: conversation.id },
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -619,7 +655,9 @@ export function ChatConversation({
             ? data.error
             : "Je n’ai pas pu répondre. Réessaie dans un instant."
 
-      const aiContent = formatAiAdviceMessage(replyText)
+      const aiContent = formatAiAdviceMessage(
+        typeof data.disclaimer === "string" ? `${replyText}\n\n${data.disclaimer}` : replyText,
+      )
       const { data: aiMsg, error: aiErr } = await supabase
         .from("messages")
         .insert({
@@ -1354,7 +1392,8 @@ export function ChatConversation({
     } else if (a === "delete_me") {
       const next = hideMessageForMe(userId, conversation.id, msg.id)
       setHiddenIds(new Set(next))
-      toast.success("Masqué pour toi")
+      void persistHiddenForMe(supabase, userId, msg.id)
+      toast.success("Supprimé pour toi")
     } else if (a === "delete" && msg.sender_id === userId) {
       setMessages((prev) => prev.filter((m) => m.id !== msg.id))
       toast.success("Supprimé")
@@ -1363,11 +1402,14 @@ export function ChatConversation({
   }
 
   function applyReaction(msgId: string, emoji: string) {
-    const next = setMessageReaction(userId, conversation.id, msgId, emoji)
+    const current = reactions[msgId]
+    const value = current === emoji ? null : emoji
+    const next = setMessageReaction(userId, conversation.id, msgId, value)
     setReactions({ ...next })
+    void persistReaction(supabase, userId, msgId, value)
     setReactPickerMsg(null)
     setSelectedMsg(null)
-    toast.success("Réaction ajoutée")
+    toast.success(value ? "Réaction ajoutée" : "Réaction retirée")
   }
 
   async function sendPriceOffer() {
@@ -1842,12 +1884,13 @@ export function ChatConversation({
             )
           }}
           className="flex items-center gap-1 rounded-full min-h-[44px] px-2 py-1.5 active:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-          aria-label="Demander conseil"
-          title="Demander conseil"
+          aria-label="Conseil IA (Yelly)"
+          title="Conseil IA (Yelly) : assistante, pas une décision financière"
+          data-testid="chat-ai-advice"
         >
-          <LifeBuoy className="h-5 w-5" />
+          <Sparkles className="h-5 w-5" aria-hidden />
           <span className="hidden sm:inline text-[11px] font-medium max-w-[72px] leading-tight">
-            Conseil
+            Conseil IA
           </span>
         </button>
         <button
@@ -1995,7 +2038,7 @@ export function ChatConversation({
             const replyMsg = msg.reply_to_id
               ? messages.find((m) => m.id === msg.reply_to_id)
               : null
-            const reaction = reactions[msg.id]
+            const reaction = reactionBadge(reactions[msg.id], peerReactions[msg.id])
             const pending = msg.id.startsWith("tmp-") || msg.id.startsWith("out:")
 
             return (

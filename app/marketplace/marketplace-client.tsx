@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Search, SlidersHorizontal, MapPin, Heart, X, ChevronLeft, Plus, ShoppingBag } from "lucide-react"
+import { Search, SlidersHorizontal, MapPin, Heart, X, ChevronLeft, Plus, ShoppingBag, MessageCircle, Star } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
@@ -39,6 +39,18 @@ import {
   hasProBadge,
   sortByFeedPriority,
 } from "@/lib/pricing/entitlements"
+import {
+  applyShopFilters,
+  countActiveFilters,
+  DEFAULT_SHOP_FILTERS,
+  locationOptions,
+  negotiateHref,
+  productLocation,
+  sellerRatings,
+  SHOP_SORT_OPTIONS,
+  type ShopFilters,
+  type ShopSort,
+} from "@/lib/products/shop-filters"
 
 type Product = {
   id: string
@@ -57,6 +69,8 @@ type Product = {
   product_type: string
   category_id: string | null
   seller_id: string
+  ville?: string | null
+  region?: string | null
   feedPriority?: number
   profiles: {
     full_name: string
@@ -76,6 +90,8 @@ function MarketplaceGridCard({
   listenProps,
   onToggleFavorite,
   onAddToCart,
+  onNegotiate,
+  sellerRating,
   formatPrice,
   imageQuality,
   priority = false,
@@ -93,6 +109,8 @@ function MarketplaceGridCard({
   }
   onToggleFavorite: (id: string, e: React.MouseEvent) => void
   onAddToCart: (id: string, e: React.MouseEvent) => void
+  onNegotiate: (p: Product, e: React.MouseEvent) => void
+  sellerRating?: number
   formatPrice: (n: number) => string
   imageQuality: number
   priority?: boolean
@@ -168,8 +186,20 @@ function MarketplaceGridCard({
             {hasProBadge(p.profiles.subscription_tier) && (
               <Badge className="bg-[#C27D10]/15 text-[#8B5A00] text-[9px] px-1 py-0 h-4">Pro</Badge>
             )}
+            {sellerRating ? (
+              <span className="inline-flex items-center gap-0.5 text-[#8B5A00]" aria-label={`Note vendeur ${sellerRating} sur 5`}>
+                <Star className="h-3 w-3 fill-[#C27D10] text-[#C27D10]" aria-hidden />
+                {sellerRating.toFixed(1)}
+              </span>
+            ) : null}
           </p>
         )}
+        {productLocation(p) ? (
+          <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1 truncate">
+            <MapPin className="h-3 w-3 shrink-0" aria-hidden />
+            {productLocation(p)}
+          </p>
+        ) : null}
         <div className="flex items-center justify-between mt-1.5">
           <span className="text-sm font-bold text-[#B91C1C]">
             {formatPrice(p.price)}{" "}
@@ -184,6 +214,16 @@ function MarketplaceGridCard({
             <Plus className="h-4 w-4" />
           </button>
         </div>
+        <button
+          type="button"
+          onClick={(e) => onNegotiate(p, e)}
+          className="mt-2 w-full min-h-9 rounded-full border border-[#2F7D32] text-[#2F7D32] text-xs font-semibold flex items-center justify-center gap-1.5 active:bg-[#2F7D32]/10"
+          aria-label={`Négocier ${p.name} avec le vendeur`}
+          data-testid="negotiate-button"
+        >
+          <MessageCircle className="h-3.5 w-3.5" aria-hidden />
+          Négocier
+        </button>
       </div>
     </Link>
   )
@@ -213,6 +253,12 @@ function MarketplaceContent({ hasServerHero = false }: { hasServerHero?: boolean
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
   const [showFilters, setShowFilters] = useState(false)
+  const [minPrice, setMinPrice] = useState<number | null>(null)
+  const [maxPrice, setMaxPrice] = useState<number | null>(null)
+  const [location, setLocation] = useState<string>("all")
+  const [minRating, setMinRating] = useState(0)
+  const [sort, setSort] = useState<ShopSort>("relevance")
+  const [ratings, setRatings] = useState<Record<string, number>>({})
   const [userId, setUserId] = useState<string | null>(null)
   const [userCity, setUserCity] = useState<string | null>(null)
   const [userCountry, setUserCountry] = useState<string | null>(null)
@@ -321,7 +367,7 @@ function MarketplaceContent({ hasServerHero = false }: { hasServerHero?: boolean
         .from("products")
         .select(`
           id, name, price, unit, description, audio_url, audio_lang, created_at, images,
-          origin_country, origin_region,
+          origin_country, origin_region, ville, region,
           is_organic, is_fair_trade, product_type, category_id, seller_id,
           profiles:seller_id(full_name, avatar_url, is_verified, subscription_tier),
           categories:category_id(name, slug)
@@ -336,7 +382,7 @@ function MarketplaceContent({ hasServerHero = false }: { hasServerHero?: boolean
               .from("products")
               .select(`
           id, name, price, unit, description, audio_url, audio_lang, created_at, images,
-          origin_country, origin_region,
+          origin_country, origin_region, ville, region,
           is_organic, is_fair_trade, product_type, category_id, seller_id,
           profiles:seller_id(full_name, avatar_url, is_verified),
           categories:category_id(name, slug)
@@ -365,6 +411,17 @@ function MarketplaceContent({ hasServerHero = false }: { hasServerHero?: boolean
       }
       const merged = sortByFeedPriority([...byId.values()]).slice(0, 24)
       setProducts(merged)
+      const sellerIds = [...new Set(merged.map((p) => p.seller_id).filter(Boolean))]
+      if (sellerIds.length) {
+        void supabase
+          .from("reviews")
+          .select("seller_id, rating")
+          .in("seller_id", sellerIds)
+          .limit(1000)
+          .then(({ data }: { data: { seller_id: string | null; rating: number | null }[] | null }) => {
+            if (data) setRatings(sellerRatings(data))
+          })
+      }
       if (categoriesRes.data) setCategories(categoriesRes.data)
       if (favsRes.data) setFavorites(new Set((favsRes.data as { product_id: string }[]).map(f => f.product_id)))
       if (!geoCity && profileRes.data?.city) setUserCity(profileRes.data.city)
@@ -399,6 +456,19 @@ function MarketplaceContent({ hasServerHero = false }: { hasServerHero?: boolean
     }
   }
 
+  function negotiate(p: Product, e: React.MouseEvent) {
+    e.preventDefault(); e.stopPropagation()
+    if (!userId) {
+      router.push(`/auth/login?redirect=${encodeURIComponent(negotiateHref(p))}`)
+      return
+    }
+    if (p.seller_id === userId) {
+      toast.message("C’est ton produit")
+      return
+    }
+    router.push(negotiateHref(p))
+  }
+
   async function addToCart(id: string, e: React.MouseEvent) {
     e.preventDefault(); e.stopPropagation()
     if (!userId) {
@@ -412,24 +482,38 @@ function MarketplaceContent({ hasServerHero = false }: { hasServerHero?: boolean
     else toast.success("Ajouté au panier")
   }
 
+  const shopFilters: ShopFilters = {
+    ...DEFAULT_SHOP_FILTERS,
+    search: searchTerm,
+    type: selectedType,
+    categoryId: selectedCategory,
+    minPrice,
+    maxPrice,
+    location,
+    minRating,
+    sort,
+  }
   const filteredProducts = useMemo(
-    () =>
-      products.filter((p) => {
-        const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase())
-        const matchesType = selectedType === "all" || p.product_type === selectedType
-        const matchesCategory =
-          selectedCategory === "all" || p.category_id === selectedCategory
-        return matchesSearch && matchesType && matchesCategory
-      }),
-    [products, searchTerm, selectedType, selectedCategory],
+    () => applyShopFilters(products, shopFilters, ratings),
+    [products, searchTerm, selectedType, selectedCategory, minPrice, maxPrice, location, minRating, sort, ratings],
   )
+  const locations = useMemo(() => locationOptions(products), [products])
+  function resetFilters() {
+    setSelectedType("all")
+    setSelectedCategory("all")
+    setMinPrice(null)
+    setMaxPrice(null)
+    setLocation("all")
+    setMinRating(0)
+    setSort("relevance")
+  }
 
   const filteredCategories = useMemo(
     () => categories.filter((c) => selectedType === "all" || c.category_type === selectedType),
     [categories, selectedType],
   )
   const fmt = (n: number) => new Intl.NumberFormat("fr-FR").format(n)
-  const activeFiltersCount = (selectedType !== "all" ? 1 : 0) + (selectedCategory !== "all" ? 1 : 0)
+  const activeFiltersCount = countActiveFilters(shopFilters)
 
   const digestSelection = useMemo(() => {
     const profile = {
@@ -640,7 +724,7 @@ function MarketplaceContent({ hasServerHero = false }: { hasServerHero?: boolean
                 )}
               </Button>
             </SheetTrigger>
-            <SheetContent side="bottom" className="h-[60vh] rounded-t-3xl md:left-1/2 md:max-w-lg md:-translate-x-1/2">
+            <SheetContent side="bottom" className="h-[85vh] overflow-y-auto rounded-t-3xl md:left-1/2 md:max-w-lg md:-translate-x-1/2">
               <SheetHeader className="pb-3"><SheetTitle>Filtres</SheetTitle></SheetHeader>
               <div className="space-y-5">
                 <div>
@@ -663,9 +747,45 @@ function MarketplaceContent({ hasServerHero = false }: { hasServerHero?: boolean
                     ))}
                   </div>
                 </div>
+                <div>
+                  <span className="text-sm font-medium mb-2 block" id="filter-price">Prix (FCFA)</span>
+                  <div className="flex items-center gap-2" role="group" aria-labelledby="filter-price">
+                    <Input type="number" inputMode="numeric" min={0} placeholder="Min" aria-label="Prix minimum"
+                      value={minPrice ?? ""} onChange={(e) => setMinPrice(e.target.value === "" ? null : Math.max(0, Number(e.target.value)))}
+                      className="h-10 rounded-xl" />
+                    <span className="text-muted-foreground">–</span>
+                    <Input type="number" inputMode="numeric" min={0} placeholder="Max" aria-label="Prix maximum"
+                      value={maxPrice ?? ""} onChange={(e) => setMaxPrice(e.target.value === "" ? null : Math.max(0, Number(e.target.value)))}
+                      className="h-10 rounded-xl" />
+                  </div>
+                </div>
+                {locations.length > 0 && (
+                  <div>
+                    <span className="text-sm font-medium mb-2 block">Localisation</span>
+                    <div className="flex flex-wrap gap-2 max-h-28 overflow-y-auto">
+                      {["all", ...locations].map((l) => (
+                        <button key={l} type="button" onClick={() => setLocation(l)} aria-pressed={location === l}
+                          className={`px-4 py-2 rounded-full text-sm font-medium ${location === l ? "bg-[#2F7D32] text-white" : "bg-muted text-muted-foreground"}`}>
+                          {l === "all" ? "Partout" : l}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div>
+                  <span className="text-sm font-medium mb-2 block">Note vendeur</span>
+                  <div className="flex flex-wrap gap-2">
+                    {[0, 3, 4, 4.5].map((r) => (
+                      <button key={r} type="button" onClick={() => setMinRating(r)} aria-pressed={minRating === r}
+                        className={`px-4 py-2 rounded-full text-sm font-medium ${minRating === r ? "bg-[#2F7D32] text-white" : "bg-muted text-muted-foreground"}`}>
+                        {r === 0 ? "Toutes" : `${String(r).replace(".", ",")} ★ et +`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <div className="flex gap-3 pt-3">
-                  <Button variant="outline" className="flex-1 rounded-xl h-11" onClick={() => { setSelectedType("all"); setSelectedCategory("all") }}>Reinitialiser</Button>
-                  <Button className="flex-1 rounded-xl h-11 bg-[#2F7D32] hover:bg-[#256025]" onClick={() => setShowFilters(false)}>Voir {filteredProducts.length} resultats</Button>
+                  <Button variant="outline" className="flex-1 rounded-xl h-11" onClick={resetFilters}>Réinitialiser</Button>
+                  <Button className="flex-1 rounded-xl h-11 bg-[#2F7D32] hover:bg-[#256025]" onClick={() => setShowFilters(false)}>Voir {filteredProducts.length} résultat{filteredProducts.length > 1 ? "s" : ""}</Button>
                 </div>
               </div>
             </SheetContent>
@@ -691,6 +811,20 @@ function MarketplaceContent({ hasServerHero = false }: { hasServerHero?: boolean
               {t.label}
             </button>
           ))}
+          <label className="ml-auto flex items-center gap-1 text-xs text-[#4B5563] whitespace-nowrap">
+            <span className="sr-only sm:not-sr-only">Trier</span>
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as ShopSort)}
+              className="h-7 rounded-full border border-[#E5E7EB] bg-white px-2 text-xs text-[#111827]"
+              aria-label="Trier les produits"
+              data-testid="shop-sort"
+            >
+              {SHOP_SORT_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </label>
         </div>
       </header>
 
@@ -746,10 +880,11 @@ function MarketplaceContent({ hasServerHero = false }: { hasServerHero?: boolean
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-4 lg:gap-5 xl:grid-cols-5">
             {[...Array(10)].map((_, i) => (
               <div key={i} className="overflow-hidden">
-                <div className="bg-muted gwa-skeleton rounded-2xl aspect-[4/3]" />
+                <div className="bg-muted gwa-skeleton rounded-2xl aspect-[4/5]" />
                 <div className="pt-2 space-y-1">
                   <div className="h-3 bg-muted rounded gwa-skeleton" />
                   <div className="h-3 bg-muted rounded w-2/3 gwa-skeleton" />
+                  <div className="h-9 mt-2 bg-muted rounded-full gwa-skeleton" />
                 </div>
               </div>
             ))}
@@ -778,6 +913,8 @@ function MarketplaceContent({ hasServerHero = false }: { hasServerHero?: boolean
                   listenProps={productListenProps(p)}
                   onToggleFavorite={toggleFavorite}
                   onAddToCart={addToCart}
+                  onNegotiate={negotiate}
+                  sellerRating={ratings[p.seller_id]}
                   formatPrice={fmt}
                   imageQuality={imageQuality}
                   priority={!hasServerHero && idx === 0}
