@@ -201,3 +201,27 @@ describe("gouvernance", () => {
     expect(YELLY_SYSTEM_PROMPT).toMatch(/indicatifs/)
   })
 })
+
+describe("Intentions : formulations réelles (test preview)", () => {
+  it("« prix juste » / « proposer combien » → prix de référence", async () => {
+    const { detectYellyIntent } = await import("@/lib/yelly/capabilities")
+    expect(detectYellyIntent("Quel est un prix juste pour ce cacao ? Je peux proposer combien ?")).toBe("reference_price")
+    expect(detectYellyIntent("Je dois offrir combien ?")).toBe("reference_price")
+  })
+})
+
+describe("Repli sans modèle : capacités déterministes", () => {
+  it("donne une fourchette de prix et détecte un accord sans inventer", async () => {
+    const { deterministicCapabilityReply } = await import("@/lib/yelly/capabilities")
+    const r = deterministicCapabilityReply("reference_price", { name: "cacao bio", price: 3000, unit: "kg" })
+    expect(r).toContain("2 700")
+    expect(r).toContain("3 300")
+    expect(deterministicCapabilityReply("reference_price", null)).toBeNull()
+    const a = deterministicCapabilityReply("purchase_order", { name: "cacao", unit: "kg" }, [
+      { author: "autre", text: "Je fais 2800 F le kilo" },
+      { author: "moi", text: "D'accord" },
+    ])
+    expect(a).toContain("2 800")
+    expect(deterministicCapabilityReply("general", null)).toBeNull()
+  })
+})
