@@ -10,13 +10,17 @@ describe("redactPiiForAi : conditions QA Lot D", () => {
       "CI93CI0000012345678901234",
       "FR76 3000 6000 0112 3456 7890 189",
       "fr7630006000011234567890189",
+      "ci93 ci00 0001 2345 6789 0123 45",
+      "ci93-ci00-0001-2345-6789-0123-45",
+      "CI93-CI00-0001-2345-6789-0123-45",
+      "fr76 3000 6000 0112 3456 7890 189",
     ]
     for (const iban of positives) {
       it(`masque ${iban.slice(0, 4)}… (${iban.includes(" ") ? "avec" : "sans"} espaces)`, () => {
         const out = redactPiiForAi(`Mon IBAN : ${iban} merci`)
         expect(out).toContain("[IBAN masqué]")
         expect(out).not.toMatch(/\d{4}/)
-        expect(out).toContain("merci")
+        expect(out).toMatch(/\] merci$/)
         expect(containsPii(iban)).toBe(true)
         expect(containsPii(out)).toBe(false)
       })
@@ -43,7 +47,7 @@ describe("redactPiiForAi : conditions QA Lot D", () => {
         const out = redactPiiForAi(`Appelle-moi au ${tel} stp`)
         expect(out).toContain("[téléphone masqué]")
         expect(out).not.toMatch(/\d{2}/)
-        expect(containsPii(tel)).toBe(true)
+        expect(containsPii(`Appelle-moi au ${tel}`)).toBe(true)
         expect(containsPii(out)).toBe(false)
       })
     }
@@ -72,6 +76,47 @@ describe("redactPiiForAi : conditions QA Lot D", () => {
         expect(containsPii(text)).toBe(false)
       })
     }
+  })
+
+  describe("9 chiffres sans 0 : contexte exigé si le nombre est collé", () => {
+    const masked = [
+      "Mon numéro : 712345678",
+      "tel 512345678",
+      "Envoie sur OM 712345678",
+      "Orange Money 712345678 svp",
+      "WhatsApp: 112345678",
+      "n° 712345678",
+      "Pour l'acompte, joindre le 512345678",
+      "7 12 34 56 78",
+      "5.12.34.56.78",
+      "1-12-34-56-78",
+    ]
+    for (const text of masked) {
+      it(`masque « ${text.replace(/\d/g, "9")} »`, () => {
+        expect(redactPiiForAi(text)).toContain("[téléphone masqué]")
+        expect(containsPii(text)).toBe(true)
+      })
+    }
+    const kept = [
+      "Commande 712345678 livrée",
+      "Stock de 512345678 unités",
+      "Lot 112345678",
+      "Référence fournisseur 712345678",
+      "Total 712345678",
+      "Wave 712345678 FCFA",
+    ]
+    for (const text of kept) {
+      it(`laisse intact « ${text.replace(/\d/g, "9")} »`, () => {
+        expect(redactPiiForAi(text)).toBe(text)
+        expect(containsPii(text)).toBe(false)
+      })
+    }
+  })
+
+  it("IBAN : les mots qui suivent restent intacts", () => {
+    expect(redactPiiForAi("vire sur ci93-ci00-0001-2345-6789-0123-45 pour la commande")).toBe(
+      "vire sur [IBAN masqué] pour la commande",
+    )
   })
 
   it("containsPii détecte aussi un OTP", () => {

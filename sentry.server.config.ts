@@ -4,6 +4,7 @@ import { scrubSentryEvent } from '@/lib/observability/sentry-scrub'
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
   tracesSampleRate: 0.1,
+  environment: process.env.NODE_ENV,
   // Pas d’IP, cookies ni en-têtes envoyés par défaut.
   sendDefaultPii: false,
   beforeSend: (event) => scrubSentryEvent(event),
