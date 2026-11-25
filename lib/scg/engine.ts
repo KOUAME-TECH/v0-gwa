@@ -1,7 +1,10 @@
+import { clampScg, SCG_BANCABLE_MIN } from "@/lib/scg/scale"
+
 /**
  * GWA — Score de Confiance GWA (SCG) v1.0
  * Port TypeScript de l'algorithme FastAPI (Ref: GWA-TECH-SCG-014)
  * Règles métier Phase 0 — pas de ML
+ * Échelle du score global : 0 à 1000 (maximum 1000, cf. lib/scg/scale.ts).
  */
 
 export interface ProducteurData {
@@ -167,11 +170,11 @@ export function getRecommandation(score: number, dims: SCGDimensions): string {
     .map(([k]) => DIMENSION_LABELS[k])
 
   if (score >= 700) {
-    return "Profil bancable — Éligible crédit agricole. Partager avec partenaires bancaires."
+    return "Profil bancable solide — Éligible crédit agricole. Partager avec partenaires bancaires."
   }
-  if (score >= 500) {
+  if (score >= SCG_BANCABLE_MIN) {
     const recs = faible.length ? `Améliorer : ${faible.slice(0, 2).join(", ")}` : "Augmenter les volumes et la régularité."
-    return `Profil intermédiaire — ${recs}`
+    return `Profil bancable — ${recs}`
   }
   if (score >= 300) {
     const focus = faible.length ? faible.slice(0, 2).join(", ") : "la régularité des transactions"
@@ -189,7 +192,8 @@ export function calculateSCG(data: ProducteurData): SCGResult {
 
   const score_brut =
     d1 * POIDS.fiabilite + d2 * POIDS.qualite + d3 * POIDS.engagement + d4 * POIDS.volumes + d5 * POIDS.stabilite
-  const score_total = Math.round(score_brut * 10) // 0-1000
+  // Dimensions sur 100, poids = 100 % → 0–100, × 10 → 0–1000. Borné quoi qu'il arrive.
+  const score_total = clampScg(score_brut * 10)
 
   const dimensions: SCGDimensions = {
     fiabilite: Math.round(d1),
@@ -208,7 +212,7 @@ export function calculateSCG(data: ProducteurData): SCGResult {
     badge_label: badge.label,
     dimensions,
     recommandation: getRecommandation(score_total, dimensions),
-    bancable: score_total >= 500,
+    bancable: score_total >= SCG_BANCABLE_MIN,
     calculated_at: new Date().toISOString(),
   }
 }

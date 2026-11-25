@@ -1,3 +1,5 @@
+import { SCG_BANCABLE_MIN } from "@/lib/scg/scale"
+
 /**
  * GWA — Éligibilité à l'affacturage (préfinancement).
  *
@@ -7,7 +9,7 @@
  * bloc affacturage des dashboards.
  */
 
-export const FACTORING_MIN_SCORE = 500
+export const FACTORING_MIN_SCORE = SCG_BANCABLE_MIN
 
 export interface FactoringScgInput {
   scg_bancable?: boolean | null

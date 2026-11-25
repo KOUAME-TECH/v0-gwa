@@ -37,7 +37,7 @@ const COACH_MAP: Record<keyof SCGDimensions, Omit<CoachAction, "dim">> = {
 
 export type CoachBand = "low" | "mid" | "high"
 
-/** Bande pédagogique selon score global (0–1000 typique SCG). */
+/** Bande pédagogique selon score global (échelle SCG 0–1000). */
 export function coachBand(score: number): CoachBand {
   if (score < 400) return "low"
   if (score < 700) return "mid"
