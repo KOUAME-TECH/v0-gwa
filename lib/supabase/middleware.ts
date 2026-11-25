@@ -1,5 +1,10 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import {
+  isTransientNetworkError,
+  shouldRedirectToLogin,
+  TRANSIENT_AUTH_RETRY_LIMIT,
+} from '@/lib/auth/session-state'
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -71,9 +76,34 @@ export async function updateSession(request: NextRequest) {
 
   // IMPORTANT: If you remove getUser() and you use server-side rendering
   // with the Supabase client, your users may be randomly logged out.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  let user: { id: string } | null = null
+  let authError: { message?: string; name?: string; status?: number } | null = null
+
+  const readUser = async () => {
+    try {
+      const result = await supabase.auth.getUser()
+      user = result.data.user
+      authError = result.error
+    } catch (err) {
+      user = null
+      authError =
+        err instanceof Error
+          ? { message: err.message, name: err.name }
+          : { message: "fetch failed" }
+    }
+  }
+
+  await readUser()
+  for (
+    let attempt = 0;
+    !user &&
+    isTransientNetworkError(authError) &&
+    attempt < TRANSIENT_AUTH_RETRY_LIMIT;
+    attempt += 1
+  ) {
+    await new Promise((resolve) => setTimeout(resolve, 350))
+    await readUser()
+  }
 
   const protectedPrefixes = [
     '/protected',
@@ -93,7 +123,15 @@ export async function updateSession(request: NextRequest) {
     (p) => path === p || path.startsWith(`${p}/`),
   )
 
-  if (needsAuth && !user) {
+  // Un timeout vers Auth n'est pas une session absente : la page affiche Réessayer.
+  // Une 500 durable ou un échec non réseau redirige vers la connexion.
+  if (
+    shouldRedirectToLogin({
+      needsAuth,
+      hasUser: Boolean(user),
+      error: authError,
+    })
+  ) {
     const url = request.nextUrl.clone()
     url.pathname = '/auth/login'
     url.searchParams.set('redirect', path)

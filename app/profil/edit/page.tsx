@@ -129,8 +129,12 @@ export default function EditProfilPage() {
         return
       }
 
-      const [{ data: profileData }, { data: kyc }] = await Promise.all([
-        supabase.from("profiles").select("*").eq("id", user.id).single(),
+      const [{ data: profileData }, { data: kyc }, { data: self }] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("id, full_name, avatar_url, bio, user_type, city, country, is_verified")
+          .eq("id", user.id)
+          .single(),
         supabase
           .from("verification_requests")
           .select("status")
@@ -139,20 +143,42 @@ export default function EditProfilPage() {
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle(),
+        supabase.rpc("profile_self"),
       ])
 
-      if (profileData) {
-        setProfile({ ...profileData, email: user.email || "" })
+      const selfRow = (Array.isArray(self) ? self[0] : self) as Record<string, unknown> | null
+      const row = { ...(profileData || {}), ...(selfRow || {}) } as typeof profileData & Record<string, unknown>
+      if (profileData || selfRow) {
+        const linkedEmail = (selfRow?.linked_email as string | undefined) || (selfRow?.email as string | undefined) || user.email || ""
+        setProfile({
+          ...row,
+          id: (row.id as string) || user.id,
+          full_name: (row.full_name as string) || "",
+          email: linkedEmail,
+          avatar_url: (row.avatar_url as string | null) ?? null,
+          bio: (row.bio as string | null) ?? null,
+          user_type: (row.user_type as string | null) ?? null,
+          phone: (selfRow?.phone as string | null) ?? null,
+          city: (row.city as string | null) ?? null,
+          country: (row.country as string | null) ?? null,
+          address: (selfRow?.address as string | null) ?? null,
+          digest_enabled: row.digest_enabled !== false,
+          is_verified: row.is_verified === true,
+          phone_verified: selfRow?.phone_verified === true,
+          linked_email: (selfRow?.linked_email as string | null) ?? null,
+          email_linked_at: (selfRow?.email_linked_at as string | null) ?? null,
+          phone_linked_at: (selfRow?.phone_linked_at as string | null) ?? null,
+        })
         setFormData({
-          full_name: profileData.full_name || "",
-          email: profileData.linked_email || profileData.email || user.email || "",
-          bio: profileData.bio || "",
-          user_type: profileData.user_type || "",
-          phone: profileData.phone || user.phone || "",
-          city: profileData.city || "",
-          country: profileData.country || "",
-          address: profileData.address || "",
-          digest_enabled: profileData.digest_enabled !== false,
+          full_name: (row.full_name as string) || "",
+          email: linkedEmail,
+          bio: (row.bio as string) || "",
+          user_type: (row.user_type as string) || "",
+          phone: (selfRow?.phone as string) || user.phone || "",
+          city: (row.city as string) || "",
+          country: (row.country as string) || "",
+          address: (selfRow?.address as string) || "",
+          digest_enabled: row.digest_enabled !== false,
         })
       }
       setKycStatus((kyc?.status as KycStatus) || null)

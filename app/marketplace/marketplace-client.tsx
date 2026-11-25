@@ -137,8 +137,9 @@ function MarketplaceGridCard({
           type="button"
           onClick={(e) => onToggleFavorite(p.id, e)}
           className="absolute top-2 right-2 w-8 h-8 bg-white/80 backdrop-blur-sm rounded-full flex items-center justify-center"
+          aria-label={favorited ? "Retirer des favoris" : "Ajouter aux favoris"}
         >
-          <Heart className={`h-4 w-4 ${favorited ? "fill-red-500 text-red-500" : "text-gray-500"}`} />
+          <Heart className={`h-4 w-4 ${favorited ? "fill-red-500 text-red-500" : "text-[#4B5563]"}`} />
         </button>
         {p.is_organic && (
           <Badge className="absolute top-2 left-2 bg-[#2F7D32] text-white text-[10px] px-1.5 py-0.5">Bio</Badge>
@@ -147,7 +148,7 @@ function MarketplaceGridCard({
           Date.now() - new Date(p.created_at).getTime() < 24 * 60 * 60 * 1000 && (
             <Badge
               className={cn(
-                "absolute top-2 text-white text-[10px] px-1.5 py-0.5 bg-[#C27D10]",
+                "absolute top-2 text-white text-[10px] px-1.5 py-0.5 bg-[#B45309]",
                 p.is_organic ? "left-12" : "left-2",
               )}
             >
@@ -170,14 +171,15 @@ function MarketplaceGridCard({
           </p>
         )}
         <div className="flex items-center justify-between mt-1.5">
-          <span className="text-sm font-bold text-red-600">
+          <span className="text-sm font-bold text-[#B91C1C]">
             {formatPrice(p.price)}{" "}
-            <span className="text-[10px] font-normal text-gray-500">FCFA/{p.unit}</span>
+            <span className="text-[10px] font-normal text-[#4B5563]">FCFA/{p.unit}</span>
           </span>
           <button
             type="button"
             onClick={(e) => onAddToCart(p.id, e)}
             className="w-8 h-8 rounded-full bg-[#2F7D32] text-white flex items-center justify-center"
+            aria-label={`Ajouter ${p.name} au panier`}
           >
             <Plus className="h-4 w-4" />
           </button>
@@ -596,7 +598,7 @@ function MarketplaceContent({ hasServerHero = false }: { hasServerHero?: boolean
         aria-hidden={headerHidden}
       >
         <div className="gwa-shell-wide flex items-center gap-3 p-3 md:px-5 lg:py-4">
-          <Link href="/" className="lg:hidden"><ChevronLeft className="h-6 w-6" /></Link>
+          <Link href="/" className="lg:hidden" aria-label="Retour à l'accueil"><ChevronLeft className="h-6 w-6" /></Link>
           <div className="flex-1 min-w-0">
             <h1 className="text-lg font-semibold text-[#111827] lg:font-display lg:text-2xl lg:text-[#1F5C2E]">
               Boutique
@@ -622,16 +624,16 @@ function MarketplaceContent({ hasServerHero = false }: { hasServerHero?: boolean
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input placeholder="Rechercher..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 bg-muted/50 border-0 h-9 rounded-xl text-sm" />
+              className="pl-10 bg-muted/50 border-0 h-9 rounded-xl text-sm placeholder:text-[#4B5563]" />
             {searchTerm && (
-              <button onClick={() => setSearchTerm("")} className="absolute right-3 top-1/2 -translate-y-1/2">
-                <X className="h-4 w-4 text-muted-foreground" />
+              <button type="button" onClick={() => setSearchTerm("")} className="absolute right-3 top-1/2 -translate-y-1/2" aria-label="Effacer la recherche">
+                <X className="h-4 w-4 text-[#4B5563]" />
               </button>
             )}
           </div>
           <Sheet open={showFilters} onOpenChange={setShowFilters}>
             <SheetTrigger asChild>
-              <Button variant="outline" size="icon" className="h-9 w-9 relative shrink-0 rounded-xl border-0 bg-muted/50">
+              <Button variant="outline" size="icon" className="h-9 w-9 relative shrink-0 rounded-xl border-0 bg-muted/50" aria-label="Filtres">
                 <SlidersHorizontal className="h-4 w-4" />
                 {activeFiltersCount > 0 && (
                   <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#2F7D32] text-white text-[9px] rounded-full flex items-center justify-center">{activeFiltersCount}</span>

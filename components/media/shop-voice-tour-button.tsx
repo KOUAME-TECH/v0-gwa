@@ -45,7 +45,7 @@ export function ShopVoiceTourButton({
         "inline-flex items-center gap-1.5 rounded-full transition-all active:scale-95 disabled:opacity-40",
         "h-9 px-3",
         active
-          ? "bg-[#C27D10]/15 text-[#C27D10] ring-1 ring-[#C27D10]/30"
+          ? "bg-[#C27D10]/15 text-[#8B5A00] ring-1 ring-[#C27D10]/30"
           : "bg-[#1F5C2E]/8 text-[#1F5C2E] hover:bg-[#1F5C2E]/14",
         total === 0 && !disabled && "opacity-60",
         decorative && "pointer-events-none",
