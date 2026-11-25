@@ -208,13 +208,13 @@ function SignupForm() {
     const mappedType = USER_TYPE_MAP[formData.userType] || formData.userType
     const profileUpdate = {
       full_name: formData.name,
-      user_type: mappedType,
       country: formData.country,
       city: formData.city,
       auth_method: "phone",
     }
     const completion = computeProfileCompletion({
       ...profileUpdate,
+      user_type: mappedType,
       phone: user.phone || phone,
       email: formData.linkedEmail || undefined,
     })
@@ -231,6 +231,20 @@ function SignupForm() {
     if (profileError) {
       setError(profileError.message)
       return false
+    }
+
+    // Rôle : champ privilégié (086) → écrit par le serveur, pas par la session.
+    if (mappedType) {
+      const roleRes = await fetch(`/api/profiles/${user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_type: mappedType }),
+      }).catch(() => null)
+      if (roleRes && !roleRes.ok && roleRes.status !== 409) {
+        const data = await roleRes.json().catch(() => ({}))
+        setError(data.error || "Enregistrement du rôle impossible")
+        return false
+      }
     }
 
     await supabase.auth.updateUser({
