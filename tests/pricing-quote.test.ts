@@ -13,13 +13,13 @@ describe("grille tarifaire validée", () => {
   it("Graine 30 000 F : 9 % et marge sous 2 000 F après agrégateur", () => {
     const quote = quotePricing(seedPlan("FREE"), 30_000)
     expect(quote.seller_commission).toBe(2_700)
-    expect(quote.buyer_service_fee).toBe(0)
-    expect(quote.total_amount).toBe(30_000)
+    expect(quote.buyer_service_fee).toBe(250)
+    expect(quote.total_amount).toBe(30_250)
     expect(quote.seller_net_amount).toBe(27_300)
     expect(quote.franchise_applied).toBe(false)
     const margin = simulateMargin(seedPlan("FREE"), 30_000, aggregator)
-    expect(margin.aggregator_fee).toBe(950)
-    expect(margin.gwa_net_margin).toBe(1_750)
+    expect(margin.aggregator_fee).toBe(958)
+    expect(margin.gwa_net_margin).toBe(1_992)
     expect(margin.margin_alert).toBe(true)
   })
 

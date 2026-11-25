@@ -1,5 +1,11 @@
 -- 067 — Grilles tarifaires GWA (producteurs et coopératives).
--- Taux, franchises et frais acheteur vivent dans pricing_plans.
+-- HISTORIQUE. Le seed et les taux de ce fichier sont ceux d'origine.
+-- Ils ont été remplacés par scripts/schema/073_vision100_pricing.sql
+-- (grille officielle Graine / Pousse / Récolte et coopératives, et
+-- platform_settings.buyer_service_fee_fixed = 250).
+-- Ne pas réécrire cette migration : elle a déjà été appliquée en prod.
+-- Les INSERT sont en ON CONFLICT DO NOTHING et ne mettent pas à jour
+-- une base déjà peuplée.
 -- Un trigger recalcule la commission à l'insertion d'une commande.
 
 CREATE TABLE IF NOT EXISTS public.pricing_plans (

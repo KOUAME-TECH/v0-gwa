@@ -1,8 +1,15 @@
 import type { PricingPlanInput } from "@/lib/pricing/quote"
 
+/** Frais de service acheteur officiel, en FCFA par opération.
+ * Aligné sur `platform_settings.buyer_service_fee_fixed` (prod = 250).
+ * Le paiement réel passe par `gwa_quote_pricing` :
+ * COALESCE(platform_settings, plan.buyer_service_fee_fixed, 0).
+ */
+export const BUYER_SERVICE_FEE_FIXED_FCFA = 250
+
 /**
  * Copie de secours pour les tests et l'affichage si la base ne répond pas.
- * Le paiement réel ne lit pas ce fichier : il lit `pricing_plans`.
+ * Le paiement réel ne lit pas ce fichier : il passe par `gwa_quote_pricing`.
  */
 export const PRICING_SEED: PricingPlanInput[] = [
   {
@@ -11,7 +18,7 @@ export const PRICING_SEED: PricingPlanInput[] = [
     target: "producer",
     monthly_fee: 0,
     commission_rate: 0.09,
-    buyer_service_fee_fixed: 0,
+    buyer_service_fee_fixed: BUYER_SERVICE_FEE_FIXED_FCFA,
     buyer_service_fee_rate: 0,
     franchise_threshold: 133_000,
     franchise_cap: 12_000,
@@ -24,7 +31,7 @@ export const PRICING_SEED: PricingPlanInput[] = [
     target: "producer",
     monthly_fee: 3_000,
     commission_rate: 0.08,
-    buyer_service_fee_fixed: 0,
+    buyer_service_fee_fixed: BUYER_SERVICE_FEE_FIXED_FCFA,
     buyer_service_fee_rate: 0,
     franchise_threshold: 312_000,
     franchise_cap: 25_000,
@@ -37,7 +44,7 @@ export const PRICING_SEED: PricingPlanInput[] = [
     target: "producer",
     monthly_fee: 8_000,
     commission_rate: 0.07,
-    buyer_service_fee_fixed: 0,
+    buyer_service_fee_fixed: BUYER_SERVICE_FEE_FIXED_FCFA,
     buyer_service_fee_rate: 0,
     franchise_threshold: 642_000,
     franchise_cap: 45_000,
@@ -50,7 +57,7 @@ export const PRICING_SEED: PricingPlanInput[] = [
     target: "cooperative",
     monthly_fee: 8_000,
     commission_rate: 0.07,
-    buyer_service_fee_fixed: 0,
+    buyer_service_fee_fixed: BUYER_SERVICE_FEE_FIXED_FCFA,
     buyer_service_fee_rate: 0,
     franchise_threshold: 500_000,
     franchise_cap: 35_000,
@@ -63,7 +70,7 @@ export const PRICING_SEED: PricingPlanInput[] = [
     target: "cooperative",
     monthly_fee: 20_000,
     commission_rate: 0.06,
-    buyer_service_fee_fixed: 0,
+    buyer_service_fee_fixed: BUYER_SERVICE_FEE_FIXED_FCFA,
     buyer_service_fee_rate: 0,
     franchise_threshold: 1_000_000,
     franchise_cap: 60_000,
@@ -76,7 +83,7 @@ export const PRICING_SEED: PricingPlanInput[] = [
     target: "cooperative",
     monthly_fee: 0,
     commission_rate: 0.05,
-    buyer_service_fee_fixed: 0,
+    buyer_service_fee_fixed: BUYER_SERVICE_FEE_FIXED_FCFA,
     buyer_service_fee_rate: 0,
     franchise_threshold: 0,
     franchise_cap: 0,

@@ -22,11 +22,11 @@ describe("seller commission (DG 28/07)", () => {
     expect(sellerCommissionRateForTier("enterprise")).toBe(0.05)
   })
 
-  it("computes seller commission on subtotal; buyer fee 0", () => {
+  it("computes seller commission on subtotal; buyer fee 250 F", () => {
     const free = computeSellerCommission(100_000, "free")
     expect(free.commissionFcfa).toBe(9_000)
     expect(free.vendeurRecoitFcfa).toBe(91_000)
-    expect(free.buyerServiceFee).toBe(0)
+    expect(free.buyerServiceFee).toBe(250)
     expect(free.pctLabel).toBe("9 %")
 
     const starter = computeSellerCommission(100_000, "starter")
@@ -49,7 +49,8 @@ describe("seller commission (DG 28/07)", () => {
     expect(SUBSCRIPTION_PRICES_FCFA.enterprise).toBeNull()
   })
 
-  it("legacy computeServiceFee returns 0 buyer fee", () => {
-    expect(computeServiceFee(10_000, "free").fee).toBe(0)
+  it("legacy computeServiceFee returns the official 250 F buyer fee", () => {
+    expect(computeServiceFee(10_000, "free").fee).toBe(250)
+    expect(computeServiceFee(10_000, "free").rate).toBe(0)
   })
 })
