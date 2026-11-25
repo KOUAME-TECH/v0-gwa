@@ -15,7 +15,7 @@ const INTENT_PATTERNS: { intent: YellyIntent; re: RegExp }[] = [
   { intent: "purchase_order", re: /bon de commande|bon d.achat|r[ée]dige.*commande|g[ée]n[èe]re.*commande/i },
   { intent: "detect_agreement", re: /accord|on est d.accord|conclu|march[ée] conclu|deal|on s.entend/i },
   { intent: "rephrase_offer", re: /reformul|r[ée][ée]cri|am[ée]liore (mon|l.)?\s*(offre|annonce|message)|tourne (mieux|autrement)/i },
-  { intent: "reference_price", re: /prix (de )?r[ée]f[ée]rence|bon prix|juste prix|combien (vaut|co[uû]te)|prix du march[ée]|trop cher|prix moyen/i },
+  { intent: "reference_price", re: /prix (de )?r[ée]f[ée]rence|bon prix|juste prix|prix juste|prix correct|proposer combien|je (peux|dois) (proposer|offrir) combien|combien (vaut|co[uû]te)|prix du march[ée]|trop cher|prix moyen/i },
 ]
 
 export function detectYellyIntent(message: string): YellyIntent {
@@ -105,4 +105,31 @@ export function referencePriceRange(input: {
     high: round(base * 1.1),
     basis: input.ocpvReference && input.ocpvReference > 0 ? "ocpv" : "listed",
   }
+}
+
+/**
+ * Réponse déterministe quand le modèle est indisponible (repli) :
+ * on garde les capacités utiles sans inventer de chiffre.
+ */
+export function deterministicCapabilityReply(
+  intent: YellyIntent,
+  product: { name?: string | null; price?: number | null; unit?: string | null; ocpvReference?: number | null } | null,
+  history: ChatTurn[] = [],
+): string | null {
+  const fmt = (n: number) => new Intl.NumberFormat("fr-FR").format(n).replace(/\u202f|\u00a0/g, " ")
+  const unit = product?.unit ? `/${product.unit}` : ""
+  if (intent === "reference_price" && product) {
+    const r = referencePriceRange({ listedPrice: product.price, ocpvReference: product.ocpvReference })
+    if (!r) return null
+    const basis = r.basis === "ocpv" ? "prix de référence OCPV" : "prix affiché"
+    return `Repère indicatif pour ${product.name || "ce produit"} : entre ${fmt(r.low)} et ${fmt(r.high)} FCFA${unit} (±10 % autour du ${basis}). Ce n’est qu’un repère : négocie selon la qualité et la quantité.`
+  }
+  if ((intent === "detect_agreement" || intent === "purchase_order") && history.length > 0) {
+    const a = detectAgreement(history)
+    if (a.agreed && a.amount) {
+      return `Accord détecté à ${fmt(a.amount)} FCFA${unit}. Pour le bon de commande officiel : bouton Offre, puis Accepter. Le paiement reste protégé par GWA jusqu’à la livraison.`
+    }
+    return "Pas encore d’accord clair sur le prix. Fais une offre avec le bouton Offre pour fixer le montant."
+  }
+  return null
 }
