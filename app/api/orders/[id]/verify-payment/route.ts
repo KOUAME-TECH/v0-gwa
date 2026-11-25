@@ -26,21 +26,10 @@ export async function POST(_request: NextRequest, context: Ctx) {
 
     const { data: order, error: orderError } = await supabase
       .from("orders")
-      .select("id, buyer_id, total_amount, currency, payment_status, payment_method, provider_reference")
+      .select("id, buyer_id, total_amount, currency, payment_status, payment_method, payment_reference")
       .eq("id", id)
       .maybeSingle()
-    if (orderError) {
-      if (
-        orderError.code === "42703" ||
-        /provider_reference.*column|column.*provider_reference/i.test(orderError.message)
-      ) {
-        return NextResponse.json(
-          { error: "Migrations 057–058 requises pour GeniusPay", code: "MIGRATION_REQUIRED" },
-          { status: 503 },
-        )
-      }
-      throw orderError
-    }
+    if (orderError) throw orderError
     if (!order) return NextResponse.json({ error: "Commande introuvable" }, { status: 404 })
     if (order.currency !== "XOF") {
       return NextResponse.json(
@@ -63,11 +52,11 @@ export async function POST(_request: NextRequest, context: Ctx) {
       if (escrowError) throw escrowError
       return NextResponse.json({ status: "paid" })
     }
-    if (order.payment_method !== "geniuspay" || !order.provider_reference) {
+    if (order.payment_method !== "geniuspay" || !order.payment_reference) {
       return NextResponse.json({ error: "Référence GeniusPay introuvable" }, { status: 409 })
     }
 
-    const result = await getGeniusPayPayment(order.provider_reference)
+    const result = await getGeniusPayPayment(order.payment_reference)
     if (!result.ok || !result.data) {
       return NextResponse.json(
         { error: "Statut GeniusPay temporairement indisponible", code: result.error },
@@ -86,12 +75,12 @@ export async function POST(_request: NextRequest, context: Ctx) {
         id: order.id,
         userId: order.buyer_id,
         totalAmount: Math.round(Number(order.total_amount)),
-        reference: order.provider_reference,
+        reference: order.payment_reference,
       })
     ) {
       console.error("[api/orders/verify-payment] GeniusPay payment/order mismatch", {
         orderId: id,
-        reference: order.provider_reference,
+        reference: order.payment_reference,
       })
       return NextResponse.json({ error: "Données de paiement non concordantes" }, { status: 422 })
     }
@@ -103,7 +92,7 @@ export async function POST(_request: NextRequest, context: Ctx) {
         .update({ payment_status: "failed", updated_at: new Date().toISOString() })
         .eq("id", id)
         .eq("payment_status", "processing")
-        .eq("provider_reference", payment.reference)
+        .eq("payment_reference", payment.reference)
         .select("id")
         .maybeSingle()
       if (failureError) throw failureError
@@ -127,7 +116,7 @@ export async function POST(_request: NextRequest, context: Ctx) {
       .eq("id", id)
       .in("payment_status", ["processing", "failed"])
       .eq("payment_method", "geniuspay")
-      .eq("provider_reference", payment.reference)
+      .eq("payment_reference", payment.reference)
       .select("id")
       .maybeSingle()
     if (updateError) throw updateError
