@@ -726,7 +726,7 @@ function MarketplaceContent({ hasServerHero = false }: { hasServerHero?: boolean
             </SheetTrigger>
             <SheetContent side="bottom" className="h-[85vh] overflow-y-auto rounded-t-3xl md:left-1/2 md:max-w-lg md:-translate-x-1/2">
               <SheetHeader className="pb-3"><SheetTitle>Filtres</SheetTitle></SheetHeader>
-              <div className="space-y-5">
+              <div className="space-y-5 px-5 pb-6">
                 <div>
                   <label className="text-sm font-medium mb-2 block">Type</label>
                   <div className="flex flex-wrap gap-2">

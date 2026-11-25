@@ -1808,7 +1808,8 @@ const FeedCard = memo(function FeedCard({
           type="button"
           onClick={onLike}
           className="flex items-center gap-1.5 px-2.5 py-2 rounded-full active:bg-[#FFF6E5] transition-colors"
-          aria-label="J'aime"
+          aria-label={(data.likes_count || 0) > 0 ? `${data.likes_count} J'aime` : "J'aime"}
+          aria-pressed={Boolean(item.isLiked)}
         >
           <Heart className={cn(
             "h-6 w-6 transition-colors",
@@ -1828,7 +1829,7 @@ const FeedCard = memo(function FeedCard({
           type="button"
           onClick={onComment}
           className="flex items-center gap-1.5 px-2.5 py-2 rounded-full text-[#4B5563] active:bg-[#FFF6E5] transition-colors"
-          aria-label="Commenter"
+          aria-label={(data.comments_count || 0) > 0 ? `${data.comments_count} commentaires, commenter` : "Commenter"}
         >
           <MessageCircle className="h-6 w-6" />
           {(data.comments_count || 0) > 0 && (

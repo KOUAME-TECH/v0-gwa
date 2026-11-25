@@ -67,7 +67,7 @@ export default function ConfidentialitePage() {
           d&apos;évoluer.
         </div>
 
-        <p className="text-xs text-neutral-500">
+        <p className="text-xs text-neutral-600">
           Dernière mise à jour : {LAST_UPDATE}
         </p>
 
@@ -244,7 +244,7 @@ export default function ConfidentialitePage() {
           </Link>
         </div>
 
-        <p className="text-center text-xs text-neutral-400 pt-2">
+        <p className="text-center text-xs text-neutral-600 pt-2">
           KOUAME CORPORATION · GWA · Abidjan, Côte d&apos;Ivoire
         </p>
       </main>
