@@ -25,10 +25,12 @@ export function roleCanRequestFactoring(userType: string | null | undefined): bo
 }
 
 /**
- * Éligibilité SCG : bancable OU score >= seuil minimum.
+ * Éligibilité SCG (méthode 5C) : le drapeau `scg_bancable` calculé côté serveur fait foi
+ * (score ≥ 500 ET identité vérifiée ET compte non suspendu ET aucun auto-échange détecté).
+ * Le score seul ne sert que si le drapeau est absent (profil jamais recalculé).
  */
 export function isFactoringEligible(input: FactoringScgInput | null | undefined): boolean {
   if (!input) return false
-  if (input.scg_bancable === true) return true
+  if (typeof input.scg_bancable === "boolean") return input.scg_bancable
   return typeof input.scg_score === "number" && input.scg_score >= FACTORING_MIN_SCORE
 }

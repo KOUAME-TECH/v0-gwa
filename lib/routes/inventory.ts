@@ -117,7 +117,7 @@ export const API_ROUTES: RouteEntry[] = [
   { path: "/api/messages/notify", status: "complete", note: "OneSignal push" },
   { path: "/api/admin/users/[id]", status: "complete", note: "PATCH verify/suspend service role" },
   { path: "/api/admin/users", status: "complete", note: "GET liste + rôles admin service role (post-035)" },
-  { path: "/api/admin/scg", status: "complete", note: "GET SCG v1 dimensions + seuils ; v2 FastAPI post-bêta" },
+  { path: "/api/admin/scg", status: "complete", note: "GET SCG 5C (5 piliers) + seuils" },
   { path: "/api/pricing/quote", status: "complete", note: "Décomposition prix / frais acheteur depuis pricing_plans" },
   { path: "/api/pricing/switch", status: "complete", note: "Bascule manuelle si CA mensuel > seuil" },
   { path: "/api/admin/pricing", status: "complete", note: "Édition grille + audit" },

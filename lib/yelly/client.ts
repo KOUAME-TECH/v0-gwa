@@ -20,7 +20,7 @@ function keywordFallback(message: string, page?: string): string {
     return "Badge vérifié : Profil → Vérification. Photo nette de ta pièce."
   }
   if (/scg|score|confiance|bancable/.test(m)) {
-    return "Ton score de confiance va de 0 à 1000. Il monte avec un profil complet et des livraisons correctes."
+    return "Ton score de confiance va de 0 à 1000, selon les 5C des banques. Il monte avec une identité vérifiée, des livraisons à temps et des ventes régulières. Détail sur la page Score."
   }
   if (/commande|escrow|paiement|payer|geniuspay|argent/.test(m)) {
     return "Tu paies, l’argent est protégé jusqu’à confirmation de réception. Suivi dans Mes commandes."
