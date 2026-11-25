@@ -58,41 +58,10 @@ export async function GET(request: Request) {
     const { data: { user } } = await supabase.auth.getUser()
     
     if (user) {
-      // Brancher SCG si aucun score encore
+      // Brancher SCG si aucun score encore — écriture serveur (service role) uniquement (084).
       try {
-        const { data: existing } = await supabase
-          .from("scg_scores")
-          .select("id")
-          .eq("user_id", user.id)
-          .limit(1)
-          .maybeSingle()
-        if (!existing) {
-          const { aggregateProducerData } = await import("@/lib/scg/aggregate")
-          const { calculateSCG } = await import("@/lib/scg/engine")
-          const scgData = await aggregateProducerData(user.id)
-          const scg = calculateSCG(scgData)
-          await supabase.from("scg_scores").insert({
-            user_id: user.id,
-            score_total: scg.score_total,
-            badge: scg.badge,
-            bancable: scg.bancable,
-            dim_fiabilite: scg.dimensions.fiabilite,
-            dim_qualite: scg.dimensions.qualite,
-            dim_engagement: scg.dimensions.engagement,
-            dim_volumes: scg.dimensions.volumes,
-            dim_stabilite: scg.dimensions.stabilite,
-            recommandation: scg.recommandation,
-          })
-          await supabase
-            .from("profiles")
-            .update({
-              scg_score: scg.score_total,
-              scg_badge: scg.badge,
-              scg_bancable: scg.bancable,
-              scg_calculated_at: scg.calculated_at,
-            })
-            .eq("id", user.id)
-        }
+        const { ensureInitialScg } = await import("@/lib/scg/persist")
+        await ensureInitialScg(user.id)
       } catch (scgErr) {
         console.error("[auth/callback] SCG:", scgErr)
       }

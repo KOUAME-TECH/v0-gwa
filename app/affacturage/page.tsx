@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { formatScg } from "@/lib/scg/scale"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -129,7 +130,7 @@ export default function AffacturagePage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Score SCG</p>
-                <p className="text-2xl font-bold">{profile?.scg_score ?? 0} / 1000</p>
+                <p className="text-2xl font-bold">{formatScg(profile?.scg_score)}</p>
               </div>
               {eligible ? (
                 <Badge className="bg-green-100 text-green-700">Éligible</Badge>

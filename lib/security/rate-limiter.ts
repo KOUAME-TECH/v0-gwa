@@ -3,6 +3,7 @@
 // Prefer Upstash Redis when KV_* env vars are present (Vercel Marketplace).
 
 import { headers } from "next/headers"
+import { resolveClientIp } from "@/lib/security/client-ip"
 import {
   hasUpstash,
   upstashGetBlocked,
@@ -158,13 +159,8 @@ export async function rateLimit(
 }
 
 export async function getClientIdentifier(): Promise<string> {
-  const headersList = await headers()
-  const forwardedFor = headersList.get("x-forwarded-for")
-  const realIP = headersList.get("x-real-ip")
-  const cfConnectingIP = headersList.get("cf-connecting-ip")
-  const ip =
-    cfConnectingIP || realIP || forwardedFor?.split(",")[0]?.trim() || "unknown"
-  return ip
+  // En-tête Vercel fiable, sinon x-real-ip, sinon DERNIÈRE entrée de x-forwarded-for.
+  return resolveClientIp(await headers())
 }
 
 export const RATE_LIMITS = {

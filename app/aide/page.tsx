@@ -16,7 +16,15 @@ const FAQ = [
   },
   {
     q: "C’est quoi le score de confiance ?",
-    a: "Le SCG montre ta fiabilité. Il monte avec un profil complet et de bonnes livraisons.",
+    a: "Le SCG montre ta fiabilité, sur une échelle de 0 à 1000. Il suit la méthode des banques, les 5C : Caractère, Capacité, Capital, Garanties et Conditions. Il monte avec une identité vérifiée, des livraisons à temps et des ventes régulières sur GWA.",
+  },
+  {
+    q: "Mon score est « bancable » : ça veut dire quoi ?",
+    a: "À partir de 500 sur 1000, avec ton identité vérifiée, ton profil peut être présenté à un partenaire financier (affacturage, crédit). Ce n’est pas une promesse de prêt : la banque décide.",
+  },
+  {
+    q: "Pourquoi mon score a changé ?",
+    a: "Ouvre la page Score : tu vois les 3 choses qui le font monter et les 3 qui le font baisser, avec un conseil pour chacune.",
   },
   {
     q: "Comment rejoindre une coop ?",

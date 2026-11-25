@@ -75,10 +75,13 @@ describe("Boutique — filtres et tri", () => {
 describe("Profil — Score de Confiance expliqué", () => {
   it("donne un niveau lisible", () => {
     expect(scgLevel(null)).toBeNull()
-    expect(scgLevel(85)?.label).toBe("Excellent")
-    expect(scgLevel(60)?.label).toBe("Bon")
-    expect(scgLevel(45)?.label).toBe("En progression")
+    // Échelle 0–1000 (directive de Yao) : paliers 800 / 600 / 400.
+    expect(scgLevel(850)?.label).toBe("Excellent")
+    expect(scgLevel(600)?.label).toBe("Bon")
+    expect(scgLevel(450)?.label).toBe("En progression")
+    expect(scgLevel(209)?.label).toBe("Débutant")
     expect(scgLevel(-5)?.label).toBe("Débutant")
+    expect(scgLevel(5000)?.label).toBe("Excellent")
     expect(SCG_EXPLANATION).toMatch(/pas une note bancaire/)
   })
 })

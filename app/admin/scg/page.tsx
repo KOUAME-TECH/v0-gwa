@@ -8,11 +8,11 @@ import { Button } from "@/components/ui/button"
 import { RefreshCw, Download, Shield, Info } from "lucide-react"
 
 type Dims = {
-  fiabilite: number
-  qualite: number
-  engagement: number
-  volumes: number
-  stabilite: number
+  character: number
+  capacity: number
+  capital: number
+  collateral: number
+  conditions: number
 }
 
 type ScgUser = {
@@ -30,7 +30,7 @@ type ScgUser = {
 type DimMeta = { key: keyof Dims; label: string; weight: number }
 
 /**
- * Admin SCG v1 lean — dimensions réelles + export.
+ * Admin SCG — méthode des 5C (docs/scg-5c.md) + export.
  * Configuration poids interactive (ancienne UI) retirée : non branchée au moteur.
  */
 export default function AdminSCGPage() {
@@ -68,7 +68,7 @@ export default function AdminSCGPage() {
         <div>
           <h1 className="text-2xl font-bold text-[#111827]">SCG — Score de Confiance</h1>
           <p className="text-sm text-[#4B5563]">
-            Moteur v1 (bêta) · dimensions transactionnelles · seuils 500 / 600 / 800
+            Méthode des 5C · sur 1000 · bancable ≥ 500 (identité vérifiée) · badges 200 / 400 / 600 / 800
           </p>
         </div>
         <div className="flex gap-2">
@@ -155,11 +155,11 @@ export default function AdminSCGPage() {
                   <div className="grid grid-cols-5 gap-1 text-center text-[10px] sm:text-xs">
                     {(
                       [
-                        ["F", u.dimensions.fiabilite],
-                        ["Q", u.dimensions.qualite],
-                        ["E", u.dimensions.engagement],
-                        ["V", u.dimensions.volumes],
-                        ["S", u.dimensions.stabilite],
+                        ["Car.", u.dimensions.character],
+                        ["Cap.", u.dimensions.capacity],
+                        ["Kap.", u.dimensions.capital],
+                        ["Gar.", u.dimensions.collateral],
+                        ["Cond.", u.dimensions.conditions],
                       ] as const
                     ).map(([label, val]) => (
                       <div key={label} className="rounded-lg bg-[#F9FAFB] py-1">

@@ -11,6 +11,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useFeatureFlag } from "@/hooks/use-feature-flag"
 import { WALLET_FLAG } from "@/lib/feature-flags/core"
 import { SCG_EXPLANATION, SCG_TIPS, scgLevel } from "@/lib/scg/explain"
+import { clampScg, formatScg, scgRatio, SCG_MAX } from "@/lib/scg/scale"
+import { dimensionsFromRow, SCG_5C_COLUMNS } from "@/lib/scg/row"
+import { ScgDimensions } from "@/components/scg/scg-display"
+import type { SCGDimensions } from "@/lib/scg/engine"
 import {
   Settings,
   LogOut,
@@ -87,6 +91,7 @@ export default function ProfilScreen({
   const [isAdmin, setIsAdmin] = useState(false)
   const [adminRoleLabel, setAdminRoleLabel] = useState<string | null>(null)
   const [scgScore, setScgScore] = useState<number | null>(null)
+  const [scgDims, setScgDims] = useState<SCGDimensions | null>(null)
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([])
   const walletEnabled = useFeatureFlag(WALLET_FLAG)
 
@@ -129,7 +134,7 @@ export default function ProfilScreen({
               .neq("sender_id", userId),
             supabase
               .from("scg_scores")
-              .select("score_total")
+              .select(`score_total, ${SCG_5C_COLUMNS}`)
               .eq("user_id", userId)
               .order("created_at", { ascending: false })
               .limit(1)
@@ -151,6 +156,7 @@ export default function ProfilScreen({
             : null,
         )
         setScgScore(typeof scgRes.data?.score_total === "number" ? scgRes.data.score_total : null)
+        setScgDims(dimensionsFromRow(scgRes.data))
         setRecentOrders((recentRes.data || []) as RecentOrder[])
         setUnreadNotifs(notifRes.count || 0)
         setUnreadMsgs(msgRes.count || 0)
@@ -467,7 +473,7 @@ export default function ProfilScreen({
                 </h3>
                 {level ? (
                   <span className="text-sm font-semibold text-[#2F7D32]">
-                    {Math.round(scgScore as number)}/100 · {level.label}
+                    {formatScg(scgScore)} · {level.label}
                   </span>
                 ) : (
                   <span className="text-xs text-neutral-500">Pas encore calculé</span>
@@ -478,11 +484,20 @@ export default function ProfilScreen({
                   className="mt-3 h-2 rounded-full bg-neutral-100 overflow-hidden"
                   role="progressbar"
                   aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={Math.round(scgScore as number)}
+                  aria-valuemax={SCG_MAX}
+                  aria-valuenow={clampScg(scgScore)}
+                  aria-valuetext={formatScg(scgScore)}
                   aria-label="Score de Confiance"
                 >
-                  <div className="h-full bg-[#2F7D32]" style={{ width: `${Math.max(0, Math.min(100, scgScore as number))}%` }} />
+                  <div className="h-full bg-[#2F7D32]" style={{ width: `${scgRatio(scgScore) * 100}%` }} />
+                </div>
+              ) : null}
+              {level && scgDims ? (
+                <div className="mt-4">
+                  <ScgDimensions dimensions={scgDims} compact />
+                  <Link href="/scg" className="mt-2 inline-block text-xs font-semibold text-[#2F7D32]">
+                    Voir le détail des 5C →
+                  </Link>
                 </div>
               ) : null}
               <p className="mt-3 text-sm text-neutral-600 leading-relaxed">

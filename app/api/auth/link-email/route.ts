@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { assertSameOrigin } from "@/lib/security/csrf"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { formatPhoneE164, validateWestAfricaPhone } from "@/lib/auth/phone"
 import { getLinkCooldown, linkCooldownMessage } from "@/lib/auth/link-cooldown"
 
@@ -119,7 +120,10 @@ export async function POST(request: Request) {
       updated_at: new Date().toISOString(),
     }
 
-    const { error: profileError } = await supabase
+    // email_linked_at est un champ privilégié (086) : écrit par le serveur une fois
+    // l'email accepté par Supabase Auth pour CET utilisateur.
+    const admin = createAdminClient()
+    const { error: profileError } = await admin
       .from("profiles")
       .update(profileUpdate)
       .eq("id", user.id)

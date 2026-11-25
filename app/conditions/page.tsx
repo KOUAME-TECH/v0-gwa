@@ -189,8 +189,30 @@ export default function ConditionsPage() {
           <p>
             Le SCG est un indicateur interne, calculé à partir de vos données
             d&apos;activité, destiné à faciliter la confiance entre membres. Il
-            est fourni à titre indicatif et ne constitue pas une notation
+            est exprimé sur une échelle de 0 à 1000. Il est fourni à titre indicatif et ne constitue pas une notation
             financière officielle ni un conseil.
+          </p>
+          <p>
+            Méthode : le SCG suit la méthode des « 5C » utilisée par les banques —
+            Caractère (25 %), Capacité (25 %), Capital (15 %), Garanties (20 %) et
+            Conditions (15 %). Données utilisées : vérification d&apos;identité et de
+            téléphone, ancienneté, commandes, livraisons, litiges, avis reçus,
+            signalements confirmés, réactivité aux messages, paiements, stock publié,
+            surface et équipements déclarés, séquestre, créances, appartenance à une
+            coopérative, parcelles géolocalisées, certifications, filière, zone et prix
+            de référence. Le contenu des messages n&apos;est pas lu : seuls les délais
+            de réponse sont mesurés. Une donnée absente reçoit une valeur neutre et
+            prudente, jamais un bonus.
+          </p>
+          <p>
+            Le score est calculé uniquement par les serveurs de GWA ; il ne peut pas
+            être modifié par un membre. Des plafonds s&apos;appliquent en cas de compte
+            suspendu, d&apos;identité non vérifiée, de compte de moins de 90 jours, de
+            ventes ou d&apos;avis entre comptes liés, ou de hausse anormale des ventes.
+            Le seuil « bancable » est de 500 sur 1000 avec identité vérifiée. Vous
+            pouvez consulter le détail de votre score (les 5C et les principaux
+            facteurs) sur la page Score, et demander une révision humaine via le
+            support.
           </p>
         </Section>
 

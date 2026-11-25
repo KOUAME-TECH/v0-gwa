@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
+import { clampScg, SCG_BANCABLE_MIN } from "@/lib/scg/scale"
 import { createClient } from "@/lib/supabase/server"
+import { dimensionsFromRow, SCG_5C_COLUMNS } from "@/lib/scg/row"
 
 type RouteParams = { params: Promise<{ profileId: string }> }
 
@@ -38,7 +40,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
       supabase
         .from("scg_scores")
         .select(
-          "score_total, badge, bancable, dim_fiabilite, dim_qualite, dim_engagement, dim_volumes, dim_stabilite, recommandation, created_at",
+          `score_total, badge, bancable, ${SCG_5C_COLUMNS}, recommandation, created_at`,
         )
         .eq("user_id", profileId)
         .order("created_at", { ascending: false })
@@ -81,7 +83,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     }
 
     const badge = profile.scg_badge ?? latestScore?.badge ?? "insuffisant"
-    const scoreTotal = profile.scg_score ?? latestScore?.score_total ?? 0
+    const scoreTotal = clampScg(profile.scg_score ?? latestScore?.score_total ?? 0)
 
     return NextResponse.json({
       score: {
@@ -89,17 +91,9 @@ export async function GET(_request: Request, { params }: RouteParams) {
         score_total: scoreTotal,
         badge,
         badge_label: BADGE_LABELS[badge] ?? badge,
-        bancable: profile.scg_bancable ?? latestScore?.bancable ?? scoreTotal >= 500,
+        bancable: profile.scg_bancable ?? latestScore?.bancable ?? scoreTotal >= SCG_BANCABLE_MIN,
         calculated_at: profile.scg_calculated_at ?? latestScore?.created_at ?? null,
-        dimensions: latestScore
-          ? {
-              fiabilite: latestScore.dim_fiabilite,
-              qualite: latestScore.dim_qualite,
-              engagement: latestScore.dim_engagement,
-              volumes: latestScore.dim_volumes,
-              stabilite: latestScore.dim_stabilite,
-            }
-          : null,
+        dimensions: dimensionsFromRow(latestScore),
         recommandation: latestScore?.recommandation ?? null,
       },
       history,

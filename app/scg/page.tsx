@@ -1,9 +1,11 @@
 "use client"
 
 import { useEffect, useState, useCallback } from "react"
+import { clampScg, formatScg, SCG_MAX } from "@/lib/scg/scale"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
-import { ScgGauge, ScgDimensions } from "@/components/scg/scg-display"
+import { ScgGauge, ScgDimensions, ScgFactors } from "@/components/scg/scg-display"
+import { dimensionsFromRow, explainFromRow } from "@/lib/scg/row"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
@@ -57,22 +59,18 @@ export default function ScgPage() {
       .limit(1)
       .maybeSingle()
 
-    if (latest) {
+    const dims = dimensionsFromRow(latest)
+    if (latest && dims) {
       setResult({
         user_id: user.id,
         score_total: latest.score_total,
         badge: latest.badge,
         badge_label: badgeLabelFor(latest.badge),
-        dimensions: {
-          fiabilite: latest.dim_fiabilite,
-          qualite: latest.dim_qualite,
-          engagement: latest.dim_engagement,
-          volumes: latest.dim_volumes,
-          stabilite: latest.dim_stabilite,
-        },
+        dimensions: dims,
         recommandation: latest.recommandation ?? "",
         bancable: latest.bancable,
         calculated_at: latest.created_at,
+        explain: explainFromRow(latest, latest.model_version ?? undefined),
       })
     }
 
@@ -121,11 +119,13 @@ export default function ScgPage() {
       if (!user) return
       const { data: latest } = await supabase
         .from("scg_scores")
-        .select("id")
+        .select("id, c_character")
         .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle()
-      if (!latest) {
+      // Aucun score, ou ancien calcul (avant les 5C) → recalcul côté serveur.
+      if (!latest || latest.c_character == null) {
         await recalculate(true)
       }
     })()
@@ -139,7 +139,7 @@ export default function ScgPage() {
     )
   }
 
-  const maxScore = Math.max(1000, ...history.map((h) => h.score_total))
+  const maxScore = SCG_MAX
 
   return (
     <main className="min-h-screen bg-[#F8F9FA] pb-24">
@@ -161,7 +161,7 @@ export default function ScgPage() {
             </div>
             <h2 className="text-lg font-semibold text-[#1A1A1A] mb-1">Calculez votre SCG</h2>
             <p className="text-sm text-[#6B7280] mb-4 text-pretty">
-              Score de fiabilité sur 5 dimensions.
+              Méthode des banques (5C) : Caractère, Capacité, Capital, Garanties, Conditions.
             </p>
             <Button onClick={() => recalculate(false)} disabled={calculating} className="bg-[#2F7D32] hover:bg-[#1B5E20]">
               {calculating ? <Spinner className="h-4 w-4 mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
@@ -214,11 +214,19 @@ export default function ScgPage() {
 
             <ScgCoachPanel score={result.score_total} actions={getCoachActions(result.dimensions)} />
 
-            {/* Dimensions */}
+            {/* 5C */}
             <Card className="p-5">
-              <h3 className="font-semibold text-[#1A1A1A] mb-4">Détail par dimension</h3>
+              <h3 className="font-semibold text-[#1A1A1A] mb-1">Les 5C, comme une banque</h3>
+              <p className="text-xs text-[#6B7280] mb-4">Chaque pilier est noté sur 100.</p>
               <ScgDimensions dimensions={result.dimensions} />
             </Card>
+
+            {result.explain ? (
+              <Card className="p-5">
+                <h3 className="font-semibold text-[#1A1A1A] mb-4">Pourquoi ce score ?</h3>
+                <ScgFactors up={result.explain.top_up} down={result.explain.top_down} />
+              </Card>
+            ) : null}
 
             {/* Historique */}
             {history.length > 1 && (
@@ -229,8 +237,8 @@ export default function ScgPage() {
                     <div key={i} className="flex-1 flex flex-col items-center gap-1">
                       <div
                         className="w-full rounded-t bg-[#2F7D32] transition-all"
-                        style={{ height: `${(h.score_total / maxScore) * 100}%`, minHeight: 4 }}
-                        title={`${h.score_total}`}
+                        style={{ height: `${(clampScg(h.score_total) / maxScore) * 100}%`, minHeight: 4 }}
+                        title={formatScg(h.score_total)}
                       />
                       <span className="text-[10px] text-[#9CA3AF]">
                         {new Date(h.created_at).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
@@ -245,7 +253,7 @@ export default function ScgPage() {
             <div className="flex items-start gap-2 px-1">
               <Info className="h-4 w-4 text-[#9CA3AF] mt-0.5 shrink-0" />
               <p className="text-xs text-[#9CA3AF] text-pretty">
-                Fiabilité 25% · Qualité 20% · Engagement 20% · Volumes 20% · Stabilité 15%.
+                Caractère 25 % · Capacité 25 % · Capital 15 % · Garanties 20 % · Conditions 15 %. Score sur {SCG_MAX}, bancable à partir de 500 avec identité vérifiée.
               </p>
             </div>
           </>

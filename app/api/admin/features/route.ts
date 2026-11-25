@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server"
+import { resolveClientIpOrNull } from "@/lib/security/client-ip"
 import { requireAdminSection } from "@/lib/auth/require-admin"
 import { canToggleFeatureFlag } from "@/lib/auth/admin-permissions"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
@@ -148,8 +149,7 @@ export async function PATCH(request: NextRequest) {
         role: gate.role.role,
         reason: input.reason ?? null,
       },
-      ip_address:
-        request.headers.get("x-forwarded-for")?.split(",")[0]?.trim().slice(0, 45) || null,
+      ip_address: resolveClientIpOrNull(request.headers),
       user_agent: request.headers.get("user-agent")?.slice(0, 500) || null,
       severity: input.name === "wallet" || input.name === "internal_wallet" ? "critical" : "warning",
     })

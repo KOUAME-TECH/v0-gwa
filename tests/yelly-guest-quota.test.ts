@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { NextRequest } from "next/server"
 
 vi.mock("server-only", () => ({}))
+vi.mock("@/lib/ops/platform-secrets", () => ({
+  resolvePlatformSecret: async () => "secret-de-test-fictif-0123456789",
+}))
 
 // Données fictives. Pas d'Upstash en test : repli mémoire du rate-limiter.
 const headerStore = new Map<string, string>()
@@ -19,7 +22,11 @@ vi.mock("@/lib/yelly/client", () => ({
   askYelly: async () => ({ reply: "Réponse de test suffisamment longue.", source: "llm", model: "test" }),
 }))
 
-import { consumeYellyGuestQuota, yellyGuestQuotaKey } from "@/lib/yelly/guest-quota"
+import {
+  consumeYellyGuestQuota,
+  resolveIpHashSecret,
+  yellyGuestQuotaKey,
+} from "@/lib/yelly/guest-quota"
 
 let ipSeq = 0
 const freshIp = () => `203.0.113.${++ipSeq}`
@@ -47,20 +54,54 @@ describe("consumeYellyGuestQuota", () => {
     expect(limiter).not.toHaveBeenCalled()
   })
 
-  it("clé Upstash : fenêtre 24 h, IP hachée (jamais en clair)", async () => {
+  it("clé Upstash : fenêtre 24 h, HMAC de l'IP avec le secret serveur (jamais en clair)", async () => {
     const limiter = vi.fn(async () => ({ success: true, remaining: 2, resetAt: 0, blocked: false }))
     await consumeYellyGuestQuota({ ip: "198.51.100.7", cookieUsed: 0, limiter })
     const [key, cfg] = limiter.mock.calls[0] as unknown as [string, { maxRequests: number; windowMs: number }]
-    expect(key).toBe(yellyGuestQuotaKey("198.51.100.7"))
+    expect(key).toBe(yellyGuestQuotaKey("198.51.100.7", "secret-de-test-fictif-0123456789"))
     expect(key).toMatch(/^YELLY_GUEST_DAY:[0-9a-f]{32}$/)
     expect(key).not.toContain("198.51.100.7")
     expect(cfg).toEqual({ maxRequests: 3, windowMs: 24 * 60 * 60 * 1000 })
+  })
+
+  it("le secret change la clé : pas de hachage nu retrouvable par dictionnaire", () => {
+    const a = yellyGuestQuotaKey("198.51.100.7", "secret-A-0123456789abcdef")
+    const b = yellyGuestQuotaKey("198.51.100.7", "secret-B-0123456789abcdef")
+    expect(a).not.toBe(b)
   })
 
   it("Upstash refuse (plafond atteint ou indisponible en prod) : refus", async () => {
     const limiter = vi.fn(async () => ({ success: false, remaining: 0, resetAt: 0, blocked: false }))
     const q = await consumeYellyGuestQuota({ ip: freshIp(), cookieUsed: 0, limiter })
     expect(q.allowed).toBe(false)
+  })
+})
+
+describe("resolveIpHashSecret — repli sûr", () => {
+  it("secret configuré (env ou platform_secrets) prioritaire", async () => {
+    const resolver = vi.fn(async () => "  secret-configure-0123456789  ")
+    const r = await resolveIpHashSecret(resolver, {})
+    expect(r).toEqual({ secret: "secret-configure-0123456789", source: "configured" })
+    expect(resolver).toHaveBeenCalledWith("YELLY_IP_HASH_SECRET", ["IP_HASH_SECRET"])
+  })
+
+  it("absent ou trop court : dérivé de la clé service_role, stable et différent d'elle", async () => {
+    const env = { SUPABASE_SERVICE_ROLE_KEY: "service-role-fictive" }
+    const r1 = await resolveIpHashSecret(async () => "court", env)
+    const r2 = await resolveIpHashSecret(async () => "", env)
+    expect(r1.source).toBe("derived")
+    expect(r1.secret).toBe(r2.secret)
+    expect(r1.secret).not.toContain("service-role-fictive")
+  })
+
+  it("lecture du secret en échec et aucune clé serveur : secret aléatoire par processus", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    const r1 = await resolveIpHashSecret(async () => Promise.reject(new Error("db")), {})
+    const r2 = await resolveIpHashSecret(async () => "", {})
+    expect(r1.source).toBe("process")
+    expect(r1.secret).toMatch(/^[0-9a-f]{64}$/)
+    expect(r2.secret).toBe(r1.secret)
+    warn.mockRestore()
   })
 })
 
