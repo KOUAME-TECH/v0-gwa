@@ -33,7 +33,8 @@ const securityHeaders = [
 
 const nextConfig = {
   typescript: {
-    ignoreBuildErrors: true,
+    // tsc --noEmit est propre sur main + finance_admin : le build échoue désormais sur une erreur de type.
+    ignoreBuildErrors: false,
   },
   images: {
     formats: ["image/avif", "image/webp"],
