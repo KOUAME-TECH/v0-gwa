@@ -103,7 +103,33 @@ Détail et justification : [ADR-015](./adr/ADR-015-convention-api.md).
 
 ---
 
-## 5. Note — wallet masqué jusqu’à l’agrément BCEAO (M+12)
+## 5. Tarifs officiels (décision du 25 novembre 2026)
+
+Yao a tranché le 25 novembre 2026 à 09:06 (Africa/Abidjan), décision relayée par le Coordinateur. **La grille du code fait référence.** Elle remplace la grille du CDC v1.0 (§C.1 : STARTER 7 500 F / 6,5 %, PRO 18 000 F / 5 %, commissions FREE 8 %, et « 0 frais GWA » côté acheteur retail).
+
+### 5.1 Abonnements vendeurs
+
+| Public | Nom public | Code stable | Prix mensuel | Commission GWA |
+| --- | --- | --- | --- | --- |
+| Producteurs | Graine | `FREE` | 0 F | 9 % |
+| Producteurs | Pousse | `STARTER` | 3 000 F | 8 % |
+| Producteurs | Récolte | `PRO` | 8 000 F | 7 % |
+| Coopératives | Coopérative | `COOP_START` | 8 000 F | 7 % |
+| Coopératives | Union | `COOP_PRO` | 20 000 F | 6 % |
+| Coopératives | Fédération | `COOP_ENTERPRISE` | sur mesure | ≤ 5 % |
+
+Dans le code et en base, Fédération est représentée par un plan actif à **0 F / 5 %** (taux plafond), le devis restant un processus ops. Les franchises, seuils de bascule et quotas de versements inclus (`payout_included`) ne font pas partie de cette décision tarifaire ; ils restent ceux de la migration `073_vision100_pricing.sql` et de `lib/pricing/published-grid.ts`.
+
+### 5.2 Frais de service acheteur
+
+**250 F par opération**, frais fixe, quelle que soit la commande. Source de vérité runtime : clé `platform_settings.buyer_service_fee_fixed` (posée par la migration 073). La fonction SQL `gwa_quote_pricing` l’applique au checkout et à la création de commande (`POST /api/orders`, `POST /api/orders/from-offer`, `GET /api/pricing/quote`). Au relâchement du séquestre, le grand livre prévoit l’écriture `ESCROW_GWA` → `REVENUE_GWA_BUYER_FEE`.
+
+Le seed TypeScript (`lib/pricing/published-grid.ts`) garde encore `buyer_service_fee_fixed: 0` : ce n’est qu’une copie de secours d’affichage / tests, pas le chemin de paiement réel. Ce décalage de secours n’est plus un tarif « à arbitrer ».
+
+---
+
+## 6. Note — wallet masqué jusqu’à l’agrément BCEAO (M+12)
+
 
 Décision de Yao du 25 novembre 2026 : masquer immédiatement les pages `/wallet` et `/payout` via un feature flag. Le wallet reste invisible jusqu’à l’agrément BCEAO (M+12, ≈ août 2027 dans le cadrage du CDC v1.0).
 
@@ -120,9 +146,9 @@ Le CDC v1.0 §G.3 (« agrément / cadre si wallet interne étendu ») et §C.4 (
 
 ---
 
-## 6. Écarts constatés entre le CDC v1.0 et le code
+## 7. Écarts constatés entre le CDC v1.0 et le code
 
-Les points 1 à 5 sont le périmètre de ces amendements. Les écarts suivants restent vrais au SHA cité ; ils ne sont **pas** tranchés ici et devront être repris (mise à jour CDC, ou correctif code, selon décision).
+Les points 1 à 6 sont le périmètre de ces amendements. Les écarts suivants restent vrais au SHA cité ; ils ne sont **pas** tranchés ici et devront être repris (mise à jour CDC, ou correctif code, selon décision).
 
 | Sujet | CDC v1.0 | Code `main` @ `a53e021` |
 | --- | --- | --- |
@@ -131,8 +157,7 @@ Les points 1 à 5 sont le périmètre de ces amendements. Les écarts suivants r
 | SCG / app | PWA déjà, SCG v1 + « v2 FastAPI » en post-bêta dans l’inventaire | TypeScript dans le monolithe ; PWA ; pas d’Expo, pas de FastAPI |
 | Routes HTTP GWA | `/api/*` | 87 routes sous `/api/*`, zéro sous `/api/v1` |
 | Wallet | Surface producteur visible (§B.2, §C.4) | Toujours visible ; le masquage par flag n’est pas encore dans `main` |
-| Grille d’abonnement | FREE / STARTER 7 500 / PRO 18 000 / ENTERPRISE ; commissions 8 % / 6,5 % / ≤ 5 % | Noms publics Graine / Pousse 3 000 / Récolte 8 000 / Fédération (devis), plus paliers coop (Coopérative, Union, Fédération). Commissions de secours du seed : 9 % / 8 % / 7 % (et 6 % / 5 % côté coop). Le paiement lit `pricing_plans` en base, pas uniquement ce seed |
-| Frais acheteur | « 0 frais GWA » pour l’acheteur retail | Mécanisme `buyer_service_fee` présent ; taux de secours du seed à 0 |
+| Grille d’abonnement et frais acheteur | STARTER 7 500 / PRO 18 000 ; commissions 8 % / 6,5 % / 5 % ; « 0 frais GWA » acheteur | **Tranché le 25/11/2026** : voir §5. Cet écart n’est plus à arbitrer. |
 | Versement vendeur | Payout FeexPay après confirmation | File manuelle ; `payout_ready` figé à `false` |
 | Dépôt / prod documentés | README encore centré sur l’ancien miroir et l’URL Vercel historique | Dépôt canonique `KOUAME-TECH/v0-gwa` ; domaine produit `mygwa.org` |
 | Phrase README | « Pas de dossier `docs/` » | Le dossier `docs/` existe déjà (`docs/chat-refonte-backlog.md`) ; le présent fichier s’y ajoute |
@@ -143,7 +168,7 @@ Aucun secret, e-mail ou numéro n’est reproduit dans ce document.
 
 ---
 
-## 7. ADR publiés avec ces amendements
+## 8. ADR publiés avec ces amendements
 
 Le dépôt n’avait pas de dossier ADR. Les ADR 001 à 011 existent hors dépôt (espace de travail agents et base Notion « Décisions »). La numérotation reprend à la suite :
 
@@ -156,7 +181,7 @@ Le dépôt n’avait pas de dossier ADR. Les ADR 001 à 011 existent hors dépô
 
 ---
 
-## 8. Documents liés
+## 9. Documents liés
 
 | Document | Rôle |
 | --- | --- |
