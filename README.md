@@ -20,6 +20,7 @@ Business Unit de **KOUAME Corporation** — marketplace agroalimentaire PWA (Cô
 | **Ops / Dashboard** | [Operations](https://app.notion.com/p/3b4a6d3a76b48117883cdd39d34acde7) · [Dashboard](https://app.notion.com/p/3b4a6d3a76b48144bfd2e4f06e8cd7ae) |
 | **Relations** (CRM, packs, accès) | [Relations](https://app.notion.com/p/3b5a6d3a76b481d28ecfcc7c3c4aff2f) · [Accès](https://app.notion.com/p/3b5a6d3a76b481b59894efbebac19cf7) |
 | Pack Investisseurs (partageable) | [Pack — Investisseurs](https://app.notion.com/p/3b5a6d3a76b48126b1f3dc1cfd56689f) |
+| **CDC v2.0 (amendements) / ADR** | [docs/CDC-v2.0-amendements.md](./docs/CDC-v2.0-amendements.md) · [docs/adr/](./docs/adr/) |
 
 ### Accès équipe (rappel)
 
@@ -27,7 +28,7 @@ Business Unit de **KOUAME Corporation** — marketplace agroalimentaire PWA (Cô
 - Stagiaire / nouveau → **Can view** sur son département + [Je démarre ici](https://app.notion.com/p/3b5a6d3a76b4814699f7eae8ead6829b).
 - Ne pas partager Operations secrètes, CRM, ni les autres départements.
 
-Ce dépôt = **code uniquement** + ce README. Pas de dossier `docs/`.
+Ce dépôt = le code, ce README, et le dossier `docs/` (amendements du cahier des charges et ADR). La documentation produit élargie reste dans Notion.
 
 ---
 
