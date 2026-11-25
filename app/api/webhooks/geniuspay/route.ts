@@ -33,6 +33,7 @@ export async function POST(request: Request) {
     payload.status || payload.data?.status || "",
   ).toLowerCase();
   const amount = Number(payload.amount ?? payload.data?.amount);
+  const currency = String(payload.currency ?? payload.data?.currency ?? "").trim().toUpperCase();
   if (!reference)
     return NextResponse.json({ error: "reference manquante" }, { status: 400 });
   const admin = createAdminClient();
@@ -43,7 +44,12 @@ export async function POST(request: Request) {
     .maybeSingle();
   if (!order) return NextResponse.json({ received: true, matched: false });
   if (["completed", "success", "successful", "paid"].includes(status)) {
-    if (Number.isFinite(amount) && amount !== Number(order.total_amount))
+    // Succès : montant et devise obligatoires et concordants (plus de succès sans montant).
+    if (!Number.isFinite(amount) || amount <= 0)
+      return NextResponse.json({ error: "Montant manquant" }, { status: 422 });
+    if (!/^[A-Z]{3}$/.test(currency))
+      return NextResponse.json({ error: "Devise manquante" }, { status: 422 });
+    if (amount !== Number(order.total_amount) || currency !== String(order.currency || "XOF").toUpperCase())
       return NextResponse.json({ error: "Montant invalide" }, { status: 422 });
     // Idempotence : déjà payé → ACK sans double écriture.
     if (order.payment_status === "paid") {

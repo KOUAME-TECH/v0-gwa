@@ -32,6 +32,11 @@ export async function POST(request: NextRequest) {
 
     const admin = gate.admin
     const body = await request.json().catch(() => null)
+    // Refuser avant toute écriture : l'acteur audité est toujours la session admin.
+    if (body?.admin_id && body.admin_id !== gate.user.id) {
+      return NextResponse.json({ error: "admin_id ne correspond pas à la session" }, { status: 403 })
+    }
+
     let targetUserId = String(body?.user_id || "")
     let tier = normalizeSubscriptionTier(body?.tier)
     const requestId = String(body?.request_id || "")
@@ -127,6 +132,17 @@ export async function POST(request: NextRequest) {
     if (updErr) {
       console.error("[api/subscriptions/activate] profile", updErr.message)
       return NextResponse.json({ error: "Activation impossible" }, { status: 500 })
+    }
+
+    if (planRow?.id) {
+      const { error: auditErr } = await admin.from("pricing_plan_audit").insert({
+        plan_id: planRow.id,
+        actor_id: gate.user.id,
+        action: "admin_activate",
+        before_state: { subscription_tier: targetProfile.subscription_tier },
+        after_state: { subscription_tier: tier, pricing_plan_id: planRow.id },
+      })
+      if (auditErr) console.error("[api/subscriptions/activate] audit", auditErr.message)
     }
 
     if (requestId) {
