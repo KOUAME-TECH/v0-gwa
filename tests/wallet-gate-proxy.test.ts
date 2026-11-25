@@ -30,6 +30,16 @@ describe("proxy — wallet masqué", () => {
     expect(res.headers.get("location")).toBe("https://mygwa.org/dashboard")
   })
 
+  it("/payout et /wallet : redirection marquée private, no-store (jamais public)", async () => {
+    const { proxy } = await import("@/proxy")
+    for (const path of ["/payout", "/payout/demande", "/wallet"]) {
+      const res = await proxy(new NextRequest(`https://mygwa.org${path}`))
+      expect(res.headers.get("cache-control"), path).toBe("private, no-store")
+    }
+    const api = await proxy(new NextRequest("https://mygwa.org/api/payout/request"))
+    expect(api.headers.get("cache-control")).toBe("private, no-store")
+  })
+
   it("/api/wallet/withdraw répond 404 JSON", async () => {
     const { proxy } = await import("@/proxy")
     const res = await proxy(new NextRequest("https://mygwa.org/api/wallet/withdraw"))

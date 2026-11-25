@@ -45,6 +45,13 @@ describe("Cache-Control private, no-store", () => {
     }
   })
 
+  it("/payout (et /wallet) : private, no-store au lieu de public, max-age=0", async () => {
+    const all = await rules()
+    for (const p of ["/payout", "/payout/:path*", "/wallet", "/affacturage", "/facture/:path*"]) {
+      expect(headerFor(all, p, "Cache-Control"), p).toBe("private, no-store")
+    }
+  })
+
   it("ne touche pas les pages publiques en cache (marketplace)", async () => {
     const all = await rules()
     expect(all.some((r) => r.source.startsWith("/marketplace"))).toBe(false)

@@ -1,6 +1,6 @@
 /* GWA SW core — v23 private network-only (partagé par sw.js et les workers OneSignal) */
 
-const CACHE = "gwa-v23-offline"
+const CACHE = "gwa-v24-offline"
 const SHELL = [
   "/",
   "/marketplace",
@@ -13,20 +13,25 @@ const SHELL = [
 ]
 
 // Pages liées à un compte : jamais en cache (v23 : + notifications, favoris, factures, publier, abonnement, scg)
+// Copie de lib/routes/private-prefixes.mjs (le SW ne peut pas importer de module) :
+// tests/sw-private-cache.test.ts vérifie que les deux listes restent alignées.
 const PRIVATE_PREFIXES = [
   "/profil",
   "/admin",
   "/dashboard",
   "/wallet",
+  "/payout",
   "/messages",
   "/panier",
   "/commandes",
   "/notifications",
+  "/publier",
   "/favoris",
   "/facture",
-  "/publier",
   "/abonnement",
   "/scg",
+  "/affacturage",
+  "/protected",
   "/auth",
 ]
 
