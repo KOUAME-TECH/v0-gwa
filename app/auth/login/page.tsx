@@ -16,11 +16,12 @@ import { HibpPasswordBanner } from "@/components/auth/hibp-password-banner"
 import { GoogleOAuthButton } from "@/components/auth/google-oauth-button"
 import { GwaMark } from "@/components/brand/gwa-mark"
 import { mergeGuestCartToUser } from "@/lib/cart/guest"
+import { safeInternalPath } from "@/lib/auth/oauth"
 
 function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const redirectTo = searchParams.get("redirect")
+  const redirectTo = safeInternalPath(searchParams.get("redirect"))
 
   const [authTab, setAuthTab] = useState<"phone" | "email">("phone")
   const [phoneStep, setPhoneStep] = useState<"input" | "otp">("input")

@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server"
+import { assertSameOrigin } from "@/lib/security/csrf"
 import { createClient } from "@/lib/supabase/server"
 
 type Params = { params: Promise<{ id: string }> }
 
 /** PATCH — renommer / marquer primaire ; DELETE — supprimer un lieu */
 export async function PATCH(request: Request, { params }: Params) {
+  const csrf = assertSameOrigin(request)
+  if (csrf) return csrf
+
   try {
     const { id } = await params
     const supabase = await createClient()
@@ -63,7 +67,10 @@ export async function PATCH(request: Request, { params }: Params) {
   }
 }
 
-export async function DELETE(_request: Request, { params }: Params) {
+export async function DELETE(request: Request, { params }: Params) {
+  const csrf = assertSameOrigin(request)
+  if (csrf) return csrf
+
   try {
     const { id } = await params
     const supabase = await createClient()

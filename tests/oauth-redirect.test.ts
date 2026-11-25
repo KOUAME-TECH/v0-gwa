@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   buildGoogleOAuthRedirectTo,
+  safeInternalPath,
   safeOAuthNextPath,
 } from "@/lib/auth/oauth"
 
@@ -42,3 +43,20 @@ describe("buildGoogleOAuthRedirectTo", () => {
     ).toBe("https://mygwa.org/auth/callback")
   })
 })
+
+describe("safeInternalPath", () => {
+  it("accepte un chemin métier", () => {
+    expect(safeInternalPath("/profil")).toBe("/profil")
+    expect(safeInternalPath("/dashboard/buyer?tab=orders")).toBe("/dashboard/buyer?tab=orders")
+  })
+
+  it("rejette antislash, schéma embarqué et boucles auth", () => {
+    expect(safeOAuthNextPath(String.raw`/\evil`)).toBeNull()
+    expect(safeOAuthNextPath("/foo://evil.example")).toBeNull()
+    expect(safeInternalPath("/auth/login")).toBeNull()
+    expect(safeInternalPath("/auth/login?redirect=/profil")).toBeNull()
+    expect(safeInternalPath("/auth/error")).toBeNull()
+    expect(safeInternalPath("/auth/callback")).toBeNull()
+  })
+})
+

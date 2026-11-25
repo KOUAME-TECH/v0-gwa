@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { assertSameOrigin } from "@/lib/security/csrf"
 import { createClient } from "@/lib/supabase/server"
 import { formatPhoneE164, validateWestAfricaPhone } from "@/lib/auth/phone"
 import { getLinkCooldown, linkCooldownMessage } from "@/lib/auth/link-cooldown"
@@ -9,6 +10,9 @@ import { getLinkCooldown, linkCooldownMessage } from "@/lib/auth/link-cooldown"
  * Si déjà lié à un autre email : cooldown de fiabilité (30 j).
  */
 export async function POST(request: Request) {
+  const csrf = assertSameOrigin(request)
+  if (csrf) return csrf
+
   try {
     const supabase = await createClient()
     const {

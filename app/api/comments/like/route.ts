@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { assertSameOrigin } from "@/lib/security/csrf"
 import { createClient } from "@/lib/supabase/server"
 import {
   CommentSubmitError,
@@ -9,6 +10,9 @@ import {
  * POST /api/comments/like — body JSON { commentId, type?: "post"|"product" }
  */
 export async function POST(request: NextRequest) {
+  const csrf = assertSameOrigin(request)
+  if (csrf) return csrf
+
   try {
     const supabase = await createClient()
     const {

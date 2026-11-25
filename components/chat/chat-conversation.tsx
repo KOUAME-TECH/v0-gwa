@@ -387,16 +387,11 @@ export function ChatConversation({
 
       // Mark unread as read only when l'utilisateur voit vraiment la conversation
       if (typeof document !== "undefined" && document.visibilityState === "visible") {
-        await supabase
-          .from("messages")
-          .update({
-            is_read: true,
-            status: "read",
-            read_at: new Date().toISOString(),
-          })
-          .eq("conversation_id", conversation.id)
-          .neq("sender_id", userId)
-          .eq("is_read", false)
+        // 078 : plus d'UPDATE direct sur messages (aucune policy UPDATE) ;
+        // le marquage « lu » passe uniquement par la RPC.
+        await supabase.rpc("mark_messages_read", {
+          p_conversation_id: conversation.id,
+        })
       }
     }
     load()
@@ -413,14 +408,9 @@ export function ChatConversation({
           setMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg])
           scroll()
           if (msg.sender_id !== userId && document.visibilityState === "visible") {
-            void supabase
-              .from("messages")
-              .update({
-                is_read: true,
-                status: "read",
-                read_at: new Date().toISOString(),
-              })
-              .eq("id", msg.id)
+            void supabase.rpc("mark_messages_read", {
+              p_conversation_id: conversation.id,
+            })
           }
         }
       )
@@ -1443,16 +1433,17 @@ export function ChatConversation({
     offer: PriceOfferPayload,
     status: "accepted" | "declined",
   ) {
-    const next = { ...offer, status }
-    const content = JSON.stringify(next)
-    const { error } = await supabase
-      .from("messages")
-      .update({ content, is_edited: true })
-      .eq("id", msg.id)
+    // 078 : seul le destinataire peut répondre, via RPC (statut seul modifié).
+    const { data: updated, error } = await supabase.rpc("respond_to_price_offer", {
+      p_message_id: msg.id,
+      p_status: status,
+    })
     if (error) {
       toast.error("Impossible de mettre à jour l’offre. Réessaie.")
       return
     }
+    const content =
+      typeof updated === "string" ? updated : JSON.stringify({ ...offer, status })
     setMessages((prev) =>
       prev.map((m) => (m.id === msg.id ? { ...m, content, is_edited: true } : m)),
     )

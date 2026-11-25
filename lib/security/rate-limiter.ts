@@ -143,6 +143,16 @@ export async function rateLimit(
     if (redisResult) return redisResult
   } catch (err) {
     console.error("[rate-limit] upstash fallback", err)
+    // Fail-closed en prod seulement si Redis est configuré mais indisponible.
+    // Sans variables KV_*/UPSTASH_*, on reste sur le repli mémoire (fail-open intra-instance).
+    if (process.env.NODE_ENV === "production" && hasUpstash()) {
+      return {
+        success: false,
+        remaining: 0,
+        resetAt: Date.now() + 60_000,
+        blocked: true,
+      }
+    }
   }
   return rateLimitMemory(key, config)
 }
@@ -184,6 +194,12 @@ export const RATE_LIMITS = {
     maxRequests: 30,
     windowMs: 60 * 1000,
     blockDurationMs: 2 * 60 * 1000,
+  },
+  /** Back-office : bascule des feature flags (GSAC-3) */
+  ADMIN_FLAG_WRITE: {
+    maxRequests: 10,
+    windowMs: 60 * 1000,
+    blockDurationMs: 5 * 60 * 1000,
   },
   /** Yelly assistant — anti-abus coût LLM */
   YELLY_CHAT: {
