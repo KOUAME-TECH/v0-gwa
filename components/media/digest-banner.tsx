@@ -50,7 +50,8 @@ export function DigestBanner({
         "mb-3 flex w-full cursor-pointer items-center gap-3 rounded-2xl border border-[#1F5C2E]/15 bg-gradient-to-r from-[#1F5C2E]/8 to-[#FFF6E5] px-3 py-2.5 text-left active:scale-[0.99] transition-transform",
         className,
       )}
-      aria-label={tourActive ? "Arrêter le digest audio" : "Écouter le Harmattan Digest"}
+      // Nom accessible = texte visible (WCAG 2.5.3 « label in name ») ; état via aria-pressed.
+      aria-pressed={tourActive}
     >
       <AudioWaveIcon playing={tourActive} size="md" variant="recorded" className="shrink-0" />
       <div className="flex-1 min-w-0">
