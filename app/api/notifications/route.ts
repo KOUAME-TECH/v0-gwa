@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { assertSameOrigin } from "@/lib/security/csrf"
 import { createClient } from "@/lib/supabase/server"
 
 /**
@@ -46,6 +47,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  const csrf = assertSameOrigin(request)
+  if (csrf) return csrf
+
   try {
     const supabase = await createClient()
     const {

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { assertSameOrigin } from "@/lib/security/csrf"
 import { createClient } from "@/lib/supabase/server"
 import { sendPushToUser } from "@/lib/notifications/push"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
@@ -8,6 +9,9 @@ import { checkRateLimit } from "@/lib/security/rate-limiter"
  * Après envoi d'un message : notif DB + push OneSignal au destinataire.
  */
 export async function POST(request: Request) {
+  const csrf = assertSameOrigin(request)
+  if (csrf) return csrf
+
   try {
     const rate = await checkRateLimit("MESSAGE_SEND")
     if (!rate.success) {
