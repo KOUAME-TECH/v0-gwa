@@ -27,5 +27,5 @@ Mission 1–3 livrées sur `gwa/chat-refonte-whatsapp-1e99`. Ne pas démarrer 5�
 - Dashboard ops chat (sans PII)
 
 ## Hors scope confirmé
-- Ne pas modifier GeniusPay / FeexPay / routes `/api/orders/[id]/pay`
+- Ne pas modifier GeniusPay / routes `/api/orders/[id]/pay`
 - Bouton « Payer maintenant » = lien vers flux commandes existant
