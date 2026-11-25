@@ -21,6 +21,7 @@ import { isFactoringEligible } from "@/lib/factoring/eligibility"
 import { getCoachActions } from "@/lib/scg/coach"
 import { ScgCoachPanel } from "@/components/scg/scg-coach"
 import type { SCGDimensions } from "@/lib/scg/engine"
+import { dimensionsFromRow, SCG_5C_COLUMNS } from "@/lib/scg/row"
 import { EmptyState } from "@/components/ui/empty-state"
 import { entitlementsForTier } from "@/lib/pricing/entitlements"
 import { productDetailPath } from "@/lib/products/paths"
@@ -125,7 +126,7 @@ export default function FarmerDashboard() {
       const { data: scg } = await supabase
         .from("scg_scores")
         .select(
-          "score_total, dim_fiabilite, dim_qualite, dim_engagement, dim_volumes, dim_stabilite",
+          `score_total, ${SCG_5C_COLUMNS}`,
         )
         .eq("user_id", authUser.id)
         .order("created_at", { ascending: false })
@@ -134,13 +135,7 @@ export default function FarmerDashboard() {
 
       if (scg) {
         setCoachScore(scg.score_total || 0)
-        setCoachDims({
-          fiabilite: scg.dim_fiabilite || 0,
-          qualite: scg.dim_qualite || 0,
-          engagement: scg.dim_engagement || 0,
-          volumes: scg.dim_volumes || 0,
-          stabilite: scg.dim_stabilite || 0,
-        })
+        setCoachDims(dimensionsFromRow(scg))
       }
 
       try {

@@ -1,6 +1,7 @@
 "use client"
 
-import { DIMENSION_META, type SCGDimensions } from "@/lib/scg/engine"
+import { DIMENSION_META, type SCGDimensions, type ScgExplainItem } from "@/lib/scg/engine"
+import { pillarSentence } from "@/lib/scg/explain"
 import { clampScg, scgRatio, SCG_MAX } from "@/lib/scg/scale"
 import { cn } from "@/lib/utils"
 
@@ -81,16 +82,19 @@ export function ScgGauge({
   )
 }
 
-export function ScgDimensions({ dimensions }: { dimensions: SCGDimensions }) {
+export function ScgDimensions({ dimensions, compact = false }: { dimensions: SCGDimensions; compact?: boolean }) {
   return (
-    <div className="space-y-4">
+    <div className={compact ? "space-y-2.5" : "space-y-4"} data-testid="scg-5c">
       {DIMENSION_META.map((meta) => {
         const value = dimensions[meta.key]
         const color = value >= 70 ? "#2F7D32" : value >= 40 ? "#F9A825" : "#E53935"
         return (
           <div key={meta.key}>
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-sm font-medium text-[#1A1A1A]">{meta.label}</span>
+              <span className="text-sm font-medium text-[#1A1A1A]">
+                {meta.label}
+                {!compact ? <span className="ml-1.5 text-xs font-normal text-[#6B7280]">{meta.question}</span> : null}
+              </span>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-[#6B7280]">{meta.weight}%</span>
                 <span className="text-sm font-semibold text-[#1A1A1A] tabular-nums w-12 text-right">
@@ -98,15 +102,55 @@ export function ScgDimensions({ dimensions }: { dimensions: SCGDimensions }) {
                 </span>
               </div>
             </div>
-            <div className="h-2 rounded-full bg-[#E5E7EB] overflow-hidden">
+            <div
+              className="h-2 rounded-full bg-[#E5E7EB] overflow-hidden"
+              role="progressbar"
+              aria-label={meta.label}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={value}
+            >
               <div
                 className="h-full rounded-full transition-all duration-700"
                 style={{ width: `${value}%`, backgroundColor: color }}
               />
             </div>
+            {!compact ? <p className="mt-1 text-xs text-[#6B7280] text-pretty">{pillarSentence(meta.key, value)}</p> : null}
           </div>
         )
       })}
+    </div>
+  )
+}
+
+/** Les 3 facteurs qui font monter et les 3 qui font baisser le score (en points sur 1000). */
+export function ScgFactors({ up, down }: { up: ScgExplainItem[]; down: ScgExplainItem[] }) {
+  if (!up.length && !down.length) return null
+  return (
+    <div className="grid gap-4 sm:grid-cols-2" data-testid="scg-factors">
+      <div>
+        <h4 className="text-sm font-semibold text-[#2F7D32] mb-2">Ce qui fait monter ton score</h4>
+        <ul className="space-y-1.5">
+          {up.map((f) => (
+            <li key={f.key} className="flex gap-2 text-sm text-[#1A1A1A]">
+              <span className="font-semibold tabular-nums text-[#2F7D32] shrink-0">+{f.impact}</span>
+              <span className="text-pretty">{f.sentence}</span>
+            </li>
+          ))}
+          {!up.length ? <li className="text-sm text-[#6B7280]">Rien encore : commence par vérifier ton identité.</li> : null}
+        </ul>
+      </div>
+      <div>
+        <h4 className="text-sm font-semibold text-[#E53935] mb-2">Ce qui le fait baisser</h4>
+        <ul className="space-y-1.5">
+          {down.map((f) => (
+            <li key={f.key} className="flex gap-2 text-sm text-[#1A1A1A]">
+              <span className="font-semibold tabular-nums text-[#E53935] shrink-0">{f.impact}</span>
+              <span className="text-pretty">{f.sentence}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   )
 }
