@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { assertSameOrigin } from "@/lib/security/csrf"
 import { requireUser } from "@/lib/auth/require-admin"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
@@ -81,6 +82,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const csrf = assertSameOrigin(request)
+  if (csrf) return csrf
+
   try {
     const rate = await checkRateLimit("API_CREATE")
     if (!rate.success) {
