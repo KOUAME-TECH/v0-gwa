@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useFeatureFlag } from "@/hooks/use-feature-flag"
 import { WALLET_FLAG } from "@/lib/feature-flags/core"
 import { SCG_EXPLANATION, SCG_TIPS, scgLevel } from "@/lib/scg/explain"
+import { clampScg, formatScg, scgRatio, SCG_MAX } from "@/lib/scg/scale"
 import {
   Settings,
   LogOut,
@@ -467,7 +468,7 @@ export default function ProfilScreen({
                 </h3>
                 {level ? (
                   <span className="text-sm font-semibold text-[#2F7D32]">
-                    {Math.round(scgScore as number)}/100 · {level.label}
+                    {formatScg(scgScore)} · {level.label}
                   </span>
                 ) : (
                   <span className="text-xs text-neutral-500">Pas encore calculé</span>
@@ -478,11 +479,12 @@ export default function ProfilScreen({
                   className="mt-3 h-2 rounded-full bg-neutral-100 overflow-hidden"
                   role="progressbar"
                   aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={Math.round(scgScore as number)}
+                  aria-valuemax={SCG_MAX}
+                  aria-valuenow={clampScg(scgScore)}
+                  aria-valuetext={formatScg(scgScore)}
                   aria-label="Score de Confiance"
                 >
-                  <div className="h-full bg-[#2F7D32]" style={{ width: `${Math.max(0, Math.min(100, scgScore as number))}%` }} />
+                  <div className="h-full bg-[#2F7D32]" style={{ width: `${scgRatio(scgScore) * 100}%` }} />
                 </div>
               ) : null}
               <p className="mt-3 text-sm text-neutral-600 leading-relaxed">

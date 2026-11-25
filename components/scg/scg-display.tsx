@@ -1,6 +1,7 @@
 "use client"
 
 import { DIMENSION_META, type SCGDimensions } from "@/lib/scg/engine"
+import { clampScg, scgRatio, SCG_MAX } from "@/lib/scg/scale"
 import { cn } from "@/lib/utils"
 
 const BADGE_STYLES: Record<string, { bg: string; text: string; ring: string }> = {
@@ -24,7 +25,7 @@ export function ScgGauge({
 }) {
   const radius = (size - 24) / 2
   const circumference = Math.PI * radius // demi-cercle
-  const pct = Math.min(1, Math.max(0, score / 1000))
+  const pct = scgRatio(score)
   const dash = circumference * pct
   const style = BADGE_STYLES[badge] ?? BADGE_STYLES.insuffisant
 
@@ -63,8 +64,8 @@ export function ScgGauge({
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-end pb-1">
-          <span className="text-4xl font-bold text-[#1A1A1A]">{score}</span>
-          <span className="text-xs text-[#6B7280]">/ 1000</span>
+          <span className="text-4xl font-bold text-[#1A1A1A]">{clampScg(score)}</span>
+          <span className="text-xs text-[#6B7280]">/ {SCG_MAX}</span>
         </div>
       </div>
       <span
