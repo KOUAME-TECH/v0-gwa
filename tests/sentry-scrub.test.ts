@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import { scrubSentryEvent } from "@/lib/observability/sentry-scrub"
 
 // Données fictives.
@@ -33,11 +33,23 @@ describe("scrubSentryEvent", () => {
     expect(out.exception.values[0].value).toContain("[IBAN masqué]")
   })
 
-  it("les 3 configs Sentry posent sendDefaultPii: false et beforeSend", () => {
-    for (const f of ["client", "server", "edge"]) {
-      const src = readFileSync(`sentry.${f}.config.ts`, "utf8")
+  it("les 3 configs Sentry (navigateur, serveur, edge) posent sendDefaultPii: false, beforeSend et environment", () => {
+    for (const f of ["instrumentation-client.ts", "sentry.server.config.ts", "sentry.edge.config.ts"]) {
+      const src = readFileSync(f, "utf8")
       expect(src).toMatch(/sendDefaultPii:\s*false/)
       expect(src).toMatch(/beforeSend:\s*\(event\)\s*=>\s*scrubSentryEvent\(event\)/)
+      expect(src).toMatch(/environment:\s*process\.env\.NODE_ENV/)
     }
+  })
+
+  it("navigateur : instrumentation-client.ts remplace sentry.client.config.ts", () => {
+    expect(existsSync("sentry.client.config.ts")).toBe(false)
+    const src = readFileSync("instrumentation-client.ts", "utf8")
+    expect(src).toMatch(/replaysSessionSampleRate:\s*0\.05/)
+    expect(src).toMatch(/replaysOnErrorSampleRate:\s*1(\.0)?/)
+    expect(src).toMatch(/maskAllText:\s*true/)
+    expect(src).toMatch(/maskAllInputs:\s*true/)
+    expect(src).toMatch(/blockAllMedia:\s*true/)
+    expect(src).toMatch(/export const onRouterTransitionStart = Sentry\.captureRouterTransitionStart/)
   })
 })
