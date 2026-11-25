@@ -104,6 +104,7 @@ export default function ConfidentialitePage() {
             <Row label="Messagerie" value="contenu des messages échangés sur la Plateforme." />
             <Row label="Notifications" value="identifiant push (OneSignal) si vous les activez." />
             <Row label="Données techniques" value="adresse IP et journaux, utilisés pour la sécurité et la limitation d'abus." />
+            <Row label="Erreurs et sessions" value="rapports d'erreur et, pour une partie des visites, enregistrement de la session (Session Replay), utilisés pour corriger les bugs." />
           </div>
         </Section>
 
@@ -146,7 +147,8 @@ export default function ConfidentialitePage() {
             <Row label="Africa's Talking" value="envoi des SMS / codes OTP." />
             <Row label="OneSignal" value="notifications push." />
             <Row label="Vercel" value="hébergement de l'application et mesure d'audience." />
-            <Row label="Google (Gemini)" value="réponses de l'assistante Yelly ; e-mails, téléphones, adresses et positions sont masqués avant envoi, aucune donnée n'est utilisée pour entraîner un modèle par GWA." />
+            <Row label="Sentry" value="suivi des erreurs et Session Replay : 5 % des sessions et 100 % des sessions où une erreur survient. Les textes et champs saisis sont masqués dans les enregistrements ; e-mails, numéros, cookies et en-têtes d'autorisation sont masqués ou retirés automatiquement des rapports d'erreur." />
+            <Row label="Google (Gemini)" value="réponses de l'assistante Yelly. Avant l'envoi, les principales données personnelles (e-mails, numéros de téléphone, IBAN, adresses, positions) sont masquées automatiquement. Ce filtre peut laisser passer certains cas : évitez d'écrire des informations personnelles à Yelly. GWA n'utilise pas ces données pour entraîner un modèle." />
             <Row label="AgentMail" value="acheminement des e-mails du formulaire de contact." />
           </div>
           <p>
@@ -162,8 +164,8 @@ export default function ConfidentialitePage() {
             actif. Les documents et informations KYC ainsi que les données de
             transactions sont conservés pendant la durée requise par les
             obligations légales applicables (notamment en matière de lutte contre
-            le blanchiment). Les journaux techniques de sécurité sont conservés
-            pour une durée limitée.
+            le blanchiment). Les journaux techniques de sécurité et les rapports
+            d&apos;erreur (Sentry) sont conservés pour une durée limitée.
           </p>
         </Section>
 

@@ -117,14 +117,12 @@ export async function POST(request: NextRequest) {
       coop: "Tâche : qualification coopérative (membres, docs, risques).",
     }
 
-    const contextHint = [taskHint[task], parsed.data.context]
-      .filter(Boolean)
-      .join("\n\n")
-
+    // La tâche est fixée côté serveur (prompt système) ; le contexte saisi est une donnée.
     const result = await askYelly({
       message: parsed.data.message,
       page: ADMIN_AI_PAGE,
-      contextHint,
+      contextHint: parsed.data.context || undefined,
+      taskInstruction: taskHint[task],
       systemPrompt: YELLY_OPS_SYSTEM_PROMPT,
     })
 
