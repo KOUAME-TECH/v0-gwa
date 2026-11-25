@@ -1,4 +1,28 @@
 -- 065 — Producer-visible sales proceeds and audited manual payout operations.
+-- 18/11 : get_seller_eligible_proceeds en LISTE BLANCHE via gwa_payout_eligible_orders (remplace le NOT IN).
+-- NON APPLIQUÉE EN PROD. Clone d'abord ; application sur GO écrit de Finance, QA et Yao.
+-- Ordre SQL : 02 → 03a → 065 (si absente de la prod) → 076 → 077 → 078 → 079.
+
+BEGIN;
+
+-- Gardes : échouer ici laisse le schéma intact (transaction unique).
+DO $gwa065_guard$
+BEGIN
+  IF to_regclass('public.orders') IS NULL THEN
+    RAISE EXCEPTION '065: table public.orders requise';
+  END IF;
+  IF to_regclass('public.profiles') IS NULL THEN
+    RAISE EXCEPTION '065: table public.profiles requise';
+  END IF;
+  IF to_regclass('public.financial_ledger') IS NULL THEN
+    RAISE EXCEPTION '065: table public.financial_ledger requise';
+  END IF;
+  IF to_regclass('public.withdrawal_requests') IS NULL THEN
+    RAISE EXCEPTION '065: table public.withdrawal_requests requise (053)';
+  END IF;
+END
+$gwa065_guard$;
+
 ALTER TABLE public.orders
   ADD COLUMN IF NOT EXISTS provider_reference TEXT,
   ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'XOF';
@@ -18,6 +42,9 @@ BEGIN
 END;
 $$;
 
+-- Aligné sur le trigger de prod (pas de contournement admin, pas de feexpay_ref
+-- retiré en prod) + colonnes 065 (provider_reference, payout_network) + colonnes
+-- 077 si déjà présentes (payout_fee_frozen_fcfa, payout_plan_id_at_payment).
 CREATE OR REPLACE FUNCTION public.protect_order_privileged_columns()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -25,28 +52,22 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  jwt_role TEXT := COALESCE(
+  jwt_role text := coalesce(
     current_setting('request.jwt.claim.role', true),
     auth.role()
   );
-  is_admin BOOLEAN := false;
 BEGIN
   IF jwt_role = 'service_role' THEN
     RETURN NEW;
   END IF;
 
-  SELECT EXISTS (
-    SELECT 1
-    FROM public.admin_roles ar
-    WHERE ar.user_id = auth.uid() AND ar.is_active = true
-  ) INTO is_admin;
-
-  IF is_admin THEN
-    RETURN NEW;
-  END IF;
-
   NEW.payment_status := OLD.payment_status;
   NEW.escrow_status := OLD.escrow_status;
+  NEW.payout_status := OLD.payout_status;
+  NEW.payout_ref := OLD.payout_ref;
+  NEW.payout_at := OLD.payout_at;
+  NEW.payout_error := OLD.payout_error;
+  NEW.payout_network := OLD.payout_network;
   NEW.total_amount := OLD.total_amount;
   NEW.subtotal := OLD.subtotal;
   NEW.shipping_cost := OLD.shipping_cost;
@@ -56,14 +77,23 @@ BEGIN
   NEW.vendeur_recoit_fcfa := OLD.vendeur_recoit_fcfa;
   NEW.buyer_id := OLD.buyer_id;
   NEW.seller_id := OLD.seller_id;
-  NEW.feexpay_ref := OLD.feexpay_ref;
-  NEW.provider_reference := OLD.provider_reference;
+  NEW.product_price := OLD.product_price;
+  NEW.buyer_service_fee := OLD.buyer_service_fee;
+  NEW.seller_commission := OLD.seller_commission;
+  NEW.seller_net_amount := OLD.seller_net_amount;
+  NEW.pricing_plan_id := OLD.pricing_plan_id;
+  NEW.commission_rate_applied := OLD.commission_rate_applied;
+  NEW.lifecycle_status := OLD.lifecycle_status;
   NEW.currency := OLD.currency;
-  NEW.payout_ref := OLD.payout_ref;
-  NEW.payout_status := OLD.payout_status;
-  NEW.payout_network := OLD.payout_network;
-  NEW.payout_at := OLD.payout_at;
-  NEW.payout_error := OLD.payout_error;
+  NEW.provider_reference := OLD.provider_reference;
+
+  -- Colonnes ajoutées par 077 : no-op si 065 s'applique avant 077.
+  BEGIN
+    NEW.payout_fee_frozen_fcfa := OLD.payout_fee_frozen_fcfa;
+    NEW.payout_plan_id_at_payment := OLD.payout_plan_id_at_payment;
+  EXCEPTION WHEN undefined_column THEN
+    NULL;
+  END;
 
   IF OLD.status NOT IN ('pending') AND NEW.status IS DISTINCT FROM OLD.status THEN
     NEW.status := OLD.status;
@@ -105,25 +135,63 @@ ALTER TABLE public.withdrawal_request_events ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.withdrawal_request_events FROM PUBLIC, anon, authenticated;
 GRANT ALL ON public.withdrawal_request_events TO service_role;
 
+-- Déjà en prod (053) : une seule demande ouverte par vendeur. IF NOT EXISTS pour les clones.
+CREATE UNIQUE INDEX IF NOT EXISTS withdrawal_requests_one_open_per_user
+  ON public.withdrawal_requests (user_id)
+  WHERE status = ANY (ARRAY['pending', 'processing', 'queued']);
+
+
+-- BEGIN-WHITELIST (stabilisation 18/11 : liste BLANCHE, remplace le NOT IN qui laissait passer
+-- cancelled / released / NULL / toute valeur inconnue). Source unique de l'éligibilité au versement.
+-- Statuts d'attente réels (écrits par confirm/route.ts ; pas de CHECK en prod) :
+--   pending_ops, failed (nouvel essai), skipped_no_provider. Jamais : cancelled, paid, processing,
+--   released, skipped_sim, skipped_zero, NULL. Commandes de test internes exclues par id.
+CREATE OR REPLACE FUNCTION public.gwa_payout_eligible_orders(p_seller_id UUID)
+RETURNS TABLE (order_id UUID, amount_fcfa NUMERIC)
+LANGUAGE SQL
+STABLE
+SET search_path = public
+AS $$
+  -- Montant = solde WALLET_SELLER du grand livre sur la commande (crédit − débit),
+  -- pas vendeur_recoit_fcfa. Les frais de versement se déduisent au versement (079).
+  SELECT id,
+         GREATEST(0, COALESCE((
+           SELECT SUM(CASE WHEN l.account_credit = 'WALLET_SELLER' THEN l.amount ELSE 0 END)
+                - SUM(CASE WHEN l.account_debit  = 'WALLET_SELLER' THEN l.amount ELSE 0 END)
+           FROM public.financial_ledger l
+           WHERE l.transaction_id = orders.id
+         ), 0))
+  FROM public.orders
+  WHERE seller_id = p_seller_id
+    AND payment_status = 'paid'
+    AND payment_status IS DISTINCT FROM 'refunded'
+    AND status = 'delivered'
+    AND status IS DISTINCT FROM 'disputed'
+    AND escrow_status = 'released'
+    AND escrow_status IS DISTINCT FROM 'disputed'
+    AND payout_status IN ('pending_ops', 'failed', 'skipped_no_provider')
+    AND id <> ALL (ARRAY['e09af219-2831-4308-b235-b37fb6df82e8']::uuid[]);  -- GWA-MW16COUJ, test interne (variante E)
+$$;
+
+REVOKE ALL ON FUNCTION public.gwa_payout_eligible_orders(UUID) FROM PUBLIC, anon, authenticated;
+
 CREATE OR REPLACE FUNCTION public.get_seller_eligible_proceeds(p_seller_id UUID)
 RETURNS NUMERIC
 LANGUAGE SQL
 STABLE
 SET search_path = public
 AS $$
-  SELECT COALESCE(SUM(
-    COALESCE(
-      vendeur_recoit_fcfa,
-      GREATEST(0, total_amount - COALESCE(commission_fcfa, 0) - COALESCE(service_fee, 0))
-    )
-  ), 0)
-  FROM public.orders
-  WHERE seller_id = p_seller_id
-    AND payment_status = 'paid'
-    AND status = 'delivered'
-    AND escrow_status = 'released'
-    AND COALESCE(payout_status, '') NOT IN ('processing', 'paid', 'skipped_sim', 'skipped_zero');
+  -- Uniquement les commandes de la liste blanche, plus les écritures de versement.
+  -- Une commande libérée puis remboursée (ou en litige) n'est plus versable.
+  SELECT GREATEST(0, COALESCE((
+    SELECT SUM(CASE WHEN l.account_credit = 'WALLET_SELLER' THEN l.amount ELSE 0 END)
+         - SUM(CASE WHEN l.account_debit  = 'WALLET_SELLER' THEN l.amount ELSE 0 END)
+    FROM public.financial_ledger l
+    WHERE l.transaction_id IN (SELECT order_id FROM public.gwa_payout_eligible_orders(p_seller_id))
+       OR l.transaction_id IN (SELECT id FROM public.withdrawal_requests WHERE user_id = p_seller_id)
+  ), 0));
 $$;
+-- END-WHITELIST
 
 REVOKE ALL ON FUNCTION public.get_seller_eligible_proceeds(UUID) FROM PUBLIC, anon, authenticated;
 
@@ -176,15 +244,20 @@ BEGIN
 
   available_amount := public.get_seller_eligible_proceeds(requester);
 
+  -- Les versements 'paid' sont déjà au débit de WALLET_SELLER : ne pas les réserver une seconde fois.
   SELECT COALESCE(SUM(amount_fcfa), 0)
     INTO reserved_amount
     FROM public.withdrawal_requests
     WHERE user_id = requester
-      AND status IN ('pending', 'processing', 'paid');
+      AND status IN ('pending', 'processing');
 
   IF p_amount_fcfa > available_amount - reserved_amount THEN
     RAISE EXCEPTION 'insufficient available balance';
   END IF;
+
+  -- Trigger prod trg_protect_withdrawal_insert : INSERT réservé à service_role.
+  -- La fonction est déjà SECURITY DEFINER et a authentifié le vendeur (auth.uid()).
+  PERFORM set_config('request.jwt.claim.role', 'service_role', true);
 
   INSERT INTO public.withdrawal_requests (
     user_id, amount_fcfa, phone, network, status
@@ -260,7 +333,7 @@ BEGIN
     'paid_out', payout_requests.paid,
     'available_for_request', GREATEST(
       0,
-      seller_proceeds.eligible - payout_requests.reserved - payout_requests.paid
+      seller_proceeds.eligible - payout_requests.reserved
     )
   )
   INTO result
@@ -353,3 +426,5 @@ $$;
 -- Only the finance API calls this with its authenticated admin id; the RPC also rechecks admin_roles.
 REVOKE ALL ON FUNCTION public.admin_update_manual_payout(UUID, TEXT, TEXT, TEXT, UUID) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_update_manual_payout(UUID, TEXT, TEXT, TEXT, UUID) TO service_role;
+
+COMMIT;
