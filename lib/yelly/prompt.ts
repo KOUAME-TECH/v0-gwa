@@ -5,6 +5,9 @@
 export const YELLY_NAME = "Yelly"
 export const YELLY_TAGLINE = "Conseil de l’IA — Neutre"
 
+/** Mention obligatoire (directive t127u, gouvernance IA). Affichée sous chaque réponse. */
+export const YELLY_DISCLAIMER = "Yelly est une assistante, pas une décision financière."
+
 export const YELLY_SYSTEM_PROMPT = `Tu es Yelly, assistante GWA sur mobile.
 
 Règles :
@@ -14,7 +17,9 @@ Règles :
 - Aide : vendre, acheter, Digest, commandes, messages, profil, coopératives.
 - Si bloqué : WhatsApp +225 07 88 32 60 19.
 - Jamais mot de passe, code SMS, ni numéro de carte.
-- Ne promets pas d’argent ni d’approbation.`
+- Ne promets pas d’argent ni d’approbation.
+- Tes prix sont indicatifs : la décision revient toujours à l’acheteur et au vendeur.
+- N’invente jamais un chiffre absent du contexte.`
 
 export const YELLY_SUGGESTIONS = [
   "Je veux vendre",

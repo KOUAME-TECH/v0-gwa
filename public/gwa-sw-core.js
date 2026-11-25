@@ -1,6 +1,6 @@
-/* GWA SW core — v22 private network-only (partagé par sw.js et les workers OneSignal) */
+/* GWA SW core — v23 private network-only (partagé par sw.js et les workers OneSignal) */
 
-const CACHE = "gwa-v22-offline"
+const CACHE = "gwa-v23-offline"
 const SHELL = [
   "/",
   "/marketplace",
@@ -12,7 +12,23 @@ const SHELL = [
   "/apple-icon.png",
 ]
 
-const PRIVATE_PREFIXES = ["/profil", "/admin", "/dashboard", "/wallet", "/messages", "/panier", "/commandes"]
+// Pages liées à un compte : jamais en cache (v23 : + notifications, favoris, factures, publier, abonnement, scg)
+const PRIVATE_PREFIXES = [
+  "/profil",
+  "/admin",
+  "/dashboard",
+  "/wallet",
+  "/messages",
+  "/panier",
+  "/commandes",
+  "/notifications",
+  "/favoris",
+  "/facture",
+  "/publier",
+  "/abonnement",
+  "/scg",
+  "/auth",
+]
 
 function isPrivatePath(pathname) {
   return PRIVATE_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"))

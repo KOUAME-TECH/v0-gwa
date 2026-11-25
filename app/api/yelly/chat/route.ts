@@ -5,15 +5,26 @@ import {
   YELLY_GUEST_MAX_PER_DAY,
 } from "@/lib/pricing/entitlements"
 import { assertSameOrigin } from "@/lib/security/csrf"
-import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { yellyChatSchema } from "@/lib/security/validation"
 import { askYelly } from "@/lib/yelly/client"
 import {
   countYellyUserMessagesToday,
-  loadYellyProductHint,
+  loadChatTurnsForYelly,
+  loadYellyProductContext,
   persistYellyTurn,
 } from "@/lib/yelly/context"
+import { buildYellyContext, buildYellyTaskInstruction } from "@/lib/yelly/context-builder"
+import { deterministicCapabilityReply, detectYellyIntent } from "@/lib/yelly/capabilities"
+import {
+  genericCacheKey,
+  matchFaq,
+  readCachedReply,
+  writeCachedReply,
+} from "@/lib/yelly/faq-cache"
 import { redactPiiForAi } from "@/lib/yelly/pii"
+import { YELLY_DISCLAIMER } from "@/lib/yelly/prompt"
+import { checkYellyGuestRateLimit, checkYellyUserRateLimit } from "@/lib/yelly/rate-limit"
+import { checkRateLimit, getClientIdentifier } from "@/lib/security/rate-limiter"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 30
@@ -29,7 +40,9 @@ function readGuestCount(request: NextRequest): number {
 /**
  * POST /api/yelly/chat
  * Auth (quota / jour selon palier abo) OU guest (max 3 / 24h cookie)
- * + CSRF + rate-limit IP + zod.
+ * + CSRF + rate-limit IP + rate-limit utilisateur 10/min + zod.
+ * Contexte : rôle, produit, historique du chat (PII masquées).
+ * FAQ fréquentes servies depuis le cache, sans appel au modèle.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -62,17 +75,45 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    {
+      // 10/min par utilisateur connecté, et aussi par IP pour les invités.
+      const userRate = user
+        ? await checkYellyUserRateLimit(user.id)
+        : await checkYellyGuestRateLimit(await getClientIdentifier())
+      if (!userRate.success) {
+        console.warn("[yelly] rate_limited", {
+          scope: user ? "user" : "guest",
+          user: user ? user.id.slice(0, 8) : null,
+          resetAt: new Date(userRate.resetAt).toISOString(),
+        })
+        return NextResponse.json(
+          {
+            error: "Trop de questions d’affilée. Réessaie dans une minute.",
+            code: "YELLY_USER_RATE_LIMIT",
+          },
+          {
+            status: 429,
+            headers: {
+              "Retry-After": String(Math.max(1, Math.ceil((userRate.resetAt - Date.now()) / 1000))),
+            },
+          },
+        )
+      }
+    }
+
     let tier: string | null = "free"
+    let userType: string | null = null
     let yellyRemaining: number | null = null
     let yellyLimit: number | null = null
 
     if (user) {
       const { data: profile } = await supabase
         .from("profiles")
-        .select("subscription_tier")
+        .select("subscription_tier, user_type")
         .eq("id", user.id)
         .maybeSingle()
       tier = profile?.subscription_tier ?? "free"
+      userType = profile?.user_type ?? null
       const usedToday = await countYellyUserMessagesToday(supabase, user.id, new Date(), {
         pageNeq: "admin-assist",
       })
@@ -114,22 +155,50 @@ export async function POST(request: NextRequest) {
         ? body.conversationId
         : null)
 
-    const contextHint = await loadYellyProductHint(supabase, context?.productId)
-    const cityHint = context?.city
-      ? `Ville: ${redactPiiForAi(context.city, 80)}`
-      : undefined
+    const intent = detectYellyIntent(message)
+    const chatConversationId = context?.chatConversationId
+    const hasContext = Boolean(context?.productId || chatConversationId)
 
-    const result = await askYelly({
-      message,
-      page,
-      contextHint: [contextHint, cityHint].filter(Boolean).join(" | ") || undefined,
+    const [product, history] = await Promise.all([
+      loadYellyProductContext(supabase, context?.productId),
+      user ? loadChatTurnsForYelly(supabase, chatConversationId, user.id) : Promise.resolve([]),
+    ])
+    const contextHint = buildYellyContext({
+      role: userType,
+      product: product ?? (context?.city ? { name: "", city: context.city } : null),
+      history,
+      intent,
     })
 
-    let savedId: string | null = conversationId
+    let result: { reply: string; source: string; model?: string }
+    const faq = !hasContext ? matchFaq(message) : null
+    const cacheKey = !hasContext && intent === "general" ? genericCacheKey(message, page) : null
+    const cached = cacheKey ? readCachedReply(cacheKey) : null
+    if (faq) {
+      result = { reply: faq.answer, source: "faq" }
+    } else if (cached) {
+      result = { reply: cached, source: "cache" }
+    } else {
+      result = await askYelly({
+        message,
+        page,
+        contextHint,
+        taskInstruction: buildYellyTaskInstruction(intent),
+      })
+      if (cacheKey && result.source === "llm") writeCachedReply(cacheKey, result.reply)
+      if (result.source === "fallback") {
+        // Modèle indisponible : on garde les capacités calculables (prix repère, accord).
+        const det = deterministicCapabilityReply(intent, product ?? null, history)
+        if (det) result = { reply: det, source: "rules" }
+      }
+    }
+
+    // L’id de conversation GWA (chat) n’est jamais un id Yelly : persistance séparée.
+    let savedId: string | null = chatConversationId === conversationId ? null : conversationId
     if (user) {
       savedId = await persistYellyTurn(supabase, {
         userId: user.id,
-        conversationId,
+        conversationId: savedId,
         userMessage: message,
         assistantReply: result.reply,
         page,
@@ -148,7 +217,9 @@ export async function POST(request: NextRequest) {
       reply: result.reply,
       source: result.source,
       model: result.model,
-      conversationId: savedId || conversationId,
+      intent,
+      disclaimer: YELLY_DISCLAIMER,
+      conversationId: savedId,
       assistant: "Yelly",
       guestRemaining,
       yellyLimit,

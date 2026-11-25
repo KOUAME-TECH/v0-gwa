@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     "Politique de confidentialité et protection des données personnelles de la plateforme GWA (KOUAME CORPORATION), conforme aux principes RGPD et à la loi ivoirienne.",
 }
 
-const LAST_UPDATE = "19 juillet 2026"
+const LAST_UPDATE = "25 novembre 2026"
 
 function Section({
   n,
@@ -67,7 +67,7 @@ export default function ConfidentialitePage() {
           d&apos;évoluer.
         </div>
 
-        <p className="text-xs text-neutral-500">
+        <p className="text-xs text-neutral-600">
           Dernière mise à jour : {LAST_UPDATE}
         </p>
 
@@ -81,6 +81,13 @@ export default function ConfidentialitePage() {
             Pour toute question ou pour exercer vos droits : WhatsApp{" "}
             <strong>+225 07 88 32 60 19</strong> — e-mail{" "}
             <strong>contact@mygwa.org</strong>.
+          </p>
+          <p>
+            <strong>Délégué à la protection des données (DPO) :</strong> le
+            référent protection des données de GWA est joignable à{" "}
+            <strong>contact@mygwa.org</strong>, objet « Données personnelles ».
+            Le traitement est soumis à la loi ivoirienne n° 2013-450 du 19 juin
+            2013, sous le contrôle de l&apos;ARTCI.
           </p>
         </Section>
 
@@ -97,6 +104,7 @@ export default function ConfidentialitePage() {
             <Row label="Messagerie" value="contenu des messages échangés sur la Plateforme." />
             <Row label="Notifications" value="identifiant push (OneSignal) si vous les activez." />
             <Row label="Données techniques" value="adresse IP et journaux, utilisés pour la sécurité et la limitation d'abus." />
+            <Row label="Erreurs et sessions" value="rapports d'erreur et, pour une partie des visites, enregistrement de la session (Session Replay), utilisés pour corriger les bugs." />
           </div>
         </Section>
 
@@ -139,6 +147,8 @@ export default function ConfidentialitePage() {
             <Row label="Africa's Talking" value="envoi des SMS / codes OTP." />
             <Row label="OneSignal" value="notifications push." />
             <Row label="Vercel" value="hébergement de l'application et mesure d'audience." />
+            <Row label="Sentry" value="suivi des erreurs et Session Replay : 5 % des sessions et 100 % des sessions où une erreur survient. Les textes et champs saisis sont masqués dans les enregistrements ; e-mails, numéros, cookies et en-têtes d'autorisation sont masqués ou retirés automatiquement des rapports d'erreur." />
+            <Row label="Google (Gemini)" value="réponses de l'assistante Yelly. Avant l'envoi, les principales données personnelles (e-mails, numéros de téléphone, IBAN, adresses, positions) sont masquées automatiquement. Ce filtre peut laisser passer certains cas : évitez d'écrire des informations personnelles à Yelly. GWA n'utilise pas ces données pour entraîner un modèle." />
             <Row label="AgentMail" value="acheminement des e-mails du formulaire de contact." />
           </div>
           <p>
@@ -154,24 +164,41 @@ export default function ConfidentialitePage() {
             actif. Les documents et informations KYC ainsi que les données de
             transactions sont conservés pendant la durée requise par les
             obligations légales applicables (notamment en matière de lutte contre
-            le blanchiment). Les journaux techniques de sécurité sont conservés
-            pour une durée limitée.
+            le blanchiment). Les journaux techniques de sécurité et les rapports
+            d&apos;erreur (Sentry) sont conservés pour une durée limitée.
           </p>
         </Section>
 
         <Section n="6" title="Vos droits">
           <p>
-            Conformément aux principes du RGPD et à la loi ivoirienne n°2013-450
+            Conformément à la loi ivoirienne n° 2013-450 du 19 juin 2013
             relative à la protection des données à caractère personnel, vous
-            disposez des droits d&apos;accès, de rectification,
-            d&apos;effacement, d&apos;opposition, de limitation et de
-            portabilité, ainsi que du droit de retirer votre consentement à tout
-            moment.
+            disposez des droits d&apos;information, d&apos;accès, de
+            rectification, d&apos;opposition et d&apos;effacement, ainsi que
+            du droit de retirer votre consentement à tout moment.
           </p>
           <p>
-            Pour les exercer, contactez-nous (voir section 1). Vous pouvez
-            également introduire une réclamation auprès de l&apos;Autorité de
-            Régulation des Télécommunications de Côte d&apos;Ivoire (ARTCI).
+            Pour les exercer, écrivez au référent protection des données (voir
+            section 1) depuis le numéro ou l&apos;e-mail de votre compte. Nous
+            répondons dans un délai d&apos;un mois au plus.
+          </p>
+          <p>
+            Vous pouvez introduire une réclamation auprès de l&apos;Autorité de
+            Régulation des Télécommunications/TIC de Côte d&apos;Ivoire
+            (ARTCI).
+          </p>
+        </Section>
+
+        <Section n="6 bis" title="Droit à l'effacement (suppression du compte)">
+          <p>
+            Sur demande, nous supprimons votre compte et effaçons vos données
+            personnelles (profil, publications, messages, historique Yelly,
+            identifiant push). Restent conservées, de façon limitée et pour la
+            seule durée légale, les données que la loi nous oblige à garder :
+            transactions, factures et pièces de vérification d&apos;identité
+            (lutte contre le blanchiment, obligations comptables). Une commande
+            en cours ou un litige ouvert doit être clôturé avant
+            l&apos;effacement.
           </p>
         </Section>
 
@@ -219,7 +246,7 @@ export default function ConfidentialitePage() {
           </Link>
         </div>
 
-        <p className="text-center text-xs text-neutral-400 pt-2">
+        <p className="text-center text-xs text-neutral-600 pt-2">
           KOUAME CORPORATION · GWA · Abidjan, Côte d&apos;Ivoire
         </p>
       </main>

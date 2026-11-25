@@ -90,7 +90,7 @@ export default function LierComptePage() {
         return
       }
       setMasked(data.masked_phone || maskPhone(data.phone))
-      setExpiresAt(Date.now() + (data.expires_in || 600) * 1000)
+      setExpiresAt(Date.now() + (data.expires_in || 300) * 1000)
       setOtpStep(true)
       setOtp("")
     } catch {

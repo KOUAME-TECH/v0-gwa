@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react"
 import { usePathname } from "next/navigation"
 import Link from "next/link"
 import { X, Send, LifeBuoy, Mic } from "lucide-react"
-import { YELLY_NAME, YELLY_TAGLINE, yellySuggestionsForRole, yellyWelcomeForRole } from "@/lib/yelly/prompt"
+import { YELLY_DISCLAIMER, YELLY_NAME, YELLY_TAGLINE, yellySuggestionsForRole, yellyWelcomeForRole } from "@/lib/yelly/prompt"
 import { WHATSAPP_LINK } from "@/lib/contact"
 import { trackYelly } from "@/lib/yelly/analytics"
 import { cn } from "@/lib/utils"
@@ -457,6 +457,10 @@ export function YellyPanel({
             {error}
           </p>
         ) : null}
+
+        <p className="px-3 pb-1 text-[11px] text-[#4B5563]" data-testid="yelly-disclaimer">
+          {YELLY_DISCLAIMER}
+        </p>
 
         <form
           className="flex items-center gap-2 border-t border-[#1F5C2E]/10 bg-white/80 px-3 py-3"

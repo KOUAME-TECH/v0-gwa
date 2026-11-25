@@ -5,10 +5,10 @@ import type { Metadata } from "next"
 export const metadata: Metadata = {
   title: "Conditions d'utilisation — GWA",
   description:
-    "Conditions générales d'utilisation de la plateforme GWA (KOUAME CORPORATION), marketplace agricole avec paiement séquestre, KYC et affacturage.",
+    "Conditions générales d'utilisation et de vente de la plateforme GWA (KOUAME CORPORATION) : marketplace agricole, paiement GeniusPay, séquestre applicatif, données ARTCI, droit OHADA.",
 }
 
-const LAST_UPDATE = "19 juillet 2026"
+const LAST_UPDATE = "25 novembre 2026"
 
 function Section({
   n,
@@ -56,7 +56,7 @@ export default function ConditionsPage() {
           revue par un conseil juridique. Il est susceptible d&apos;évoluer.
         </div>
 
-        <p className="text-xs text-neutral-500">
+        <p className="text-xs text-neutral-600">
           Dernière mise à jour : {LAST_UPDATE}
         </p>
 
@@ -124,15 +124,51 @@ export default function ConditionsPage() {
           </p>
         </Section>
 
-        <Section n="6" title="Commandes et paiement sous séquestre (escrow)">
+        <Section n="6" title="Commandes, paiement GeniusPay et séquestre applicatif">
           <p>
-            Les paiements peuvent être opérés via des prestataires de paiement
-            (mobile money notamment). Les fonds sont conservés sous séquestre
-            puis libérés au vendeur après confirmation de la bonne réception de
-            la commande par l&apos;acheteur, ou selon les règles de résolution
-            des litiges. GWA agit en tant qu&apos;intermédiaire technique et
-            n&apos;est pas partie au contrat de vente conclu entre acheteur et
-            vendeur.
+            Les paiements sont encaissés par notre prestataire de paiement{" "}
+            <strong>GeniusPay</strong> (mobile money et page de paiement
+            sécurisée), en francs CFA (XOF). GWA ne conserve aucune donnée de
+            carte ni code de mobile money.
+          </p>
+          <p>
+            Le montant payé est placé sous <strong>séquestre applicatif
+            GWA</strong> : GWA retient l&apos;argent sur le compte marchand de
+            la Plateforme et ne le libère au vendeur qu&apos;après confirmation
+            de la bonne réception par l&apos;acheteur, ou selon les règles de
+            résolution des litiges. Ce séquestre est un mécanisme contractuel de
+            la Plateforme ; il ne s&apos;agit ni d&apos;un compte bancaire
+            séquestre, ni d&apos;un service de GeniusPay.
+          </p>
+          <p>
+            Les versements aux vendeurs sont effectués par GWA après libération.
+            Aucun portefeuille électronique (« wallet ») n&apos;est proposé
+            tant que GWA n&apos;a pas obtenu l&apos;agrément requis de la BCEAO
+            ou conclu un partenariat avec un établissement agréé.
+          </p>
+          <p>
+            GWA agit en tant qu&apos;intermédiaire technique et n&apos;est pas
+            partie au contrat de vente conclu entre acheteur et vendeur.
+          </p>
+        </Section>
+
+        <Section n="6 bis" title="Conditions générales de vente : tarifs GWA">
+          <p>
+            Acheteurs : frais de service de <strong>250 F CFA par
+            opération</strong>, affichés avant le paiement.
+          </p>
+          <p>
+            Producteurs : Graine 0 F/mois et commission de 9 % ; Pousse
+            3 000 F/mois et 8 % ; Récolte 8 000 F/mois et 7 %. Coopératives :
+            Coopérative 8 000 F/mois et 7 % ; Union 20 000 F/mois et 6 % ;
+            Fédération sur devis, 5 % au plus. La commission est prélevée sur le
+            montant de la vente au moment de la libération du séquestre.
+          </p>
+          <p>
+            Les abonnements sont payables d&apos;avance, sans reconduction
+            forcée. Les prix des produits sont fixés librement par les vendeurs
+            et s&apos;entendent toutes taxes éventuelles comprises, sauf mention
+            contraire.
           </p>
         </Section>
 
@@ -155,6 +191,17 @@ export default function ConditionsPage() {
             d&apos;activité, destiné à faciliter la confiance entre membres. Il
             est fourni à titre indicatif et ne constitue pas une notation
             financière officielle ni un conseil.
+          </p>
+        </Section>
+
+        <Section n="8 bis" title="Assistante Yelly (IA)">
+          <p>
+            Yelly est une assistante d&apos;intelligence artificielle. Ses
+            réponses (prix de référence, reformulation, résumé d&apos;accord)
+            sont indicatives :{" "}
+            <strong>Yelly est une assistante, pas une décision financière.</strong>{" "}
+            Les coordonnées personnelles sont masquées avant tout envoi au
+            modèle.
           </p>
         </Section>
 
@@ -196,13 +243,30 @@ export default function ConditionsPage() {
           </p>
         </Section>
 
+        <Section n="12 bis" title="Données personnelles (ARTCI)">
+          <p>
+            Les données personnelles sont traitées conformément à la loi
+            ivoirienne n° 2013-450 du 19 juin 2013 relative à la protection des
+            données à caractère personnel, sous le contrôle de l&apos;Autorité
+            de Régulation des Télécommunications/TIC de Côte d&apos;Ivoire
+            (ARTCI). Le détail (finalités, durées, droits, effacement) figure
+            dans la{" "}
+            <Link href="/confidentialite" className="underline">
+              Politique de confidentialité
+            </Link>
+            .
+          </p>
+        </Section>
+
         <Section n="13" title="Droit applicable et litiges">
           <p>
             Les présentes conditions sont régies par le droit de la
-            <strong> République de Côte d&apos;Ivoire</strong> et, le cas
-            échéant, par les actes uniformes OHADA et la réglementation UEMOA.
-            À défaut de règlement amiable, les tribunaux compétents
-            d&apos;Abidjan seront saisis.
+            <strong> République de Côte d&apos;Ivoire</strong>, notamment les
+            Actes uniformes de l&apos;<strong>OHADA</strong> (dont
+            l&apos;Acte uniforme relatif au droit commercial général) et la
+            réglementation UEMOA applicable aux paiements. À défaut de
+            règlement amiable dans un délai de 30 jours, le litige est porté
+            devant le Tribunal de commerce d&apos;Abidjan.
           </p>
         </Section>
 
@@ -222,7 +286,7 @@ export default function ConditionsPage() {
           </Link>
         </div>
 
-        <p className="text-center text-xs text-neutral-400 pt-2">
+        <p className="text-center text-xs text-neutral-600 pt-2">
           KOUAME CORPORATION · GWA · Abidjan, Côte d&apos;Ivoire
         </p>
       </main>

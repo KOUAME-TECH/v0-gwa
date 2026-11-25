@@ -25,6 +25,16 @@ export function AdminModeBanner() {
     let mounted = true
     const run = async () => {
       try {
+        const supabase = createClient()
+        // Visiteur non connecté : pas d'appel admin-status (évite un 401 inutile en console).
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+        if (!session) {
+          if (mounted) setShow(false)
+          return
+        }
+
         const res = await fetch("/api/auth/admin-status")
         const data = await res.json().catch(() => ({}))
         if (!mounted || !data.isAdmin) {
@@ -32,7 +42,6 @@ export function AdminModeBanner() {
           return
         }
 
-        const supabase = createClient()
         const {
           data: { user },
         } = await supabase.auth.getUser()

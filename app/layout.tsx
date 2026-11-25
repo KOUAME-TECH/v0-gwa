@@ -11,6 +11,14 @@ export const metadata: Metadata = {
   description:
     "Achetez, vendez, discutez et partagez. Le marketplace social africain qui connecte producteurs, coopératives et acheteurs du monde entier.",
   manifest: "/manifest.json",
+  // Icônes explicites : évite la requête /favicon.ico (404) sur chaque page.
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/icon-32.png", sizes: "32x32", type: "image/png" },
+    ],
+    apple: "/apple-icon.png",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",

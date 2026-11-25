@@ -1,4 +1,4 @@
-import { withSentryConfig } from '@sentry/nextjs'
+import { withSentryConfig } from '@sentry/nextjs/config'
 
 export const PRIVATE_NO_STORE = "private, no-store"
 export const PRIVATE_NO_STORE_PREFIXES = [

@@ -92,7 +92,7 @@ export async function sendSmsOtp(
   phoneE164: string,
   code: string,
 ): Promise<SmsResult> {
-  const body = `GWA: votre code est ${code}. Valable 10 min. Ne le partagez pas.`
+  const body = `GWA: votre code est ${code}. Valable 5 min. Ne le partagez pas.`
 
   // Africa's Talking en priorité si clé présente (crédits GWA), puis Twilio, puis Termii.
   // (Avant : Twilio d'abord — or Twilio est souvent absent en CI.)

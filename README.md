@@ -5,8 +5,8 @@ Business Unit de **KOUAME Corporation** — marketplace agroalimentaire PWA (Cô
 **Tech Lead GWA :** Makan Diabaté (pilotage quotidien — prise en main)  
 **DG / supervision :** Yao Kouamé (vérification ponctuelle)
 
-**Prod :** https://v0-gwa-mu.vercel.app  
-**Repo :** https://github.com/MYSTERE-arch/v0-gwa
+**Prod :** https://mygwa.org  
+**Repo :** https://github.com/KOUAME-TECH/v0-gwa (public : aucun secret dans le code ni dans l’historique)
 
 ---
 
@@ -21,6 +21,8 @@ Business Unit de **KOUAME Corporation** — marketplace agroalimentaire PWA (Cô
 | **Relations** (CRM, packs, accès) | [Relations](https://app.notion.com/p/3b5a6d3a76b481d28ecfcc7c3c4aff2f) · [Accès](https://app.notion.com/p/3b5a6d3a76b481b59894efbebac19cf7) |
 | Pack Investisseurs (partageable) | [Pack — Investisseurs](https://app.notion.com/p/3b5a6d3a76b48126b1f3dc1cfd56689f) |
 | **CDC v2.0 (amendements) / ADR** | [docs/CDC-v2.0-amendements.md](./docs/CDC-v2.0-amendements.md) · [docs/adr/](./docs/adr/) |
+| **Améliorations / dettes** | [IMPROVEMENT_LEDGER.md](./IMPROVEMENT_LEDGER.md) |
+| **IA (Yelly) / Juridique** | [docs/ai-governance.md](./docs/ai-governance.md) · [docs/legal/](./docs/legal/) |
 
 ### Accès équipe (rappel)
 
@@ -44,15 +46,24 @@ Ce dépôt = le code, ce README, et le dossier `docs/` (amendements du cahier de
 ## Démarrage local
 
 ```bash
-npm install --legacy-peer-deps
+npm install --legacy-peer-deps   # un seul lockfile : package-lock.json (Vercel installe avec npm)
 # Demander .env.local au lead (ne jamais committer de secrets)
 npm run dev
-npm test
+npm run typecheck && npm run lint && npx vitest run
 ```
+
+## Sécurité (résumé)
+
+- **OTP SMS :** code à 6 chiffres haché (SHA-256 + `OTP_PEPPER`), valable **5 min**, usage unique (supprimé à la validation + verrou anti-concurrence), 5 essais par code, **5 vérifications et 5 envois par heure et par numéro** (`OTP_POLICY` dans `lib/auth/otp-store.ts`).
+- **Yelly (Gemini) :** clé serveur lue dans `platform_secrets` (ou env), données personnelles masquées avant envoi, 10 requêtes/min par utilisateur, repli déterministe si le modèle est indisponible. Voir [ADR-016](./docs/adr/ADR-016-yelly-ia.md).
+- **E-mails :** comptes via Supabase Auth ; domaine mygwa.org chez Zoho (SPF + DMARC présents, DKIM à publier). Gabarits HTML dans `emails/` et `lib/email/templates.ts`. Voir [ADR-017](./docs/adr/ADR-017-otp-emails.md).
+- **PWA :** le Service Worker ne met jamais en cache les pages liées à un compte (`PRIVATE_PREFIXES` dans `public/gwa-sw-core.js`).
+- **En-têtes :** HSTS, CSP, X-Frame-Options, nosniff, Referrer/Permissions-Policy (`next.config.mjs`).
 
 ## Déploiement & SQL
 
-- Push `main` → Vercel prod.
+- Push `main` → Vercel prod. Chaque branche a une preview `v0-gwa-git-<branche>-kouametech.vercel.app`.
+- Les fichiers `scripts/schema/NNN_*.sql` ne sont **jamais** appliqués automatiquement : application manuelle, après go de Yao, avec le `.rollback.sql` correspondant.
 - La prod Supabase est déclarée au niveau 064 d’après le schéma fourni. La nouvelle fonctionnalité de versement nécessite la migration additive `scripts/schema/065_manual_seller_payouts.sql` ; ne rejouez pas 058–064 sans vérifier l’état réel de la base.
 - GitHub Supabase Deploy = **OFF**.
 
