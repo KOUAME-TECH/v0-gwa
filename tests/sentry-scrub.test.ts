@@ -34,8 +34,9 @@ describe("scrubSentryEvent", () => {
   })
 
   it("les 3 configs Sentry posent sendDefaultPii: false et beforeSend", () => {
-    for (const f of ["client", "server", "edge"]) {
-      const src = readFileSync(`sentry.${f}.config.ts`, "utf8")
+    // Navigateur : instrumentation-client.ts (Next 16) ; serveur et edge : sentry.*.config.ts
+    for (const file of ["instrumentation-client.ts", "sentry.server.config.ts", "sentry.edge.config.ts"]) {
+      const src = readFileSync(file, "utf8")
       expect(src).toMatch(/sendDefaultPii:\s*false/)
       expect(src).toMatch(/beforeSend:\s*\(event\)\s*=>\s*scrubSentryEvent\(event\)/)
     }
