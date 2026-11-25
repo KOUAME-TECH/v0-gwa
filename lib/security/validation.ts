@@ -106,6 +106,8 @@ export const yellyChatSchema = z.object({
     .object({
       productId: z.string().uuid().optional(),
       city: z.string().max(80).optional(),
+      /** Conversation GWA acheteur–vendeur : historique utilisé comme contexte (participant seulement) */
+      chatConversationId: z.string().uuid().optional(),
     })
     .optional(),
 })

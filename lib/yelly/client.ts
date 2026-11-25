@@ -22,7 +22,7 @@ function keywordFallback(message: string, page?: string): string {
   if (/scg|score|confiance|bancable/.test(m)) {
     return "Ton score de confiance monte avec un profil complet et des livraisons correctes."
   }
-  if (/commande|escrow|paiement|payer|feex|argent/.test(m)) {
+  if (/commande|escrow|paiement|payer|geniuspay|argent/.test(m)) {
     return "Tu paies, l’argent est protégé jusqu’à confirmation de réception. Suivi dans Mes commandes."
   }
   if (/publier|offre|vendre|produit/.test(m)) {
