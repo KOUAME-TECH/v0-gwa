@@ -1,5 +1,6 @@
 -- Rollback de 078_security_modules.sql.
--- À encadrer par BEGIN/ROLLBACK ou BEGIN/COMMIT selon le go.
+-- ROLLBACK par défaut : remplacer la dernière ligne par COMMIT uniquement
+-- sur go écrit.
 -- Restaure messages_update_participant (066) et l'ancienne fonction trigger 065
 -- (sans le verrou payment_reference ajouté par 078).
 
@@ -35,6 +36,7 @@ CREATE POLICY "messages_update_participant"
   );
 
 DROP FUNCTION IF EXISTS public.mark_messages_read(uuid);
+DROP FUNCTION IF EXISTS public.respond_to_price_offer(uuid, text);
 
 DROP TABLE IF EXISTS public.scg_events_queue;
 
@@ -95,4 +97,4 @@ BEGIN
 END;
 $$;
 
-COMMIT;
+ROLLBACK; -- par défaut ; COMMIT seulement sur go écrit
