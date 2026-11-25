@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { clampScg, SCG_BANCABLE_MIN } from "@/lib/scg/scale"
 import { createClient } from "@/lib/supabase/server"
 
 type RouteParams = { params: Promise<{ profileId: string }> }
@@ -81,7 +82,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     }
 
     const badge = profile.scg_badge ?? latestScore?.badge ?? "insuffisant"
-    const scoreTotal = profile.scg_score ?? latestScore?.score_total ?? 0
+    const scoreTotal = clampScg(profile.scg_score ?? latestScore?.score_total ?? 0)
 
     return NextResponse.json({
       score: {
@@ -89,7 +90,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
         score_total: scoreTotal,
         badge,
         badge_label: BADGE_LABELS[badge] ?? badge,
-        bancable: profile.scg_bancable ?? latestScore?.bancable ?? scoreTotal >= 500,
+        bancable: profile.scg_bancable ?? latestScore?.bancable ?? scoreTotal >= SCG_BANCABLE_MIN,
         calculated_at: profile.scg_calculated_at ?? latestScore?.created_at ?? null,
         dimensions: latestScore
           ? {

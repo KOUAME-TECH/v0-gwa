@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, useCallback } from "react"
+import { clampScg, formatScg, SCG_MAX } from "@/lib/scg/scale"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { ScgGauge, ScgDimensions } from "@/components/scg/scg-display"
@@ -139,7 +140,7 @@ export default function ScgPage() {
     )
   }
 
-  const maxScore = Math.max(1000, ...history.map((h) => h.score_total))
+  const maxScore = SCG_MAX
 
   return (
     <main className="min-h-screen bg-[#F8F9FA] pb-24">
@@ -229,8 +230,8 @@ export default function ScgPage() {
                     <div key={i} className="flex-1 flex flex-col items-center gap-1">
                       <div
                         className="w-full rounded-t bg-[#2F7D32] transition-all"
-                        style={{ height: `${(h.score_total / maxScore) * 100}%`, minHeight: 4 }}
-                        title={`${h.score_total}`}
+                        style={{ height: `${(clampScg(h.score_total) / maxScore) * 100}%`, minHeight: 4 }}
+                        title={formatScg(h.score_total)}
                       />
                       <span className="text-[10px] text-[#9CA3AF]">
                         {new Date(h.created_at).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}

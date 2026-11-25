@@ -189,7 +189,7 @@ export default function ConditionsPage() {
           <p>
             Le SCG est un indicateur interne, calculé à partir de vos données
             d&apos;activité, destiné à faciliter la confiance entre membres. Il
-            est fourni à titre indicatif et ne constitue pas une notation
+            est exprimé sur une échelle de 0 à 1000. Il est fourni à titre indicatif et ne constitue pas une notation
             financière officielle ni un conseil.
           </p>
         </Section>
