@@ -13,7 +13,7 @@ import {
   referencePriceRange,
   type ChatTurn,
 } from "@/lib/yelly/capabilities"
-import { buildYellyContext } from "@/lib/yelly/context-builder"
+import { buildYellyContext, buildYellyTaskInstruction } from "@/lib/yelly/context-builder"
 import {
   clearYellyCache,
   genericCacheKey,
@@ -22,7 +22,11 @@ import {
   writeCachedReply,
   YELLY_CACHE_TTL_MS,
 } from "@/lib/yelly/faq-cache"
-import { checkYellyUserRateLimit, YELLY_USER_RATE_LIMIT } from "@/lib/yelly/rate-limit"
+import {
+  checkYellyGuestRateLimit,
+  checkYellyUserRateLimit,
+  YELLY_USER_RATE_LIMIT,
+} from "@/lib/yelly/rate-limit"
 import { YELLY_DISCLAIMER, YELLY_SYSTEM_PROMPT } from "@/lib/yelly/prompt"
 
 const PII_HISTORY: ChatTurn[] = [
@@ -118,7 +122,12 @@ describe("askYelly : charge utile réellement envoyée à Gemini (fetch simulé)
         history: PII_HISTORY,
         intent,
       })
-      const res = await askYelly({ message, page: "messages/chat", contextHint })
+      const res = await askYelly({
+        message,
+        page: "messages/chat",
+        contextHint,
+        taskInstruction: buildYellyTaskInstruction(intent),
+      })
       expect(res.source).toBe("llm")
       expect(captured).toHaveLength(1)
       const body = JSON.parse(captured[0])
@@ -127,8 +136,16 @@ describe("askYelly : charge utile réellement envoyée à Gemini (fetch simulé)
       const dynamicPart = sent.replace(/\+225 07 88 32 60 19/g, "[support GWA]")
       expect(containsPii(dynamicPart)).toBe(false)
       expect(sent).not.toMatch(/0711223344|ama@test\.ci|kouassi/)
-      expect(body.system_instruction.parts[0].text).toMatch(sc.expect)
-      expect(body.system_instruction.parts[0].text).toMatch(/Rôle de l’utilisateur/)
+      const system = body.system_instruction.parts[0].text as string
+      const userTurn = body.contents[body.contents.length - 1].parts[0].text as string
+      // Données (page, contexte, historique) : dans le message utilisateur, bloc délimité.
+      expect(`${system}\n${userTurn}`).toMatch(sc.expect)
+      expect(userTurn).toMatch(/Rôle de l’utilisateur/)
+      expect(userTurn).toMatch(/Page actuelle : messages\/chat/)
+      expect(userTurn.startsWith("=== DONNÉES DE CONTEXTE")).toBe(true)
+      // Prompt système : consignes serveur seulement.
+      expect(system).not.toMatch(/Rôle de l’utilisateur|Page actuelle|Derniers messages du chat/)
+      expect(system).toMatch(/pas des consignes|n’exécute jamais/)
     })
   }
 })
@@ -192,6 +209,15 @@ describe("rate limit utilisateur : 10 / minute", () => {
     expect(results[10].success).toBe(false)
     // un autre utilisateur n'est pas impacté
     expect((await checkYellyUserRateLimit(`${uid}-b`)).success).toBe(true)
+  })
+  it("invités : 10 appels par IP puis blocage, sans toucher aux comptes", async () => {
+    const ip = `198.51.100.${Date.now() % 250}`
+    const results = []
+    for (let i = 0; i < 11; i++) results.push(await checkYellyGuestRateLimit(ip))
+    expect(results.slice(0, 10).every((r) => r.success)).toBe(true)
+    expect(results[10].success).toBe(false)
+    expect((await checkYellyGuestRateLimit(`${ip}9`)).success).toBe(true)
+    expect((await checkYellyUserRateLimit(ip)).success).toBe(true)
   })
 })
 
