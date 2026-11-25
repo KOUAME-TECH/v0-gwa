@@ -1,9 +1,11 @@
 /**
- * Affichage des paliers historiques (entitlements).
- * Le montant réellement prélevé sur une commande vient de `pricing_plans`
- * via le trigger `orders_apply_pricing`, pas de ces constantes.
+ * Affichage des paliers (entitlements) et copie de secours des taux.
+ * Sur une commande réelle, le frais acheteur et la commission viennent de
+ * `gwa_quote_pricing` (COALESCE(platform_settings.buyer_service_fee_fixed,
+ * plan, 0)), appelée par le checkout et le trigger `orders_apply_pricing`.
  */
 import { quotePricing, seedPlan } from "@/lib/pricing/quote"
+import { BUYER_SERVICE_FEE_FIXED_FCFA } from "@/lib/pricing/published-grid"
 
 export type SubscriptionTier = "free" | "starter" | "pro" | "enterprise"
 
@@ -71,13 +73,14 @@ export type SellerCommissionResult = {
   pctLabel: string
   commissionFcfa: number
   vendeurRecoitFcfa: number
-  /** Toujours 0 — pas de frais GWA acheteur. */
+  /** Frais de service acheteur (FCFA). Copie de secours : 250 F. */
   buyerServiceFee: number
 }
 
 /**
  * Calcule la commission vendeur sur le sous-total catalogue (hors GeniusPay).
- * L’acheteur paie subtotal (+ shipping) ; GWA prélève sur le vendeur.
+ * L’acheteur paie le sous-total + le frais de service (250 F dans cette copie
+ * de secours). Le montant réellement prélevé est celui de `gwa_quote_pricing`.
  */
 export function computeSellerCommission(
   subtotal: number,
@@ -106,18 +109,23 @@ export function computeSellerCommission(
   }
 }
 
-/** @deprecated Utiliser computeSellerCommission — frais acheteur = 0. */
+/**
+ * @deprecated Préférer le devis serveur (`GET /api/pricing/quote` /
+ * `gwa_quote_pricing`). Conservé pour d’éventuels appelants d’affichage.
+ * Le frais officiel est un fixe de 250 F par opération (pas un pourcentage).
+ * `subtotal` n’entre pas dans le calcul.
+ */
 export function computeServiceFee(
-  subtotal: number,
+  _subtotal: number,
   _tier?: string | null,
 ): { fee: number; rate: number; tier: SubscriptionTier; pctLabel: string } {
   return {
-    fee: 0,
+    fee: BUYER_SERVICE_FEE_FIXED_FCFA,
     rate: 0,
     tier: normalizeSubscriptionTier(_tier),
-    pctLabel: "0 %",
+    pctLabel: `${BUYER_SERVICE_FEE_FIXED_FCFA} F`,
   }
 }
 
-/** @deprecated Alias historique — rates acheteur retirés. */
+/** @deprecated Alias historique — ancien barème de taux, désormais les commissions vendeur. */
 export const SERVICE_FEE_RATES = SELLER_COMMISSION_RATES
