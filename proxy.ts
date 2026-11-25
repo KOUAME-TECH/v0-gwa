@@ -2,6 +2,12 @@ import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 import { updateSession } from "@/lib/supabase/middleware"
 import { assertSameOrigin } from "@/lib/security/csrf"
+import {
+  WALLET_DISABLED_REDIRECT,
+  WALLET_FLAG,
+  fetchFeatureFlag,
+  walletPathScope,
+} from "@/lib/feature-flags/core"
 
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"])
 
@@ -24,6 +30,22 @@ export async function proxy(request: NextRequest) {
   if (pathname.startsWith("/api/") && MUTATING_METHODS.has(method) && !isCsrfExempt(pathname)) {
     const csrf = assertSameOrigin(request)
     if (csrf) return csrf
+  }
+
+  // Wallet / versements masqués tant que le drapeau `wallet` est off (GSAC-2,
+  // directive CEO 25/11 : invisible jusqu'à l'agrément BCEAO). Fail-closed.
+  const walletScope = walletPathScope(pathname)
+  if (walletScope && !(await fetchFeatureFlag(WALLET_FLAG))) {
+    if (walletScope === "api") {
+      return NextResponse.json(
+        { error: "Fonctionnalité indisponible", code: "FEATURE_DISABLED" },
+        { status: 404, headers: { "Cache-Control": "no-store" } },
+      )
+    }
+    const url = request.nextUrl.clone()
+    url.pathname = WALLET_DISABLED_REDIRECT
+    url.search = ""
+    return NextResponse.redirect(url)
   }
 
   // Protect admin routes
