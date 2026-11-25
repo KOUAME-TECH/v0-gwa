@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { checkRateLimit } from "@/lib/security/rate-limiter"
+import { checkRateLimit, rateLimit } from "@/lib/security/rate-limiter"
 import { formatPhoneE164, validateWestAfricaPhone } from "@/lib/auth/phone"
 import {
   resolvePostAuthRedirect,
@@ -13,6 +13,9 @@ import {
   bumpOtpAttempts,
   clearOtp,
   verifyOtpHash,
+  acquireOtpVerifyLock,
+  releaseOtpVerifyLock,
+  OTP_POLICY,
 } from "@/lib/auth/otp-store"
 
 async function runScg(userId: string) {
@@ -48,7 +51,34 @@ async function runScg(userId: string) {
   }
 }
 
+/**
+ * Enveloppe d'usage unique : une seule vérification à la fois par numéro
+ * (verrou court), puis délégation au flux existant.
+ */
 export async function POST(request: Request) {
+  let lockedPhone: string | null = null
+  try {
+    const peek = await request.clone().json().catch(() => null)
+    const formatted =
+      peek && typeof peek.phone === "string"
+        ? formatPhoneE164(peek.phone, peek.countryCode || "ci")
+        : null
+    if (formatted) {
+      if (!(await acquireOtpVerifyLock(formatted))) {
+        return NextResponse.json(
+          { error: "Vérification déjà en cours. Patientez quelques secondes." },
+          { status: 409 },
+        )
+      }
+      lockedPhone = formatted
+    }
+    return await verifyOtpFlow(request)
+  } finally {
+    if (lockedPhone) await releaseOtpVerifyLock(lockedPhone).catch(() => {})
+  }
+}
+
+async function verifyOtpFlow(request: Request) {
   try {
     const body = await request.json()
     const {
@@ -70,10 +100,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Numéro invalide" }, { status: 400 })
     }
 
-    const rateLimit = await checkRateLimit("OTP_REQUEST", `verify:${formatted}`)
-    if (!rateLimit.success) {
+    const shortLimit = await checkRateLimit("OTP_REQUEST", `verify:${formatted}`)
+    // Politique : 5 tentatives par heure et par numéro.
+    const hourLimit = await rateLimit(`OTP_VERIFY_H:${formatted}`, OTP_POLICY.verifyPerHour)
+    if (!shortLimit.success || !hourLimit.success) {
       return NextResponse.json(
-        { error: "Trop de tentatives de vérification" },
+        { error: "Trop de tentatives de vérification. Réessayez dans une heure." },
         { status: 429 },
       )
     }
@@ -91,7 +123,7 @@ export async function POST(request: Request) {
     // 1) OTP custom (email lié / Twilio)
     const stored = await getOtp(formatted)
     if (stored) {
-      if (stored.attempts >= 5) {
+      if (stored.attempts >= OTP_POLICY.maxAttemptsPerCode) {
         await clearOtp(formatted)
         return NextResponse.json(
           { error: "Trop d'essais. Demandez un nouveau code." },

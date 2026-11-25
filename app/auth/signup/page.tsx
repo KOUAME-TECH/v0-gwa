@@ -145,7 +145,7 @@ function SignupForm() {
         return
       }
       setMaskedPhone(data.masked_phone || maskPhone(data.phone))
-      setOtpExpiresAt(Date.now() + (data.expires_in || 600) * 1000)
+      setOtpExpiresAt(Date.now() + (data.expires_in || 300) * 1000)
       setPhoneOtpStep("otp")
       setOtp("")
     } catch {

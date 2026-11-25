@@ -15,7 +15,7 @@ import {
   persistYellyTurn,
 } from "@/lib/yelly/context"
 import { buildYellyContext } from "@/lib/yelly/context-builder"
-import { detectYellyIntent } from "@/lib/yelly/capabilities"
+import { deterministicCapabilityReply, detectYellyIntent } from "@/lib/yelly/capabilities"
 import {
   genericCacheKey,
   matchFaq,
@@ -178,6 +178,11 @@ export async function POST(request: NextRequest) {
     } else {
       result = await askYelly({ message, page, contextHint })
       if (cacheKey && result.source === "llm") writeCachedReply(cacheKey, result.reply)
+      if (result.source === "fallback") {
+        // Modèle indisponible : on garde les capacités calculables (prix repère, accord).
+        const det = deterministicCapabilityReply(intent, product ?? null, history)
+        if (det) result = { reply: det, source: "rules" }
+      }
     }
 
     // L’id de conversation GWA (chat) n’est jamais un id Yelly : persistance séparée.
