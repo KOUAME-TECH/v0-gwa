@@ -185,6 +185,12 @@ export const RATE_LIMITS = {
     windowMs: 60 * 1000,
     blockDurationMs: 2 * 60 * 1000,
   },
+  /** Back-office : bascule des feature flags (GSAC-3) */
+  ADMIN_FLAG_WRITE: {
+    maxRequests: 10,
+    windowMs: 60 * 1000,
+    blockDurationMs: 5 * 60 * 1000,
+  },
   /** Yelly assistant — anti-abus coût LLM */
   YELLY_CHAT: {
     maxRequests: 20,

@@ -21,6 +21,7 @@ export type AdminSection =
   | "settings"
   | "support"
   | "pricing"
+  | "features"
 
 export const ADMIN_ROLE_LABELS: Record<AdminRole, string> = {
   super_admin: "Super administrateur",
@@ -49,6 +50,7 @@ export const ADMIN_NAV: { name: string; href: string; section: AdminSection }[] 
   { name: "Yelly Ops", href: "/admin/ai", section: "ai" },
   { name: "Statistiques", href: "/admin/analytics", section: "analytics" },
   { name: "Parametres", href: "/admin/settings", section: "settings" },
+  { name: "Fonctionnalités", href: "/admin/features", section: "features" },
 ]
 
 const ALL_SECTIONS: AdminSection[] = ADMIN_NAV.map((n) => n.section)
@@ -89,6 +91,26 @@ export type AdminAction =
   | "grant_support"
   | "grant_admin"
   | "revoke_admin"
+
+/** Bascule des feature flags : super_admin et admin uniquement. */
+export function canToggleFeatureFlags(role: AdminRole): boolean {
+  return role === "super_admin" || role === "admin"
+}
+
+/** Drapeaux réglementés (wallet = agrément BCEAO) : super_admin uniquement. */
+export const SUPER_ADMIN_ONLY_FLAGS: readonly string[] = ["wallet", "internal_wallet"]
+
+export function canToggleFeatureFlag(role: AdminRole, flag: string): boolean {
+  if (!canToggleFeatureFlags(role)) return false
+  if (SUPER_ADMIN_ONLY_FLAGS.includes(flag)) return role === "super_admin"
+  return true
+}
+
+/** UX : un admin simple ne voit pas les interrupteurs réglementés. */
+export function visibleFeatureFlags<T extends { name: string }>(flags: T[], role: AdminRole): T[] {
+  if (role === "super_admin") return flags
+  return flags.filter((f) => !SUPER_ADMIN_ONLY_FLAGS.includes(f.name))
+}
 
 export function canEditCommercialSettings(role: AdminRole): boolean {
   return role === "super_admin" || role === "finance_admin"
