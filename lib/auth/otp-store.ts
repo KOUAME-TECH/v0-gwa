@@ -12,6 +12,22 @@ import { Redis } from "@upstash/redis"
  */
 export type OtpMode = "login" | "bind" | "register"
 
+/**
+ * Politique OTP (Lot D, phase 5) :
+ * - un code expire après 5 minutes ;
+ * - usage unique : supprimé dès qu'il est validé, verrou anti-concurrence ;
+ * - 5 tentatives de vérification maximum par heure et par numéro
+ *   (et 5 essais maximum sur un même code) ;
+ * - 5 envois maximum par heure et par numéro (en plus du délai de 55 s).
+ */
+export const OTP_POLICY = {
+  ttlSeconds: 300,
+  maxAttemptsPerCode: 5,
+  verifyPerHour: { maxRequests: 5, windowMs: 60 * 60 * 1000 },
+  sendPerHour: { maxRequests: 5, windowMs: 60 * 60 * 1000 },
+  verifyLockSeconds: 30,
+} as const
+
 export type StoredOtp = {
   /** SHA-256 hex of code + pepper — never store plaintext */
   codeHash: string
@@ -93,7 +109,7 @@ export async function storeOtp(
     phone: string
     mode?: OtpMode
   },
-  ttlSeconds = 600,
+  ttlSeconds: number = OTP_POLICY.ttlSeconds,
 ): Promise<void> {
   const data: StoredOtp = {
     codeHash: hashOtpCode(payload.code),
@@ -142,7 +158,7 @@ export async function bumpOtpAttempts(phoneE164: string): Promise<number> {
   if (redis) {
     const ttl = await redis.ttl(otpKey(phoneE164))
     await redis.set(otpKey(phoneE164), next, {
-      ex: ttl > 0 ? ttl : 600,
+      ex: ttl > 0 ? ttl : OTP_POLICY.ttlSeconds,
     })
   } else {
     const mem = memoryStore.get(otpKey(phoneE164))
@@ -160,6 +176,42 @@ export async function clearOtp(phoneE164: string): Promise<void> {
     return
   }
   memoryStore.delete(otpKey(phoneE164))
+}
+
+/**
+ * Verrou d'usage unique : une seule vérification à la fois pour un numéro.
+ * Empêche deux requêtes simultanées de consommer le même code.
+ */
+export async function acquireOtpVerifyLock(phoneE164: string): Promise<boolean> {
+  const key = `gwa:otp:lock:${phoneE164}`
+  const redis = getRedis()
+  if (redis) {
+    const res = await redis.set(key, "1", { nx: true, ex: OTP_POLICY.verifyLockSeconds })
+    return res === "OK"
+  }
+  const mem = memoryStore.get(key)
+  if (mem && mem.expiresAt > Date.now()) return false
+  memoryStore.set(key, {
+    codeHash: "",
+    userId: "",
+    email: "",
+    phone: phoneE164,
+    mode: "login",
+    attempts: 0,
+    createdAt: Date.now(),
+    expiresAt: Date.now() + OTP_POLICY.verifyLockSeconds * 1000,
+  })
+  return true
+}
+
+export async function releaseOtpVerifyLock(phoneE164: string): Promise<void> {
+  const key = `gwa:otp:lock:${phoneE164}`
+  const redis = getRedis()
+  if (redis) {
+    await redis.del(key)
+    return
+  }
+  memoryStore.delete(key)
 }
 
 /** Anti-spam envoi OTP (indépendant du rate-limit IP) */
