@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { createAdminClient } from "@/lib/supabase/admin"
 import type { SCGResult } from "@/lib/scg/engine"
+import { SCG_MODEL_VERSION } from "@/lib/scg/five-c"
 
 /**
  * Seule voie d'écriture du SCG (migration 084) : service role, côté serveur.
@@ -18,11 +19,19 @@ export async function persistScgResult(
     score_total: result.score_total,
     badge: result.badge,
     bancable: result.bancable,
-    dim_fiabilite: result.dimensions.fiabilite,
-    dim_qualite: result.dimensions.qualite,
-    dim_engagement: result.dimensions.engagement,
-    dim_volumes: result.dimensions.volumes,
-    dim_stabilite: result.dimensions.stabilite,
+    model_version: result.explain?.model_version ?? SCG_MODEL_VERSION,
+    c_character: result.dimensions.character,
+    c_capacity: result.dimensions.capacity,
+    c_capital: result.dimensions.capital,
+    c_collateral: result.dimensions.collateral,
+    c_conditions: result.dimensions.conditions,
+    explain: {
+      top_up: result.explain?.top_up ?? [],
+      top_down: result.explain?.top_down ?? [],
+      caps: result.explain?.caps ?? [],
+      flags: result.explain?.flags ?? [],
+      factors: result.explain?.factors ?? [],
+    },
     recommandation: result.recommandation,
   })
   if (insertError) throw new Error(`scg_scores: ${insertError.message}`)
@@ -34,6 +43,7 @@ export async function persistScgResult(
       scg_badge: result.badge,
       scg_bancable: result.bancable,
       scg_calculated_at: result.calculated_at,
+      scg_criteria: { model: result.explain?.model_version ?? SCG_MODEL_VERSION, ...result.dimensions },
     })
     .eq("id", userId)
   if (profileError) throw new Error(`profiles.scg: ${profileError.message}`)
@@ -53,7 +63,7 @@ export async function ensureInitialScg(
   if (existing) return false
   const { aggregateProducerData } = await import("@/lib/scg/aggregate")
   const { calculateSCG } = await import("@/lib/scg/engine")
-  const result = calculateSCG(await aggregateProducerData(userId))
+  const result = calculateSCG(await aggregateProducerData(userId, admin))
   await persistScgResult(userId, result, admin)
   return true
 }
