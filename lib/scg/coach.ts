@@ -8,30 +8,30 @@ export type CoachAction = {
 }
 
 const COACH_MAP: Record<keyof SCGDimensions, Omit<CoachAction, "dim">> = {
-  fiabilite: {
-    title: "Honorer tes prochaines livraisons",
-    how: "Confirme et livre à l’heure — chaque commande réussie monte ta fiabilité.",
-    href: "/dashboard/commandes",
+  character: {
+    title: "Renforcer la confiance",
+    how: "Fais vérifier ton identité, livre à la date promise et réponds vite aux messages.",
+    href: "/profil",
   },
-  qualite: {
-    title: "Soigner la qualité perçue",
-    how: "Photos nettes, description honnête, réponse aux avis — moins de litiges.",
-    href: "/dashboard/products",
-  },
-  engagement: {
-    title: "Rester actif sur GWA",
-    how: "Publie régulièrement et réponds aux messages acheteurs.",
-    href: "/publier",
-  },
-  volumes: {
-    title: "Augmenter un peu les volumes",
-    how: "Ajoute une offre claire (prix + quantité) pour plus de transactions.",
+  capacity: {
+    title: "Vendre un peu chaque mois",
+    how: "Des ventes livrées régulières, à plusieurs acheteurs, prouvent ta capacité à rembourser.",
     href: "/dashboard/products/new",
   },
-  stabilite: {
-    title: "Stabiliser ton approvisionnement",
-    how: "Évite les ruptures : mets à jour le stock avant de publier.",
+  capital: {
+    title: "Montrer ce que tu as construit",
+    how: "Publie ton stock avec prix et quantité, renseigne ta surface et ton matériel.",
     href: "/dashboard/products",
+  },
+  collateral: {
+    title: "Sécuriser tes ventes",
+    how: "Fais payer via le séquestre GWA, rejoins ta coopérative et géolocalise ton champ.",
+    href: "/cooperatives",
+  },
+  conditions: {
+    title: "Compléter ton contexte",
+    how: "Indique tes filières, ta zone de production et aligne tes prix sur la référence.",
+    href: "/profil",
   },
 }
 

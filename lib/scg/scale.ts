@@ -1,7 +1,7 @@
 /**
  * Échelle unique du Score de Confiance GWA (SCG) : 0 à 1000 (directive de Yao, 25/11/2026).
  * Toute lecture, écriture ou affichage du score global passe par ces helpers.
- * Les 5 dimensions restent des sous-scores sur 100 (pondérées, puis × 10).
+ * Les 5 piliers (méthode des 5C) restent des sous-scores sur 100 (pondérés, puis × 10).
  * Contrainte SQL correspondante : scripts/schema/083_scg_max_1000.sql.
  */
 export const SCG_MIN = 0
