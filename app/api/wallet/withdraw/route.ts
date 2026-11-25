@@ -68,32 +68,45 @@ export async function POST(request: NextRequest) {
 
     const admin = createAdminClient()
 
-    // Solde disponible = commandes livrées / escrow released
-    const { data: completed } = await admin
-      .from("orders")
-      .select("vendeur_recoit_fcfa, total_amount, commission_fcfa, service_fee")
-      .eq("seller_id", user.id)
-      .eq("payment_status", "paid")
-      .or("escrow_status.eq.released,status.eq.delivered")
+    // Client admin (service_role) : le trigger prod protège l'INSERT.
+    // Solde = liste blanche (get_seller_eligible_proceeds), pas vendeur_recoit_fcfa.
+    const { data: proceedsRaw, error: proceedsErr } = await admin.rpc(
+      "get_seller_eligible_proceeds",
+      { p_seller_id: user.id },
+    )
+    if (proceedsErr) {
+      if (/does not exist|schema cache|42883/i.test(proceedsErr.message)) {
+        return NextResponse.json(
+          { error: "Migration 065 requise (get_seller_eligible_proceeds)", code: "MIGRATION_REQUIRED" },
+          { status: 503 },
+        )
+      }
+      return NextResponse.json({ error: proceedsErr.message }, { status: 500 })
+    }
+    const available = Math.max(0, Number(proceedsRaw) || 0)
 
-    const available = (completed || []).reduce((sum, o) => {
-      if (o.vendeur_recoit_fcfa != null) return sum + (Number(o.vendeur_recoit_fcfa) || 0)
-      return (
-        sum +
-        (Number(o.total_amount) || 0) -
-        (Number(o.commission_fcfa) || 0) -
-        (Number(o.service_fee) || 0)
-      )
-    }, 0)
-
-    const { data: prior } = await admin
+    const { data: prior, error: priorErr } = await admin
       .from("withdrawal_requests")
       .select("amount_fcfa, status")
       .eq("user_id", user.id)
-      .in("status", ["pending", "processing", "paid"])
+      .in("status", ["pending", "processing", "queued"])
 
-    const already = (prior || []).reduce((s, w) => s + (Number(w.amount_fcfa) || 0), 0)
-    const balance = Math.max(0, available - already)
+    if (priorErr && /does not exist|relation/i.test(priorErr.message)) {
+      return NextResponse.json(
+        { error: "Migration 053 requise (withdrawal_requests)", code: "MIGRATION_REQUIRED" },
+        { status: 503 },
+      )
+    }
+
+    if ((prior || []).length > 0) {
+      return NextResponse.json(
+        { error: "Une demande de versement est déjà en cours", code: "OPEN_REQUEST_EXISTS" },
+        { status: 409 },
+      )
+    }
+
+    const reserved = (prior || []).reduce((s, w) => s + (Number(w.amount_fcfa) || 0), 0)
+    const balance = Math.max(0, available - reserved)
 
     if (amount > balance) {
       return NextResponse.json(
