@@ -40,12 +40,12 @@ export const quantitySchema = z.number().positive().max(999_999)
 export const amountFCFA = z.number().int().min(100).max(100_000_000)
 
 export const loginSchema = z.object({
-  email: z.string().email("Email invalide").max(255).toLowerCase().trim(),
+  email: z.string().trim().toLowerCase().email("Email invalide").max(255),
   password: z.string().min(8, "Minimum 8 caracteres").max(128),
 })
 
 export const signupSchema = z.object({
-  email: z.string().email().max(255).toLowerCase().trim(),
+  email: z.string().trim().toLowerCase().email().max(255),
   password: z
     .string()
     .min(8)
