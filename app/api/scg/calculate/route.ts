@@ -1,9 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { assertSameOrigin } from "@/lib/security/csrf"
 import { createClient } from "@/lib/supabase/server"
-import { createAdminClient } from "@/lib/supabase/admin"
 import { aggregateProducerData } from "@/lib/scg/aggregate"
 import { calculateSCG } from "@/lib/scg/engine"
+import { persistScgResult } from "@/lib/scg/persist"
 
 /**
  * POST /api/scg/calculate
@@ -42,30 +42,7 @@ export async function POST(request: NextRequest) {
 
     const data = await aggregateProducerData(targetUserId)
     const result = calculateSCG(data)
-    const admin = createAdminClient()
-
-    await admin.from("scg_scores").insert({
-      user_id: targetUserId,
-      score_total: result.score_total,
-      badge: result.badge,
-      bancable: result.bancable,
-      dim_fiabilite: result.dimensions.fiabilite,
-      dim_qualite: result.dimensions.qualite,
-      dim_engagement: result.dimensions.engagement,
-      dim_volumes: result.dimensions.volumes,
-      dim_stabilite: result.dimensions.stabilite,
-      recommandation: result.recommandation,
-    })
-
-    await admin
-      .from("profiles")
-      .update({
-        scg_score: result.score_total,
-        scg_badge: result.badge,
-        scg_bancable: result.bancable,
-        scg_calculated_at: result.calculated_at,
-      })
-      .eq("id", targetUserId)
+    await persistScgResult(targetUserId, result)
 
     return NextResponse.json(result)
   } catch (error) {

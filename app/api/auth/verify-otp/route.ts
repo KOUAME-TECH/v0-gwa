@@ -20,32 +20,11 @@ import {
 
 async function runScg(userId: string) {
   try {
-    const admin = createAdminClient()
+    // Écriture serveur (service role) uniquement — migration 084.
     const { aggregateProducerData } = await import("@/lib/scg/aggregate")
     const { calculateSCG } = await import("@/lib/scg/engine")
-    const scgData = await aggregateProducerData(userId)
-    const scg = calculateSCG(scgData)
-    await admin.from("scg_scores").insert({
-      user_id: userId,
-      score_total: scg.score_total,
-      badge: scg.badge,
-      bancable: scg.bancable,
-      dim_fiabilite: scg.dimensions.fiabilite,
-      dim_qualite: scg.dimensions.qualite,
-      dim_engagement: scg.dimensions.engagement,
-      dim_volumes: scg.dimensions.volumes,
-      dim_stabilite: scg.dimensions.stabilite,
-      recommandation: scg.recommandation,
-    })
-    await admin
-      .from("profiles")
-      .update({
-        scg_score: scg.score_total,
-        scg_badge: scg.badge,
-        scg_bancable: scg.bancable,
-        scg_calculated_at: scg.calculated_at,
-      })
-      .eq("id", userId)
+    const { persistScgResult } = await import("@/lib/scg/persist")
+    await persistScgResult(userId, calculateSCG(await aggregateProducerData(userId)))
   } catch (scgErr) {
     console.error("[auth/verify-otp] SCG:", scgErr)
   }
