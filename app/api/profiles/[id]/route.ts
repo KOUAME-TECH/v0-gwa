@@ -4,6 +4,7 @@ import { computeProfileCompletion } from "@/lib/auth/post-auth"
 import { assertSameOrigin } from "@/lib/security/csrf"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { sanitizeHtml, sanitizePlainText } from "@/lib/security/validation"
+import { applySelfRoleChoice } from "@/lib/profile/privileged"
 
 const PUBLIC_FIELDS =
   "id, full_name, avatar_url, bio, user_type, sub_type, country, city, is_verified, rating, total_reviews, scg_score, scg_badge, scg_bancable, created_at"
@@ -18,7 +19,8 @@ const PATCHABLE_FIELDS = [
   "city",
   "address",
   "avatar_url",
-  // user_type / sub_type : interdits en self-service (voir 049 + admin)
+  // user_type / sub_type : jamais écrits avec la session du membre (086) ;
+  // choix initial du rôle via applySelfRoleChoice (service role, règles serveur).
   "preferred_language",
   "digest_enabled",
   "production_type",
@@ -98,6 +100,16 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Corps de requête invalide" }, { status: 400 })
     }
 
+    // Choix du rôle (inscription / onboarding) : écrit côté serveur, une seule fois.
+    let roleChanged = false
+    if ("user_type" in body || "sub_type" in body) {
+      const role = await applySelfRoleChoice(id, { user_type: body.user_type, sub_type: body.sub_type })
+      if ("error" in role) {
+        return NextResponse.json({ error: role.error }, { status: role.status })
+      }
+      roleChanged = true
+    }
+
     const updates: Record<string, unknown> = {}
 
     for (const field of PATCHABLE_FIELDS) {
@@ -117,7 +129,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       }
     }
 
-    if (Object.keys(updates).length === 0) {
+    if (Object.keys(updates).length === 0 && !roleChanged) {
       return NextResponse.json({ error: "Aucun champ à mettre à jour" }, { status: 400 })
     }
 

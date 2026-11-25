@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { applySelfRoleChoice } from "@/lib/profile/privileged"
 import { checkRateLimit, rateLimit } from "@/lib/security/rate-limiter"
 import { formatPhoneE164, validateWestAfricaPhone } from "@/lib/auth/phone"
 import {
@@ -371,13 +372,13 @@ async function verifyOtpFlow(request: Request) {
           const profileUpdate = {
             phone: formatted,
             full_name: profileData.name || undefined,
-            user_type: mappedType,
             country: profileData.country || undefined,
             city: profileData.city || undefined,
             auth_method: "phone" as const,
           }
           const completion = computeProfileCompletion({
             ...profileUpdate,
+            user_type: mappedType,
             email: syntheticEmail,
           })
           await admin
@@ -388,6 +389,7 @@ async function verifyOtpFlow(request: Request) {
               updated_at: new Date().toISOString(),
             })
             .eq("id", data.user.id)
+          if (mappedType) await applySelfRoleChoice(data.user.id, { user_type: mappedType }, admin)
         }
 
         const { path, isNewUser } = await resolvePostAuthRedirect(
@@ -461,16 +463,17 @@ async function verifyOtpFlow(request: Request) {
         const profileUpdate = {
           phone: formatted,
           full_name: profileData.name || undefined,
-          user_type: mappedType,
           country: profileData.country || undefined,
           city: profileData.city || undefined,
           auth_method: "phone" as const,
         }
         const completion = computeProfileCompletion({
           ...profileUpdate,
+          user_type: mappedType,
           email: stored.email,
         })
-        await supabase
+        // phone et rôle sont privilégiés (086) : écriture serveur après vérification du code.
+        await admin
           .from("profiles")
           .update({
             ...profileUpdate,
@@ -478,6 +481,7 @@ async function verifyOtpFlow(request: Request) {
             updated_at: new Date().toISOString(),
           })
           .eq("id", data.user.id)
+        if (mappedType) await applySelfRoleChoice(data.user.id, { user_type: mappedType }, admin)
       }
 
       const { path, isNewUser } = await resolvePostAuthRedirect(
@@ -515,8 +519,8 @@ async function verifyOtpFlow(request: Request) {
 
       const profileUpdate = {
         phone: formatted,
+        phone_verified: true,
         full_name: profileData.name || undefined,
-        user_type: mappedType,
         country: profileData.country || undefined,
         city: profileData.city || undefined,
         auth_method: "phone" as const,
@@ -524,10 +528,14 @@ async function verifyOtpFlow(request: Request) {
 
       const completion = computeProfileCompletion({
         ...profileUpdate,
+        user_type: mappedType,
         email: data.user.email,
       })
 
-      await supabase
+      // Code vérifié par Supabase Auth pour data.user : phone / phone_verified / rôle
+      // sont privilégiés (086) → écriture par le serveur (service role).
+      const admin = createAdminClient()
+      await admin
         .from("profiles")
         .update({
           ...profileUpdate,
@@ -535,6 +543,7 @@ async function verifyOtpFlow(request: Request) {
           updated_at: new Date().toISOString(),
         })
         .eq("id", data.user.id)
+      if (mappedType) await applySelfRoleChoice(data.user.id, { user_type: mappedType }, admin)
 
       await supabase.auth.updateUser({
         data: {
@@ -546,7 +555,7 @@ async function verifyOtpFlow(request: Request) {
         },
       })
     } else {
-      await supabase
+      await createAdminClient()
         .from("profiles")
         .update({
           phone: formatted,
