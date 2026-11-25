@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest"
 import { seedPlan } from "@/lib/pricing/quote"
 import { calculateOrderTotals } from "@/lib/features/payments/calculate-order"
-import { ledgerIsBalanced, payInLedgerLines, payoutLedgerLines } from "@/lib/features/payments/ledger"
+import {
+  ledgerAccountBalances,
+  ledgerIsBalanced,
+  payInLedgerLines,
+  payoutLedgerLines,
+} from "@/lib/features/payments/ledger"
 import { payoutFeeFcfa, sellerReceivesAfterPayoutFee } from "@/lib/features/payments/payout-fee"
 import { allocateStock } from "@/lib/features/agritech/handle-stock"
 import { requestIsMatched } from "@/lib/features/agritech/rfq-engine"
@@ -60,21 +65,26 @@ describe("frais de versement", () => {
 })
 
 describe("grand livre", () => {
-  it("équilibre le paiement et le versement, frais de versement compris", () => {
+  it("équilibre le paiement et la libération ; le frais de versement n'est pas dans cette ventilation", () => {
     const totals = calculateOrderTotals(3_000, 10, seedPlan("FREE"), buyerFee)
-    const fee = payoutFeeFcfa({ payoutsAlreadyThisMonth: 0, payoutIncluded: 0, feeCost: 300 })
-    const sellerNet = sellerReceivesAfterPayoutFee(totals.sellerNet, fee)
     const payIn = payInLedgerLines({ transactionId: "order-1", totalPaid: totals.totalPaid })
-    const payout = payoutLedgerLines({
+    const release = payoutLedgerLines({
       transactionId: "order-1",
-      sellerNet,
+      sellerNet: totals.sellerNet,
       commission: totals.commission,
       buyerFee: totals.buyerFee,
-      payoutFee: fee,
     })
-    expect(ledgerIsBalanced(payIn, payout)).toBe(true)
-    expect(payIn[0]?.amount).toBe(30_250)
-    expect(payout.reduce((sum, line) => sum + line.amount, 0)).toBe(30_250)
+    expect(ledgerIsBalanced(payIn, release)).toBe(true)
+    expect(payIn[0]).toMatchObject({
+      debitAccount: "GATEWAY_GENIUSPAY",
+      creditAccount: "ESCROW_GWA",
+      amount: 30_250,
+    })
+    expect(release.reduce((sum, line) => sum + line.amount, 0)).toBe(30_250)
+    const bal = ledgerAccountBalances([...payIn, ...release])
+    expect(bal.ESCROW_GWA).toBe(0)
+    expect(bal.WALLET_SELLER).toBe(totals.sellerNet)
+    expect(bal.REVENUE_GWA_PAYOUT ?? 0).toBe(0)
   })
 })
 
