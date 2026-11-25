@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { requireAdminSection } from "@/lib/auth/require-admin"
 import { checkRateLimit } from "@/lib/security/rate-limiter"
 import { DIMENSION_META } from "@/lib/scg/engine"
+import { dimensionsFromRow, SCG_5C_COLUMNS } from "@/lib/scg/row"
 
 /**
  * GET /api/admin/scg
@@ -41,11 +42,12 @@ export async function GET() {
     let latestByUser = new Map<
       string,
       {
-        dim_fiabilite: number
-        dim_qualite: number
-        dim_engagement: number
-        dim_volumes: number
-        dim_stabilite: number
+        c_character: number | null
+        c_capacity: number | null
+        c_capital: number | null
+        c_collateral: number | null
+        c_conditions: number | null
+        model_version: string | null
         recommandation: string | null
         created_at: string
       }
@@ -55,7 +57,7 @@ export async function GET() {
       const { data: snapshots } = await admin
         .from("scg_scores")
         .select(
-          "user_id, dim_fiabilite, dim_qualite, dim_engagement, dim_volumes, dim_stabilite, recommandation, created_at",
+          `user_id, ${SCG_5C_COLUMNS}, recommandation, created_at`,
         )
         .in("user_id", ids)
         .order("created_at", { ascending: false })
@@ -72,25 +74,18 @@ export async function GET() {
       const snap = latestByUser.get(p.id)
       return {
         ...p,
-        dimensions: snap
-          ? {
-              fiabilite: snap.dim_fiabilite,
-              qualite: snap.dim_qualite,
-              engagement: snap.dim_engagement,
-              volumes: snap.dim_volumes,
-              stabilite: snap.dim_stabilite,
-            }
-          : null,
+        dimensions: dimensionsFromRow(snap),
+        model_version: snap?.model_version ?? null,
         recommandation: snap?.recommandation ?? null,
         snapshot_at: snap?.created_at ?? p.scg_calculated_at,
       }
     })
 
     return NextResponse.json({
-      engine: "scg-v1",
+      engine: "scg-5c-v1",
       dimensions_meta: DIMENSION_META,
       thresholds: { bancable: 500, credit: 600, elite: 800 },
-      note: "SCG v2 5C = post-bêta (roadmap CdC 12 mois)",
+      note: "Méthode des 5C (docs/scg-5c.md). Bancable : ≥ 500 + identité vérifiée.",
       users: rows,
     })
   } catch (err) {
