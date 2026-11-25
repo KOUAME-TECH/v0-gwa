@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     "Politique de confidentialité et protection des données personnelles de la plateforme GWA (KOUAME CORPORATION), conforme aux principes RGPD et à la loi ivoirienne.",
 }
 
-const LAST_UPDATE = "19 juillet 2026"
+const LAST_UPDATE = "25 novembre 2026"
 
 function Section({
   n,
@@ -82,6 +82,13 @@ export default function ConfidentialitePage() {
             <strong>+225 07 88 32 60 19</strong> — e-mail{" "}
             <strong>contact@mygwa.org</strong>.
           </p>
+          <p>
+            <strong>Délégué à la protection des données (DPO) :</strong> le
+            référent protection des données de GWA est joignable à{" "}
+            <strong>contact@mygwa.org</strong>, objet « Données personnelles ».
+            Le traitement est soumis à la loi ivoirienne n° 2013-450 du 19 juin
+            2013, sous le contrôle de l&apos;ARTCI.
+          </p>
         </Section>
 
         <Section n="2" title="Données que nous collectons">
@@ -139,6 +146,7 @@ export default function ConfidentialitePage() {
             <Row label="Africa's Talking" value="envoi des SMS / codes OTP." />
             <Row label="OneSignal" value="notifications push." />
             <Row label="Vercel" value="hébergement de l'application et mesure d'audience." />
+            <Row label="Google (Gemini)" value="réponses de l'assistante Yelly ; e-mails, téléphones, adresses et positions sont masqués avant envoi, aucune donnée n'est utilisée pour entraîner un modèle par GWA." />
             <Row label="AgentMail" value="acheminement des e-mails du formulaire de contact." />
           </div>
           <p>
@@ -161,17 +169,34 @@ export default function ConfidentialitePage() {
 
         <Section n="6" title="Vos droits">
           <p>
-            Conformément aux principes du RGPD et à la loi ivoirienne n°2013-450
+            Conformément à la loi ivoirienne n° 2013-450 du 19 juin 2013
             relative à la protection des données à caractère personnel, vous
-            disposez des droits d&apos;accès, de rectification,
-            d&apos;effacement, d&apos;opposition, de limitation et de
-            portabilité, ainsi que du droit de retirer votre consentement à tout
-            moment.
+            disposez des droits d&apos;information, d&apos;accès, de
+            rectification, d&apos;opposition et d&apos;effacement, ainsi que
+            du droit de retirer votre consentement à tout moment.
           </p>
           <p>
-            Pour les exercer, contactez-nous (voir section 1). Vous pouvez
-            également introduire une réclamation auprès de l&apos;Autorité de
-            Régulation des Télécommunications de Côte d&apos;Ivoire (ARTCI).
+            Pour les exercer, écrivez au référent protection des données (voir
+            section 1) depuis le numéro ou l&apos;e-mail de votre compte. Nous
+            répondons dans un délai d&apos;un mois au plus.
+          </p>
+          <p>
+            Vous pouvez introduire une réclamation auprès de l&apos;Autorité de
+            Régulation des Télécommunications/TIC de Côte d&apos;Ivoire
+            (ARTCI).
+          </p>
+        </Section>
+
+        <Section n="6 bis" title="Droit à l'effacement (suppression du compte)">
+          <p>
+            Sur demande, nous supprimons votre compte et effaçons vos données
+            personnelles (profil, publications, messages, historique Yelly,
+            identifiant push). Restent conservées, de façon limitée et pour la
+            seule durée légale, les données que la loi nous oblige à garder :
+            transactions, factures et pièces de vérification d&apos;identité
+            (lutte contre le blanchiment, obligations comptables). Une commande
+            en cours ou un litige ouvert doit être clôturé avant
+            l&apos;effacement.
           </p>
         </Section>
 
