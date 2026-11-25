@@ -14,10 +14,10 @@ import {
 } from '@/lib/notifications/onesignal-config'
 import { getSmsOpsFailure, isOtpStoreReady } from '@/lib/auth/otp-store'
 import {
-  resolveGeniusPayCredentials,
-  resolveGeniusPayWebhookSecret,
-  type GeniusPayEnvironment,
-} from '@/lib/payment/geniuspay'
+  HEALTH_HEADERS,
+  isHealthOpsAuthorized,
+  publicHealthBody,
+} from '@/lib/ops/health'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,16 +25,17 @@ function envSet(name: string): boolean {
   return !!(process.env[name] || '').replace(/^"|"$/g, '').trim()
 }
 
-export async function GET() {
-  let dbStatus = 'unknown'
+async function readDbStatus(): Promise<string> {
   try {
     const supabase = await createClient()
-    await supabase.from('profiles').select('id').limit(1)
-    dbStatus = 'connected'
+    const { error } = await supabase.from('profiles').select('id').limit(1)
+    return error ? 'error' : 'connected'
   } catch {
-    dbStatus = 'error'
+    return 'error'
   }
-  const healthy = dbStatus === 'connected'
+}
+
+async function collectOpsDetails() {
   const smsConfigured = hasSmsProvider()
   const otpPepper = envSet('OTP_PEPPER')
   const cronSecret = envSet('CRON_SECRET')
@@ -67,7 +68,6 @@ export async function GET() {
     envSet('YELLY_API_KEY')
   if (!geminiReady) {
     try {
-      const { hasPlatformSecret } = await import('@/lib/ops/platform-secrets')
       geminiReady = await hasPlatformSecret('GEMINI_API_KEY', [
         'GOOGLE_GENERATIVE_AI_API_KEY',
         'YELLY_API_KEY',
@@ -76,15 +76,11 @@ export async function GET() {
       geminiReady = false
     }
   }
-  return NextResponse.json({
-    status: healthy ? 'healthy' : 'degraded',
+  return {
     app: 'GWA Platform',
-    tagline: 'Marche - langue Anoh, Cote d\'Ivoire',
-    version: '2.0.0',
+    tagline: "Marche - langue Anoh, Cote d'Ivoire",
     ts: new Date().toISOString(),
     env: process.env.NODE_ENV,
-    db: dbStatus,
-    // Booléens ops uniquement — jamais les valeurs des secrets
     secrets: {
       OTP_PEPPER: otpPepper,
       CRON_SECRET: cronSecret,
@@ -93,7 +89,6 @@ export async function GET() {
       SMS_AT: atKey,
       SMS_AT_USERNAME_LIVE: atLive,
       SMS_AT_SENDER_ID: atSender,
-      // 'default' = sender par défaut Africa's Talking (pas de paramètre from)
       SMS_AT_SENDER_MODE: atSender ? 'custom' : 'default',
       SMS_TWILIO:
         envSet('TWILIO_ACCOUNT_SID') &&
@@ -113,9 +108,7 @@ export async function GET() {
       payin_ready: geniuspayKey && geniuspaySecret,
       payout_ready: false,
     },
-    // Sender ID personnalisé optionnel : sans lui, AT utilise son sender par défaut.
     sms_delivery_ready: atKey && atLive,
-    // Dernier échec OTP/SMS (codes ops only) — aide à distinguer config OK vs rejet AT réel
     sms_last_failure: await getSmsOpsFailure(),
     deploy: {
       git_sha: (process.env.VERCEL_GIT_COMMIT_SHA || process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA || '').slice(0, 12) || null,
@@ -130,5 +123,23 @@ export async function GET() {
       sw_cache: 'gwa-v21-offline',
       sw_worker: 'OneSignalSDKWorker.js',
     },
-  }, { status: healthy ? 200 : 503 })
+  }
+}
+
+export async function GET(request: Request) {
+  const dbStatus = await readDbStatus()
+  const publicBody = publicHealthBody(dbStatus)
+  const healthy = dbStatus === 'connected'
+
+  if (!(await isHealthOpsAuthorized(request))) {
+    return NextResponse.json(publicBody, {
+      status: healthy ? 200 : 503,
+      headers: HEALTH_HEADERS,
+    })
+  }
+
+  return NextResponse.json(
+    { ...publicBody, ...(await collectOpsDetails()) },
+    { status: healthy ? 200 : 503, headers: HEALTH_HEADERS },
+  )
 }
