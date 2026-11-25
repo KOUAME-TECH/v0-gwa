@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { assertSameOrigin } from "@/lib/security/csrf"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { aggregateProducerData } from "@/lib/scg/aggregate"
@@ -9,6 +10,9 @@ import { calculateSCG } from "@/lib/scg/engine"
  * Calcule le SCG du producteur connecté (ou d'un userId fourni si admin actif).
  */
 export async function POST(request: NextRequest) {
+  const csrf = assertSameOrigin(request)
+  if (csrf) return csrf
+
   try {
     const supabase = await createClient()
     const {

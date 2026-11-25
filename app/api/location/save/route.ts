@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { assertSameOrigin } from "@/lib/security/csrf"
 import { createClient } from "@/lib/supabase/server"
 
 /**
@@ -7,6 +8,9 @@ import { createClient } from "@/lib/supabase/server"
  * Body: { lat, lon, city?, country?, region?, address? }
  */
 export async function POST(request: Request) {
+  const csrf = assertSameOrigin(request)
+  if (csrf) return csrf
+
   try {
     const supabase = await createClient()
     const {

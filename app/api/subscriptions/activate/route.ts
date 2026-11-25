@@ -90,6 +90,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (body?.admin_id && body.admin_id !== gate.user.id) {
+      return NextResponse.json({ error: "admin_id ne correspond pas à la session" }, { status: 403 })
+    }
+
     const { data: targetProfile } = await admin
       .from("profiles")
       .select("id, user_type, subscription_tier")
@@ -127,6 +131,22 @@ export async function POST(request: NextRequest) {
     if (updErr) {
       console.error("[api/subscriptions/activate] profile", updErr.message)
       return NextResponse.json({ error: "Activation impossible" }, { status: 500 })
+    }
+
+    const { error: auditError } = await admin.from("audit_logs").insert({
+      action: "subscription_activate",
+      user_id: gate.user.id,
+      target_type: "profile",
+      metadata: {
+        target_user_id: targetUserId,
+        previous_tier: targetProfile.subscription_tier,
+        tier,
+        request_id: requestId || null,
+        pricing_plan_id: planRow?.id ?? null,
+      },
+    })
+    if (auditError) {
+      console.error("[api/subscriptions/activate] audit", auditError.message)
     }
 
     if (requestId) {

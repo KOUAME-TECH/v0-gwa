@@ -41,6 +41,7 @@ import {
   Sparkles,
   Percent,
   UserRound,
+  ToggleLeft,
 } from "lucide-react"
 import {
   ADMIN_ROLE_LABELS,
@@ -75,6 +76,7 @@ const NAV_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   "Yelly Ops": Sparkles,
   Statistiques: TrendingUp,
   Parametres: Settings,
+  Fonctionnalités: ToggleLeft,
 }
 
 interface AdminUser {

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { assertSameOrigin } from "@/lib/security/csrf"
 import { createClient } from "@/lib/supabase/server"
 import { sendPushToUser } from "@/lib/notifications/push"
 import { getOneSignalAppId, getOneSignalRestApiKey } from "@/lib/notifications/onesignal-config"
@@ -35,7 +36,10 @@ export async function GET() {
   })
 }
 
-export async function POST() {
+export async function POST(request: Request) {
+  const csrf = assertSameOrigin(request)
+  if (csrf) return csrf
+
   const rate = await checkRateLimit("API_CREATE")
   if (!rate.success) {
     return NextResponse.json({ error: "Trop de requêtes" }, { status: 429 })

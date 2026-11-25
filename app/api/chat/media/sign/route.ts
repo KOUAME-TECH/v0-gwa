@@ -85,14 +85,7 @@ export async function POST(request: NextRequest) {
       .createSignedUrl(path, CHAT_SIGNED_URL_TTL_SEC)
 
     if (error || !data?.signedUrl) {
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from(CHAT_MEDIA_BUCKET).getPublicUrl(path)
-      return NextResponse.json({
-        url: publicUrl,
-        expiresIn: null,
-        fallback: "public",
-      })
+      return NextResponse.json({ error: "Lien signé impossible" }, { status: 500 })
     }
 
     return NextResponse.json({

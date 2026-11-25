@@ -1,5 +1,20 @@
 import { withSentryConfig } from '@sentry/nextjs/config'
 
+export const PRIVATE_NO_STORE = "private, no-store"
+export const PRIVATE_NO_STORE_PREFIXES = [
+  "/profil",
+  "/admin",
+  "/dashboard",
+  "/wallet",
+  "/messages",
+  "/panier",
+  "/commandes",
+  "/notifications",
+  "/publier",
+  "/favoris",
+  "/auth",
+]
+
 const securityHeaders = [
   { key: 'X-DNS-Prefetch-Control', value: 'on' },
   { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
@@ -22,7 +37,7 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline' https://onesignal.com https://cdn.onesignal.com",
       // unsafe-inline: Next inline + OneSignal SDK. Éviter unsafe-eval (retiré).
       "script-src 'self' 'unsafe-inline' https://cdn.onesignal.com https://onesignal.com https://api.onesignal.com",
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://onesignal.com https://*.onesignal.com https://api.onesignal.com https://api.open-meteo.com https://*.upstash.io https://nominatim.openstreetmap.org https://api.openai.com https://api.groq.com https://*.vercel.app",
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://onesignal.com https://*.onesignal.com https://api.onesignal.com https://api.open-meteo.com https://*.upstash.io https://nominatim.openstreetmap.org https://api.openai.com https://api.groq.com https://*.vercel.app https://*.sentry.io https://*.ingest.sentry.io https://*.geniuspay.ci",
       "frame-src 'self' https://www.openstreetmap.org",
       "worker-src 'self' blob:",
       "manifest-src 'self'",
@@ -33,7 +48,7 @@ const securityHeaders = [
 
 const nextConfig = {
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   images: {
     formats: ["image/avif", "image/webp"],
@@ -89,9 +104,12 @@ const nextConfig = {
       source: "/manifest.json",
       headers: [{ key: "Cache-Control", value: "public, max-age=3600" }],
     },
-    ...["/profil", "/admin", "/dashboard", "/wallet", "/messages", "/panier", "/commandes"].flatMap((p) => [
-      { source: p, headers: [{ key: "Cache-Control", value: "no-store" }] },
-      { source: `${p}/:path*`, headers: [{ key: "Cache-Control", value: "no-store" }] },
+    // Pages privées ou liées à une session : jamais en cache partagé (CDN).
+    // /favoris et /auth/login sont prérendues statiques (pages "use client"
+    // sans donnée serveur) : Next leur pose sinon s-maxage=31536000.
+    ...PRIVATE_NO_STORE_PREFIXES.flatMap((p) => [
+      { source: p, headers: [{ key: "Cache-Control", value: PRIVATE_NO_STORE }] },
+      { source: `${p}/:path*`, headers: [{ key: "Cache-Control", value: PRIVATE_NO_STORE }] },
     ]),
   ],
   /** Alias legacy — une seule source de vérité pour les redirections */
