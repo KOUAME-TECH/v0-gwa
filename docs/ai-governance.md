@@ -28,7 +28,7 @@
 | Étape | Pratique GWA | Preuve |
 |---|---|---|
 | **Données d’entraînement** | GWA **n’entraîne ni n’affine** aucun modèle. Aucune donnée utilisateur n’est envoyée pour l’entraînement. Les conditions du fournisseur (API Gemini payante) excluent l’usage des requêtes pour l’entraînement : [À VÉRIFIER, contrat et paramètres du compte Google Cloud] | — |
-| **Modèle** | Google Gemini, `gemini-3.1-flash-lite` par défaut (`YELLY_MODEL` / `GEMINI_MODEL`). Repli OpenAI-compatible si configuré, puis repli par mots-clés sans IA | `lib/yelly/client.ts` |
+| **Modèle** | Google Gemini, `gemini-flash-lite-latest` par défaut (`YELLY_MODEL` / `GEMINI_MODEL`), second modèle `gemini-3.5-flash-lite` (`YELLY_FALLBACK_MODEL`) si le premier répond 503. Repli OpenAI-compatible si configuré, puis repli par mots-clés sans IA | `lib/yelly/client.ts` |
 | **Prompts** | Prompt système versionné dans le dépôt (`YELLY_SYSTEM_PROMPT`). Consignes par capacité (prix de référence, reformulation, détection d’accord, bon de commande) | `lib/yelly/prompt.ts`, `lib/yelly/capabilities.ts` |
 | **Contexte** | Rôle de l’utilisateur, produit (nom, prix, ville, prix de référence OCPV), 8 derniers messages du chat (participant seulement, messages IA exclus) | `lib/yelly/context-builder.ts`, `lib/yelly/context.ts` |
 | **Minimisation / PII** | Tout texte envoyé passe par `redactPiiForAi` : e-mail, téléphone, adresse (rue, BP), GPS, carte, code OTP masqués. Aucune donnée vendeur (nom, téléphone) n’est chargée | `lib/yelly/pii.ts`, `tests/yelly-lot-d.test.ts` |

@@ -1,19 +1,8 @@
 import { withSentryConfig } from '@sentry/nextjs/config'
+import { PRIVATE_ROUTE_PREFIXES } from './lib/routes/private-prefixes.mjs'
 
 export const PRIVATE_NO_STORE = "private, no-store"
-export const PRIVATE_NO_STORE_PREFIXES = [
-  "/profil",
-  "/admin",
-  "/dashboard",
-  "/wallet",
-  "/messages",
-  "/panier",
-  "/commandes",
-  "/notifications",
-  "/publier",
-  "/favoris",
-  "/auth",
-]
+export const PRIVATE_NO_STORE_PREFIXES = PRIVATE_ROUTE_PREFIXES
 
 const securityHeaders = [
   { key: 'X-DNS-Prefetch-Control', value: 'on' },

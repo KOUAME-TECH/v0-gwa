@@ -5,6 +5,7 @@ import {
   shouldRedirectToLogin,
   TRANSIENT_AUTH_RETRY_LIMIT,
 } from '@/lib/auth/session-state'
+import { isProtectedPath, isPublicProfilePath } from '@/lib/auth/protected-routes'
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -31,7 +32,7 @@ export async function updateSession(request: NextRequest) {
       path === "/auth/error" ||
       path.startsWith("/produit/") ||
       path.startsWith("/post/") ||
-      (path.startsWith("/profil/") && !path.startsWith("/profil/edit")))
+      isPublicProfilePath(path))
 
   const hasAuthCookie = request.cookies
     .getAll()
@@ -105,23 +106,7 @@ export async function updateSession(request: NextRequest) {
     await readUser()
   }
 
-  const protectedPrefixes = [
-    '/protected',
-    '/admin',
-    '/dashboard',
-    '/profil/edit',
-    '/publier',
-    '/messages',
-    '/notifications',
-    '/wallet',
-    '/commandes',
-    '/abonnement',
-    '/scg',
-    '/affacturage',
-  ]
-  const needsAuth = protectedPrefixes.some(
-    (p) => path === p || path.startsWith(`${p}/`),
-  )
+  const needsAuth = isProtectedPath(path)
 
   // Un timeout vers Auth n'est pas une session absente : la page affiche Réessayer.
   // Une 500 durable ou un échec non réseau redirige vers la connexion.

@@ -42,3 +42,37 @@ describe("scrubSentryEvent", () => {
     }
   })
 })
+
+describe("scrubSentryEvent — paramètres d'URL sensibles", () => {
+  // Valeurs fictives.
+  it("retire token= et les autres secrets de l'URL, de la query string et des breadcrumbs", () => {
+    const event = {
+      request: {
+        url: "https://mygwa.org/auth/reset?token=abc123SECRET&lang=fr&code=OAUTHCODE#access_token=JWTVALUE&type=recovery",
+        query_string: "token=abc123SECRET&lang=fr&apikey=KEYVALUE",
+      },
+      breadcrumbs: [
+        { category: "fetch", data: { url: "https://x.supabase.co/rest/v1/p?select=*&apikey=ANONKEY" } },
+        { category: "navigation", data: { to: "/verify?Token=UPPER1&otp=123456" } },
+      ],
+      spans: [{ data: { "http.url": "https://s3.example/obj?X-Amz-Signature=SIGVALUE&x=1" } }],
+      message: "échec lien token=FREETEXT",
+    }
+    const out = scrubSentryEvent(structuredClone(event))
+    const json = JSON.stringify(out)
+    expect(json).not.toMatch(/abc123SECRET|OAUTHCODE|JWTVALUE|KEYVALUE|ANONKEY|UPPER1|123456|SIGVALUE|FREETEXT/)
+    expect(out.request.url).toBe(
+      "https://mygwa.org/auth/reset?token=[Filtered]&lang=fr&code=[Filtered]#access_token=[Filtered]&type=recovery",
+    )
+    expect(out.request.query_string).toBe("token=[Filtered]&lang=fr&apikey=[Filtered]")
+  })
+
+  it("gère la query string en paires ou en objet, sans toucher aux paramètres anodins", () => {
+    const pairs = scrubSentryEvent({ request: { query_string: [["token", "T1"], ["page", "2"]] } })
+    expect(pairs.request.query_string).toEqual([["token", "[Filtered]"], ["page", "2"]])
+    const obj = scrubSentryEvent({ request: { query_string: { refresh_token: "R1", q: "cacao" } } })
+    expect(obj.request.query_string).toEqual({ refresh_token: "[Filtered]", q: "cacao" })
+    const plain = scrubSentryEvent({ request: { url: "https://mygwa.org/recherche?q=cacao&tokenizer=1&page=2" } })
+    expect(plain.request.url).toBe("https://mygwa.org/recherche?q=cacao&tokenizer=1&page=2")
+  })
+})

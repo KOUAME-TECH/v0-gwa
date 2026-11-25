@@ -24,6 +24,7 @@ import {
 import { redactPiiForAi } from "@/lib/yelly/pii"
 import { YELLY_DISCLAIMER } from "@/lib/yelly/prompt"
 import { checkYellyGuestRateLimit, checkYellyUserRateLimit } from "@/lib/yelly/rate-limit"
+import { consumeYellyGuestQuota } from "@/lib/yelly/guest-quota"
 import { checkRateLimit, getClientIdentifier } from "@/lib/security/rate-limiter"
 
 export const dynamic = "force-dynamic"
@@ -37,9 +38,21 @@ function readGuestCount(request: NextRequest): number {
   return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0
 }
 
+function guestLimitReached() {
+  return NextResponse.json(
+    {
+      error: "Limite invitée atteinte — connecte-toi pour continuer.",
+      guestRemaining: 0,
+      reply:
+        "Tu as utilisé tes 3 questions gratuites. Connecte-toi pour continuer avec moi, ou WhatsApp +225 07 88 32 60 19.",
+    },
+    { status: 401 },
+  )
+}
+
 /**
  * POST /api/yelly/chat
- * Auth (quota / jour selon palier abo) OU guest (max 3 / 24h cookie)
+ * Auth (quota / jour selon palier abo) OU guest (max 3 / 24h : Upstash par IP + cookie)
  * + CSRF + rate-limit IP + rate-limit utilisateur 10/min + zod.
  * Contexte : rôle, produit, historique du chat (PII masquées).
  * FAQ fréquentes servies depuis le cache, sans appel au modèle.
@@ -63,23 +76,14 @@ export async function POST(request: NextRequest) {
     } = await supabase.auth.getUser()
 
     const guestUsed = readGuestCount(request)
-    if (!user && guestUsed >= YELLY_GUEST_MAX_PER_DAY) {
-      return NextResponse.json(
-        {
-          error: "Limite invitée atteinte — connecte-toi pour continuer.",
-          guestRemaining: 0,
-          reply:
-            "Tu as utilisé tes 3 questions gratuites. Connecte-toi pour continuer avec moi, ou WhatsApp +225 07 88 32 60 19.",
-        },
-        { status: 401 },
-      )
-    }
+    const guestClientId = user ? null : await getClientIdentifier()
+    if (!user && guestUsed >= YELLY_GUEST_MAX_PER_DAY) return guestLimitReached()
 
     {
       // 10/min par utilisateur connecté, et aussi par IP pour les invités.
       const userRate = user
         ? await checkYellyUserRateLimit(user.id)
-        : await checkYellyGuestRateLimit(await getClientIdentifier())
+        : await checkYellyGuestRateLimit(guestClientId ?? "unknown")
       if (!userRate.success) {
         console.warn("[yelly] rate_limited", {
           scope: user ? "user" : "guest",
@@ -143,6 +147,17 @@ export async function POST(request: NextRequest) {
         { error: "Message invalide", details: parsed.error.flatten() },
         { status: 400 },
       )
+    }
+
+    // Quota invité décompté côté serveur (Upstash par IP + cookie), après validation.
+    let guestQuota: { used: number; remaining: number } | null = null
+    if (!user) {
+      const q = await consumeYellyGuestQuota({
+        ip: guestClientId ?? "unknown",
+        cookieUsed: guestUsed,
+      })
+      if (!q.allowed) return guestLimitReached()
+      guestQuota = q
     }
 
     const { message: rawMessage, page, context, conversationId: parsedConvId } =
@@ -209,9 +224,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const guestRemaining = user
-      ? null
-      : Math.max(0, YELLY_GUEST_MAX_PER_DAY - (guestUsed + 1))
+    const guestRemaining = user ? null : (guestQuota?.remaining ?? 0)
 
     const res = NextResponse.json({
       reply: result.reply,
@@ -228,7 +241,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (!user) {
-      res.cookies.set(GUEST_COOKIE, String(guestUsed + 1), {
+      res.cookies.set(GUEST_COOKIE, String(guestQuota?.used ?? guestUsed + 1), {
         httpOnly: true,
         sameSite: "lax",
         secure: process.env.NODE_ENV === "production",
