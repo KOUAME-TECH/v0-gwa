@@ -1,6 +1,9 @@
 import "server-only"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { sanitizePlainText } from "@/lib/security/validation"
+import { parseOfferContent } from "@/lib/chat/offer"
+import type { ChatTurn } from "@/lib/yelly/capabilities"
+import type { YellyProductContext } from "@/lib/yelly/context-builder"
 
 /** Début du jour civil (UTC = Africa/Abidjan, sans DST). */
 export function yellyDayStartIso(now = new Date()): string {
@@ -126,4 +129,72 @@ export async function persistYellyTurn(
     console.warn("[yelly] persist", err)
     return null
   }
+}
+
+/** Produit structuré pour le contexte Yelly (aucune donnée vendeur). */
+export async function loadYellyProductContext(
+  supabase: SupabaseClient,
+  productId?: string,
+): Promise<YellyProductContext | null> {
+  if (!productId) return null
+  const { data } = await supabase
+    .from("products")
+    .select("name, price, unit, ville, origin_region, prix_ocpv_ref_fcfa, status")
+    .eq("id", productId)
+    .eq("status", "active")
+    .maybeSingle()
+  if (!data) return null
+  return {
+    name: String(data.name || ""),
+    price: typeof data.price === "number" ? data.price : Number(data.price) || null,
+    unit: data.unit || null,
+    city: data.ville || null,
+    region: data.origin_region || null,
+    ocpvReference: data.prix_ocpv_ref_fcfa ?? null,
+  }
+}
+
+/**
+ * Derniers messages d’une conversation GWA dont l’utilisateur est participant.
+ * RLS + contrôle explicite : aucun accès à une conversation tierce.
+ * Les messages « Conseil IA » sont exclus (pas d’auto-alimentation).
+ */
+export async function loadChatTurnsForYelly(
+  supabase: SupabaseClient,
+  chatConversationId: string | undefined,
+  userId: string,
+  limit = 10,
+): Promise<ChatTurn[]> {
+  if (!chatConversationId) return []
+  const { data: conv } = await supabase
+    .from("conversations")
+    .select("id, participant_1, participant_2")
+    .eq("id", chatConversationId)
+    .maybeSingle()
+  if (!conv || (conv.participant_1 !== userId && conv.participant_2 !== userId)) return []
+  const { data } = await supabase
+    .from("messages")
+    .select("sender_id, content, message_type, created_at")
+    .eq("conversation_id", chatConversationId)
+    .neq("message_type", "ai")
+    .order("created_at", { ascending: false })
+    .limit(limit)
+  return (data || [])
+    .reverse()
+    .map((m: { sender_id: string; content: string | null; message_type: string | null }) => {
+      const author: ChatTurn["author"] = m.sender_id === userId ? "moi" : "autre"
+      if (m.message_type === "offer") {
+        const offer = parseOfferContent(m.content || "")
+        if (offer) {
+          return {
+            author,
+            text: `Offre ${offer.amount} FCFA${offer.productName ? ` pour ${offer.productName}` : ""} (${offer.status})`,
+            offerAmount: offer.amount,
+            offerStatus: offer.status,
+          }
+        }
+      }
+      return { author, text: sanitizePlainText(String(m.content || ""), 300) }
+    })
+    .filter((t) => t.text)
 }
