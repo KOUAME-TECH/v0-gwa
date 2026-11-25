@@ -107,16 +107,16 @@ describe("escrow-flow", () => {
 describe("scg coach", () => {
   it("retourne 3 actions sur dims faibles", () => {
     const actions = getCoachActions({
-      fiabilite: 20,
-      qualite: 80,
-      engagement: 15,
-      volumes: 70,
-      stabilite: 10,
+      character: 20,
+      capacity: 80,
+      capital: 15,
+      collateral: 70,
+      conditions: 10,
     })
     expect(actions).toHaveLength(3)
-    expect(actions[0].dim).toBe("stabilite")
-    expect(actions[1].dim).toBe("engagement")
-    expect(actions[2].dim).toBe("fiabilite")
+    expect(actions[0].dim).toBe("conditions")
+    expect(actions[1].dim).toBe("capital")
+    expect(actions[2].dim).toBe("character")
     expect(buildCoachSpeech(420, actions)).toMatch(/420/)
     expect(coachBand(420)).toBe("mid")
   })

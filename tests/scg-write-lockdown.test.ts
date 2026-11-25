@@ -97,7 +97,7 @@ describe("persistScgResult", () => {
   }
 
   it("écrit le résultat du moteur (borné à 1000) dans scg_scores puis profiles", async () => {
-    const result = calculateSCG({ user_id: "u-1", commandes_total: 10, commandes_honorees: 10 })
+    const result = calculateSCG({ user_id: "u-1", kyc_verified: true, orders_completed: 10 })
     const { client, calls } = fakeAdmin()
     await persistScgResult("u-1", result, client)
     expect(calls.map((c) => `${c.table}.${c.op}`)).toEqual(["scg_scores.insert", "profiles.update"])

@@ -10,9 +10,14 @@ describe("éligibilité affacturage (P11)", () => {
     expect(isFactoringEligible({ scg_bancable: true, scg_score: 0 })).toBe(true)
   })
 
-  it("score >= seuil → éligible", () => {
-    expect(isFactoringEligible({ scg_bancable: false, scg_score: FACTORING_MIN_SCORE })).toBe(true)
-    expect(isFactoringEligible({ scg_score: 750 })).toBe(true)
+  it("drapeau absent : score >= seuil → éligible", () => {
+    expect(isFactoringEligible({ scg_score: FACTORING_MIN_SCORE })).toBe(true)
+    expect(isFactoringEligible({ scg_bancable: null, scg_score: 750 })).toBe(true)
+  })
+
+  it("5C : non bancable calculé (ex. identité non vérifiée, auto-échange) → refusé même à 500+", () => {
+    expect(isFactoringEligible({ scg_bancable: false, scg_score: FACTORING_MIN_SCORE })).toBe(false)
+    expect(isFactoringEligible({ scg_bancable: false, scg_score: 900 })).toBe(false)
   })
 
   it("score sous le seuil et non bancable → non éligible", () => {

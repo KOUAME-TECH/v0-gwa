@@ -22,23 +22,44 @@ describe("échelle SCG 0 à 1000 (directive de Yao)", () => {
   })
 
   it("le moteur ne dépasse jamais 1000, même avec des entrées extrêmes", () => {
-    const max = calculateSCG({
-      user_id: "u-test",
-      commandes_total: 10_000,
-      commandes_honorees: 10_000,
-      note_moyenne_acheteurs: 50,
-      nb_evaluations: 10_000,
-      certifications_count: 99,
-      jours_actif_plateforme: 99_999,
-      formations_suivies: 99,
-      cooperative_active: true,
-      parrainage_count: 99,
-      gmv_cumule_fcfa: 1e12,
-      mois_actif_consecutifs: 999,
-      variation_volume_pct: 999,
-      offres_publiees_total: 999,
-      regularite_publication_score: 50,
-    })
+    const max = calculateSCG(
+      {
+        user_id: "u-test",
+        account_age_days: 99_999,
+        kyc_verified: true,
+        rccm_verified: true,
+        phone_verified: true,
+        email_present: true,
+        reviews_count: 10_000,
+        reviews_avg: 50,
+        orders_completed: 10_000,
+        msgs_received: 1000,
+        msgs_replied_48h: 1000,
+        gmv_12m_fcfa: 1e12,
+        orders_completed_12m: 10_000,
+        active_months_12m: 999,
+        distinct_buyers: 999,
+        top_buyer_share: 0.01,
+        gmv_prev_150d_fcfa: 1e13,
+        revenue_total_fcfa: 1e12,
+        stock_value_fcfa: 1e12,
+        surface_ha: 9999,
+        storage_or_vehicle: true,
+        activity_start_year: 1960,
+        escrow_held_fcfa: 1e12,
+        receivables_fcfa: 1e12,
+        coop_member: true,
+        coop_verified: true,
+        gps_parcels: 99,
+        certifications: 99,
+        main_filiere: "cacao",
+        filieres_count: 5,
+        country_supported: true,
+        region_known: true,
+        price_gap_pct: 0,
+      },
+      new Date("2026-11-25T12:00:00Z"),
+    )
     expect(max.score_total).toBeLessThanOrEqual(1000)
     expect(max.score_total).toBeGreaterThanOrEqual(900)
     expect(max.badge).toBe("excellence")
@@ -54,7 +75,7 @@ describe("échelle SCG 0 à 1000 (directive de Yao)", () => {
     expect(SCG_BANCABLE_MIN).toBe(500)
     expect(FACTORING_MIN_SCORE).toBe(SCG_BANCABLE_MIN)
     // Un profil bancable (≥ 500) n'est plus décrit comme « intermédiaire ».
-    const dims = { fiabilite: 80, qualite: 30, engagement: 60, volumes: 50, stabilite: 35 }
+    const dims = { character: 80, capacity: 30, capital: 60, collateral: 50, conditions: 35 }
     expect(getRecommandation(550, dims)).toMatch(/^Profil bancable — /)
     expect(getRecommandation(750, dims)).toMatch(/^Profil bancable solide/)
     expect(getRecommandation(499, dims)).not.toMatch(/bancable/)
