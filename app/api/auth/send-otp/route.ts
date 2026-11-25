@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { checkRateLimit } from "@/lib/security/rate-limiter"
+import { checkRateLimit, rateLimit } from "@/lib/security/rate-limiter"
 import {
   formatPhoneE164,
   validateWestAfricaPhone,
@@ -15,6 +15,7 @@ import {
   releaseSendOtp,
   isOtpStoreReady,
   recordSmsOpsFailure,
+  OTP_POLICY,
 } from "@/lib/auth/otp-store"
 import {
   hasSmsProvider,
@@ -84,18 +85,18 @@ export async function POST(request: Request) {
       )
     }
 
-    const rateLimit = await checkRateLimit("OTP_REQUEST", formatted)
-    if (!rateLimit.success) {
-      const waitMin = Math.ceil((rateLimit.resetAt - Date.now()) / 60000)
+    const shortLimit = await checkRateLimit("OTP_REQUEST", formatted)
+    // Politique : 5 envois par heure et par numéro.
+    const hourLimit = await rateLimit(`OTP_SEND_H:${formatted}`, OTP_POLICY.sendPerHour)
+    const limit = !shortLimit.success ? shortLimit : !hourLimit.success ? hourLimit : null
+    if (limit) {
+      const waitMin = Math.ceil((limit.resetAt - Date.now()) / 60000)
       return NextResponse.json(
         {
-          error: rateLimit.blocked
+          error: limit.blocked
             ? `Trop de tentatives. Réessayez dans ${waitMin} min.`
-            : "Limite atteinte. Patientez avant de renvoyer un code.",
-          retry_after: Math.max(
-            0,
-            Math.ceil((rateLimit.resetAt - Date.now()) / 1000),
-          ),
+            : `Limite atteinte. Réessayez dans ${waitMin} min.`,
+          retry_after: Math.max(0, Math.ceil((limit.resetAt - Date.now()) / 1000)),
         },
         { status: 429 },
       )
@@ -254,7 +255,7 @@ export async function POST(request: Request) {
       channel: "sms",
       provider: sms.provider,
       message: "Code SMS envoyé",
-      expires_in: 600,
+      expires_in: OTP_POLICY.ttlSeconds,
       resend_after: 60,
       ...(sms.warning ? { delivery_warning: sms.warning } : {}),
     })
