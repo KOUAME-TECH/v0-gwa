@@ -50,13 +50,23 @@ async function resolveGeminiKey(): Promise<string> {
   ])
 }
 
-function resolveModel(): string {
-  return (
-    process.env.YELLY_MODEL ||
-    process.env.GEMINI_MODEL ||
-    // flash-lite : réponses complètes sans « thinking » qui mange le budget tokens
-    "gemini-3.1-flash-lite"
-  ).trim()
+/** Modèle par défaut : alias « latest » de la famille flash-lite (pas de « thinking »). */
+export const YELLY_DEFAULT_MODEL = "gemini-flash-lite-latest"
+/** Second modèle, tenté seulement si le premier est saturé (503) ou indisponible. */
+export const YELLY_DEFAULT_FALLBACK_MODEL = "gemini-3.5-flash-lite"
+
+/** Codes HTTP Gemini qui justifient un essai sur le second modèle. */
+const GEMINI_RETRY_STATUSES = new Set([503, 500, 502, 504, 429])
+
+export function resolveYellyModels(env: Record<string, string | undefined> = process.env): {
+  primary: string
+  fallback: string | null
+} {
+  const raw = (env.YELLY_MODEL || env.GEMINI_MODEL || YELLY_DEFAULT_MODEL).trim()
+  // Un nom OpenAI dans YELLY_MODEL ne doit pas partir chez Gemini.
+  const primary = raw.includes("gpt") ? YELLY_DEFAULT_MODEL : raw
+  const fb = (env.YELLY_FALLBACK_MODEL || YELLY_DEFAULT_FALLBACK_MODEL).trim()
+  return { primary, fallback: fb && fb !== primary ? fb : null }
 }
 
 function toGeminiContents(
@@ -81,7 +91,7 @@ async function askGemini(opts: {
   userMsg: string
   apiKey: string
   model: string
-}): Promise<YellyChatResult | null> {
+}): Promise<YellyChatResult | { status: number } | null> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(opts.model)}:generateContent`
   const res = await fetch(url, {
     method: "POST",
@@ -102,8 +112,9 @@ async function askGemini(opts: {
   })
 
   if (!res.ok) {
-    console.error("[yelly] Gemini HTTP", res.status, await res.text().catch(() => ""))
-    return null
+    // Statut seul : le corps d'erreur fournisseur peut reprendre la requête.
+    console.error("[yelly] Gemini HTTP", res.status, opts.model)
+    return { status: res.status }
   }
 
   const data = (await res.json()) as {
@@ -122,6 +133,37 @@ async function askGemini(opts: {
     source: "llm",
     model: opts.model,
   }
+}
+
+function isGeminiResult(r: YellyChatResult | { status: number } | null): r is YellyChatResult {
+  return Boolean(r && "reply" in r)
+}
+
+/**
+ * Modèle principal, puis le second modèle si le premier répond 503 (saturé),
+ * une autre erreur transitoire (429/5xx) ou dépasse le délai.
+ */
+export async function askGeminiWithFallback(opts: {
+  system: string
+  history: YellyMessage[]
+  userMsg: string
+  apiKey: string
+  models: { primary: string; fallback: string | null }
+}): Promise<YellyChatResult | null> {
+  const base = { system: opts.system, history: opts.history, userMsg: opts.userMsg, apiKey: opts.apiKey }
+  let retry = false
+  try {
+    const first = await askGemini({ ...base, model: opts.models.primary })
+    if (isGeminiResult(first)) return first
+    retry = Boolean(first && GEMINI_RETRY_STATUSES.has(first.status))
+  } catch (err) {
+    const name = err instanceof Error ? err.name : "unknown"
+    console.error("[yelly] Gemini error", name, opts.models.primary)
+    retry = name === "TimeoutError" || name === "AbortError" || name === "TypeError"
+  }
+  if (!retry || !opts.models.fallback) return null
+  const second = await askGemini({ ...base, model: opts.models.fallback })
+  return isGeminiResult(second) ? second : null
 }
 
 async function askOpenAICompat(opts: {
@@ -202,7 +244,7 @@ export async function askYelly(opts: {
   const question = sanitizePlainText(opts.message, 800)
   const page = safeYellyPage(opts.page)
   const geminiKey = await resolveGeminiKey()
-  const model = resolveModel()
+  const models = resolveYellyModels()
   const openAiKey = process.env.OPENAI_API_KEY || ""
   const baseUrl = (process.env.YELLY_BASE_URL || "https://api.openai.com/v1").replace(
     /\/$/,
@@ -224,12 +266,12 @@ export async function askYelly(opts: {
 
   try {
     if (geminiKey) {
-      const gemini = await askGemini({
+      const gemini = await askGeminiWithFallback({
         system,
         history,
         userMsg,
         apiKey: geminiKey,
-        model: model.includes("gpt") ? "gemini-3.1-flash-lite" : model,
+        models,
       })
       if (gemini) return gemini
     }
