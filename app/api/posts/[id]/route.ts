@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { assertSameOrigin } from "@/lib/security/csrf"
 import { createClient } from "@/lib/supabase/server"
 
 type Ctx = { params: Promise<{ id: string }> }
@@ -9,7 +10,10 @@ type Ctx = { params: Promise<{ id: string }> }
  * La RLS `posts_delete_own` (author_id = auth.uid()) constitue une seconde
  * barrière côté base de données.
  */
-export async function DELETE(_request: NextRequest, context: Ctx) {
+export async function DELETE(request: NextRequest, context: Ctx) {
+  const csrf = assertSameOrigin(request)
+  if (csrf) return csrf
+
   try {
     const { id } = await context.params
     const supabase = await createClient()

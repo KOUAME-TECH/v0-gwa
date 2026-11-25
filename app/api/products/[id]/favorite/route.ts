@@ -3,12 +3,16 @@
  * Ajoute ou retire le produit des favoris de l'utilisateur connecté.
  */
 import { type NextRequest, NextResponse } from "next/server"
+import { assertSameOrigin } from "@/lib/security/csrf"
 import { createClient } from "@/lib/supabase/server"
 
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const csrf = assertSameOrigin(request)
+  if (csrf) return csrf
+
   try {
     const { id: productId } = await params
     const supabase = await createClient()
